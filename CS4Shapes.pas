@@ -2215,7 +2215,7 @@ procedure DrawNative0(const VT: TTransf2D;
   const LineKind: TLineKind;
   const Hatching: THatching;
   const LineColor, FillColor, HatchColor: TColor;
-  const LineWidth, PixelSize, UnitLength, Scale: TRealType);
+  const LineWidth, PixelSize, UnitLength, Scale, MiterLimit: TRealType);
 var
   IsMetafile: Boolean;
   BrushStyle0: TBrushStyle;
@@ -2289,7 +2289,7 @@ begin
   if LineKind = liNone then SetPen(psClear, clRed)
   else
   begin
-    SetMiterLimit(Cnv.Canvas.Handle, 10, nil);
+    SetMiterLimit(Cnv.Canvas.Handle, MiterLimit, nil);
     case LineKind of
       liThin:
         begin
@@ -2346,7 +2346,7 @@ procedure TPrimitive2D.DrawNative(const VT: TTransf2D; const Cnv:
   const DrawMode: Integer; const IsClosed: Boolean;
   const Pnts: array of TPoint);
 var
-  LineWidth, PixelSize, UnitLength, Scale: TRealType;
+  LineWidth, PixelSize, UnitLength, Scale, MiterLimit: TRealType;
 begin
   if OwnerCAD = nil then
   begin
@@ -2361,10 +2361,11 @@ begin
     PixelSize := OwnerCAD.Viewports[0].GetPixelAperture.X;
     UnitLength := (OwnerCAD as TDrawing2D).PicUnitLength;
     Scale := (OwnerCAD as TDrawing2D).PicScale;
+    MiterLimit:= (OwnerCAD as TDrawing2D).MiterLimit;
   end;
   DrawNative0(VT, Cnv, DrawPath, ClipRect2D, DrawMode, IsClosed, Pnts,
     fLineKind, fHatching, fLineColor, fFillColor, fHatchColor,
-    LineWidth, PixelSize, UnitLength, Scale);
+    LineWidth, PixelSize, UnitLength, Scale, MiterLimit);
 end;
 
 procedure TPrimitive2D.DrawPiece(Piece: TPiece;
@@ -2376,7 +2377,7 @@ var
   IsClosed: Boolean;
   Pnts: array of TPoint;
   I: Integer;
-  LineWidth, PixelSize, UnitLength, Scale: TRealType;
+  LineWidth, PixelSize, UnitLength, Scale, MiterLimit: TRealType;
 begin
   //if OwnerCAD = nil then Exit;
   if OwnerCAD = nil then
@@ -2392,6 +2393,7 @@ begin
     PixelSize := OwnerCAD.Viewports[0].GetPixelAperture.X;
     UnitLength := (OwnerCAD as TDrawing2D).PicUnitLength;
     Scale := (OwnerCAD as TDrawing2D).PicScale;
+    MiterLimit := (OwnerCAD as TDrawing2D).MiterLimit;
   end;
   if Piece.Count <= 1 then Exit;
   IsClosed := IsSamePoint2D(Piece[0], Piece[Piece.Count - 1]);
@@ -2404,7 +2406,7 @@ begin
   DrawNative0(VT, Cnv, PathProc, ClipRect2D, DrawMode, IsClosed, Pnts,
     Piece.GetLineKind(Self), Piece.GetHatching(Self),
     Piece.GetLineColor(Self), Piece.GetFillColor(Self), fHatchColor,
-    LineWidth, PixelSize, UnitLength, Scale);
+    LineWidth, PixelSize, UnitLength, Scale, MiterLimit);
 end;
 
 procedure TPrimitive2D.DrawPieces(const VT: TTransf2D; const Cnv:

@@ -10091,9 +10091,9 @@ object AboutForm: TAboutForm
     object Label2: TLabel
       Left = 20
       Top = 244
-      Width = 93
+      Width = 66
       Height = 16
-      Caption = 'Version 1.1beta'
+      Caption = 'Version 1.1'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clGreen
       Font.Height = -13

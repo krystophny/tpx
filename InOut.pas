@@ -106,7 +106,7 @@ type
     procedure WritePrimitiveAttr0(LineColor,
       HatchColor, FillColor: TColor;
       LineKind: TLineKind; Hatching: THatching;
-      XMLNode: TXMLDElement);
+      MiterLimit: TRealType; XMLNode: TXMLDElement);
     procedure WritePrimitiveAttr(Obj: TPrimitive2D;
       XMLNode: TXMLDElement);
     procedure WritePoly0(PP: TPointsSet2D;
@@ -500,7 +500,7 @@ function FileExec(const aCmdLine, InFile, OutFile, Directory:
 function TryDeleteFile(const FileName: string): Boolean;
 function GetTempDir: string;
 function XMLNodeText(Node: TXMLDNode; Level: Integer): string;
-procedure Import_EMF(Drawing: TDrawing2D; const EmfFileName: string;
+procedure Import_Metafile(Drawing: TDrawing2D; const FileName: string;
   Lines: TStrings);
 procedure Import_Eps(Drawing: TDrawing2D; const EpsFileName: string);
 
@@ -1151,6 +1151,8 @@ begin
       AttributeValue['DashSize'] := fDrawing2D.DashSize;
       AttributeValue['TeXMinLine'] := FF(fDrawing2D.TeXMinLine);
       AttributeValue['LineWidth'] := FF(fDrawing2D.LineWidth);
+      if fDrawing2D.MiterLimit <> 10 then
+        AttributeValue['MiterLimit'] := FF(fDrawing2D.MiterLimit);
       if fDrawing2D.TeXCenterFigure <> TeXCenterFigure_Default
         then AttributeValue['TeXCenterFigure'] :=
         fDrawing2D.TeXCenterFigure;
@@ -1567,7 +1569,7 @@ procedure T_SVG_Export.WriteHeader;
 var
   XMLNode: TXMLDElement;
 begin
-  fFactorMM := 1 / fDrawing2D.PicUnitLength;
+  fFactorMM := 1 / fDrawing2D.PicUnitLength * 10;
   MeasureDrawing;
   {fXML.Doctype := 'svg PUBLIC "-//W3C//DTD SVG 1.1//EN"' + EOL
     + ' "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"';}
@@ -1616,13 +1618,13 @@ end;
 procedure T_SVG_Export.WritePrimitiveAttr0(LineColor,
   HatchColor, FillColor: TColor;
   LineKind: TLineKind; Hatching: THatching;
-  XMLNode: TXMLDElement);
+  MiterLimit: TRealType; XMLNode: TXMLDElement);
 begin
   if LineKind = liNone then
     XMLNode.AttributeValue['stroke'] := 'none'
   else
   begin
-    XMLNode.AttributeValue['stroke-miterlimit'] := 10;
+    XMLNode.AttributeValue['stroke-miterlimit'] := MiterLimit;
     if LineColor = clDefault then
       XMLNode.AttributeValue['stroke'] := 'black'
     else
@@ -1658,7 +1660,7 @@ procedure T_SVG_Export.WritePrimitiveAttr(Obj: TPrimitive2D;
 begin
   WritePrimitiveAttr0(Obj.LineColor,
     Obj.HatchColor, Obj.FillColor,
-    Obj.LineKind, Obj.Hatching, XMLNode);
+    Obj.LineKind, Obj.Hatching, fDrawing2D.MiterLimit, XMLNode);
 end;
 
 procedure T_SVG_Export.WritePoly0(PP: TPointsSet2D;
@@ -1693,7 +1695,7 @@ begin
     if I < PP.Count - 1 then AddSt(' ');
   end;
   WritePrimitiveAttr0(LineColor, HatchColor, FillColor,
-    LineKind, Hatching, XMLNode);
+    LineKind, Hatching, fDrawing2D.MiterLimit, XMLNode);
   XMLNode.AttributeValue['points'] := PathSt;
 end;
 
@@ -2263,6 +2265,9 @@ begin
     end;
   end;
   WriteColor(LineColor);
+  if fDrawing2D.MiterLimit <> 10 then
+    WriteStream(
+      Format('%.2g setmiterlimit ', [fDrawing2D.MiterLimit]));
   //if Obj.LineColor <> clDefault then  begin    RGB := PS_RGB(Obj.LineColor);  end;
 end;
 
@@ -3123,14 +3128,16 @@ begin
       if Obj.OwnerCAD is TDrawing2D then
       begin
         StarsSize := (Obj.OwnerCAD as TDrawing2D).StarsSize;
-        {??case LineKind of
+        case LineKind of
           liThin, liDashed:
             StarsSize := StarsSize +
-              0.5 * (Obj.OwnerCAD as TDrawing2D).LineWidth;
+              0.5 * (Obj.OwnerCAD as TDrawing2D).LineWidth
+              / (Obj.OwnerCAD as TDrawing2D).PicScale;
           liThick, liDotted:
             StarsSize := StarsSize +
-              1 * (Obj.OwnerCAD as TDrawing2D).LineWidth;
-        end;}
+              1 * (Obj.OwnerCAD as TDrawing2D).LineWidth
+              / (Obj.OwnerCAD as TDrawing2D).PicScale;
+        end;
       end
       else StarsSize := 1;
       D := Round(2 * StarsSize * fFactorW);
@@ -3464,7 +3471,7 @@ begin
     try
       Obj.BezierPoints(PP, IdentityTransf2D);
       for I := 0 to (PP.Count - 4) div 3 do
-        WriteCBezier(PP[I*3], PP[I*3 + 1], PP[I*3 + 2], PP[I*3 + 3]);
+        WriteCBezier(PP[I * 3], PP[I * 3 + 1], PP[I * 3 + 2], PP[I * 3 + 3]);
     finally
       PP.Free;
     end;
@@ -3557,6 +3564,7 @@ begin
   else
     Result := Result + ',linestyle=solid';
   end;
+  //Result := Result + ',linearc=0.0003mm';
   if Color <> '' then
     Result := Result + ',linecolor=' + Color;
   Result := Format('[%s]', [Result]);
@@ -3580,12 +3588,19 @@ var
   I: Integer;
 begin
   if PP.Count < 1 then Exit;
+//  if fDrawing2D.MiterLimit <> 10 then
+//    WriteLnStream(Format('\pscustom{\code{%.2g setmiterlimit}',
+//      [fDrawing2D.MiterLimit]));
+//\pscustom{%
+//    \code{1 setlinejoin}
+//    \psline(0,0)(1,2)(2,0)}
   if Closed then
     WriteStream(Format('\pspolygon%s', [Attr]))
   else
     WriteStream(Format('\psline%s', [Attr]));
   for I := 0 to PP.Count - 1 do
     WriteStreamPoint(PP[I]);
+//  if fDrawing2D.MiterLimit <> 10 then    WriteStream('}');
 end;
 
 procedure T_PSTricks_Export.WriteHatching(const P: TPointsSet2D;
@@ -3755,8 +3770,7 @@ end;
 
 procedure T_PSTricks_Export.WriteHeader;
 begin
-
-  fUnitLength := fDrawing2D.PicUnitLength;
+  fUnitLength := fDrawing2D.PicUnitLength / 10;
   fFactorMM := 1 / fUnitLength;
   MeasureDrawing;
   fW := fW_MM * fFactorMM;
@@ -3764,7 +3778,7 @@ begin
   fHatchingStep := fDrawing2D.HatchingStep;
   //WriteLnStream('\clearpage');
   //WriteLnStream(Format('\psset{xunit=%.4g mm, yunit=%.4g mm, runit=%.4g mm}',    [fUnitLength, fUnitLength, fUnitLength]));
-  WriteLnStream(Format('\psset{unit=%.4g mm}', [fUnitLength]));
+  WriteLnStream(Format('\psset{unit=%.5g mm}', [fUnitLength]));
   with fDrawing2D do
   begin
     WriteLnStream(Format('\psset{dotsize=%.2fmm 0}',
@@ -4258,6 +4272,8 @@ begin
     [fDrawing2D.PicUnitLength]));
   WriteLnStream('linecap:=butt;');
   WriteLnStream('linejoin:=mitered;');
+  if fDrawing2D.MiterLimit <> 10 then
+    WriteLnStream(Format('miterlimit:=%.2g;', [fDrawing2D.MiterLimit]));
   WriteLnStream('path pp;');
 end;
 
@@ -4687,6 +4703,9 @@ begin
       if LineColor <> clDefault
         then SetRGBStrokeColor(LineColor)
       else SetRGBStrokeColor(0);
+      if MiterLimit <> 10 then
+        _WriteString(Format('%.2g M'#10, [MiterLimit]),
+          fPDF.Canvas.Contents.Stream);
     end;
 end;
 
@@ -5201,7 +5220,7 @@ begin
     fPolygon.Clear;
     fPolygon.Closed := Closed;
     N1 := PP.Count - 1;
-    if IsSamePoint2D(PP[0], PP[N1]) then Dec(N1);
+    if Closed and IsSamePoint2D(PP[0], PP[N1]) then Dec(N1);
     for I := 0 to N1 do
     begin
       P := ConvertPnt(PP[I]);
@@ -5290,7 +5309,9 @@ begin
   end;
   try
     fOutline.Free;
-    fOutline := TmpPoly.Grow(Fixed(W / 2), 0.99);
+    fOutline := TmpPoly.Grow(Fixed(W / 2),
+      1 - 2 / Sqr(fDrawing2D.MiterLimit));
+        //Link between MiterLimit and EdgeSharpness
     fOutline.FillMode := pfWinding;
   finally
     TmpPoly.Free;
@@ -5428,8 +5449,11 @@ begin
       jvCenter: VShift := FontH / 2;
       jvTop: VShift := 0;
     end;
-    fBitmap.TextoutW(Round(ConvertX(P.X) - HShift),
-      Round(ConvertY(P.Y) - VShift), Text);
+    fBitmap.RenderTextW(Round(ConvertX(P.X) - HShift),
+      Round(ConvertY(P.Y) - VShift), Text, 4 {0-4},
+      Color32(fBitmap.Font.Color));
+    {fBitmap.TextoutW(Round(ConvertX(P.X) - HShift),
+      Round(ConvertY(P.Y) - VShift), Text);}
   end;
 end;
 
@@ -6063,6 +6087,9 @@ begin
         fDrawing2D.TeXMinLine := AttributeValue['TeXMinLine'];
       if AttributeNode['LineWidth'] <> nil then
         fDrawing2D.LineWidth := AttributeValue['LineWidth'];
+      if AttributeNode['MiterLimit'] <> nil then
+        fDrawing2D.MiterLimit := AttributeValue['MiterLimit']
+      else fDrawing2D.MiterLimit := 10;
       if AttributeNode['TeXCenterFigure'] <> nil then
         fDrawing2D.TeXCenterFigure :=
           AttributeValue['TeXCenterFigure']
@@ -6268,7 +6295,8 @@ begin
       XMLNodeText(ChildNodes[I], Level + 1) + EOL;
 end;
 
-procedure Import_EMF(Drawing: TDrawing2D; const EmfFileName: string;
+procedure Import_Metafile(Drawing: TDrawing2D;
+  const FileName: string;
   Lines: TStrings);
 var
   EMF_Loader: T_EMF_Loader;
@@ -6279,7 +6307,7 @@ begin
   try
     EMF_Loader := T_EMF_Loader.Create;
     try
-      EMF_Loader.LoadFromFile(EmfFileName);
+      EMF_Loader.LoadFromFile(FileName);
       EMF_Loader.FillXML(TpX_Loader.XMLDoc);
       TpX_Loader.ReadAll;
     finally
@@ -6293,7 +6321,7 @@ begin
       Caption := '';
       FigLabel := '';
       Comment := Format('Imported from %s',
-        [ExtractFileName(EmfFileName)]);
+        [ExtractFileName(FileName)]);
       PicUnitLength := PicUnitLength_Default;
       HatchingStep := HatchingStep_Default;
       DottedSize := DottedSize_Default;
@@ -6341,7 +6369,7 @@ begin
         'Error', MB_OK)
     else
     begin
-      Import_EMF(Drawing, TempEMF, nil);
+      Import_Metafile(Drawing, TempEMF, nil);
       Drawing.Comment := Format('Imported from %s',
         [ExtractFileName(EpsFileName)]);
     end;

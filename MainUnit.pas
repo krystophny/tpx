@@ -304,7 +304,7 @@ type
     PreviewBMP1: TMenuItem;
     PreviewBMP2: TMenuItem;
     EPSOpenDialog: TOpenDialog;
-    ImportEMF: TAction;
+    ImportMetafile: TAction;
     ImportEPS: TAction;
     ImportEPS1: TMenuItem;
     procedure InsertLineBtnClick(Sender: TObject);
@@ -368,7 +368,7 @@ type
     procedure LocalViewMouseDown2D(Sender: TObject; Button:
       TMouseButton;
       Shift: TShiftState; WX, WY: Single; X, Y: Integer);
-    procedure ImportEMFExecute(Sender: TObject);
+    procedure ImportMetafileExecute(Sender: TObject);
     procedure ToolButton4Click(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
@@ -1320,14 +1320,14 @@ begin
   RO_Free(XMLDoc);
 end;
 
-procedure TMainForm.ImportEMFExecute(Sender: TObject);
+procedure TMainForm.ImportMetafileExecute(Sender: TObject);
 begin
   if not EMFOpenDialog.Execute then Exit;
   if AskSaveCurrentDrawing = mrCancel then Exit;
   LocalPrg.Reset;
   if RichEdit1.Visible then
-    Import_EMF(TheDrawing, EMFOpenDialog.FileName, RichEdit1.Lines)
-  else Import_EMF(TheDrawing, EMFOpenDialog.FileName, nil);
+    Import_Metafile(TheDrawing, EMFOpenDialog.FileName, RichEdit1.Lines)
+  else Import_Metafile(TheDrawing, EMFOpenDialog.FileName, nil);
   Caption := TheDrawing.FileName;
   LocalView.ZoomToExtension;
   LocalView.Repaint;

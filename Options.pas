@@ -68,7 +68,7 @@ begin
     OptionsList.AddString('IncludePath',
       @(IncludePath),
       'Path to add before \includegraphics file name (like mypictures/)');
-      
+
     OptionsList.AddRealType('LineWidth', @LineWidth,
       'Thin line width (mm)');
     OptionsList.AddRealType('ArrowsSize',
@@ -83,7 +83,14 @@ begin
       'Dashed line size (mm)');
     OptionsList.AddRealType('DefaultFontHeight',
       @(DefaultFontHeight), 'Default font height');
-      
+    OptionsList.AddRealType('MiterLimit',
+      @(MiterLimit), 'Miter limit. Used to cut off too long spike miter join'
+      + ' could have when the angle between two lines is sharp. If the ratio of miter length'
+      + ' (distance between the outer corner and the inner corner of the miter) to'
+      + ' line width is greater than miter limit, then bevel join'
+      + ' is used instead of miter join. Default value of miter limit is 10.'
+      + ' This option is not applicable to TeX-picture and PsTricks formats.');
+
     OptionsList.AddRealType('TeXMinLine',
       @TeXMinLine, 'TeX minimum line length');
     OptionsList.AddBoolean('TeXCenterFigure',

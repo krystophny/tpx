@@ -36,7 +36,7 @@ type
     Header: T_EMFHeader;
     pLogStrings: TStrings;
     constructor Create;
-    procedure LoadFromFile(const FileName: string);
+    procedure LoadFromStream(const Stream: TStream);
   end;
 
   T_EMF_Loader = class
@@ -82,8 +82,35 @@ end;
 
 
 procedure T_EMF_Loader.LoadFromFile(const FileName: string);
+var
+  Stream: TStream;
+  //Stream: TMemoryStream; TFileStream;
+  MF: TMetaFile;
 begin
-  EMF_Struct.LoadFromFile(FileName);
+  if LowerCase(ExtractFileExt(FileName)) = '.emf' then
+  begin
+    Stream := TFileStream.Create(FileName, fmOpenRead);
+    try
+      EMF_Struct.LoadFromStream(Stream);
+    finally
+      Stream.Free;
+    end;
+  end
+  else
+  begin
+    MF := TMetaFile.Create;
+    Stream := TMemoryStream.Create;
+    try
+      MF.LoadFromFile(FileName);
+      MF.Enhanced := True;
+      MF.SaveToStream(Stream);
+      Stream.Position := 0;
+      EMF_Struct.LoadFromStream(Stream);
+    finally
+      Stream.Free;
+      MF.Free;
+    end;
+  end;
 end;
 
 
@@ -127,10 +154,9 @@ begin
   pLogStrings := nil;
 end;
 
-procedure T_EMF_Structure.LoadFromFile(const FileName:
-  string);
+procedure T_EMF_Structure.LoadFromStream(const Stream:
+  TStream);
 var
-  Stream: TFileStream;
   RecIndex: Integer;
   EMR_Info: TEMR;
   ARecord: TEMF_Record;
@@ -138,57 +164,52 @@ var
 var
   APosition: Int64;
 begin
-  Stream := TFileStream.Create(FileName, fmOpenRead);
   if pLogStrings <> nil then pLogStrings.Clear;
-  try
-    Stream.ReadBuffer(Header, SizeOf(Header));
-    Stream.Seek(Header.RecordSize, soFromBeginning);
-    LastBeginPath := -1;
-    for RecIndex := 1 to Header.NumOfRecords - 1 do
+  Stream.ReadBuffer(Header, SizeOf(Header));
+  Stream.Seek(Header.RecordSize, soFromBeginning);
+  LastBeginPath := -1;
+  for RecIndex := 1 to Header.NumOfRecords - 1 do
+  begin
+    APosition := Stream.Position;
+    Stream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
+    if pLogStrings <> nil then
+      pLogStrings.Add(EMF_Records[EMR_Info.iType]);
+    Stream.Seek(-SizeOf(EMR_Info), soFromCurrent);
+    if (EMR_Info.iType < 1) or (EMR_Info.iType > 97) then
     begin
-      APosition := Stream.Position;
-      Stream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
-      if pLogStrings <> nil then
-        pLogStrings.Add(EMF_Records[EMR_Info.iType]);
-      Stream.Seek(-SizeOf(EMR_Info), soFromCurrent);
-      if (EMR_Info.iType < 1) or (EMR_Info.iType > 97) then
-      begin
         //ShowMessage(IntToStr(EMR_Info.iType));
-        Stream.Position := APosition;
-        Stream.Seek(EMR_Info.nSize, soFromCurrent);
-        Continue;
-      end;
-      ARecord := EMF_RecordsClasses[EMR_Info.iType].Create;
-      Add(ARecord);
-      ARecord.ReadFromStream(Stream);
       Stream.Position := APosition;
       Stream.Seek(EMR_Info.nSize, soFromCurrent);
-      if ARecord is TEMF_BeginPath then
+      Continue;
+    end;
+    ARecord := EMF_RecordsClasses[EMR_Info.iType].Create;
+    Add(ARecord);
+    ARecord.ReadFromStream(Stream);
+    Stream.Position := APosition;
+    Stream.Seek(EMR_Info.nSize, soFromCurrent);
+    if ARecord is TEMF_BeginPath then
+    begin
+      (ARecord as TEMF_BeginPath).HasStroke := False;
+      (ARecord as TEMF_BeginPath).HasFill := False;
+      LastBeginPath := RecIndex - 1
+    end
+    else if (ARecord is TEMF_PathBounds)
+      and (LastBeginPath >= 0) then
+    begin
+      if ARecord is TEMF_StrokePath then
+        (Self[LastBeginPath]
+          as TEMF_BeginPath).HasStroke := True
+      else if ARecord is TEMF_FillPath then
+        (Self[LastBeginPath]
+          as TEMF_BeginPath).HasFill := True
+      else if ARecord is TEMF_StrokeAndFillPath then
       begin
-        (ARecord as TEMF_BeginPath).HasStroke := False;
-        (ARecord as TEMF_BeginPath).HasFill := False;
-        LastBeginPath := RecIndex - 1
-      end
-      else if (ARecord is TEMF_PathBounds)
-        and (LastBeginPath >= 0) then
-      begin
-        if ARecord is TEMF_StrokePath then
-          (Self[LastBeginPath]
-            as TEMF_BeginPath).HasStroke := True
-        else if ARecord is TEMF_FillPath then
-          (Self[LastBeginPath]
-            as TEMF_BeginPath).HasFill := True
-        else if ARecord is TEMF_StrokeAndFillPath then
-        begin
-          (Self[LastBeginPath]
-            as TEMF_BeginPath).HasStroke := True;
-          (Self[LastBeginPath]
-            as TEMF_BeginPath).HasFill := True;
-        end;
+        (Self[LastBeginPath]
+          as TEMF_BeginPath).HasStroke := True;
+        (Self[LastBeginPath]
+          as TEMF_BeginPath).HasFill := True;
       end;
     end;
-  finally
-    Stream.Free;
   end;
 end;
 

@@ -4103,6 +4103,7 @@ type
     TeXPicPrologue: string;
     TeXPicEpilogue: string;
     LineWidth: TRealType;
+    MiterLimit: TRealType;
     //FactorMM: TRealType; // for line width
     Border: TRealType;
     PicMagnif: TRealType;
@@ -12730,6 +12731,7 @@ begin
   TeXPicPrologue := '';
   TeXPicEpilogue := '';
   LineWidth := LineWidth_Default;
+  MiterLimit := 10;
   //FactorMM := 1;
   Border := Border_Default;
   PicMagnif := PicMagnif_Default;

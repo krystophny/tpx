@@ -502,7 +502,7 @@ object MainForm: TMainForm
         Caption = '-'
       end
       object ImportEMF1: TMenuItem
-        Action = ImportEMF
+        Action = ImportMetafile
       end
       object ImportEPS1: TMenuItem
         Action = ImportEPS
@@ -981,7 +981,7 @@ object MainForm: TMainForm
     Top = 32
   end
   object EMFOpenDialog: TOpenPictureDialog
-    Filter = 'Enhanced Metafiles (*.emf)|*.emf'
+    Filter = 'Windows (Enhanced) Metafiles (*.emf,*.wmf)|*.emf;*.wmf'
     Left = 200
     Top = 84
   end
@@ -1551,10 +1551,10 @@ object MainForm: TMainForm
       Caption = 'Preview EMF'
       OnExecute = PicturePreviewExecute
     end
-    object ImportEMF: TAction
+    object ImportMetafile: TAction
       Category = 'File'
-      Caption = 'Import EMF'
-      OnExecute = ImportEMFExecute
+      Caption = 'Import EMF/WMF'
+      OnExecute = ImportMetafileExecute
     end
     object ImportEPS: TAction
       Category = 'File'
