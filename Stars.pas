@@ -2,7 +2,7 @@ unit Stars;
 
 interface
 
-uses 
+uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
   ImgList, ComCtrls, ToolWin;
 
@@ -32,3 +32,4 @@ implementation
 {$R *.dfm}
 
 end.
+

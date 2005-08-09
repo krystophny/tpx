@@ -4,7 +4,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics,
-    Controls, Forms,
+  Controls, Forms,
   Dialogs, ExtCtrls, StdCtrls, ShellAPI;
 
 type
@@ -44,4 +44,3 @@ begin
 end;
 
 end.
-

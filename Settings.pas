@@ -16,6 +16,7 @@ type
     Button2: TButton;
     Memo1: TMemo;
     OpenDialog1: TOpenDialog;
+    FontDialog1: TFontDialog;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormShow(Sender: TObject);
@@ -41,7 +42,7 @@ var
 
 implementation
 
-uses InOut, MainUnit, CADSys4, PreView;
+uses InOut, MainUnit, CADSys4, PreView, EMF_Unit;
 
 {$R *.dfm}
 
@@ -59,7 +60,7 @@ begin
     ExtractFilePath(ParamStr(0))) + IniFileName0;
   SettingsList := TOptionsList.Create;
 
-   SettingsList.AddRealType('PicScale_Default',
+  SettingsList.AddRealType('PicScale_Default',
     @PicScale_Default, 'Picture scale (mm per unit)');
   SettingsList.AddRealType('Border_Default',
     @Border_Default, 'Picture border (mm)');
@@ -77,22 +78,29 @@ begin
   SettingsList.AddString('IncludePath_Default',
     @(IncludePath_Default),
     'Path to add before \includegraphics file name (like mypictures/)');
-    
+
   SettingsList.AddRealType('LineWidth_Default',
-    @LineWidth_Default, 'Thin line width (mm)');
+    @LineWidthBase_Default, 'Thin line width (mm)');
   SettingsList.AddRealType('ArrowsSize_Default',
     @ArrowsSize_Default, 'Arrows size');
   SettingsList.AddRealType('StarsSize_Default',
     @StarsSize_Default, 'Stars size');
   SettingsList.AddRealType('HatchingStep_Default',
     @HatchingStep_Default, 'Hatching step (mm)');
+  SettingsList.AddRealType('HatchingLineWidth_Default',
+    @HatchingLineWidth_Default, 'Hatching line width (fraction of LineWidth)');
   SettingsList.AddRealType('DottedSize_Default',
     @DottedSize_Default, 'Dotted line size (mm)');
   SettingsList.AddRealType('DashSize_Default',
     @DashSize_Default, 'Dashed line size (mm)');
   SettingsList.AddRealType('DefaultFontHeight_Default',
     @DefaultFontHeight_Default, 'Default font height');
-    
+  SettingsList.AddFontName('FontName_Default',
+    @FontName_Default, 'Default font');
+  {SettingsList.AddBoolean('ScalePhysicalUnits',
+    @(MainForm.ScalePhysical.Checked),
+    'Scale physical units when transforming the whole picture');}
+
   SettingsList.AddRealType('TeXMinLine_Default',
     @TeXMinLine_Default, 'TeX minimum line length');
   SettingsList.AddBoolean('TeXCenterFigure_Default',
@@ -113,16 +121,26 @@ begin
     '*.exe|*.exe', 'Path to LaTeX (latex.exe)');
   SettingsList.AddFilePath('PdfLatexPath', @(PdfLatexPath),
     '*.exe|*.exe', 'Path to PDFLaTeX (pdflatex.exe)');
-  //SettingsList.AddFilePath('DviPsPath', @(DviPsPath),    '*.exe|*.exe', 'Path to DVIPS (dvips.exe)');
+  SettingsList.AddFilePath('DviPsPath', @(DviPsPath),
+    '*.exe|*.exe', 'Path to DVIPS (dvips.exe)');
   SettingsList.AddFilePath('DviViewerPath', @(DviViewerPath),
     '*.exe|*.exe',
     'Path to DVI viewer (e.g. yap.exe). Leave this blank to use the default viewer');
   SettingsList.AddFilePath('PdfViewerPath', @(PdfViewerPath),
     '*.exe|*.exe',
     'Path to PDF viewer (e.g. acrobat.exe). Leave this blank to use the default viewer');
-  {SettingsList.AddFilePath('PSViewerPath', @(PSViewerPath),
+  SettingsList.AddFilePath('PSViewerPath', @(PSViewerPath),
     '*.exe|*.exe',
-    'Path to PostScript viewer (e.g. gsview32.exe). Leave this blank to use the default viewer');}
+    'Path to PostScript viewer (e.g. gsview32.exe). Leave this blank to use the default viewer');
+  SettingsList.AddFilePath('TextViewerPath', @(TextViewerPath),
+    '*.exe|*.exe',
+    'Path to text viewer (e.g. notepad.exe). Leave this blank to use the default viewer');
+  SettingsList.AddString('PostscriptPrinter', @(PostscriptPrinter),
+    'Postscript printer to create EPS files');
+  SettingsList.AddBoolean('PostscriptPrinterUseOffset',
+    @(PostscriptPrinterUseOffset),
+    'Use offset when creating EPS files');
+
 
   SettingsList.AddFilePath('MetaPostPath', @(MetaPostPath),
     '*.exe|*.exe',
@@ -136,6 +154,10 @@ begin
   SettingsList.AddFilePath('PsToEditPath', @(PsToEditPath),
     '*.exe|*.exe',
     'Path to PsToEdit program (pstoedit.exe). Needed for convering EPS to EMF (used for EPS import)');
+  SettingsList.AddString('PsToEditFormat', @(PsToEditFormat),
+    'Format for PsToEdit program for convering EPS to EMF (used for EPS import).' +
+    ' Format can be emf or one of the better implementations (wemf, wemfc, wemfnss)' +
+    ' which are available in registered version of PsToEdit');
 
   SettingsList.AddStringList('RecentFiles', MainForm.RecentFiles, '');
   SettingsList.Add(
@@ -200,6 +222,8 @@ begin
       VLE.ItemProps[I].EditMask := Data.GetMask;
     if Data is TFilePathOption then
       VLE.ItemProps[I].EditStyle := esEllipsis;
+    if Data is TFontNameOption then
+      VLE.ItemProps[I].EditStyle := esEllipsis;
     if Data is TChoiceOption then
     begin
       VLE.ItemProps[I].EditStyle := esPickList;
@@ -245,6 +269,13 @@ begin
       OpenDialog1.Filter := Filter;
       if not OpenDialog1.Execute then Exit;
       VLE.Cells[1, VLE.Row] := OpenDialog1.FileName;
+    end
+  else if SettingsList[VLE.Row - 1] is TFontNameOption then
+    with SettingsList[VLE.Row - 1] as TFontNameOption do
+    begin
+      FontDialog1.Font.Name := VLE.Cells[1, VLE.Row];
+      if not FontDialog1.Execute then Exit;
+      VLE.Cells[1, VLE.Row] := FontDialog1.Font.Name;
     end;
 end;
 

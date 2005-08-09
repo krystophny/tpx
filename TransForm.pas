@@ -45,6 +45,8 @@ var
 
 implementation
 
+uses Geometry;
+
 {$R *.dfm}
 
 procedure TTransfForm.FormCreate(Sender: TObject);
@@ -137,4 +139,3 @@ begin
 end;
 
 end.
-

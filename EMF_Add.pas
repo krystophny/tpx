@@ -2,7 +2,7 @@ unit EMF_Add;
 
 interface
 
-uses Types, Classes, Windows, Contnrs, SysUtils;
+uses Types, Classes, Forms, Windows, Contnrs, SysUtils, Graphics;
 
 const
 
@@ -43,6 +43,7 @@ const
 type
 
   TEMF_Record = class
+    EMR_Info0: TEMR;
     procedure ReadFromStream(AStream: TStream); virtual;
       abstract;
   end;
@@ -318,13 +319,20 @@ type
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
+  TEMRSetMiterLimitQQ = packed record
+    emr: TEMR;
+    eMiterLimit: Longword;
+    //a bug in Windows GDI! eMiterLimit is actually DWORD(Longword) instead of FLOAT(Single)
+  end;
+
   TEMF_SetMiterLimit = class(TEMF_Record)
-    EMR_Info: TEMRSetMiterLimit;
+    EMR_Info: TEMRSetMiterLimitQQ;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_BeginPath = class(TEMF_Skip)
-    HasStroke, HasFill: Boolean;
+    HasStroke, HasFill, HasClip, UseBezier: Boolean;
+    N: Integer;
   end;
 
   TEMF_EndPath = class(TEMF_Skip)
@@ -353,7 +361,7 @@ type
   TEMF_WidenPath = class(TEMF_Skip)
   end;
 
-  TEMF_SelectClipPath = class(TEMF_Record)
+  TEMF_SelectClipPath = class(TEMF_PathBounds)
     EMR_Info: TEMRSelectClipPath;
     procedure ReadFromStream(AStream: TStream); override;
   end;
@@ -428,7 +436,7 @@ type
 
   TEMF_ExtTextOut = class(TEMF_Record)
     EMR_Info: TEMRExtTextOut;
-    Str: WideString;
+    Str: Widestring;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -484,16 +492,20 @@ type
 
   TEMF_PolyDraw16 = class(TEMF_Record)
     EMR_Info: TEMRPolyDraw16;
+    PointsArray16: array of TSmallPoint;
+    abTypes: array of Byte;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_CreateMonoBrush = class(TEMF_Record)
     EMR_Info: TEMRCreateMonoBrush;
+    BMP: Graphics.TBitmap;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_CreateDIBPatternBrushPt = class(TEMF_Record)
     EMR_Info: TEMRCreateDIBPatternBrushPt;
+    BMP: Graphics.TBitmap;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -796,12 +808,14 @@ end;
 
 procedure TEMF_Poly.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.aptl), soFromCurrent);
 end;
 
 procedure TEMF_PolyPolyline0.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.aPolyCounts)
     - SizeOf(EMR_Info.aptl), soFromCurrent);
@@ -809,152 +823,179 @@ end;
 
 procedure TEMF_SetExtEx.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_SetOrgEx.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_SetPixelV.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_SetMapperFlags.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_Mode.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_SetColorAdjustment.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_SetTextColor0.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_OffsetClipRgn.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_LineTo0.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_ClipRect.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_ScaleExtEx.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_RestoreDC.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_SetWorldTransform.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_ModifyWorldTransform.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_ObjectHandle.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_CreatePen.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_CreateBrushIndirect.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_AngleArc.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_Rect0.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_RoundRect.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_Arc0.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_SelectPalette.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_CreatePalette.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_SetPaletteEntries.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_ResizePalette.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_ExtFloodFill.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_PolyDraw.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.aptl)
     - SizeOf(EMR_Info.abTypes), soFromCurrent);
@@ -963,30 +1004,48 @@ end;
 procedure TEMF_SetArcDirection.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_SetMiterLimit.ReadFromStream(AStream:
   TStream);
+{var
+  BB: array[1..4] of Byte;
+  BB2: array[1..4] of Byte;
+  I: Integer;
+  St: string;}
 begin
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
+  //EMR_Info.eMiterLimit := 7;
+  //Move(EMR_Info.eMiterLimit, BB, SizeOf(BB));
+  //for I := 1 to 4 do BB2[5 - I] := BB[I];
+  //Move(BB2, EMR_Info.eMiterLimit, SizeOf(BB));
+  //St := '';
+  //for I := 1 to 4 do St := St + Format('%x', [BB[I]]);
+  //Application.MessageBox(PChar(St), '');
+  //Application.Tag := Round(EMR_Info.eMiterLimit);
+//  unsigned 32-bit *2 + 32
 end;
 
 procedure TEMF_PathBounds.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_SelectClipPath.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_GDIComment.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.Data), soFromCurrent);
 end;
@@ -994,6 +1053,7 @@ end;
 procedure TEMF_FillRgn.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.RgnData), soFromCurrent);
 end;
@@ -1001,6 +1061,7 @@ end;
 procedure TEMF_FrameRgn.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.RgnData), soFromCurrent);
 end;
@@ -1008,6 +1069,7 @@ end;
 procedure TEMF_InvertRgn.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.RgnData), soFromCurrent);
 end;
@@ -1015,6 +1077,7 @@ end;
 procedure TEMF_PaintRgn.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.RgnData), soFromCurrent);
 end;
@@ -1022,6 +1085,7 @@ end;
 procedure TEMF_ExtSelectClipRgn.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.RgnData), soFromCurrent);
 end;
@@ -1029,36 +1093,42 @@ end;
 procedure TEMF_BitBlt.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_StretchBlt.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_MaskBlt.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_PLGBlt.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_SetDIBitsToDevice.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
 procedure TEMF_StretchDIBits.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
 end;
 
@@ -1067,6 +1137,7 @@ procedure TEMF_ExtCreateFontIndirectW.ReadFromStream(AStream:
 var
   APosition: Int64;
 begin
+
   APosition := AStream.Position;
   AStream.ReadBuffer(EMR_Info.emr, SizeOf(EMR_Info.emr));
   AStream.ReadBuffer(EMR_Info.ihFont, SizeOf(EMR_Info.ihFont));
@@ -1078,6 +1149,7 @@ end;
 procedure TEMF_ExtTextOut.ReadFromStream(AStream:
   TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Position :=
     AStream.Position - SizeOf(EMR_Info)
@@ -1088,7 +1160,7 @@ end;
 
 procedure TEMF_Poly16.ReadFromStream(AStream: TStream);
 var
-  I: Integer;
+  I: Longword;
 begin
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.apts), soFromCurrent);
@@ -1112,15 +1184,17 @@ end;
 
 procedure TEMF_PolyPoly16.ReadFromStream(AStream: TStream);
 var
-  iPoly, I: Integer;
+  iPoly, I: Longword;
   Len: DWORD;
   Poly: T_PointsArray16;
 begin
+
   if PolyList = nil then
     PolyList := TObjectList.Create;
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.aPolyCounts)
     - SizeOf(EMR_Info.apts), soFromCurrent);
+  if EMR_Info.nPolys = 0 then Exit;
   for iPoly := 0 to EMR_Info.nPolys - 1 do
   begin
     AStream.ReadBuffer(Len, SizeOf(Len));
@@ -1156,37 +1230,108 @@ end;
       }
 
 procedure TEMF_PolyDraw16.ReadFromStream(AStream: TStream);
+var
+  I: Longword;
+  S: TMemoryStream;
+  St: string;
 begin
-  AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
+  AStream.ReadBuffer(EMR_Info.emr, SizeOf(EMR_Info.emr));
+  AStream.ReadBuffer(EMR_Info.rclBounds, SizeOf(EMR_Info.rclBounds));
+  AStream.ReadBuffer(EMR_Info.cpts, SizeOf(EMR_Info.cpts));
+  {AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.apts)
-    - SizeOf(EMR_Info.abTypes), soFromCurrent);
+    - SizeOf(EMR_Info.abTypes), soFromCurrent);}
+  SetLength(PointsArray16, EMR_Info.cpts);
+  SetLength(abTypes, EMR_Info.cpts);
+  for I := 0 to EMR_Info.cpts - 1 do
+    AStream.ReadBuffer(PointsArray16[I], SizeOf(TSmallPoint));
+  for I := 0 to EMR_Info.cpts - 1 do
+    AStream.ReadBuffer(abTypes[I], SizeOf(Byte));
+  {S := TMemoryStream.Create;
+  for I := 0 to EMR_Info.cpts - 1 do
+  begin
+    St := Format('%d %d %d'#13#10,
+      [PointsArray16[I].X, PointsArray16[I].Y, abTypes[I]]);
+    S.Write(St[1], Length(St));
+  end;
+  S.SaveToFile('C:\WRK\-.txt');
+  S.Free;}
 end;
 
 procedure TEMF_CreateMonoBrush.ReadFromStream(AStream: TStream);
+var
+  bmiHeader: TBitmapInfoHeader;
+  bmi: TBitmapInfo;
+  PBits: Pointer;
+  h_DC: HDC;
+  hBmp: Longint;
+  Position0: Longint;
 begin
+  Position0 := AStream.Position;
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
+  if not Assigned(BMP) then BMP := Graphics.TBitmap.Create;
+  AStream.Position := Position0 + EMR_Info.offBmi;
+  AStream.ReadBuffer(bmiHeader, SizeOf(bmiHeader));
+  bmi.bmiHeader := bmiHeader;
+  //Application.MessageBox(PChar(IntToStr(bmiHeader.biBitCount)), '');
+  h_DC := GetWindowDC(0);
+  GetMem(PBits, EMR_Info.cbBits);
+  AStream.Position := Position0 + EMR_Info.offBits;
+  AStream.ReadBuffer(PBits^, EMR_Info.cbBits);
+  hBmp := CreateDIBSection(h_DC, bmi, EMR_Info.iUsage, PBits, 0, 0);
+  //Application.MessageBox(PChar(IntToStr(EMR_Info.cbBits)), '');
+  BMP.Handle := hBmp;
+  //Application.MessageBox(PChar(IntToStr(BMP.Canvas.Pixels[0,0])), '');
+  //Application.MessageBox(PChar(Format('%d %d', [BMP.Width, BMP.Height])), '');
+  ReleaseDC(0, h_DC);
 end;
 
 procedure TEMF_CreateDIBPatternBrushPt.ReadFromStream(AStream:
   TStream);
+var
+  bmiHeader: TBitmapInfoHeader;
+  bmi: TBitmapInfo;
+  PBits: Pointer;
+  h_DC: HDC;
+  hBmp: Longint;
+  Position0: Longint;
 begin
+  Position0 := AStream.Position;
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
+  if not Assigned(BMP) then BMP := Graphics.TBitmap.Create;
+  AStream.Position := Position0 + EMR_Info.offBmi;
+  AStream.ReadBuffer(bmiHeader, SizeOf(bmiHeader));
+  bmi.bmiHeader := bmiHeader;
+  //Application.MessageBox(PChar(IntToStr(bmiHeader.biBitCount)), '');
+  h_DC := GetWindowDC(0);
+  GetMem(PBits, EMR_Info.cbBits);
+  AStream.Position := Position0 + EMR_Info.offBits;
+  AStream.ReadBuffer(PBits^, EMR_Info.cbBits);
+  hBmp := CreateDIBSection(h_DC, bmi, EMR_Info.iUsage, PBits, 0, 0);
+  //Application.MessageBox(PChar(IntToStr(EMR_Info.cbBits)), '');
+  BMP.Handle := hBmp;
+  //Application.MessageBox(PChar(IntToStr(BMP.Canvas.Pixels[0,0])), '');
+  //Application.MessageBox(PChar(Format('%d %d', [BMP.Width, BMP.Height])), '');
+  ReleaseDC(0, h_DC);
 end;
 
 procedure TEMF_ExtCreatePen.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   //AStream.Seek(-SizeOf(EMR_Info.elp.elpStyleEntry),    soFromCurrent);
 end;
 
 procedure TEMF_PolyTextOutA.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.aemrtext), soFromCurrent);
 end;
 
 procedure TEMF_PolyTextOutW.ReadFromStream(AStream: TStream);
 begin
+
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.aemrtext), soFromCurrent);
 end;

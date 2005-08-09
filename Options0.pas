@@ -60,6 +60,9 @@ type
       Filter0: string; Hint0: string);
   end;
 
+  TFontNameOption = class(TStringOption0)
+  end;
+
   TStringListOption = class(TStringOption0)
     procedure SetAsString(St: string); override;
     function GetAsString: string; override;
@@ -87,6 +90,8 @@ type
       PData0: Pointer; Hint0: string);
     procedure AddFilePath(Key0: string;
       PData0: Pointer; Filter0: string; Hint0: string);
+    procedure AddFontName(Key0: string;
+      PData0: Pointer; Hint0: string);
     procedure AddStringList(Key0: string;
       List: TStrings; Hint0: string);
     procedure AddChoice(Key0: string;
@@ -290,6 +295,12 @@ begin
   Add(TFilePathOption.Create(Key0, PData0, Filter0, Hint0));
 end;
 
+procedure TOptionsList.AddFontName(Key0: string;
+  PData0: Pointer; Hint0: string);
+begin
+  Add(TFontNameOption.Create(Key0, PData0, Hint0));
+end;
+
 procedure TOptionsList.AddStringList(Key0: string;
   List: TStrings; Hint0: string);
 begin
@@ -303,4 +314,3 @@ begin
 end;
 
 end.
-

@@ -4,22 +4,23 @@ unit CADSys4;
 interface
 
 uses SysUtils, Classes, Messages, Windows, Graphics, Controls,
-  Contnrs, Clipbrd, ComCtrls, CS4BaseTypes;
+  Contnrs, Clipbrd, ComCtrls, CS4BaseTypes, Draw;
+
 const
   Drawing_NewFileName = ': Unnamed drawing :';
 
 type
-  TeXFormatKind = (tex_tex, tex_pstricks, tex_eps, tex_png,
+  TeXFormatKind = (tex_tex, tex_pgf, tex_pstricks, tex_eps, tex_png,
     tex_bmp, tex_metapost, tex_emf);
-  PdfTeXFormatKind = (pdftex_tex, pdftex_pdf, pdftex_png,
+  PdfTeXFormatKind = (pdftex_tex, pdftex_pgf, pdftex_pdf, pdftex_png,
     pdftex_metapost, pdftex_epstopdf);
   TeXFigureEnvKind = (fig_none, fig_figure, fig_floating,
     fig_wrap);
 
 
 const
-  TeXFormat_Choice = 'tex;pstricks;eps;png;bmp;metapost;emf';
-  PdfTeXFormat_Choice = 'tex;pdf;png;metapost;epstopdf';
+  TeXFormat_Choice = 'tex;pgf;pstricks;eps;png;bmp;metapost;emf';
+  PdfTeXFormat_Choice = 'tex;pgf;pdf;png;metapost;epstopdf';
   TeXFigure_Choice = 'none;figure;floatingfigure;wrapfigure';
 
 var
@@ -36,17 +37,22 @@ var
   PicScale_Default: TRealType = 1;
   PicUnitLength_Default: TRealType = 0.05;
   HatchingStep_Default: TRealType = 2;
+  HatchingLineWidth_Default: TRealType = 0.5;
   DottedSize_Default: TRealType = 0.5;
   DashSize_Default: TRealType = 1;
+  FontName_Default: string = 'Times New Roman';
   TeXMinLine_Default: TRealType = 2;
   TeXCenterFigure_Default: Boolean = True;
   TeXFigure_Default: TeXFigureEnvKind = fig_figure;
-  LineWidth_Default: TRealType = 0.3;
+  LineWidthBase_Default: TRealType = 0.3;
   Border_Default: TRealType = 2;
   PicMagnif_Default: TRealType = 1;
   MetaPostTeXText_Default: Boolean = True;
   IncludePath_Default: string = '';
   // in=72.27pt  in=25.4mm  mm=2.845pt
+  // in=72pt  in=25.4mm  mm=2.8346pt
+
+  SmoothBezierNodes: Boolean;
 
 const
   TpXClipboardFormatString = 'TpX Clipboard Format';
@@ -164,10 +170,6 @@ type
    it from this class.
 }
   ECADSysException = class(Exception);
-{: This exception is raised when a <See Class=TPointsSet2D> or <See Class=TPointsSet3D>
-  object is accessed with an out of bound index.
-}
-  ECADOutOfBound = class(ECADSysException);
 {: This exception is raised when an attempt is made to use an
    unregistered shape class in a method that need a registered
    one.
@@ -222,16 +224,11 @@ type
   TObject2D = class;
   TGraphicObjList = class;
   TGraphicObject = class;
+  TGraphicObjectClass = class of TGraphicObject;
 
   //TSY:
   TOnChangeDrawing = procedure(Drawing: TDrawing) of object;
 
-{: This type defines a message handler function that is called
-   when a <See Class=TPointsSet2D> object is changed.
-
-   It has as arguments the vector that has called the handler.
-}
-  TOnChangePointsSet = procedure(Sender: TObject) of object;
 {: This type defines the event that is fired when an object is added to
    a <See Class=TDrawing> control.
 
@@ -307,410 +304,6 @@ type
   TMouseMoveEvent2D = procedure(Sender: TObject; Shift:
     TShiftState; WX, WY: TRealType; X, Y: Integer) of object;
 
-{: This class defines a set of points that can be drawed as
-   a polyline or filled polygon.
-
-   The points in the set are single precision points (<See Class=TPoint2D>)
-   that are clipped against a 2D axis aligned rectangle before drawed
-   on a Canvas.
-
-   The class has also picking capabilities as well as a method
-   to apply a trasform to all the points.
-
-   The may let the vector to grow when new points are added it; also
-   the vector can call a user defined function whenever this occour.
-
-   This class is very useful in defining new shapes to be used with
-   the library (see also <See Class=TPrimitive2D>, <See Class=TCurve2D>).
-}
-  TPointsSet2D = class(TObject)
-  private
-    fPoints: Pointer;
-    fCapacity, fCount: Word;
-    fGrownEnabled, fDisableEvents: Boolean;
-    fOnChange: TOnChangePointsSet;
-    fTag: Integer;
-
-    procedure SetDisableEvents(B: Boolean);
-    procedure CallOnChange;
-    function GetExtension: TRect2D;
-    procedure PutProp(Index: Word; const Item: TPoint2D);
-    procedure Expand(const NewCapacity: Integer);
-  protected
-    {: This method is called whenever a point is requested from the set.
-
-       <I=Index> is the index of the point to be extracted (the set
-       is like an array so the inserted points are referred to by a
-       numeric index value from 0 to Count - 1).
-
-       The method must return a point or raise a <See Class=ECADOutOfBound>
-       exception.
-    }
-    function Get(Index: Word): TPoint2D; virtual;
-    {: This method is called whenever a point in the set is to be replaced.
-
-       <I=PutIndex> is the index of point where to store
-       <I=Item>; <I=ItemIndex> is the index of <I=Item> if
-       it is already present in the list (so it will be replaced by
-       <I=Item>); <I=Item> is the modified point.
-
-       <B=Note>: You may want to redefine this method if you want
-       to customize the set by adding new informations to all the
-       points. For instance if you want to add a type specifier to
-       all the points you have to override this method and use the
-       specified indexes to manage the extra infos. For these
-       remember that:
-
-       <LI=<I=PutIndex> is equal to <I=ItemIndex> if
-            a point is being replaced with a new one.>
-       <LI=<I=ItemIndex>=<I=PutIndex> - 1 if the point
-            at <I=PutIndex> is being replaced with the previous
-            point in the set (this happens when <See Method=TPointsSet2D@Insert> is
-            called)>
-       <LI=<I=ItemIndex>=<I=PutIndex> + 1 if the point
-            at <I=PutIndex> is being replaced with the next
-            point in the set (this happens when <See Method=TPointsSet2D@Delete> is
-            called).>
-    }
-    procedure Put(PutIndex, ItemIndex: Word; const Item:
-      TPoint2D); virtual;
-  public
-    {: This method create a new instance of the class setting its capacity
-       to <I=_Capacity>.
-
-       <I=_Capacity> is the initial number of points that can be stored
-       in the set. If <See Property=TPointsSet2D@GrowingEnabled> is <B=True>
-       you can add more that <I=_Capacity> points to the set, otherwise
-       a <See Class=ECADOutOfBound> exception will be raised if
-       you try to do so.
-
-       Setting <I=_Capacity> to the real number of points in the set
-       will speed up the insertion of the point in the set.
-    }
-    constructor Create(const _Capacity: Word); virtual;
-    {: Free the memory used by the instance of the class.
-
-       Remember to call the <I=Free> method of the class when done
-       with the class or memory leak will result.
-    }
-    destructor Destroy; override;
-    {: Clear the set.
-
-       <B=Note> that the memory used by the set is not freed for
-       optimization. Only the <See Property=TPointsSet2D@Count> is reset to zero.
-    }
-    procedure Clear;
-    {: Copy a subset of the points from another set. The
-       points are copied in the respective positions, so
-       the second point of S is copied on the second point
-       of Self.
-
-       <I=S> is the source set from which the points will be
-       copied; <I=StIdx> and <I=EndIdx> are the start and end
-       index of the points in <I=S> to be copied respectively.
-
-       After the copy the <See Property=TPointsSet2D@OnChange> event will
-       be fired.
-
-       <B=Note>: If <See Property=TPointsSet2D@GrowingEnabled> is
-       <B=True> the size of the vector may grow if there is no
-       space for the points, otherwise only the points that sit into
-       the vect are copied and a <See Class=ECADOutOfBound>
-       exception will be raised if you try to do so.
-    }
-    procedure Copy(const S: TPointsSet2D; const StIdx, EndIdx:
-      Integer);
-    {: Add an item at the end of the set.
-
-       <I=Item> is the point to be added. The point is added
-       after any other point.
-
-       After the copy the <See Property=TPointsSet2D@OnChange> event will
-       be fired.
-
-       <B=Note>: If <See Property=TPointsSet2D@GrowingEnabled> is
-       <B=True> the size of the vector may grow if there is no
-       space for the point, otherwise a <See Class=ECADOutOfBound>
-       exception will be raised if you try to do so.
-    }
-    procedure Add(const Item: TPoint2D);
-    {: Add a set all the points of a set to the current one.
-
-       <I=Items> is the set from which copy the points. The
-       points will be added in the same order the have in <I=Items>
-       at the end of the current set.
-
-       After the copy the <See Property=TPointsSet2D@OnChange> event will
-       be fired.
-
-       <B=Note>: If <See Property=TPointsSet2D@GrowingEnabled> is
-       <B=True> the size of the vector may grow if there is no
-       space for the points, otherwise only the points that sit into
-       the vect are copied and a <See Class=ECADOutOfBound>
-       exception will be raised if you try to do so.
-    }
-    procedure AddPoints(const Items: array of TPoint2D);
-    {: Transform all the points in the set which a transformation matrix.
-
-       <I=T> is the transformation matrix that may be created
-       whith the functions <See Function=Translate2D>,
-       <See Function=Rotate2D>, <See Function=Scale2D>,
-       <See Function=MultiplyTransform2D>,
-       <See Function=InvertTransform2D>.
-
-       After the copy the <See Property=TPointsSet2D@OnChange> event will
-       be fired.
-    }
-    procedure TransformPoints(const T: TTransf2D);
-    {: Remove a point from the set.
-
-       <I=Index> is the index value of the point to be removed.
-       After the copy the <See Property=TPointsSet2D@OnChange> event will
-       be fired.
-
-       <B=Note 1>: Removing a point from a set is a time consuming
-       operation (or better it may be so if the set is a very large
-       one).
-
-       <B=Note 2>: If the <I=Index> is not in the vector a
-       <See Class=ECADOutOfBound> exception will be raised.
-    }
-    procedure Delete(const Index: Word);
-    {: Insert a point into the set.
-
-       <I=Index> is the index value at which the point will be
-       inserted. All the points in the set from the one next of
-       <I=Index> position to the end will be moved by one
-       to make space for the new point. <I=Item> is the new point to be
-       inserted.
-
-       <B=Note 1>: Insert a point into a set is a time consuming
-       operation (or better it may be so if the set is a very large
-       one).
-
-       <B=Note 2>: If <See Property=TPointsSet2D@GrowingEnabled> is
-       <B=True> the size of the vector may grow if there is no
-       space for the point, otherwise a <See Class=ECADOutOfBound>
-       exception will be raised if you try to do so.
-    }
-    procedure Insert(const Index: Word; const Item: TPoint2D);
-    {: Draw the entire set of the points in the set onto a Canvas as
-       a closed polygon filled with the current brush of the Canvas.
-
-       <I=Cnv> is the destination canvas on which the set will
-       be drawed <See Class=TDecorativeCanvas@TDecorativeCanvas>; <I=Clip> is the clipping rectangle in canvas
-       coordinates used to clip the output; <I=Extent> is the
-       extension of the set as returned from <See Property=TPointsSet2D@Extension>;
-       <I=S> is the viewport transformation as returned from
-       <See Property=TCADViewport@ViewportToScreenTransform>.
-
-       The set will be drawed as a closed polyline (it will be
-       closed automatically by the method) with the outline drawed
-       with the current pen and the interior filled with the
-       current brush of the canvas.
-
-       <B=Note 1>: The <I=Clip> parameter is of type <See Type=TRect2D>
-       but it is referred to convas coordinates that are of type <I=TRect>.
-       For this you have to use the <See Function=RectToRect2D> function
-       to pass the <I=ClipRect> property of the canvas.
-
-       <B=Note2>: The clipping region of the canvas have to be the
-       entire canvas extension (that is no user defined clipping region
-       must be is set).
-    }
-    procedure DrawAsPolygon(const Cnv: TDecorativeCanvas; const
-      Clip, Extent: TRect2D; const S: TTransf2D);
-    //TSY:
-    procedure DrawAsPolygonOutline(const Cnv: TDecorativeCanvas;
-      const
-      Clip, Extent: TRect2D; const S: TTransf2D);
-    {: Draw the entire set of the points in the set onto a Canvas
-       as a polyline.
-
-       <I=Cnv> is the destination canvas on which the set will
-       be drawed <See Class=TDecorativeCanvas@TDecorativeCanvas>; <I=Clip> is the clipping rectangle in canvas
-       coordinates used to clip the output; <I=Extent> is the
-       extension of the set as returned from <See Property=TPointsSet2D@Extension>;
-       <I=S> is the viewport transformation as returned from
-       <See Property=TCADViewport@ViewportToScreenTransform>.
-
-       The set will be drawed as a polyline (not closed by the
-       method) with the outline drawed with the current pen of
-       the canvas and not filled.
-
-       <B=Note 1>: The <I=Clip> parameter is of type <See Type=TRect2D>
-       but it is referred to convas coordinates that are of type <I=TRect>.
-       For this you have to use the <See Function=RectToRect2D> function
-       to pass the <I=ClipRect> property of the canvas.
-
-       <B=Note 2>: The clipping region of the canvas have to be the
-       entire canvas extension (that is no user defined clipping region
-       must be is set).
-    }
-    procedure DrawAsPolyline(const Cnv: TDecorativeCanvas; const
-      Clip, Extent: TRect2D; const S: TTransf2D);
-    {: Draw a subset of points onto a Canvas as a closed
-       polygon filled with the current brush of the Canvas.
-
-       <I=Cnv> is the destination canvas on which the set will
-       be drawed <See Class=TDecorativeCanvas@TDecorativeCanvas>; <I=Clip> is the clipping rectangle in canvas
-       coordinates used to clip the output; <I=Extent> is the
-       extension of the set as returned from <See Property=TPointsSet2D@Extension>;
-       <I=S> is the viewport transformation as returned from
-       <See Property=TCADViewport@ViewportToScreenTransform>.
-       <I=StartIdx> is the index of first point of the set to be
-       drawed; <I=EndIdx> is the index of last point of the
-       set to be drawed. <I=EndIdx> must be greater than
-       <I=StartIdx>.
-
-       The set will be drawed as a closed polyline (it will be
-       closed automatically by the method) from the point at
-       <I=StartIdx> and the last point at <I=EndIdx>, with the
-       outline drawed with the current pen and the interior filled
-       with the current brush of the canvas.
-
-       <B=Note 1>: The <I=Clip> parameter is of type <See Type=TRect2D>
-       but it is referred to convas coordinates that are of type <I=TRect>.
-       For this you have to use the <See Function=RectToRect2D> function
-       to pass the <I=ClipRect> property of the canvas.
-
-       <B=Note2>: The clipping region of the canvas have to be the
-       entire canvas extension (that is no user defined clipping region
-       must be is set).
-    }
-    procedure DrawSubsetAsPolygon(const Cnv: TDecorativeCanvas;
-      const Clip, Extent: TRect2D; const S: TTransf2D; const
-      StartIdx, EndIdx: Integer);
-    {: Draw a subset of the points in the set onto a Canvas as a polyline.
-
-       <I=Cnv> is the destination canvas on which the set will
-       be drawed <See Class=TDecorativeCanvas@TDecorativeCanvas>; <I=Clip> is the clipping rectangle in canvas
-       coordinates used to clip the output; <I=Extent> is the
-       extension of the set as returned from <See Property=TPointsSet2D@Extension>;
-       <I=S> is the viewport transformation as returned from
-       <See Property=TCADViewport@ViewportToScreenTransform>.
-       <I=StartIdx> is the index of first point of the set to be
-       drawed; <I=EndIdx> is the index of last point of the
-       set to be drawed. <I=EndIdx> must be greater than
-       <I=StartIdx>.
-
-       The set will be drawed as a polyline (not closed by the
-       method) from the point at <I=StartIdx> and the last
-       point at <I=EndIdx>, with the outline drawed with
-       the current pen of the canvas and not filled.
-
-       <B=Note 1>: The <I=Clip> parameter is of type <See Type=TRect2D>
-       but it is referred to convas coordinates that are of type <I=TRect>.
-       For this you have to use the <See Function=RectToRect2D> function
-       to pass the <I=ClipRect> property of the canvas.
-
-       <B=Note2>: The clipping region of the canvas have to be the
-       entire canvas extension (that is no user defined clipping region
-       must be is set).
-    }
-    procedure DrawSubsetAsPolyline(const Cnv: TDecorativeCanvas;
-      const Clip, Extent: TRect2D; const S: TTransf2D; const
-      StartIdx, EndIdx: Integer; const ToBeClosed: Boolean);
-    {: This property contains the extension of the set, that is
-       the smaller axis-alligned rectangle that fully contains the
-       points in the set.
-
-       <B=Note>: Because this method compute the extension every
-       time it is called you may want to store it in a temporary
-       variable if you want to use it in different part of your
-       function (obviously if you don't change the set between
-       uses of the extension).
-    }
-    procedure GetExtension0(var R: TRect2D; const FirstPass: Boolean);
-    property Extension: TRect2D read GetExtension;
-    {: This property contains the points in the set in an array-like
-       fashion.
-
-       <I=Index> is the index of the point to be accessed and it
-       is zero-based (that is the points in the set have
-       indexes 0,1,2,...).
-
-       <B=Note 1>: This is a default property so you can drop the
-       name of the property, for instance you may use:
-
-       <Code=AVect[2]>
-
-       instead of:
-
-       <Code=AVect.Points[2]>
-
-       <B=Note 2>: If <I=Index> is greater than
-       <See Property=TPointsSet2D@Count> a <See Class=ECADOutOfBound> exception
-       will be raised.
-    }
-    property Points[Index: Word]: TPoint2D read Get write
-    PutProp; default;
-    {: This property contains the number of points in the set.
-
-       You may use this property to iterate the points in the set.
-
-       <B=Note>: This property is always less than <See Property=TPointsSet2D@Capacity>.
-    }
-    property Count: Word read fCount;
-    {: This property contains the maximun number of points
-       that can be added or inserted into the set without growing
-       it (if possible).
-    }
-    property Capacity: Word read fCapacity;
-    {: If this property is set to <B=True> then the
-       <See Property=TPointsSet2D@OnChange> event will not be fired when
-       the set change.
-    }
-    property DisableEvents: Boolean read fDisableEvents write
-      SetDisableEvents;
-    {: If this property is set to <B=True> then the set can grow
-       if you add points when <See Property=TPointsSet2D@Count> is equal to
-       <See Property=TPointsSet2D@Capacity>, otherwise a <See Class=ECADOutOfBound>
-       exception will be raised if you try to do so.
-    }
-    property GrowingEnabled: Boolean read fGrownEnabled write
-      fGrownEnabled;
-    {: This property contains the points reference, that is a pointer
-       to the underling set of points. You will need to use it in the
-       functions:
-       <See Function=IsPointOnPolyLine2D>
-       <See Function=IsPointInPolygon2D>
-       <See Function=Draw2DSubSetAsPolygon>
-       <See Function=Draw2DSubSetAsPolyline>
-    }
-    property PointsReference: Pointer read fPoints;
-    {: The Tag property for user's information.
-
-       It is not saved.
-    }
-    property Tag: Integer read fTag write fTag;
-    {: EVENTS}
-    {: This event is fired whenever the set is changed.
-
-       In the <I=Sender> argument of the event handler the changed
-       set is passed.
-
-       <B=Note>: If you change the vector in the event handler no
-       new event will be fired.
-    }
-    property OnChange: TOnChangePointsSet read fOnChange write
-      fOnChange;
-  end;
-
-{: This type defines the procedure used by a <See Class=TCADViewport>
-   controll to clear the canvas before drawing on it.
-
-   <I=Sender> is the viewport, <I=Cnv> canvas to be cleared,
-   <I=ARect> is the rectangle of the viewplane that will be drawed onto
-   the canvas and <I=BackCol> is the background color to be used to clear
-   the canvas.
-
-   By default the canvas is simply cleared with the background color. This
-   procedure is useful to draw a raster image onto which you want to
-   do readlining.
-}
-  TClearCanvas = procedure(Sender: TObject; Cnv: TCanvas; const
-    ARect: TRect2D; const BackCol: TColor) of object;
 
 {: This is the base class for all kinds of graphical objects.
 
@@ -767,7 +360,7 @@ type
    <LI=<See Property=TGraphicObject@Enabled> to <B=True> >
    <LI=<See Property=TGraphicObject@ToBeSaved> to <B=True> >
 }
-    constructor Create(ID: Longint);
+    constructor Create(ID: Longint); virtual;
 {: This constructor is used to create an instance of the class and initialize
    its state with the one saved to a stream with a previous call to
    <See Method=TGraphicObject@SaveToStream>.
@@ -991,7 +584,6 @@ type
       fOnChange;
   end;
 
-  TGraphicObjectClass = class of TGraphicObject;
 
 { Syncronization object to prevent linking of Delphi's packages. }
 {: For Internal use of CADSys library.
@@ -1196,6 +788,8 @@ type
    <See Property=TGraphicObjList@FreeOnClear> property.
 }
     procedure RemoveCurrent;
+    //TSY: deletes object from the list and puts another object to that place
+    procedure ReplaceDeleteCurrent(const Obj: TGraphicObject);
   end;
 
 {: This class defines a double linked list of graphic objects.
@@ -1698,6 +1292,7 @@ type
    with BSP).
 }
   TObject2DClass = class of TObject2D;
+  TChangeProc = procedure(const Obj: TGraphicObject; PData: Pointer) of object;
 
   TDrawing = class(TComponent)
   private
@@ -2077,7 +1672,7 @@ type
     }
     procedure SaveToFile(const FileName: string);
     //TSY:
-    procedure SaveToFile_EMF(const FileName: string);
+    function SaveToFile_EMF(const FileName: string): Boolean;
     procedure SaveToFile_Bitmap(const FileName: string);
     procedure SaveToFile_PNG(const FileName: string);
     {: This method deletes the source block with the specified ID.
@@ -2232,6 +1827,13 @@ type
     procedure DeleteSelected;
     function GetSelectionExtension: TRect2D;
     function GetSelectionCenter: TPoint2D;
+    procedure ChangeSelected(ChangeProc: TChangeProc; PData: Pointer);
+    procedure ChangeLineKind(const Obj: TGraphicObject; PData: Pointer);
+    procedure ChangeLineColor(const Obj: TGraphicObject; PData: Pointer);
+    procedure ChangeHatching(const Obj: TGraphicObject; PData: Pointer);
+    procedure ChangeHatchColor(const Obj: TGraphicObject; PData: Pointer);
+    procedure ChangeFillColor(const Obj: TGraphicObject; PData: Pointer);
+    procedure ChangeLineWidth(const Obj: TGraphicObject; PData: Pointer);
     procedure NotifyChanged;
     property ObjectsIterator: TGraphicObjIterator read
       GetListOfObjects;
@@ -3647,7 +3249,7 @@ type
     }
     property WritableBox: TRect2D read fBox write fBox;
   public
-    constructor Create(ID: Longint);
+    constructor Create(ID: Longint); override;
     destructor Destroy; override;
     constructor CreateFromStream(const Stream: TStream; const
       Version: TCADVersion); override;
@@ -3841,7 +3443,8 @@ type
        itself and will be freed when the container is deleted. So it
        isn't possible to share objects between containers.
     }
-    constructor Create(ID: Longint; const Objs: array of
+    constructor Create(ID: Longint); override;
+    constructor CreateSpec(ID: Longint; const Objs: array of
       TObject2D);
     destructor Destroy; override;
     constructor CreateFromStream(const Stream: TStream; const
@@ -3922,7 +3525,8 @@ type
        it is possible to share these objects using the <See Class=TBlock2D>
        class.
     }
-    constructor Create(ID: Longint; const Name:
+    constructor Create(ID: Longint); override;
+    constructor CreateSpec(ID: Longint; const Name:
       TSourceBlockName; const Objs: array of TObject2D);
     constructor CreateFromStream(const Stream: TStream; const
       Version: TCADVersion); override;
@@ -3994,7 +3598,8 @@ type
        <I=Source> is the source block that is used to define
        the instance.
     }
-    constructor Create(ID: Longint; const Source:
+    constructor Create(ID: Longint); override;
+    constructor CreateSpec(ID: Longint; const Source:
       TSourceBlock2D);
     destructor Destroy; override;
     constructor CreateFromStream(const Stream: TStream; const
@@ -4067,6 +3672,8 @@ type
     property CanRedo: Boolean read GetCanRedo;
   end;
 
+  TOnPasteMetafileFromClipboard = procedure(Drawing: TDrawing2D) of object;
+
   {: This class defines a specialization of a <See Class=TDrawing>
      control (see it for details).
 
@@ -4092,8 +3699,10 @@ type
     PicScale: TRealType;
     PicUnitLength: TRealType;
     HatchingStep: TRealType;
+    HatchingLineWidth: TRealType;
     DottedSize: TRealType;
     DashSize: TRealType;
+    FontName: string;
     TeXMinLine: TRealType;
     TeXCenterFigure: Boolean;
     TeXFigure: TeXFigureEnvKind;
@@ -4102,7 +3711,7 @@ type
     TeXFigureEpilogue: string;
     TeXPicPrologue: string;
     TeXPicEpilogue: string;
-    LineWidth: TRealType;
+    LineWidthBase: TRealType;
     MiterLimit: TRealType;
     //FactorMM: TRealType; // for line width
     Border: TRealType;
@@ -4110,6 +3719,7 @@ type
     MetaPostTeXText: Boolean;
     IncludePath: string;
     History: TDrawHistory;
+    OnPasteMetafileFromClipboard: TOnPasteMetafileFromClipboard;
     procedure LoadObjectsFromStream(const Stream: TStream; const
       Version: TCADVersion); override;
     //TSY:
@@ -4255,7 +3865,9 @@ type
       Longint; const T: TTransf2D);
     procedure ScaleAll(const P: TPoint2D; ScaleX, ScaleY:
       TRealType);
-    procedure ScaleStandard;
+    function ScaleStandard(ScaleStandardMaxWidth,
+      ScaleStandardMaxHeight: TRealType): TTransf2D;
+    procedure ScalePhysical(const S: TRealType);
     procedure RedrawObject(const Obj: TObject2D);
     {: This property contains the extension of the drawing.
 
@@ -5392,880 +5004,6 @@ type
       write fSnapFilter;
   end;
 
-  {: This function returns the angle in radiants that
-     corresponds to <I=A> in degrees.
-  }
-function DegToRad(const A: TRealType): TRealType;
-  {: This function returns the angle in degree that
-     corresponds to <I=A> in angles.
-
-     The resulting angle is in the range <I=0-360°>.
-  }
-function RadToDeg(const A: TRealType): TRealType;
-function HSVToRGB(Hue, Sat, V: TRealType): TColor;
-
-  { 2D functions. }
-
-  {: Use this function to initialize a 2D point variable.
-
-     This function returns always a cartesing point (W=1).
-
-     Parameters:
-
-     <LI=<I=X> is the X coordinate of the point.>
-     <LI=<I=Y> is the Y coordinate of the point.>
-  }
-function Point2D(const X, Y: TRealType): TPoint2D;
-  {: Use this function to initialize a 2D rectangle variable.
-
-     This function returns always a cartesian rectangle (with W=1).
-
-     Parameters:
-
-     <LI=<I=Left> is the left X coordinate of the rectangle.>
-     <LI=<I=Bottom> is the bottom Y coordinate of the rectangle.>
-     <LI=<I=Right> is the right X coordinate of the rectangle.>
-     <LI=<I=Top> is the top Y coordinate of the rectangle.>
-  }
-function Rect2D(const Left, Bottom, Right, Top: TRealType):
-  TRect2D;
-  {: Use this function to create a versor.
-
-     A versor is vector whose length is 1. This function compute
-     this kind of vector by dividing the vector by its length.
-     If the lenght is zero an exception will be raised.
-
-     Parameters:
-
-     <LI=<I=X> is the X coordinate of the versor.>
-     <LI=<I=Y> is the Y coordinate of the versor.>
-  }
-function Versor2D(const X, Y: TRealType): TVector2D;
-  {: This function normalizes a vector.
-
-     Normalizing a Vector means that the vector coordinates
-     are divided by the length of the vector. If the lenght is
-     zero an exception will be raised.
-
-     Parameters:
-
-     <LI=<I=V> is the vector being normalized.>
-  }
-function NormalizeVector2D(const V: TVector2D): TVector2D;
-  {: This function returns a versor that rapresent the direction from
-     the point <I=PFrom> to the point <I=PTo>.
-
-     The function computes the vector beetwen the two points
-     and then normalizes it.
-
-     Parameters:
-
-     <LI=<I=PFrom> is the starting point of the direction.>
-     <LI=<I=PTo> is the ending point of the direction.>
-  }
-function Direction2D(const PFrom, PTo: TPoint2D): TVector2D;
-  {: This function returns the vector from the point
-     <I=PFrom> to the point <I=PTo>.
-
-     A vector rapresents the difference of the coordinates
-     from the two points.
-
-     The points are made cartesian before the creation of the vector.
-  }
-function Vector2D(PFrom, PTo: TPoint2D): TVector2D;
-  {: This function returns the modulus of the vector, that
-     is its length.
-
-     This value is also called the <I=Euclidian Norm> of the vector.
-
-     Parameters:
-
-     <LI=<I=V> is the versor on which the function is applied.>
-  }
-function VectorLength2D(const V: TVector2D): TRealType;
-  {: This function returns <B=True> if two points are equal
-     and <B=False> otherwise.
-
-     All the coordinates (also W) are tested.
-
-     Parameters:
-
-     <LI=<I=P1> is the first point.>
-     <LI=<I=P2> is the second point.>
-  }
-function IsSamePoint2D(P1, P2: TPoint2D): Boolean;
-  {: This function returns <B=True> if two vectors are equal
-     and <I=False> otherwise.
-
-     All the coordinates (also W) are tested.
-
-     Parameters:
-
-     <LI=<I=V1> is the first vector.>
-     <LI=<I=V2> is the second vector.>
-  }
-function IsSameVector2D(const V1, V2: TVector2D): Boolean;
-  {: This function returns <B=True> if two transform matrices
-     are equal and <B=False> otherwise.
-
-     The function use optimizations if the two matrices are
-     cartesian matrices.
-
-     Parameters:
-
-     <LI=<I=T1> is the first matrix.>
-     <LI=<I=T2> is the second matrix.>
-  }
-function IsSameTransform2D(const T1, T2: TTransf2D): Boolean;
-  {: This function returns <B=True> if a transform matrix is
-     a cartesian matrix, that is a matrix with the third column
-     equal to [0, 0, 1].
-
-     Parameters:
-
-     <LI=<I=T> is the matrix being tested.>
-  }
-function IsCartesianTransform2D(const T: TTransf2D): Boolean;
-  {: This function returns the cartesian point equivalent
-     to <I=P>.
-
-     A cartesian point has the W coordinate equals to 1.
-     To convert the point all the coordinates are divided by W.
-
-     When a point is made cartesian, there is no way to obtain
-     the original point back.
-
-     Parameters:
-
-     <LI=<I=P> is the point being transformed.>
-  }
-function CartesianPoint2D(const P: TPoint2D): TPoint2D;
-  {: This function returns the cartesian rectangle equivalent
-     to <I=R>.
-
-     A cartesian rectangle has the W coordinate of its corners
-     equals to 1. To convert the rectangle all the coordinates
-     of the two corners are divided by their W.
-
-     When a rectangle is made cartesian, there is no way to
-     obtain the original rectangle back.
-
-     Parameters:
-
-     <LI=<I=R> is the rectangle being transformed.>
-  }
-function CartesianRect2D(const R: TRect2D): TRect2D;
-  {: This function returns an ordered rectangle in which the
-     first point is the left-botton one and the second point
-     is the right-top one.
-
-     The returned rectangle is always cartesian.
-
-     Parameters:
-
-     <LI=<I=R> is the rectangle being ordered.>
-  }
-function ReorderRect2D(const R: TRect2D): TRect2D;
-  {: This function transforms a point into a point in
-     which the coordinates are integers. To do the
-     transformation the function <I=Round> is used.
-
-     The resulting point is specified in Windows screen coordinate
-     system.
-
-     Parameters:
-
-     <LI=<I=P2D> is the point being transformed.>
-  }
-function Point2DToPoint(const P2D: TPoint2D): TPoint;
-//TSY:
-  {: This function transforms a point with integer
-     coordinates into a point with real coordinates.
-
-     <I=P> is considered as specified in Windows screen
-     coordinate system.
-
-     Parameters:
-
-     <LI=<I=P> is the point being transformed.>
-  }
-function PointToPoint2D(const P: TPoint): TPoint2D;
-  {: This function transforms a rectangle with integer
-     coordinates into a rectangle with real coordinates.
-
-     <I=R> is considered as specified in Windows screen
-     coordinate system.
-
-     Parameters:
-
-     <LI=<I=R> is the rectangle being transformed.>
-  }
-function RectToRect2D(const R: TRect): TRect2D;
-  {: This function transforms a rectangle with real coordinates
-     into a rectangle with integer coordinates.
-     To do the transformation the function <I=Round> is used.
-
-     The resulting rectangle is specified in Windows screen coordinate
-     system.
-
-     Parameters:
-
-     <LI=<I=R> is the rectangle being transformed.>
-  }
-function Rect2DToRect(R: TRect2D): TRect;
-  {: This function enlarges a rectangle by the specified
-     percentual.
-
-     The resulting rectangle is always cartesian.
-
-     Parameters:
-
-     <LI=<I=R> is the box being enlarged.>
-     <LI=<I=Perc> is the percentual by which enlarge the box.
-     A value of 0.5 means the the rectangle is doubled (50%).>
-  }
-function EnlargeBoxPerc2D(R: TRect2D; const Perc: TRealType):
-  TRect2D;
-  {: This function enlarges a rectangle by the specified
-     delta in all directions.
-
-     The resulting rectangle is always cartesian.
-
-     Parameters:
-
-     <LI=<I=R> is the box being enlarged.>
-     <LI=<I=Delta> is the amount by which enlarge the box.
-     A value of 0.1 means the the rectangle is enlarged by
-     0.1 along the X-Y directions.
-  }
-function EnlargeBoxDelta2D(R: TRect2D; const Delta: TRealType):
-  TRect2D;
-  {: This function multiplies two affine matrix. It
-     returns the resulting matrix.
-
-     The order of multiplication is important for matrixes.
-
-     This function may be useful to concatenate transformation
-     matrixes.
-
-     Parameters:
-
-     <LI=<I=M1> is the first matrix.>
-     <LI=<I=M2> is the second matrix.>
-  }
-function MultiplyTransform2D(const M1, M2: TTransf2D):
-  TTransf2D;
-  {: This function returns the invers of a matrix.
-
-     The matrix must be non singular (that is its determinant
-     is non zero).
-
-     This function may be useful to obtain the inverse of
-     a transformation.
-
-     Parameters:
-     <LI=<I=M> is the matrix to be inverted.>
-  }
-function InvertTransform2D(const M1: TTransf2D): TTransf2D;
-  {: This function transforms a points by using a
-     transformation matrix.
-
-     Use <See function=Translate2D>, <See function=Rotate2D>
-     and <See function=Scale2D> to obtain a transformation
-     matrix for the most common transforms.
-
-     Parameters:
-
-     <LI=<I=P> is the point to be transformed.>
-     <LI=<I=T> is the transformation matrix.>
-  }
-function TransformPoint2D(const P: TPoint2D; const T:
-  TTransf2D): TPoint2D;
-  {: This function transforms a vector by using a transformation
-     matrix.
-
-     Use <See function=Translate2D>, <See function=Rotate2D> and
-     <See function=Scale2D> to obtain a transformation matrix
-     for the most common transforms.
-
-     Parameters:
-
-     <LI=<I=V> is the vector to be transformed.>
-     <LI=<I=T> is the transformation matrix.>
-  }
-function TransformVector2D(const V: TVector2D; const T:
-  TTransf2D): TVector2D;
-  {: This function transforms a rectangle by using a
-     transformation matrix. The first corner and the second corner
-     of the rectangle are transformed.
-
-     Use <See function=Translate2D>, <See function=Rotate2D> and
-     <See function=Scale2D> to obtain a transformation matrix
-     for the most common transforms.
-
-     Parameters:
-
-     <LI=<I=R> is the rectangle to be transformed.>
-     <LI=<I=T> is the transformation matrix.>
-  }
-function TransformRect2D(const R: TRect2D; const T: TTransf2D):
-  TRect2D;
-  {: This function transforms a bounding box by using a
-     transformation matrix. The resulting rectangle is a the
-     bounding box that fully contains the passed rectangle.
-
-     Use <See function=Translate2D>, <See function=Rotate2D> and
-     <See function=Scale2D> to obtain a transformation matrix
-     for the most common transforms.
-
-     Parameters:
-
-     <LI=<I=R> is the rectangle to be transformed.>
-     <LI=<I=T> is the transformation matrix.>
-  }
-function TransformBoundingBox2D(const Box: TRect2D; const
-  Transf: TTransf2D): TRect2D;
-  {: This function returns a transformation matrix that
-     correspond to a 2D translation.
-
-     Parameters:
-
-     <LI=<I=Tx> is the translation among the X axis.>
-     <LI=<I=Ty> is the translation among the Y axis.>
-  }
-function Translate2D(const TX, TY: TRealType): TTransf2D;
-  {: This function returns a transformation matrix that
-     correspond to a 2D rotation.
-
-     The center of rotation is in (0, 0). To rotate along a
-     point (px, py), concatenate the following matrixes:
-
-     <Code=
-       Translate(-px, -py) -> Rotate2D(A) -> Translate(px, py)
-     >
-
-     Parameters:
-
-     <LI=<I=R> is the angle of rotation in radiants.>
-  }
-function Rotate2D(const R: TRealType): TTransf2D;
-
-//TSY: rotate over point (CX,CY), R radians
-function RotateCenter2D(const R: TRealType;
-  const C: TPoint2D): TTransf2D;
-
-  {: This function returns a transformation matrix that
-     correspond to a 2D scaling.
-
-     Parameters:
-
-     <LI=<I=Sx> is the scaling among the X axis.>
-     <LI=<I=Sy> is the scaling among the Y axis.>
-  }
-function Scale2D(const Sx, Sy: TRealType): TTransf2D;
-//TSY: scale with central point (CX,CY)
-function ScaleCenter2D(const Sx, Sy: TRealType; const C:
-  TPoint2D): TTransf2D;
-
-//TSY: flip over a line given by the ortogonal vector from (0,0)
-function Flip2D(const DX, DY: TRealType): TTransf2D;
-
-  {: This function creates a matrix transform that maps
-     the points in the W window, in points in the V window.
-
-     The function mantains the aspect ratio desired (if non zero).
-
-     Parameters:
-
-     <LI=<I=W> is the source rectangle>
-     <LI=<I=V> is the destionation rectangle>
-     <LI=<I=Aspect> is the aspect ratio, that is <I=XW/YW>.>
-  }
-function GetVisualTransform2D(var W: TRect2D; const V: TRect;
-  Aspect: TRealType): TTransf2D;
-  {: This procedure may be used to apply an ortogonal
-     constraint to a point.
-
-     The parameter <I=CurrPt> is modified so that the
-     ray beetwen <I=LastPt> and <I=CurrPt> is parallel
-     to the axis <I=X> or <I=Y>. The new <I=CurrPt> will
-     be on that ray, and the ray will be parallel to the
-     axis that lead to the greter lenght on the ray.
-
-     Parameters:
-
-     <LI=<I=LastPt> is the reference point>
-     <LI=<I=CurrPt> is the point to be constrained.>
-  }
-procedure MakeOrto2D(LastPt: TPoint2D; var CurrPt: TPoint2D);
-  {: This function returns the dot product of two vectors.
-     The resulting value is given by <I=S=a.X*b.X+a.Y*b.Y>.
-
-     If the vectors are versors, then the result value is
-     the coseno of the angle beetwen the versors.
-
-     Parameters:
-
-     <LI=<I=A> is the first vector>
-     <LI=<I=B> is the second vector>
-  }
-function DotProduct2D(const A, B: TVector2D): TRealType;
-  {: This function returns the vector that is
-     perpendicular to the given one.
-
-     Parameters:
-
-     <LI=<I=V> is the reference vector>
-  }
-function Perpendicular2D(const V: TVector2D): TVector2D;
-  {: This function returns the vector that rapresent
-     the opposite of the given one.
-
-     The result will be <I=(-V.X, -V.Y)>.
-
-     Parameters:
-
-     <LI=<I=V> is the reference vector>
-  }
-function Reflect2D(const V: TVector2D): TVector2D;
-  {: This function clips a segment against a rectangular
-     clipping region.
-
-     The function returns the clipping result code
-     and change <I=Pt1> and <I=Pt2> on the base of the clipping.
-
-     The resulting value can be one of the following:
-
-     <LI=<I=[ccNotVisible]> if the segment is not visible
-      in the clipping region.>
-     <LI=<I=[ccVisible]> if the segment is fully contained
-      in the clipping region.>
-     <LI=<I=[ccFirstEdge]> if the first point of segment
-      was clipped.>
-     <LI=<I=[ccSecondEdge]> if the second point of segment
-      was clipped.>
-     <LI=<I=[ccFirstEdge, ccSecondEdge]> if the bothe point
-      of segment were clipped.>
-
-     Parameters:
-
-     <LI=<I=Clip> is the clipping region.>
-     <LI=<I=Pt1> is the first point of the segment.>
-     <LI=<I=Pt2> is the second point of the segment.>
-  }
-  //TSY:
-function MixPoint(P1, P2: TPoint2D; Mix: TRealType): TPoint2D;
-function MidPoint(P1, P2: TPoint2D): TPoint2D;
-function ClipLine2D(Clip: TRect2D; var Pt1, Pt2: TPoint2D):
-  TClipResult;
-  {: This function clips a segment against the left and right
-     edges of a rectangular clipping region.
-
-     The function returns the clipping result code and change
-     <I=Pt1> and <I=Pt2> on the base of the clipping.
-
-     The resulting value can be one of the following:
-
-     <LI=<I=[ccNotVisible]> if the segment is not visible
-      in the clipping region.>
-     <LI=<I=[ccVisible]> if the segment is fully contained in
-      the clipping region.>
-     <LI=<I=[ccFirstEdge]> if the first point of segment
-      was clipped.>
-     <LI=<I=[ccSecondEdge]> if the second point of segment was
-      clipped.>
-     <LI=<I=[ccFirstEdge, ccSecondEdge]> if both the point
-      of segment were clipped.>
-
-     Parameters:
-
-     <LI=<I=Clip> is the clipping region.>
-     <LI=<I=Pt1> is the first point of the segment.>
-     <LI=<I=Pt2> is the second point of the segment.>
-  }
-function ClipLineLeftRight2D(Clip: TRect2D; var Pt1, Pt2:
-  TPoint2D): TClipResult;
-  {: This function clips a segment against the upper and
-     bottom edges of a rectangular clipping region.
-
-     The function returns the clipping result code and
-     change <I=Pt1> and <I=Pt2> on the base of the clipping.
-
-     The resulting value can be one of the following:
-
-     <LI=<I=[ccNotVisible]> if the segment is not visible in
-      the clipping region.>
-     <LI=<I=[ccVisible]> if the segment is fully contained in
-      the clipping region.>
-     <LI=<I=[ccFirstEdge]> if the first point of segment was
-      clipped.>
-     <LI=<I=[ccSecondEdge]> if the second point of segment
-      was clipped.>
-     <LI=<I=[ccFirstEdge, ccSecondEdge]> if both the point
-      of segment were clipped.>
-
-     Parameters:
-
-     <LI=<I=Clip> is the clipping region.>
-     <LI=<I=Pt1> is the first point of the segment.>
-     <LI=<I=Pt2> is the second point of the segment.>
-  }
-function ClipLineUpBottom2D(Clip: TRect2D; var Pt1, Pt2:
-  TPoint2D): TClipResult;
-  {: This function returns <B=True> if the point <I=P> lies
-     on the segment from <I=P1> to <I=P2>.
-
-     Parameters:
-
-     <LI=<I=P> is the testing point>
-     <LI=<I=P1> is the first point of the segment.>
-     <LI=<I=P2> is the second point of the segment.>
-  }
-function IsPointOnSegment2D(P, P1, P2: TPoint2D): Boolean;
-  {: This function returns the distance of <I=P> from the
-     segment from <I=P1> to <I=P2>.
-
-     Parameters:
-
-     <LI=<I=P> is the testing point>
-     <LI=<I=P1> is the first point of the segment.>
-     <LI=<I=P2> is the second point of the segment.>
-  }
-function PointLineDistance2D(P, P1, P2: TPoint2D): TRealType;
-  {: This function returns the distance beetwen two points.
-
-     The resulting value is always positive.
-
-     Parameters:
-
-     <LI=<I=P1> is the first point>
-     <LI=<I=P2> is the second point>
-  }
-function PointDistance2D(const P1, P2: TPoint2D): TRealType;
-  {: This function returns <B=True> if the point P is in the axis aligned
-     box with the side equal to 2*Aperture and centered at the point <I=RP>.
-     So a point may be considered near also if its distance from RP is
-     greater than Aperture.
-
-     Parameters:
-
-     <LI=<I=RP> is the reference point>
-     <LI=<I=P> is the testing point>
-     <LI=<I=Aperture> is the half side of reference box>
-     <LI=<I=Dist> will contains the distance of <I=P>
-      from <I=RP>. If the function returns <B=False>,
-      <I=Dist> will be set to <See const=MaxCoord>.
-  }
-function NearPoint2D(RP, P: TPoint2D; const Aperture: TRealType;
-  var Dist: TRealType): Boolean;
-  {: This function returns a position code that rapresent the
-     position of a point respect to the given polyline.
-
-     The result value is one of the following:
-
-     <LI=<I=PICK_NOOBJECT> if the point <I=P> isn't near to
-      the polyline>
-     <LI=<I=PICK_ONOBJECT> if the point <I=P> is near to
-      the passed polyline by a distance less than <I=Aperture>.>
-
-     Parameters:
-
-     <LI=<I=Vect> is the reference polyline. It is a PVectPoints2D
-         and is returned by <See Property=TPointsSet2D@PointsReference> >
-     <LI=<I=Count> is the number of points of the polyline >
-     <LI=<I=P> is the testing point>
-     <LI=<I=Dist> will contains the real distance of <I=P>
-      from the polyline. If the function returns
-      <I=PICK_NOOBJECT>, <I=Dist> will be set to
-      <See const=MaxCoord>.>
-     <LI=<I=Aperture> is the reference distance>
-     <LI=<I=T> is an optional transformation matrix.
-      The polyline is transformed by this matrix before
-      the testing.>
-     <LI=<I=MustClose>. If it is <B=True> the polyline will
-      be closed (if it is not already closed).>
-  }
-function IsPointOnPolyLine2D(const Vect: Pointer; Count:
-  Integer;
-  P: TPoint2D; var Dist: TRealType;
-  const Aperture: TRealType; const T: TTransf2D;
-  const MustClose: Boolean): Integer;
-  {: This function returns a position code that rapresent the
-     position of a point respect to the given closed polygon.
-
-     The result value is one of the following:
-
-     <LI=<I=PICK_NOOBJECT> if the point <I=P> isn't near to the
-      polygon>
-     <LI=<I=PICK_ONOBJECT> if the point <I=P> is near to the
-      passed polygon by a distance less than <I=Aperture>.>
-     <LI=<I=PICK_INOBJECT> if the point is inside the polygon.
-
-     Parameters:
-
-     <LI=<I=Vect> is the reference polyline. It is a PVectPoints2D
-         and is returned by <See Property=TPointsSet2D@PointsReference> >
-     <LI=<I=Count> is the number of points of the polyline >
-     <LI=<I=P> is the testing point>
-     <LI=<I=Dist> will contains the real distance of <I=P>
-      from the polyline. If the function returns
-      <I=PICK_NOOBJECT>, <I=Dist> will be set to
-      <See const=MaxCoord>.>
-     <LI=<I=Aperture> is the reference distance>
-     <LI=<I=T> is an optional transformation matrix. The
-      polyline is transformed by this matrix before the testing.>
-  }
-
-  //TSY:
-function FindPointPolylinePosition(const Vect: Pointer;
-  Count: Integer; P: TPoint2D;
-  const Aperture: TRealType;
-  const MustClose: Boolean): Integer;
-
-function IsPointInPolygon2D(const Vect: Pointer; Count: Integer;
-  P: TPoint2D; var Dist: TRealType;
-  const Aperture: TRealType; const T: TTransf2D): Integer;
-  {: This function returns a position code that rapresent
-     the position of a point respect to the given line.
-
-     The result value is one of the following:
-
-     <LI=<I=PICK_NOOBJECT> if the point <I=P> isn't near to
-      the segment>
-     <LI=<I=PICK_ONOBJECT> if the point <I=P> is near to
-      the passed segment by a distance less than <I=Aperture>.>
-
-     Parameters:
-
-     <LI=<I=A> is the first point of the segment>
-     <LI=<I=B> is the second point of the segment>
-     <LI=<I=P> is the testing point>
-     <LI=<I=Dist> will contains the real distance of
-      <I=P> from the segment. If the function returns
-      <I=PICK_NOOBJECT>, <I=Dist> will be set to <See const=MaxCoord>.>
-     <LI=<I=Aperture> is the reference distance>
-     <LI=<I=T> is an optional transformation matrix.
-      The line is transformed by this matrix before the testing.>
-  }
-function IsPointOnLine2D(A, B, P: TPoint2D; var Dist: TRealType;
-  const Aperture: TRealType; const T: TTransf2D): Integer;
-  {: This function returns a position code that rapresent the
-    position of a point respect to the given rectangle.
-
-    The result value is one of the following:
-
-    <LI=<I=PICK_NOOBJECT> if the point <I=P> isn't near to
-     the rectangle>
-    <LI=<I=PICK_ONOBJECT> if the point <I=P> is near to the
-     passed rectangle by a distance less than <I=Aperture>.>
-    <LI=<I=PICK_INOBJECT> if the point is inside the rectangle.>
-
-    Parameters:
-
-    <LI=<I=Box> is the axis alligned rectangle>
-    <LI=<I=P> is the testing point>
-    <LI=<I=Dist> will contains the real distance of <I=P> from
-     the box. If the function returns
-     <I=PICK_NOOBJECT>, <I=Dist> will be set to <See const=MaxCoord>.>
-    <LI=<I=Aperture> is the reference distance>
-    <LI=<I=T> is an optional transformation matrix. The
-     box is transformed by this matrix before the testing.>
-  }
-function IsPointOnRect2D(const Box: TRect2D; P: TPoint2D; var
-  Dist: TRealType;
-  const Aperture: TRealType; const T: TTransf2D): Integer;
-  {: This function returns <B=True> if the testing point is
-     inside the reference rectangle.
-
-     The function works on the assumption that the parameters
-     are cartesian points (W = 1.0).
-
-     Parameters:
-
-     <LI=<I=Box> is the axis alligned rectangle>
-     <LI=<I=P> is the testing point>
-  }
-function IsPointInCartesianBox2D(const PT: TPoint2D; const Box:
-  TRect2D): Boolean;
-  {: This function returns <B=True> if the testing point is
-     inside the reference rectangle.
-
-     The function works on both ordinary and non ordinary
-     points, for the function makes the points ordinary (W=1.0)
-     before do the test.
-
-     Parameters:
-
-     <LI=<I=Pt> is the testing point>
-     <LI=<I=Box> is the axis alligned rectangle>
-  }
-function IsPointInBox2D(PT: TPoint2D; Box: TRect2D): Boolean;
-  {: This function returns the smallest axis alligned rectangle
-     that contains the given points and the given rectangle.
-
-     The function works on both ordinary and non ordinary
-     points, for the function makes the points ordinary (W=1.0)
-     before do its job.
-
-     Parameters:
-
-     <LI=<I=Pt> is the point>
-     <LI=<I=Box> is the axis alligned rectangle>
-  }
-function PointOutBox2D(PT: TPoint2D; Box: TRect2D): TRect2D;
-  {: This function returns <B=True> if Box1 is completely or
-     partially contained in Box2.
-
-    The function works on both ordinary and non ordinary
-    points, for the function makes the points ordinary
-    (W=1.0) before do its job.
-
-    Parameters:
-
-    <LI=<I=Box1> is the first axis alligned rectangle>
-    <LI=<I=Box2> is the second axis alligned rectangle>
-  }
-function IsBoxInBox2D(Box1, Box2: TRect2D): Boolean;
-  {: This function returns <B=True> if <I=Box2> is fully
-     contained into <I=Box2>.
-
-     The function works on both ordinary and non ordinary
-     points, for the function makes the points ordinary
-     (W=1.0) before do its job.
-
-     Parameters:
-
-     <LI=<I=Box1> is the first axis alligned rectangle>
-     <LI=<I=Box2> is the second axis alligned rectangle>
-  }
-function IsBoxAllInBox2D(Box1, Box2: TRect2D): Boolean;
-  {: This function returns <B=True> if <I=Box2> is fully
-     contained into <I=Box2>.
-
-     The function works on the assumption that the parameters
-     are ordinary points (W = 1.0).
-
-     Parameters:
-
-     <LI=<I=Box1> is the first axis alligned rectangle>
-     <LI=<I=Box2> is the second axis alligned rectangle>
-  }
-function IsBoxAllInCartesianBox2D(const Box1, Box2: TRect2D):
-  Boolean;
-  {: This function returns the smallest axis alligned rectangle
-     that contains the given rectangles.
-
-     The function works on both ordinary and non ordinary
-     points, for the function makes the points ordinary (W=1.0)
-     before do its job.
-
-     Parameters:
-
-     <LI=<I=Box1> is the first axis alligned rectangle>
-     <LI=<I=Box2> is the second axis alligned rectangle>
-  }
-function BoxOutBox2D(Box1, Box2: TRect2D): TRect2D;
-function BoxFillingCartesian2D(const Box1, Box2: TRect2D): Word;
-
-  { Drawing functions
-    Vect deve essere di tipo PVectPoints2D, Count è il numero di punti. }
-procedure Draw2DSubSetAsPolygon(const Vect: Pointer; Count:
-  Integer;
-  const Cnv: TDecorativeCanvas;
-  const Clip, Extent: TRect2D;
-  const S: TTransf2D;
-  const StartIdx, EndIdx: Integer);
-procedure Draw2DSubSetAsPolyline(const Vect: Pointer; Count:
-  Integer;
-  const Cnv: TDecorativeCanvas;
-  const Clip, Extent: TRect2D;
-  const S: TTransf2D;
-  const StartIdx, EndIdx: Integer;
-  const ToBeClosed: Boolean);
-  {: This is an utility procedure useful when you want to mark a control point of
-     a graphic object.
-
-     It draws a small square of size <I=Wdt> centered at <I=X,Y> on the
-     canvas <I=Cnv>. All the parameters are refered to window's screen
-     coordinates. <I=Wdt> is half of the side of the square.
-  }
-procedure DrawPlaceHolder(const Cnv: TDecorativeCanvas; const X,
-  Y, Wdt: Integer);
-procedure DrawRoundPlaceHolder(const Cnv: TDecorativeCanvas;
-  const X, Y, Wdt: Integer);
-  {: This function can be used to draw a rectangle onto a
-     canvas.
-
-     The rectangle being drawed is first transformed by <I=MT>,
-     then it is clipped within the specified region and
-     then mapped on the screen with the matrix <I=S>.
-
-     Parameters:
-
-     <LI=<I=Cnv> is the canvas on which the rectangle is drawed.>
-     <LI=<I=Box> is the rectangle to be drawed.>
-     <LI=<I=Clip> is the clipping rectangle.>
-     <LI=<I=MT> is the transform matrix to be applied to Box.>
-     <LI=<I=S> is the mapping matrix used to map the clipped Box to the screen.>
-  }
-procedure DrawRect2DAsPolyline(const Cnv: TDecorativeCanvas;
-  const Box, Clip: TRect2D; const MT, S: TTransf2D);
-  {: This function can be used to draw a box onto a canvas.
-
-     The box being drawed is first transformed by
-     <I=MT>, then it is clipped within the specified region and
-     then mapped on the screen with the matrix <I=S>.
-
-     The rectangle is filled with the canvas brush.
-
-     Parameters:
-
-     <LI=<I=Cnv> is the canvas on which the rectangle is drawed.>
-     <LI=<I=Box> is the rectangle to be drawed.>
-     <LI=<I=Clip> is the clipping rectangle.>
-     <LI=<I=MT> is the transform matrix to be applied to Box>
-     <LI=<I=S> is the mapping matrix used to map the clipped Boxto the screen.>
-  }
-procedure DrawRect2DAsPolygon(const Cnv: TDecorativeCanvas; const
-  Box, Clip: TRect2D; const MT, S: TTransf2D);
-  {: This function can be used to draw a line onto a canvas.
-
-     The line being drawed is clipped within the specified
-     region and then mapped on the screen with the matrix <I=S>.
-
-     Parameters:
-
-     <LI=<I=Cnv> is the canvas on which the line is drawed.>
-     <LI=<I=P1> is the first point of the line.>
-     <LI=<I=P2> is the second point of the line.>
-     <LI=<I=Clip>. This is the clipping rectangle.>
-     <LI=<I=S> is the mapping matrix used to map the clipped line to the screen.>
-  }
-function DrawLine2D(const Cnv: TDecorativeCanvas; P1, P2:
-  TPoint2D; const Clip: TRect2D; const S: TTransf2D): Boolean;
-  {: This function can be used to draw a bounding box onto
-     a canvas.
-
-     The box being drawed is first transformed by <I=MT>.
-     This transformation keep the bounding box nature of
-     the rectangle, so the transformed box has the edges
-     parallel to the axis of the world.
-
-     After that it is mapped onto the screen and clipped
-     against the clipping region.
-
-     Parameters:
-
-     <LI=<I=Cnv> is the canvas on which the rectangle is drawed.>
-     <LI=<I=Box> is the rectangle to be drawed.>
-     <LI=<I=Clip> is the clipping rectangle.>
-     <LI=<I=MT> is the transform matrix to be applied to <I=Box>.>
-     <LI=<I=S> is the mapping matrix used to map the clipped
-      <I=Box> to the screen.>
-  }
-procedure DrawBoundingBox2D(const Cnv: TDecorativeCanvas; Box,
-  Clip: TRect2D; const S: TTransf2D);
-
   { The below class utilities are for graphics object registration. }
   {: This procedure resets the list of graphic object registrations.
 
@@ -6410,7 +5148,7 @@ procedure BitmapToPNG(const aBitmap: TBitmap;
 
 implementation
 
-uses Math, Dialogs, Forms, CS4Shapes, pngimage, MainUnit;
+uses Math, Dialogs, Forms, CS4Shapes, pngimage, MainUnit, Geometry;
 
 type
   TPaintingThread = class(TThread)
@@ -6440,2059 +5178,10 @@ type
 var
   GraphicObjectsRegistered: TGraphicClassRegistered;
 
-// 2D Clipping functions.
-
-{ This function returns the position code of P against Clip.
-  P and Clip must be cartesian point, Clip must be ordered.
-}
-
-function _PositionCode2D(const Clip: TRect2D; const P:
-  TPoint2D): TOutCode;
-begin
-  Result := [];
-  if P.X < Clip.Left then
-    Result := [Left]
-  else if P.X > Clip.Right then
-    Result := [Right];
-  if P.Y < Clip.Bottom then
-    Result := Result + [Bottom]
-  else if P.Y > Clip.Top then
-    Result := Result + [Top];
-end;
-
-{ This function is used to implement the Liang-Barsky clipping method. }
-
-function _ClipPt(const Denom, Num: Extended; var tE, tL:
-  Extended): Boolean;
-var
-  T: Extended;
-begin
-  Result := False;
-  if Denom > 0 then
-  begin
-    T := Num / Denom;
-    if T > tL then
-      Exit
-    else if T > tE then
-      tE := T;
-  end
-  else if Denom < 0 then
-  begin
-    T := Num / Denom;
-    if T < tE then
-      Exit
-    else if T < tL then
-      tL := T;
-  end
-  else if Num > 0 then
-    Exit;
-  Result := True;
-end;
-
-{ Implement the Liang-Barsky algoritm. }
-
-function _ClipLine2D(const Clip: TRect2D; var Pt1, Pt2:
-  TPoint2D): TClipResult;
-var
-  DX, DY, tE, tL: Extended;
-begin
-  Pt1 := CartesianPoint2D(Pt1);
-  Pt2 := CartesianPoint2D(Pt2);
-  DX := Pt2.X - Pt1.X;
-  DY := Pt2.Y - Pt1.Y;
-  Result := [ccNotVisible];
-  if (DX = 0) and (DY = 0) and IsPointInCartesianBox2D(Pt1, Clip)
-    then
-  begin
-    Result := [ccVisible];
-    Exit;
-  end;
-  tE := 0.0;
-  tL := 1.0;
-  // 0.9 in 1.
-  if _ClipPt(DX, Clip.Left - Pt1.X, tE, tL) then
-    if _ClipPt(-DX, Pt1.X - Clip.Right, tE, tL) then
-      if _ClipPt(DY, Clip.Bottom - Pt1.Y, tE, tL) then
-        if _ClipPt(-DY, Pt1.Y - Clip.Top, tE, tL) then
-        begin
-          Result := [];
-          if tL < 1 then
-          begin
-            Pt2.X := Pt1.X + tL * DX;
-            Pt2.Y := Pt1.Y + tL * DY;
-            Result := [ccSecond];
-          end;
-          if tE > 0 then
-          begin
-            Pt1.X := Pt1.X + tE * DX;
-            Pt1.Y := Pt1.Y + tE * DY;
-            Result := Result + [ccFirst];
-          end;
-          if Result = [] then
-            Result := [ccVisible];
-        end;
-end;
-
-{ Implement the Liang-Barsky algoritm. }
-
-function _ClipLineLeftRight2D(const Clip: TRect2D; var Pt1, Pt2:
-  TPoint2D): TClipResult;
-var
-  DX, DY, tE, tL: Extended;
-begin
-  Pt1 := CartesianPoint2D(Pt1);
-  Pt2 := CartesianPoint2D(Pt2);
-  DX := Pt2.X - Pt1.X;
-  DY := Pt2.Y - Pt1.Y;
-  Result := [ccNotVisible];
-  if (DX = 0) and (DY = 0) and IsPointInCartesianBox2D(Pt1, Clip)
-    then
-  begin
-    Result := [ccVisible];
-    Exit;
-  end;
-  tE := 0.0;
-  tL := 1.0;
-  { 0.9 in 1. }
-  if _ClipPt(DX, Clip.Left - Pt1.X, tE, tL) then
-    if _ClipPt(-DX, Pt1.X - Clip.Right, tE, tL) then
-    begin
-      Result := [];
-      if tL < 1 then
-      begin
-        Pt2.X := Pt1.X + tL * DX;
-        Pt2.Y := Pt1.Y + tL * DY;
-        Result := [ccSecond];
-      end;
-      if tE > 0 then
-      begin
-        Pt1.X := Pt1.X + tE * DX;
-        Pt1.Y := Pt1.Y + tE * DY;
-        Result := Result + [ccFirst];
-      end;
-      if Result = [] then
-        Result := [ccVisible];
-    end;
-end;
-
-{ Implement the Liang-Barsky algoritm. }
-
-function _ClipLineUpBottom2D(const Clip: TRect2D; var Pt1, Pt2:
-  TPoint2D): TClipResult;
-var
-  DX, DY, tE, tL: Extended;
-begin
-  Pt1 := CartesianPoint2D(Pt1);
-  Pt2 := CartesianPoint2D(Pt2);
-  DX := Pt2.X - Pt1.X;
-  DY := Pt2.Y - Pt1.Y;
-  Result := [ccNotVisible];
-  if (DX = 0) and (DY = 0) and IsPointInCartesianBox2D(Pt1, Clip)
-    then
-  begin
-    Result := [ccVisible];
-    Exit;
-  end;
-  tE := 0.0;
-  tL := 1.0;
-  { 0.9 in 1. }
-  if _ClipPt(DY, Clip.Bottom - Pt1.Y, tE, tL) then
-    if _ClipPt(-DY, Pt1.Y - Clip.Top, tE, tL) then
-    begin
-      Result := [];
-      if tL < 1 then
-      begin
-        Pt2.X := Pt1.X + tL * DX;
-        Pt2.Y := Pt1.Y + tL * DY;
-        Result := [ccSecond];
-      end;
-      if tE > 0 then
-      begin
-        Pt1.X := Pt1.X + tE * DX;
-        Pt1.Y := Pt1.Y + tE * DY;
-        Result := Result + [ccFirst];
-      end;
-      if Result = [] then
-        Result := [ccVisible];
-    end;
-end;
-
-{ General functions }
-
-function DegToRad(const A: TRealType): TRealType;
-begin
-  Result := A * Pi / 180.0;
-end;
-
-function RadToDeg(const A: TRealType): TRealType;
-begin
-  Result := A * 180.0 / Pi;
-end;
-
-// Hue: 0-360
-
-function HSVToRGB(Hue, Sat, V: TRealType): TColor;
-var
-  I: Integer;
-  R, G, B: Integer;
-  F, P, Q, T: TRealType;
-begin
-  Hue := (Hue / 60.0);
-  I := Trunc(Hue);
-  F := Hue - I;
-  P := V * (1.0 - Sat);
-  Q := V * (1.0 - (Sat * F));
-  T := V * (1.0 - (Sat * (1.0 - F)));
-  R := 0;
-  G := 0;
-  B := 0;
-  case I of
-    0:
-      begin
-        R := Trunc(V * 255);
-        G := Trunc(T * 255);
-        B := Trunc(P * 255);
-      end;
-    1:
-      begin
-        R := Trunc(Q * 255);
-        G := Trunc(V * 255);
-        B := Trunc(P * 255);
-      end;
-    2:
-      begin
-        R := Trunc(P * 255);
-        G := Trunc(V * 255);
-        B := Trunc(T * 255);
-      end;
-    3:
-      begin
-        R := Trunc(P * 255);
-        G := Trunc(Q * 255);
-        B := Trunc(V * 255);
-      end;
-    4:
-      begin
-        R := Trunc(T * 255);
-        G := Trunc(P * 255);
-        B := Trunc(V * 255);
-      end;
-    5:
-      begin
-        R := Trunc(V * 255);
-        G := Trunc(P * 255);
-        B := Trunc(Q * 255);
-      end;
-  end;
-  Result := RGB(R, G, B);
-end;
-
-{ 2D functions }
-
-function IsSamePoint2D(P1, P2: TPoint2D): Boolean;
-begin
-  if (P1.W <> P2.W) then
-  begin
-    P1 := CartesianPoint2D(P1);
-    P2 := CartesianPoint2D(P2);
-  end;
-  Result := (P1.X = P2.X) and (P1.Y = P2.Y);
-end;
-
-function IsSameVector2D(const V1, V2: TVector2D): Boolean;
-begin
-  Result := (V1.X = V2.X) and (V1.Y = V2.Y);
-end;
-
-function IsSameTransform2D(const T1, T2: TTransf2D): Boolean;
-begin
-  Result := (T1[1, 1] = T2[1, 1])
-    and (T1[1, 2] = T2[1, 2])
-    and (T1[1, 3] = T2[1, 3])
-    and (T1[2, 1] = T2[2, 1])
-    and (T1[2, 2] = T2[2, 2])
-    and (T1[2, 3] = T2[2, 3])
-    and (T1[3, 1] = T2[3, 1])
-    and (T1[3, 2] = T2[3, 2])
-    and (T1[3, 3] = T2[3, 3]);
-end;
-
-function IsCartesianTransform2D(const T: TTransf2D): Boolean;
-begin
-  Result := (T[1, 3] = 0.0) and (T[2, 3] = 0.0) and (T[3, 3] =
-    1.0);
-end;
-
-function Point2D(const X, Y: TRealType): TPoint2D;
-begin
-  Result.X := X;
-  Result.Y := Y;
-  Result.W := 1.0;
-end;
-
-function VectorLength2D(const V: TVector2D): TRealType;
-begin
-  Result := Sqrt(V.X * V.X + V.Y * V.Y);
-end;
-
-function Versor2D(const X, Y: TRealType): TVector2D;
-begin
-  Result.X := X;
-  Result.Y := Y;
-  Result := NormalizeVector2D(Result);
-end;
-
-function NormalizeVector2D(const V: TVector2D): TVector2D;
-var
-  Modul: TRealType;
-begin
-  Modul := VectorLength2D(V);
-  Result := V;
-  if (Modul <> 1.0) and (Modul <> 0.0) then
-  begin
-    Modul := 1.0 / Modul;
-    Result.X := V.X * Modul;
-    Result.Y := V.Y * Modul;
-  end;
-end;
-
-function Vector2D(PFrom, PTo: TPoint2D): TVector2D;
-begin
-  if PFrom.W <> PTo.W then
-  begin
-    PFrom := CartesianPoint2D(PFrom);
-    PTo := CartesianPoint2D(PTo);
-  end;
-  Result.X := PTo.X - PFrom.X;
-  Result.Y := PTo.Y - PFrom.Y;
-end;
-
-function Direction2D(const PFrom, PTo: TPoint2D): TVector2D;
-begin
-  Result := NormalizeVector2D(Vector2D(PFrom, PTo));
-end;
-
-function ReorderRect2D(const R: TRect2D): TRect2D;
-begin
-  Result := CartesianRect2D(R);
-  if R.Left > R.Right then
-  begin
-    Result.Left := R.Right;
-    Result.Right := R.Left;
-  end;
-  if R.Bottom > R.Top then
-  begin
-    Result.Bottom := R.Top;
-    Result.Top := R.Bottom;
-  end;
-end;
-
-function Rect2D(const Left, Bottom, Right, Top: TRealType):
-  TRect2D;
-begin
-  Result.Left := Left;
-  Result.Right := Right;
-  Result.W1 := 1.0;
-  Result.Bottom := Bottom;
-  Result.Top := Top;
-  Result.W2 := 1.0;
-end;
-
-function CartesianPoint2D(const P: TPoint2D): TPoint2D;
-begin
-  if (P.W <> 1.0) and (P.W <> 0.0) then
-  begin
-    Result.X := P.X / P.W;
-    Result.Y := P.Y / P.W;
-    Result.W := 1.0;
-  end
-  else
-    Result := P;
-end;
-
-function CartesianRect2D(const R: TRect2D): TRect2D;
-begin
-  Result.FirstEdge := CartesianPoint2D(R.FirstEdge);
-  Result.SecondEdge := CartesianPoint2D(R.SecondEdge);
-end;
-
-function Point2DToPoint(const P2D: TPoint2D): TPoint;
-begin
-  if (P2D.W <> 1.0) and (P2D.W <> 0.0) then
-  begin
-    Result.X := Round(P2D.X / P2D.W);
-    Result.Y := Round(P2D.Y / P2D.W);
-  end
-  else
-  begin
-    Result.X := Round(P2D.X);
-    Result.Y := Round(P2D.Y);
-  end
-end;
-
-function PointToPoint2D(const P: TPoint): TPoint2D;
-begin
-  Result.X := P.X;
-  Result.Y := P.Y;
-  Result.W := 1.0;
-end;
-
-function RectToRect2D(const R: TRect): TRect2D;
-begin
-  Result := Rect2D(R.Left, R.Top, R.Right, R.Bottom);
-end;
-
-function Rect2DToRect(R: TRect2D): TRect;
-begin
-  R := ReorderRect2D(R);
-  Result.Left := Round(R.Left);
-  Result.Right := Round(R.Right);
-  Result.Top := Round(R.Bottom);
-  Result.Bottom := Round(R.Top);
-end;
-
-function EnlargeBoxDelta2D(R: TRect2D; const Delta: TRealType):
-  TRect2D;
-begin
-  R := CartesianRect2D(R);
-  Result.Left := R.Left - Delta;
-  Result.Right := R.Right + Delta;
-  Result.W1 := 1.0;
-  Result.Bottom := R.Bottom - Delta;
-  Result.Top := R.Top + Delta;
-  Result.W2 := 1.0;
-end;
-
-function EnlargeBoxPerc2D(R: TRect2D; const Perc: TRealType):
-  TRect2D;
-var
-  Marg: TRealType;
-begin
-  R := CartesianRect2D(R);
-  Marg := Abs(R.Right - R.Left) * Perc;
-  Result.Left := R.Left - Marg;
-  Result.Right := R.Right + Marg;
-  Marg := Abs(R.Top - R.Bottom) * Perc;
-  Result.Bottom := R.Bottom - Marg;
-  Result.Top := R.Top + Marg;
-  Result.W1 := 1.0;
-  Result.W2 := 1.0;
-end;
-
-function GetVisualTransform2D(var W: TRect2D; const V: TRect;
-  Aspect: TRealType): TTransf2D;
-var
-  TmpAsp: TRealType;
-begin
-  {
-    | Sx                     0                          0 |
-    | 0                      Sy                         0 |
-    | V.Left-(Sx*W.Left)+0.5 V.Bottom-(Sy*W.Bottom)+0.5 1 |
-
-    Sx=(V.Right-V.Left-1.0)/(W.Right-W.Left)
-    Sy=(V.Top-V.Bottom-1.0)/(W.Top-W.Bottom)
-    Se pero' AspectRatio=Sx/Sy > 0 allora Sy=Sx/AspectRatio.
-  }
-  try
-    if Aspect > 0.0 then
-    begin
-      TmpAsp := (V.Right - V.Left) / (V.Bottom - V.Top) *
-        Aspect;
-      if (W.Top - W.Bottom) > (W.Right - W.Left) / TmpAsp then
-        W.Right := W.Left + (W.Top - W.Bottom) * TmpAsp
-      else
-        W.Top := W.Bottom + (W.Right - W.Left) / TmpAsp;
-    end;
-    if W.Right <> W.Left then
-      Result[1, 1] := (V.Right - V.Left) / (W.Right - W.Left);
-    Result[1, 2] := 0.0;
-    Result[1, 3] := 0.0;
-    Result[2, 1] := 0.0;
-    if W.Top <> W.Bottom then
-      Result[2, 2] := (V.Top - V.Bottom) / (W.Top - W.Bottom);
-    Result[2, 3] := 0.0;
-    Result[3, 1] := V.Left - Result[1, 1] * W.Left - 0.5;
-    Result[3, 2] := V.Bottom - Result[2, 2] * W.Bottom - 0.5;
-    Result[3, 3] := 1.0;
-  except
-    on EZeroDivide do Result := IdentityTransf2D;
-  end;
-end;
-
-function MultiplyTransform2D(const M1, M2: TTransf2D):
-  TTransf2D;
-var
-  B1, B2: Boolean;
-begin
-  B1 := (M1[1, 3] = 0.0) and (M1[2, 3] = 0.0) and (M1[3, 3] =
-    1.0);
-  B2 := (M2[1, 3] = 0.0) and (M2[2, 3] = 0.0) and (M2[3, 3] =
-    1.0);
-  if B1 and B2 then
-  begin
-    Result[1, 1] := M1[1, 1] * M2[1, 1] + M1[1, 2] * M2[2, 1];
-    Result[1, 2] := M1[1, 1] * M2[1, 2] + M1[1, 2] * M2[2, 2];
-    Result[1, 3] := 0.0;
-
-    Result[2, 1] := M1[2, 1] * M2[1, 1] + M1[2, 2] * M2[2, 1];
-    Result[2, 2] := M1[2, 1] * M2[1, 2] + M1[2, 2] * M2[2, 2];
-    Result[2, 3] := 0.0;
-
-    Result[3, 1] := M1[3, 1] * M2[1, 1] + M1[3, 2] * M2[2, 1] +
-      M2[3, 1];
-    Result[3, 2] := M1[3, 1] * M2[1, 2] + M1[3, 2] * M2[2, 2] +
-      M2[3, 2];
-    Result[3, 3] := 1.0;
-  end
-  else if B1 and (not B2) then
-  begin
-    Result[1, 1] := M1[1, 1] * M2[1, 1] + M1[1, 2] * M2[2, 1];
-    Result[1, 2] := M1[1, 1] * M2[1, 2] + M1[1, 2] * M2[2, 2];
-    Result[1, 3] := M1[1, 1] * M2[1, 3] + M1[1, 2] * M2[2, 3];
-
-    Result[2, 1] := M1[2, 1] * M2[1, 1] + M1[2, 2] * M2[2, 1];
-    Result[2, 2] := M1[2, 1] * M2[1, 2] + M1[2, 2] * M2[2, 2];
-    Result[2, 3] := M1[2, 1] * M2[1, 3] + M1[2, 2] * M2[2, 3];
-
-    Result[3, 1] := M1[3, 1] * M2[1, 1] + M1[3, 2] * M2[2, 1] +
-      M2[3, 1];
-    Result[3, 2] := M1[3, 1] * M2[1, 2] + M1[3, 2] * M2[2, 2] +
-      M2[3, 2];
-    Result[3, 3] := M1[3, 1] * M2[1, 3] + M1[3, 2] * M2[2, 3] +
-      M2[3, 3];
-  end
-  else if (not B1) and B2 then
-  begin
-    Result[1, 1] := M1[1, 1] * M2[1, 1] + M1[1, 2] * M2[2, 1] +
-      M1[1, 3] * M2[3, 1];
-    Result[1, 2] := M1[1, 1] * M2[1, 2] + M1[1, 2] * M2[2, 2] +
-      M1[1, 3] * M2[3, 2];
-    Result[1, 3] := M1[1, 3];
-
-    Result[2, 1] := M1[2, 1] * M2[1, 1] + M1[2, 2] * M2[2, 1] +
-      M1[2, 3] * M2[3, 1];
-    Result[2, 2] := M1[2, 1] * M2[1, 2] + M1[2, 2] * M2[2, 2] +
-      M1[2, 3] * M2[3, 2];
-    Result[2, 3] := M1[2, 3];
-
-    Result[3, 1] := M1[3, 1] * M2[1, 1] + M1[3, 2] * M2[2, 1] +
-      M1[3, 3] * M2[3, 1];
-    Result[3, 2] := M1[3, 1] * M2[1, 2] + M1[3, 2] * M2[2, 2] +
-      M1[3, 3] * M2[3, 2];
-    Result[3, 3] := M1[3, 3];
-  end
-  else
-  begin
-    Result[1, 1] := M1[1, 1] * M2[1, 1] + M1[1, 2] * M2[2, 1] +
-      M1[1, 3] * M2[3, 1];
-    Result[1, 2] := M1[1, 1] * M2[1, 2] + M1[1, 2] * M2[2, 2] +
-      M1[1, 3] * M2[3, 2];
-    Result[1, 3] := M1[1, 1] * M2[1, 3] + M1[1, 2] * M2[2, 3] +
-      M1[1, 3] * M2[3, 3];
-
-    Result[2, 1] := M1[2, 1] * M2[1, 1] + M1[2, 2] * M2[2, 1] +
-      M1[2, 3] * M2[3, 1];
-    Result[2, 2] := M1[2, 1] * M2[1, 2] + M1[2, 2] * M2[2, 2] +
-      M1[2, 3] * M2[3, 2];
-    Result[2, 3] := M1[2, 1] * M2[1, 3] + M1[2, 2] * M2[2, 3] +
-      M1[2, 3] * M2[3, 3];
-
-    Result[3, 1] := M1[3, 1] * M2[1, 1] + M1[3, 2] * M2[2, 1] +
-      M1[3, 3] * M2[3, 1];
-    Result[3, 2] := M1[3, 1] * M2[1, 2] + M1[3, 2] * M2[2, 2] +
-      M1[3, 3] * M2[3, 2];
-    Result[3, 3] := M1[3, 1] * M2[1, 3] + M1[3, 2] * M2[2, 3] +
-      M1[3, 3] * M2[3, 3];
-  end;
-end;
-
-{
-  a11 a12
-  a21 a22
-}
-
-function _Det2(a11, a21, a12, a22: TRealType): TRealType;
-begin
-  Result := a11 * a22 - a12 * a21;
-end;
-
-function _Det3_2D(const M: TTransf2D): TRealType;
-begin
-  Result := M[1, 1] * M[2, 2] * M[3, 3] +
-    M[1, 3] * M[2, 1] * M[3, 2] +
-    M[1, 2] * M[2, 3] * M[3, 1] -
-    M[1, 3] * M[2, 2] * M[3, 1] -
-    M[1, 1] * M[3, 2] * M[2, 3] -
-    M[1, 2] * M[2, 1] * M[3, 3];
-end;
-
-function _Adjoint3(const M: TTransf2D): TTransf2D;
-var
-  A1, A2, A3, B1, B2, B3, C1, C2, C3: TRealType;
-begin
-  A1 := M[1, 1];
-  A2 := M[2, 1];
-  A3 := M[3, 1];
-  B1 := M[1, 2];
-  B2 := M[2, 2];
-  B3 := M[3, 2];
-  C1 := M[1, 3];
-  C2 := M[2, 3];
-  C3 := M[3, 3];
-
-  Result[1, 1] := _Det2(B2, B3, C2, C3);
-  Result[2, 1] := -_Det2(A2, A3, C2, C3);
-  Result[3, 1] := _Det2(A2, A3, B2, B3);
-
-  Result[1, 2] := -_Det2(B1, B3, C1, C3);
-  Result[2, 2] := _Det2(A1, A3, C1, C3);
-  Result[3, 2] := -_Det2(A1, A3, B1, B3);
-
-  Result[1, 3] := _Det2(B1, B2, C1, C2);
-  Result[2, 3] := -_Det2(A1, A2, C1, C2);
-  Result[3, 3] := _Det2(A1, A2, B1, B2);
-end;
-
-function InvertTransform2D(const M1: TTransf2D): TTransf2D;
-var
-  Divisor: TRealType;
-begin
-  if (M1[1, 3] = 0.0) and (M1[2, 3] = 0.0) and (M1[3, 3] = 1.0)
-    then
-  begin // Cartesian
-    if (M1[1, 1] * M1[2, 2] - M1[2, 1] * M1[1, 2]) = 0.0 then
-    begin
-      Result := NullTransf2D;
-      Exit;
-    end;
-    Divisor := 1.0 / (M1[1, 1] * M1[2, 2] - M1[2, 1] * M1[1,
-      2]);
-    Result[1, 1] := M1[2, 2] * Divisor;
-    Result[1, 2] := -M1[1, 2] * Divisor;
-    Result[1, 3] := 0.0;
-    Result[2, 1] := -M1[2, 1] * Divisor;
-    Result[2, 2] := M1[1, 1] * Divisor;
-    Result[2, 3] := 0.0;
-    Result[3, 1] := (M1[2, 1] * M1[3, 2] - M1[2, 2] * M1[3, 1])
-      * Divisor;
-    Result[3, 2] := (M1[1, 2] * M1[3, 1] - M1[1, 1] * M1[3, 2])
-      * Divisor;
-    Result[3, 3] := 1.0;
-  end
-  else
-  begin
-    Divisor := _Det3_2D(M1);
-    if Divisor = 0 then
-    begin
-      Result := NullTransf2D;
-      Exit;
-    end;
-    Result := _Adjoint3(M1);
-
-    Result[1, 1] := Result[1, 1] / Divisor;
-    Result[1, 2] := Result[1, 2] / Divisor;
-    Result[1, 3] := Result[1, 3] / Divisor;
-    Result[2, 1] := Result[2, 1] / Divisor;
-    Result[2, 2] := Result[2, 2] / Divisor;
-    Result[2, 3] := Result[2, 3] / Divisor;
-    Result[3, 1] := Result[3, 1] / Divisor;
-    Result[3, 2] := Result[3, 2] / Divisor;
-    Result[3, 3] := Result[3, 3] / Divisor;
-  end;
-end;
-
-function TransformPoint2D(const P: TPoint2D; const T:
-  TTransf2D): TPoint2D;
-begin
-  Result.X := P.X * T[1, 1] + P.Y * T[2, 1] + P.W * T[3, 1];
-  Result.Y := P.X * T[1, 2] + P.Y * T[2, 2] + P.W * T[3, 2];
-  Result.W := P.X * T[1, 3] + P.Y * T[2, 3] + P.W * T[3, 3];
-end;
-
-function TransformVector2D(const V: TVector2D; const T:
-  TTransf2D): TVector2D;
-begin
-  Result.X := V.X * T[1, 1] + V.Y * T[2, 1];
-  Result.Y := V.X * T[1, 2] + V.Y * T[2, 2];
-end;
-
-function TransformRect2D(const R: TRect2D; const T: TTransf2D):
-  TRect2D;
-begin
-  Result.FirstEdge := TransformPoint2D(R.FirstEdge, T);
-  Result.SecondEdge := TransformPoint2D(R.SecondEdge, T);
-end;
-
-function TransformBoundingBox2D(const Box: TRect2D; const
-  Transf: TTransf2D): TRect2D;
-var
-  Box1, Box2: TRect2D;
-begin
-  Box1 := TransformRect2D(Box, Transf);
-  Box2 := TransformRect2D(Rect2D(Box.Left, Box.Top, Box.Right,
-    Box.Bottom), Transf);
-  Result := BoxOutBox2D(Box1, Box2);
-end;
-
-function Translate2D(const TX, TY: TRealType): TTransf2D;
-begin
-  {
-    | 1  0  0 |
-    | 0  1  0 |
-    | Tx Ty 1 |
-  }
-  Result := IdentityTransf2D;
-  Result[3, 1] := TX;
-  Result[3, 2] := TY;
-end;
-
-function Rotate2D(const R: TRealType): TTransf2D;
-begin
-  {
-    | cos(R)  sin(R)   0 |
-    | -sin(R) cos(R)   0 |
-    | 0       0        1 |
-  }
-  Result := IdentityTransf2D;
-  Result[1, 1] := Cos(R);
-  Result[1, 2] := Sin(R);
-  Result[2, 1] := -Result[1, 2];
-  Result[2, 2] := Result[1, 1];
-end;
-
-//TSY: rotate over point (CX,CY), R radians
-
-function RotateCenter2D(const R: TRealType;
-  const C: TPoint2D): TTransf2D;
-var
-  CosR, SinR: TRealType;
-begin
-  {
-    | cosR                 sinR                 0 |
-    | -sinR                cosR                 0 |
-    | CX*(1-cosR)+CY*sinR  CY*(1-cosR)-CX*sinR  1 |
-  }
-  Result := IdentityTransf2D;
-  CosR := Cos(R);
-  SinR := Sin(R);
-  Result[1, 1] := CosR;
-  Result[1, 2] := SinR;
-  Result[2, 1] := -SinR;
-  Result[2, 2] := CosR;
-  Result[3, 1] := C.X * (1 - CosR) + C.Y * SinR;
-  Result[3, 2] := C.Y * (1 - CosR) - C.X * SinR;
-end;
-
-function Scale2D(const Sx, Sy: TRealType): TTransf2D;
-begin
-  {
-    | Sx  0  0 |
-    | 0   Sy 0 |
-    | 0   0  1 |
-  }
-  Result := IdentityTransf2D;
-  Result[1, 1] := Sx;
-  Result[2, 2] := Sy;
-end;
-
-//TSY: scale with central point (CX,CY)
-
-function ScaleCenter2D(const Sx, Sy: TRealType;
-  const C: TPoint2D): TTransf2D;
-begin
-  {
-    | Sx       0         0 |
-    | 0        Sy        0 |
-    | CX(1-Sx) CY(1-Sy)  1 |
-  }
-  Result := IdentityTransf2D;
-  Result[1, 1] := Sx;
-  Result[2, 2] := Sy;
-  Result[3, 1] := C.X * (1 - Sx);
-  Result[3, 2] := C.Y * (1 - Sy);
-end;
-
-//TSY: flip over a line given by the ortogonal vector from (0,0)
-
-function Flip2D(const DX, DY: TRealType): TTransf2D;
-var
-  D2, A, B: TRealType;
-begin
-  {      D2 = DX^2+DY^2
-    | -(DX^2-DY^2)/D2  -2*DX*DY/D2     0 |
-    | -2*DX*DY/D2      (DX^2-DY^2)/D2  0 |
-    | 2*DX              2*DY           1 |
-  }
-  Result := IdentityTransf2D;
-  D2 := Sqr(DX) + Sqr(DY);
-  if D2 = 0 then Exit;
-  A := (Sqr(DX) - Sqr(DY)) / D2;
-  B := -2 * DX * DY / D2;
-  Result[1, 1] := -A;
-  Result[1, 2] := B;
-  Result[2, 2] := A;
-  Result[2, 1] := B;
-  Result[3, 1] := 2 * DX;
-  Result[3, 2] := 2 * DY;
-end;
-
-function IsBoxInBox2D(Box1, Box2: TRect2D): Boolean;
-var
-  FCode, SCode: TOutCode;
-begin
-  Box1 := ReorderRect2D(Box1);
-  Box2 := ReorderRect2D(Box2);
-  FCode := _PositionCode2D(Box2, Box1.FirstEdge);
-  SCode := _PositionCode2D(Box2, Box1.SecondEdge);
-  Result := (FCode * SCode) = [];
-end;
-
-function IsPointInCartesianBox2D(const PT: TPoint2D; const Box:
-  TRect2D): Boolean;
-begin
-  Result := _PositionCode2D(Box, PT) = [];
-end;
-
-function IsPointInBox2D(PT: TPoint2D; Box: TRect2D): Boolean;
-begin
-  PT := CartesianPoint2D(PT);
-  Box := CartesianRect2D(Box);
-  Result := _PositionCode2D(Box, PT) = [];
-end;
-
-function BoxFillingCartesian2D(const Box1, Box2: TRect2D): Word;
-var
-  Tmp1, Tmp2: Byte;
-begin
-  try
-    Tmp1 := Round((Box1.Right - Box1.Left) / (Box2.Right -
-      Box2.Left)) * 1000;
-    Tmp2 := Round((Box1.Top - Box1.Bottom) / (Box2.Top -
-      Box2.Bottom)) * 1000;
-    if Tmp1 > Tmp2 then
-      Result := Tmp1
-    else
-      Result := Tmp2;
-  except
-    on EZeroDivide do Result := 1000;
-  end;
-end;
-
-function IsBoxAllInBox2D(Box1, Box2: TRect2D): Boolean;
-var
-  FCode, SCode: TOutCode;
-begin
-  Box1 := CartesianRect2D(Box1);
-  Box2 := CartesianRect2D(Box2);
-  FCode := _PositionCode2D(Box2, Box1.FirstEdge);
-  SCode := _PositionCode2D(Box2, Box1.SecondEdge);
-  Result := (FCode = []) and (SCode = []);
-end;
-
-function IsBoxAllInCartesianBox2D(const Box1, Box2: TRect2D):
-  Boolean;
-var
-  FCode, SCode: TOutCode;
-begin
-  FCode := _PositionCode2D(Box2, Box1.FirstEdge);
-  SCode := _PositionCode2D(Box2, Box1.SecondEdge);
-  Result := (FCode = []) and (SCode = []);
-end;
-
-function BoxOutBox2D(Box1, Box2: TRect2D): TRect2D;
-begin
-  Box1 := ReorderRect2D(Box1);
-  Box2 := ReorderRect2D(Box2);
-  Result := Box1;
-  if Box2.Left < Box1.Left then
-    Result.Left := Box2.Left;
-  if Box2.Right > Box1.Right then
-    Result.Right := Box2.Right;
-  if Box2.Bottom < Box1.Bottom then
-    Result.Bottom := Box2.Bottom;
-  if Box2.Top > Box1.Top then
-    Result.Top := Box2.Top;
-end;
-
-procedure MakeOrto2D(LastPt: TPoint2D; var CurrPt: TPoint2D);
-var
-  DeltaPt: TVector2D;
-begin
-  LastPt := CartesianPoint2D(LastPt);
-  CurrPt := CartesianPoint2D(CurrPt);
-  DeltaPt := Vector2D(LastPt, CurrPt);
-  if Abs(DeltaPt.X) > Abs(DeltaPt.Y) then
-    CurrPt.Y := LastPt.Y
-  else
-    CurrPt.X := LastPt.X;
-end;
-
-function DotProduct2D(const A, B: TVector2D): TRealType;
-begin
-  Result := A.X * B.X + A.Y * B.Y;
-end;
-
-function Perpendicular2D(const V: TVector2D): TVector2D;
-begin
-  Result.X := -V.Y;
-  Result.Y := V.X;
-end;
-
-function Reflect2D(const V: TVector2D): TVector2D;
-begin
-  Result.X := -V.X;
-  Result.Y := -V.Y;
-end;
-
-function MixPoint(P1, P2: TPoint2D; Mix: TRealType): TPoint2D;
-begin
-  Result := Point2D(P1.X + (P2.X - P1.X) * Mix,
-    P1.Y + (P2.Y - P1.Y) * Mix);
-end;
-
-function MidPoint(P1, P2: TPoint2D): TPoint2D;
-begin
-  Result := Point2D((P1.X + P2.X) / 2,
-    (P1.Y + P2.Y) / 2);
-end;
-
-function IsPointOnSegment2D(P, P1, P2: TPoint2D): Boolean;
-var
-  R, L, LQ, DX, DY: Double;
-begin
-  P := CartesianPoint2D(P);
-  P1 := CartesianPoint2D(P1);
-  P2 := CartesianPoint2D(P2);
-  Result := False;
-  DX := P2.X - P1.X;
-  DY := P2.Y - P1.Y;
-  L := Sqrt(DX * DX + DY * DY);
-  if L = 0 then Exit;
-  LQ := L * L;
-  R := ((P1.Y - P.Y) * (-DY) - (P1.X - P.X) * DX) / LQ;
-  Result := (R >= 0) and (R <= 1);
-end;
-
-function PointDistance2D(const P1, P2: TPoint2D): TRealType;
-begin
-  Result := VectorLength2D(Vector2D(P1, P2));
-end;
-
-function PointLineDistance2D(P, P1, P2: TPoint2D): TRealType;
-var
-  L, DX, DY: Double;
-begin
-  P := CartesianPoint2D(P);
-  P1 := CartesianPoint2D(P1);
-  P2 := CartesianPoint2D(P2);
-  Result := -1.0;
-  DX := P2.X - P1.X;
-  DY := P2.Y - P1.Y;
-  L := Sqrt(DX * DX + DY * DY);
-  if L = 0 then Exit;
-  Result := Abs(((P1.Y - P.Y) * DX - (P1.X - P.X) * DY) / L);
-end;
-
-{ Dist is valid only if the P projection lies on the line.
-  Parametri già omogeneizzati. }
-
-function _PointSegmentDistance2D(const P, P1, P2: TPoint2D; var
-  Dist: TRealType): Boolean;
-var
-  R, L, LQ, DX, DY: Double;
-begin
-  Result := False;
-  Dist := MaxCoord;
-  DX := P2.X - P1.X;
-  DY := P2.Y - P1.Y;
-  L := Sqrt(DX * DX + DY * DY);
-  if L = 0 then Exit;
-  LQ := L * L;
-  R := ((P1.Y - P.Y) * (-DY) - (P1.X - P.X) * DX) / LQ;
-  Result := (R >= 0) and (R <= 1);
-  if not Result then Exit;
-  Dist := Abs(((P1.Y - P.Y) * DX - (P1.X - P.X) * DY) / L);
-end;
-
-function IsPointOnRect2D(const Box: TRect2D; P: TPoint2D; var
-  Dist: TRealType;
-  const Aperture: TRealType; const T: TTransf2D): Integer;
-var
-  TmpDist: TRealType;
-  TmpPt1, TmpPt2: TPoint2D;
-begin
-  Dist := MaxCoord;
-  Result := PICK_NOOBJECT;
-  P := CartesianPoint2D(P);
-  TmpPt1 := CartesianPoint2D(TransformPoint2D(Box.FirstEdge,
-    T));
-  TmpPt2 := CartesianPoint2D(TransformPoint2D(Point2D(Box.Left,
-    Box.Top), T));
-  if _PointSegmentDistance2D(P, TmpPt1, TmpPt2, TmpDist) and
-    (TmpDist <= Aperture) then
-  begin
-    Result := PICK_ONOBJECT;
-    Dist := TmpDist;
-    Exit;
-  end;
-  TmpPt1 := TmpPt2;
-  TmpPt2 := CartesianPoint2D(TransformPoint2D(Box.SecondEdge,
-    T));
-  if _PointSegmentDistance2D(P, TmpPt1, TmpPt2, TmpDist) and
-    (TmpDist <= Aperture) then
-  begin
-    Result := PICK_ONOBJECT;
-    Dist := TmpDist;
-    Exit;
-  end;
-  TmpPt1 := TmpPt2;
-  TmpPt2 := CartesianPoint2D(TransformPoint2D(Point2D(Box.Right,
-    Box.Bottom), T));
-  if _PointSegmentDistance2D(P, TmpPt1, TmpPt2, TmpDist) and
-    (TmpDist <= Aperture) then
-  begin
-    Result := PICK_ONOBJECT;
-    Dist := TmpDist;
-    Exit;
-  end;
-  TmpPt1 := TmpPt2;
-  TmpPt2 := CartesianPoint2D(TransformPoint2D(Box.FirstEdge,
-    T));
-  if _PointSegmentDistance2D(P, TmpPt1, TmpPt2, TmpDist) and
-    (TmpDist <= Aperture) then
-  begin
-    Result := PICK_ONOBJECT;
-    Dist := TmpDist;
-    Exit;
-  end;
-end;
-
-function PointOutBox2D(PT: TPoint2D; Box: TRect2D): TRect2D;
-begin
-  PT := CartesianPoint2D(PT);
-  Result := Box;
-  if PT.X > Result.Right then
-    Result.Right := PT.X
-  else if PT.X < Result.Left then
-    Result.Left := PT.X;
-  if PT.Y > Result.Top then
-    Result.Top := PT.Y
-  else if PT.Y < Result.Bottom then
-    Result.Bottom := PT.Y;
-end;
-
-function NearPoint2D(RP, P: TPoint2D; const Aperture: TRealType;
-  var Dist: TRealType): Boolean;
-var
-  TmpBox: TRect2D;
-begin
-  RP := CartesianPoint2D(RP);
-  P := CartesianPoint2D(P);
-  TmpBox.FirstEdge := Point2D(RP.X - Aperture, RP.Y - Aperture);
-  TmpBox.SecondEdge := Point2D(RP.X + Aperture, RP.Y +
-    Aperture);
-  Result := _PositionCode2D(TmpBox, P) = [];
-  if Result then
-    Dist := Sqrt(Power(P.X - RP.X, 2) + Power(P.Y - RP.Y, 2))
-  else
-    Dist := MaxCoord;
-end;
-
-function IsPointOnPolyLine2D(const Vect: Pointer; Count:
-  Integer;
-  P: TPoint2D; var Dist: TRealType;
-  const Aperture: TRealType; const T: TTransf2D; const
-  MustClose: Boolean): Integer;
-var
-  MinDist, TmpDist: TRealType;
-  TmpPt1, TmpPt2: TPoint2D;
-  Cont, Max: Integer;
-begin
-  Result := PICK_NOOBJECT;
-  Dist := MaxCoord;
-  if Count = 0 then
-    Exit;
-  MinDist := Aperture;
-  P := CartesianPoint2D(P);
-  if MustClose then
-    Max := Count
-  else
-    Max := Count - 1;
-  TmpPt1 :=
-    CartesianPoint2D(TransformPoint2D(PVectPoints2D(Vect)^[0],
-    T));
-  for Cont := 1 to Max do
-  begin
-    if Cont = Count then
-      TmpPt2 :=
-        CartesianPoint2D(TransformPoint2D(PVectPoints2D(Vect)^[0],
-        T))
-    else
-      TmpPt2 :=
-        CartesianPoint2D(TransformPoint2D(PVectPoints2D(Vect)^[Cont], T));
-    if _PointSegmentDistance2D(P, TmpPt1, TmpPt2, TmpDist) and
-      (TmpDist <= MinDist) then
-    begin
-      Result := PICK_ONOBJECT;
-      Dist := TmpDist;
-      MinDist := Dist;
-    end;
-    TmpPt1 := TmpPt2;
-  end;
-end;
-
-//TSY: Find position of point on polyline (which segment)
-
-function FindPointPolylinePosition(const Vect: Pointer;
-  Count: Integer; P: TPoint2D;
-  const Aperture: TRealType;
-  const MustClose: Boolean): Integer;
-var
-  MinDist, D: TRealType;
-  P1, P2: TPoint2D;
-  I, Max: Integer;
-begin
-  Result := -1;
-  if Count = 0 then Exit;
-  MinDist := Aperture;
-  P := CartesianPoint2D(P);
-  if MustClose then Max := Count else Max := Count - 1;
-  P1 := CartesianPoint2D(PVectPoints2D(Vect)^[0]);
-  for I := 1 to Max do
-  begin
-    if I = Count
-      then P2 := CartesianPoint2D(PVectPoints2D(Vect)^[0])
-    else P2 := CartesianPoint2D(PVectPoints2D(Vect)^[I]);
-    if _PointSegmentDistance2D(P, P1, P2, D) and
-      (D <= MinDist) then
-    begin
-      Result := I - 1;
-      MinDist := D;
-    end;
-    P1 := P2;
-  end;
-end;
-
-function IsPointOnLine2D(A, B, P: TPoint2D; var Dist: TRealType;
-  const Aperture: TRealType; const T: TTransf2D): Integer;
-var
-  TmpDist: TRealType;
-begin
-  Result := PICK_NOOBJECT;
-  Dist := MaxCoord;
-  P := CartesianPoint2D(P);
-  A := CartesianPoint2D(TransformPoint2D(A, T));
-  B := CartesianPoint2D(TransformPoint2D(B, T));
-  if _PointSegmentDistance2D(P, A, B, TmpDist) and (TmpDist <=
-    Aperture) then
-  begin
-    Result := PICK_ONOBJECT;
-    Dist := TmpDist;
-  end;
-end;
-
-function _RightIntersection2D(const P, P1, P2: TPoint2D):
-  Boolean;
-var
-  R: Double;
-begin
-  Result := ((P.Y >= P1.Y) and (P.Y < P2.Y)) or ((P.Y < P1.Y)
-    and (P.Y >= P2.Y));
-  if not Result then Exit;
-  R := (P.Y - P1.Y) * (P2.X - P1.X) / (P2.Y - P1.Y) + P1.X;
-  Result := P.X <= R;
-end;
-
-function IsPointInPolygon2D(const Vect: Pointer; Count: Integer;
-  P: TPoint2D; var Dist: TRealType;
-  const Aperture: TRealType; const T: TTransf2D): Integer;
-var
-  Cont, NInters: Integer;
-  TmpPt1, TmpPt2: TPoint2D;
-  TmpDist: TRealType;
-begin
-  Result := PICK_NOOBJECT;
-  Dist := Aperture;
-  if Count = 0 then
-    Exit;
-  NInters := 0;
-  P := CartesianPoint2D(P);
-  TmpPt1 :=
-    CartesianPoint2D(TransformPoint2D(PVectPoints2D(Vect)^[0],
-    T));
-  for Cont := 1 to Count do
-  begin
-    if Cont = Count then
-      TmpPt2 :=
-        CartesianPoint2D(TransformPoint2D(PVectPoints2D(Vect)^[0],
-        T))
-    else
-      TmpPt2 :=
-        CartesianPoint2D(TransformPoint2D(PVectPoints2D(Vect)^[Cont], T));
-    if _PointSegmentDistance2D(P, TmpPt1, TmpPt2, TmpDist) and
-      (TmpDist <= Dist) then
-    begin
-      if TmpDist < Aperture then
-        Result := PICK_ONOBJECT;
-      Dist := TmpDist;
-    end
-    else if _RightIntersection2D(P, TmpPt1, TmpPt2) then
-      Inc(NInters);
-    TmpPt1 := TmpPt2;
-  end;
-  if Odd(NInters) and (Result = PICK_NOOBJECT) then
-  begin
-    Result := PICK_INOBJECT;
-    Dist := Aperture;
-  end
-  else if (Result = PICK_NOOBJECT) then
-    Dist := MaxCoord;
-end;
-
-{ 2D clipping functions. }
-
-{ Use the Liang-Barsky algoritm. }
-
-function ClipLine2D(Clip: TRect2D; var Pt1, Pt2: TPoint2D):
-  TClipResult;
-var
-  DX, DY, tE, tL: Extended;
-begin
-  Result := [ccNotVisible];
-  Clip := ReorderRect2D(Clip);
-  Pt1 := CartesianPoint2D(Pt1);
-  Pt2 := CartesianPoint2D(Pt2);
-  DX := Pt2.X - Pt1.X;
-  DY := Pt2.Y - Pt1.Y;
-  if (DX = 0) and (DY = 0) and IsPointInCartesianBox2D(Pt1, Clip)
-    then
-  begin
-    Result := [ccVisible];
-    Exit;
-  end;
-  tE := 0.0;
-  tL := 1.0;
-  { 0.9 in 1. }
-  if _ClipPt(DX, Clip.Left - Pt1.X, tE, tL) then
-    if _ClipPt(-DX, Pt1.X - Clip.Right, tE, tL) then
-      if _ClipPt(DY, Clip.Bottom - Pt1.Y, tE, tL) then
-        if _ClipPt(-DY, Pt1.Y - Clip.Top, tE, tL) then
-        begin
-          Result := [];
-          if tL < 1 then
-          begin
-            Pt2.X := Pt1.X + tL * DX;
-            Pt2.Y := Pt1.Y + tL * DY;
-            Result := [ccSecond];
-          end;
-          if tE > 0 then
-          begin
-            Pt1.X := Pt1.X + tE * DX;
-            Pt1.Y := Pt1.Y + tE * DY;
-            Result := Result + [ccFirst];
-          end;
-          if Result = [] then
-            Result := [ccVisible];
-        end;
-end;
-
-{ Use the Liang-Barsky algoritm. }
-
-function ClipLineLeftRight2D(Clip: TRect2D; var Pt1, Pt2:
-  TPoint2D): TClipResult;
-var
-  DX, DY, tE, tL: Extended;
-begin
-  Clip := ReorderRect2D(Clip);
-  Pt1 := CartesianPoint2D(Pt1);
-  Pt2 := CartesianPoint2D(Pt2);
-  DX := Pt2.X - Pt1.X;
-  DY := Pt2.Y - Pt1.Y;
-  Result := [ccNotVisible];
-  if (DX = 0) and (DY = 0) and IsPointInCartesianBox2D(Pt1, Clip)
-    then
-  begin
-    Result := [ccVisible];
-    Exit;
-  end;
-  tE := 0.0;
-  tL := 1.0;
-  { 0.9 in 1. }
-  if _ClipPt(DX, Clip.Left - Pt1.X, tE, tL) then
-    if _ClipPt(-DX, Pt1.X - Clip.Right, tE, tL) then
-    begin
-      Result := [];
-      if tL < 1 then
-      begin
-        Pt2.X := Pt1.X + tL * DX;
-        Pt2.Y := Pt1.Y + tL * DY;
-        Result := [ccSecond];
-      end;
-      if tE > 0 then
-      begin
-        Pt1.X := Pt1.X + tE * DX;
-        Pt1.Y := Pt1.Y + tE * DY;
-        Result := Result + [ccFirst];
-      end;
-      if Result = [] then
-        Result := [ccVisible];
-    end;
-end;
-
-function ClipLineUpBottom2D(Clip: TRect2D; var Pt1, Pt2:
-  TPoint2D): TClipResult;
-var
-  DX, DY, tE, tL: Extended;
-begin
-  Clip := ReorderRect2D(Clip);
-  Pt1 := CartesianPoint2D(Pt1);
-  Pt2 := CartesianPoint2D(Pt2);
-  DX := Pt2.X - Pt1.X;
-  DY := Pt2.Y - Pt1.Y;
-  Result := [ccNotVisible];
-  if (DX = 0) and (DY = 0) and IsPointInCartesianBox2D(Pt1, Clip)
-    then
-  begin
-    Result := [ccVisible];
-    Exit;
-  end;
-  tE := 0.0;
-  tL := 1.0;
-  { 0.9 in 1. }
-  if _ClipPt(DY, Clip.Bottom - Pt1.Y, tE, tL) then
-    if _ClipPt(-DY, Pt1.Y - Clip.Top, tE, tL) then
-    begin
-      Result := [];
-      if tL < 1 then
-      begin
-        Pt2.X := Pt1.X + tL * DX;
-        Pt2.Y := Pt1.Y + tL * DY;
-        Result := [ccSecond];
-      end;
-      if tE > 0 then
-      begin
-        Pt1.X := Pt1.X + tE * DX;
-        Pt1.Y := Pt1.Y + tE * DY;
-        Result := Result + [ccFirst];
-      end;
-      if Result = [] then
-        Result := [ccVisible];
-    end;
-end;
-
-procedure Draw2DSubSetAsPolyline(const Vect: Pointer; Count:
-  Integer;
-  const Cnv: TDecorativeCanvas;
-  const Clip, Extent: TRect2D;
-  const S: TTransf2D;
-  const StartIdx, EndIdx: Integer;
-  const ToBeClosed: Boolean);
-type
-  TPoints = array[0..0] of TPoint;
-var
-  VisPoints, Cont, AllocatedMem: Integer;
-  TmpPt1, TmpPt2: TPoint2D;
-  TmpPts: ^TPoints;
-  ClipRes: TClipResult;
-  TmpClip: TRect2D;
-begin
-  if (Count = 0) or (EndIdx > Count) or (StartIdx > EndIdx) then
-    Exit;
-  if ToBeClosed then
-    AllocatedMem := (Count + 1) * SizeOf(TPoint)
-  else
-    AllocatedMem := Count * SizeOf(TPoint);
-  GetMem(TmpPts, AllocatedMem);
-  try
-    VisPoints := 0;
-    if IsBoxAllInBox2D(TransformRect2D(Extent, S), Clip) then
-    begin
-      for Cont := StartIdx to EndIdx do
-      begin
-        TmpPt1 := TransformPoint2D(PVectPoints2D(Vect)^[Cont],
-          S);
-        TmpPts^[VisPoints] := Point2DToPoint(TmpPt1);
-        Inc(VisPoints);
-      end;
-      if ToBeClosed then
-      begin
-        TmpPt1 :=
-          TransformPoint2D(PVectPoints2D(Vect)^[StartIdx], S);
-        TmpPts^[VisPoints] := Point2DToPoint(TmpPt1);
-        Inc(VisPoints);
-      end;
-      ClipRes := [ccVisible];
-    end
-    else if ToBeClosed then
-    begin
-      TmpClip := ReorderRect2D(Clip);
-      for Cont := StartIdx + 1 to EndIdx + 1 do
-      begin
-        TmpPt1 := TransformPoint2D(PVectPoints2D(Vect)^[Cont -
-          1], S);
-        if Cont > EndIdx then
-          TmpPt2 :=
-            TransformPoint2D(PVectPoints2D(Vect)^[StartIdx], S)
-        else
-          TmpPt2 := TransformPoint2D(PVectPoints2D(Vect)^[Cont],
-            S);
-        ClipRes := _ClipLine2D(TmpClip, TmpPt1, TmpPt2);
-        if not (ccNotVisible in ClipRes) then
-        begin
-          TmpPts^[VisPoints] := Point2DToPoint(TmpPt1);
-          Inc(VisPoints);
-        end;
-        if ccSecond in ClipRes then
-        begin
-          TmpPts^[VisPoints] := Point2DToPoint(TmpPt2);
-          Inc(VisPoints);
-          Cnv.Polyline(TmpPts, VisPoints);
-          VisPoints := 0;
-        end;
-      end;
-      if not (ccNotVisible in ClipRes) then
-      begin
-        TmpPts^[VisPoints] := Point2DToPoint(TmpPt2);
-        Inc(VisPoints);
-      end;
-    end
-    else
-    begin
-      TmpClip := ReorderRect2D(Clip);
-      for Cont := StartIdx + 1 to EndIdx do
-      begin
-        TmpPt1 := TransformPoint2D(PVectPoints2D(Vect)^[Cont -
-          1], S);
-        TmpPt2 := TransformPoint2D(PVectPoints2D(Vect)^[Cont],
-          S);
-        ClipRes := _ClipLine2D(TmpClip, TmpPt1, TmpPt2);
-        if not (ccNotVisible in ClipRes) then
-        begin
-          TmpPts^[VisPoints] := Point2DToPoint(TmpPt1);
-          Inc(VisPoints);
-        end;
-        if ccSecond in ClipRes then
-        begin
-          TmpPts^[VisPoints] := Point2DToPoint(TmpPt2);
-          Inc(VisPoints);
-          Cnv.Polyline(TmpPts, VisPoints);
-          VisPoints := 0;
-        end;
-      end;
-      if not (ccNotVisible in ClipRes) then
-      begin
-        TmpPts^[VisPoints] := Point2DToPoint(TmpPt2);
-        Inc(VisPoints);
-      end;
-    end;
-    if (VisPoints > 0) then
-      Cnv.Polyline(TmpPts, VisPoints);
-  finally
-    FreeMem(TmpPts, AllocatedMem);
-  end;
-end;
-
-procedure Draw2DSubSetAsPolygon(const Vect: Pointer; Count:
-  Integer;
-  const Cnv: TDecorativeCanvas;
-  const Clip, Extent: TRect2D;
-  const S: TTransf2D;
-  const StartIdx, EndIdx: Integer);
-type
-  TPoints = array[0..0] of TPoint;
-var
-  VisPoints, VisPoints1, Cont: Integer;
-  TmpPt1, TmpPt2: TPoint2D;
-  TmpPts, FirstClipPts: ^TPoints;
-  ClipRes: TClipResult;
-  TmpClip: TRect2D;
-begin
-  if (Count = 0) or (EndIdx > Count) or (StartIdx > EndIdx) then
-    Exit;
-  GetMem(TmpPts, Count * 3 * SizeOf(TPoint));
-  GetMem(FirstClipPts, Count * 3 * SizeOf(TPoint));
-  try
-    VisPoints := 0;
-    VisPoints1 := 0;
-    if IsBoxAllInBox2D(TransformRect2D(Extent, S), Clip) then
-      for Cont := StartIdx to EndIdx do
-      begin
-        TmpPt1 := TransformPoint2D(PVectPoints2D(Vect)^[Cont],
-          S);
-        TmpPts^[VisPoints] := Point2DToPoint(TmpPt1);
-        Inc(VisPoints);
-      end
-    else
-    begin
-      TmpClip := ReorderRect2D(Clip);
-      for Cont := StartIdx to EndIdx do
-      begin
-        TmpPt1 := TransformPoint2D(PVectPoints2D(Vect)^[Cont],
-          S);
-        if Cont < EndIdx then
-          TmpPt2 := TransformPoint2D(PVectPoints2D(Vect)^[Cont +
-            1], S)
-        else
-          TmpPt2 :=
-            TransformPoint2D(PVectPoints2D(Vect)^[StartIdx], S);
-        ClipRes := _ClipLineLeftRight2D(TmpClip, TmpPt1,
-          TmpPt2);
-        if not (ccNotVisible in ClipRes) then
-        begin
-          FirstClipPts^[VisPoints1] := Point2DToPoint(TmpPt1);
-          Inc(VisPoints1);
-        end;
-        if ccSecond in ClipRes then
-        begin
-          FirstClipPts^[VisPoints1] := Point2DToPoint(TmpPt2);
-          Inc(VisPoints1);
-        end;
-      end;
-      FirstClipPts^[VisPoints1] := FirstClipPts^[0];
-      Inc(VisPoints1);
-      VisPoints := 0;
-      for Cont := 0 to VisPoints1 - 2 do
-      begin
-        TmpPt1 := PointToPoint2D(FirstClipPts^[Cont]);
-        TmpPt2 := PointToPoint2D(FirstClipPts^[Cont + 1]);
-        ClipRes := _ClipLineUpBottom2D(TmpClip, TmpPt1, TmpPt2);
-        if not (ccNotVisible in ClipRes) then
-        begin
-          TmpPts^[VisPoints] := Point2DToPoint(TmpPt1);
-          Inc(VisPoints);
-        end;
-        if ccSecond in ClipRes then
-        begin
-          TmpPts^[VisPoints] := Point2DToPoint(TmpPt2);
-          Inc(VisPoints);
-        end;
-      end;
-    end;
-    if (VisPoints > 0) then
-      Polygon(Cnv.Canvas.Handle, TmpPts^, VisPoints);
-  finally
-    FreeMem(TmpPts, Count * 3 * SizeOf(TPoint));
-    FreeMem(FirstClipPts, Count * 3 * SizeOf(TPoint));
-  end;
-end;
-
-procedure DrawPlaceHolder(const Cnv: TDecorativeCanvas; const X,
-  Y, Wdt: Integer);
-var
-  TmpWdt: Integer;
-begin
-  with Cnv.Canvas do
-  begin
-    Brush.Style := bsSolid;
-    Brush.Color := clSilver;
-    Pen.Style := psSolid;
-    TmpWdt := Wdt div 2;
-    Windows.Rectangle(Handle, X - TmpWdt, Y - TmpWdt, X +
-      TmpWdt, Y + TmpWdt);
-  end;
-end;
-
-procedure DrawRoundPlaceHolder(const Cnv: TDecorativeCanvas;
-  const X, Y, Wdt: Integer);
-var
-  TmpWdt: Integer;
-begin
-  with Cnv.Canvas do
-  begin
-    Brush.Style := bsSolid;
-    Brush.Color := clSilver;
-    Pen.Style := psSolid;
-    TmpWdt := Wdt div 2;
-    Windows.Ellipse(Handle, X - TmpWdt, Y - TmpWdt, X + TmpWdt, Y
-      + TmpWdt);
-  end;
-end;
-
-procedure DrawRect2DAsPolyline(const Cnv: TDecorativeCanvas;
-  const Box, Clip: TRect2D; const MT, S: TTransf2D);
-type
-  TPoints = array[0..0] of TPoint;
-var
-  VisPoints, Cont: Integer;
-  TmpPt1, TmpPt2: TPoint2D;
-  TmpPts: ^TPoints;
-  BoxPts: ^TVectPoints2D;
-  ClipRes: TClipResult;
-  TmpClip: TRect2D;
-begin
-  GetMem(TmpPts, 5 * SizeOf(TPoint));
-  GetMem(BoxPts, 5 * SizeOf(TPoint2D));
-  try
-    VisPoints := 0;
-    Cont := 0;
-    BoxPts^[Cont] := TransformPoint2D(Box.FirstEdge, MT);
-    BoxPts^[Cont + 1] := TransformPoint2D(Point2D(Box.Left,
-      Box.Top), MT);
-    BoxPts^[Cont + 2] := TransformPoint2D(Box.SecondEdge, MT);
-    BoxPts^[Cont + 3] := TransformPoint2D(Point2D(Box.Right,
-      Box.Bottom), MT);
-    BoxPts^[Cont + 4] := TransformPoint2D(Box.FirstEdge, MT);
-    if IsBoxAllInBox2D(TransformRect2D(Box, S), Clip) then
-      for Cont := 0 to 4 do
-      begin
-        TmpPt1 := TransformPoint2D(PVectPoints2D(BoxPts)^[Cont],
-          S);
-        TmpPts^[VisPoints] := Point2DToPoint(TmpPt1);
-        Inc(VisPoints);
-        ClipRes := [ccVisible];
-      end
-    else
-    begin
-      TmpClip := ReorderRect2D(Clip);
-      for Cont := 1 to 4 do
-      begin
-        TmpPt1 := TransformPoint2D(PVectPoints2D(BoxPts)^[Cont -
-          1], S);
-        TmpPt2 := TransformPoint2D(PVectPoints2D(BoxPts)^[Cont],
-          S);
-        ;
-        ClipRes := _ClipLine2D(TmpClip, TmpPt1, TmpPt2);
-        if not (ccNotVisible in ClipRes) then
-        begin
-          TmpPts^[VisPoints] := Point2DToPoint(TmpPt1);
-          Inc(VisPoints);
-        end;
-        if ccSecond in ClipRes then
-        begin
-          TmpPts^[VisPoints] := Point2DToPoint(TmpPt2);
-          Inc(VisPoints);
-          Cnv.Polyline(TmpPts, VisPoints);
-          VisPoints := 0;
-        end;
-      end;
-      if not (ccNotVisible in ClipRes) then
-      begin
-        TmpPts^[VisPoints] := Point2DToPoint(TmpPt2);
-        Inc(VisPoints);
-      end;
-    end;
-    if (VisPoints > 0) then
-      Cnv.Polyline(TmpPts, VisPoints)
-  finally
-    FreeMem(BoxPts, 5 * SizeOf(TPoint2D));
-    FreeMem(TmpPts, 5 * SizeOf(TPoint));
-  end;
-end;
-
-procedure DrawRect2DAsPolygon(const Cnv: TDecorativeCanvas; const
-  Box, Clip: TRect2D; const MT, S: TTransf2D);
-type
-  TPoints = array[0..0] of TPoint;
-var
-  VisPoints, VisPoints1, Cont: Integer;
-  TmpPt1, TmpPt2: TPoint2D;
-  TmpPts, FirstClipPts: ^TPoints;
-  BoxPts: ^TVectPoints2D;
-  ClipRes: TClipResult;
-  TmpClip: TRect2D;
-begin
-  GetMem(TmpPts, 15 * SizeOf(TPoint));
-  GetMem(FirstClipPts, 15 * SizeOf(TPoint));
-  GetMem(BoxPts, 5 * SizeOf(TPoint2D));
-  try
-    Cont := 0;
-    BoxPts^[Cont] := TransformPoint2D(Box.FirstEdge, MT);
-    BoxPts^[Cont + 1] := TransformPoint2D(Point2D(Box.Left,
-      Box.Top), MT);
-    BoxPts^[Cont + 2] := TransformPoint2D(Box.SecondEdge, MT);
-    BoxPts^[Cont + 3] := TransformPoint2D(Point2D(Box.Right,
-      Box.Bottom), MT);
-    BoxPts^[Cont + 4] := TransformPoint2D(Box.FirstEdge, MT);
-    VisPoints := 0;
-    VisPoints1 := 0;
-    if IsBoxAllInBox2D(TransformRect2D(Box, S), Clip) then
-      for Cont := 0 to 4 do
-      begin
-        TmpPt1 := TransformPoint2D(PVectPoints2D(BoxPts)^[Cont],
-          S);
-        TmpPts^[VisPoints] := Point2DToPoint(TmpPt1);
-        Inc(VisPoints);
-      end
-    else
-    begin
-      TmpClip := ReorderRect2D(Clip);
-      for Cont := 0 to 4 do
-      begin
-        TmpPt1 := TransformPoint2D(PVectPoints2D(BoxPts)^[Cont],
-          S);
-        if Cont < 4 then
-          TmpPt2 := TransformPoint2D(PVectPoints2D(BoxPts)^[Cont
-            + 1], S)
-        else
-          TmpPt2 := TransformPoint2D(PVectPoints2D(BoxPts)^[0],
-            S);
-        ClipRes := _ClipLineLeftRight2D(TmpClip, TmpPt1,
-          TmpPt2);
-        if not (ccNotVisible in ClipRes) then
-        begin
-          FirstClipPts^[VisPoints1] := Point2DToPoint(TmpPt1);
-          Inc(VisPoints1);
-        end;
-        if ccSecond in ClipRes then
-        begin
-          FirstClipPts^[VisPoints1] := Point2DToPoint(TmpPt2);
-          Inc(VisPoints1);
-        end;
-      end;
-      FirstClipPts^[VisPoints1].X := FirstClipPts^[0].X;
-      FirstClipPts^[VisPoints1].Y := FirstClipPts^[0].Y;
-      Inc(VisPoints1);
-      VisPoints := 0;
-      for Cont := 0 to VisPoints1 - 2 do
-      begin
-        TmpPt1 := PointToPoint2D(FirstClipPts^[Cont]);
-        TmpPt2 := PointToPoint2D(FirstClipPts^[Cont + 1]);
-        ClipRes := _ClipLineUpBottom2D(TmpClip, TmpPt1, TmpPt2);
-        if not (ccNotVisible in ClipRes) then
-        begin
-          TmpPts^[VisPoints] := Point2DToPoint(TmpPt1);
-          Inc(VisPoints);
-        end;
-        if ccSecond in ClipRes then
-        begin
-          TmpPts^[VisPoints] := Point2DToPoint(TmpPt2);
-          Inc(VisPoints);
-        end;
-      end;
-    end;
-    if (VisPoints > 0) then
-      Polygon(Cnv.Canvas.Handle, TmpPts^, VisPoints);
-  finally
-    FreeMem(BoxPts, 5 * SizeOf(TPoint2D));
-    FreeMem(TmpPts, 15 * SizeOf(TPoint));
-    FreeMem(FirstClipPts, 15 * SizeOf(TPoint));
-  end;
-end;
-
-function DrawLine2D(const Cnv: TDecorativeCanvas; P1, P2:
-  TPoint2D; const Clip: TRect2D; const S: TTransf2D): Boolean;
-var
-  TmpPt1, TmpPt2: TPoint;
-  TmpPt12D, TmpPt22D: TPoint2D;
-  ClipRes: TClipResult;
-  TmpBox: TRect2D;
-  TmpClip: TRect2D;
-begin
-  TmpBox.FirstEdge := P1;
-  TmpBox.SecondEdge := P2;
-  TmpBox := ReorderRect2D(TmpBox);
-  if IsBoxAllInBox2D(TransformRect2D(TmpBox, S), Clip) then
-  begin
-    Result := True;
-    TmpPt1 := Point2DToPoint(TransformPoint2D(P1, S));
-    TmpPt2 := Point2DToPoint(TransformPoint2D(P2, S));
-    Cnv.MoveTo(TmpPt1.X, TmpPt1.Y);
-    Cnv.LineTo(TmpPt2.X, TmpPt2.Y);
-  end
-  else
-  begin
-    TmpClip := ReorderRect2D(Clip);
-    TmpPt12D := TransformPoint2D(P1, S);
-    TmpPt22D := TransformPoint2D(P2, S);
-    ;
-    ClipRes := _ClipLine2D(TmpClip, TmpPt12D, TmpPt22D);
-    Result := not (ccNotVisible in ClipRes);
-    if Result then
-    begin
-      TmpPt1 := Point2DToPoint(TmpPt12D);
-      TmpPt2 := Point2DToPoint(TmpPt22D);
-      Cnv.MoveTo(TmpPt1.X, TmpPt1.Y);
-      Cnv.LineTo(TmpPt2.X, TmpPt2.Y);
-    end;
-  end;
-end;
-
-procedure DrawBoundingBox2D(const Cnv: TDecorativeCanvas; Box,
-  Clip: TRect2D; const S: TTransf2D);
-begin
-  DrawRect2DAsPolyline(Cnv, Box, Clip, IdentityTransf2D, S)
-end;
-
 procedure Register;
 begin
   RegisterComponents('TpX', [TRuler, TDrawing2D,
     TCADViewport2D, TCADPrg2D]);
-end;
-
-// =====================================================================
-// TPointsSet2D
-// =====================================================================
-
-procedure TPointsSet2D.Expand(const NewCapacity: Integer);
-var
-  Cont: Integer;
-begin
-  if NewCapacity <= fCapacity then
-    Exit;
-  ReAllocMem(fPoints, NewCapacity * SizeOf(TPoint2D));
-  for Cont := fCapacity to NewCapacity - 1 do
-    with PVectPoints2D(fPoints)^[Cont] do
-    begin
-      X := 0.0;
-      Y := 0.0;
-      W := 1.0;
-    end;
-  fCapacity := NewCapacity;
-end;
-
-procedure TPointsSet2D.SetDisableEvents(B: Boolean);
-begin
-  fDisableEvents := B;
-end;
-
-procedure TPointsSet2D.CallOnChange;
-begin
-  // Call onChange only if the events are enabled.
-  if (not fDisableEvents) and Assigned(fOnChange) then
-  begin
-    fDisableEvents := True;
-    try
-      fOnChange(Self);
-    finally
-      fDisableEvents := False;
-    end;
-  end;
-end;
-
-constructor TPointsSet2D.Create(const _Capacity: Word);
-begin
-  inherited Create;
-
-  fCount := 0;
-  fCapacity := _Capacity;
-  GetMem(fPoints, fCapacity * SizeOf(TPoint2D));
-  fDisableEvents := False;
-  fGrownEnabled := True;
-  fTag := 0;
-end;
-
-destructor TPointsSet2D.Destroy;
-begin
-  FreeMem(fPoints, fCapacity * SizeOf(TPoint2D));
-  inherited Destroy;
-end;
-
-function TPointsSet2D.Get(Index: Word): TPoint2D;
-begin
-  if Index < fCount then
-    Result := PVectPoints2D(fPoints)^[Index]
-  else
-    raise
-      ECADOutOfBound.Create('TPointsSet2D.Get: Index out of bound');
-end;
-
-procedure TPointsSet2D.GetExtension0(var R: TRect2D;
-  const FirstPass: Boolean);
-var
-  Cont: Integer;
-  TmpPt: TPoint2D;
-begin
-  if fCount = 0 then
-    Exit;
-  if FirstPass then
-  begin
-    TmpPt := CartesianPoint2D(PVectPoints2D(fPoints)^[0]);
-    R.FirstEdge := TmpPt;
-    R.SecondEdge := TmpPt;
-  end;
-  for Cont := 1 to fCount - 1 do
-  begin
-    TmpPt := CartesianPoint2D(PVectPoints2D(fPoints)^[Cont]);
-    if TmpPt.X > R.Right then
-      R.Right := TmpPt.X
-    else if TmpPt.X < R.Left then
-      R.Left := TmpPt.X;
-    if TmpPt.Y > R.Top then
-      R.Top := TmpPt.Y
-    else if TmpPt.Y < R.Bottom then
-      R.Bottom := TmpPt.Y;
-  end;
-end;
-
-function TPointsSet2D.GetExtension: TRect2D;
-var
-  Cont: Integer;
-begin
-  Result := Rect2D(0, 0, 0, 0);
-  GetExtension0(Result, True);
-end;
-
-procedure TPointsSet2D.PutProp(Index: Word; const Item:
-  TPoint2D);
-begin
-  Put(Index, Index, Item);
-  CallOnChange;
-end;
-
-procedure TPointsSet2D.Put(PutIndex, ItemIndex: Word; const
-  Item: TPoint2D);
-begin
-  if PutIndex < fCapacity then
-  begin
-    PVectPoints2D(fPoints)^[PutIndex] := Item;
-    if PutIndex >= fCount then
-      fCount := PutIndex + 1;
-  end
-  else if fGrownEnabled then
-  begin
-    Expand(MaxIntValue([PutIndex + 1, fCapacity * 2 + 1]));
-    PVectPoints2D(fPoints)^[PutIndex] := Item;
-    Inc(fCount);
-  end
-  else
-    raise
-      ECADOutOfBound.Create('TPointsSet2D.Put: Vector out of bound');
-end;
-
-procedure TPointsSet2D.Add(const Item: TPoint2D);
-begin
-  PutProp(fCount, Item);
-end;
-
-procedure TPointsSet2D.AddPoints(const Items: array of
-  TPoint2D);
-var
-  Cont: Integer;
-begin
-  if (not fGrownEnabled) and (High(Items) - Low(Items) >
-    fCapacity) then
-    raise
-      ECADOutOfBound.Create('TPointsSet2D.AddPoints: Vector out of bound');
-  Expand(fCapacity + High(Items) - Low(Items) + 1);
-  for Cont := Low(Items) to High(Items) do
-    Put(fCount, fCount, Items[Cont]);
-  CallOnChange;
-end;
-
-procedure TPointsSet2D.Clear;
-begin
-  fCount := 0;
-end;
-
-procedure TPointsSet2D.Delete(const Index: Word);
-var
-  Cont: Integer;
-begin
-  if Index < fCount then
-  begin
-    for Cont := Index to fCount - 2 do
-      Put(Cont, Cont + 1, PVectPoints2D(fPoints)^[Cont + 1]);
-    Dec(fCount);
-    CallOnChange;
-  end
-  else
-    raise
-      ECADOutOfBound.Create('TPointsSet2D.Delete: Vector out of bound');
-end;
-
-procedure TPointsSet2D.Insert(const Index: Word; const Item:
-  TPoint2D);
-var
-  Cont: Integer;
-begin
-  if Index >= fCount then
-    raise
-      ECADOutOfBound.Create('TPointsSet2D.Insert: Vector out of bound');
-  Put(fCount, fCount, Item);
-  for Cont := fCount - 1 downto Index + 1 do
-    Put(Cont, Cont - 1, PVectPoints2D(fPoints)^[Cont - 1]);
-  Put(Index, Index, Item);
-  CallOnChange;
-end;
-
-procedure TPointsSet2D.TransformPoints(const T: TTransf2D);
-var
-  Cont: Integer;
-  TmpPt: TPoint2D;
-begin
-  for Cont := 0 to fCount - 1 do
-  begin
-    TmpPt := TransformPoint2D(PVectPoints2D(fPoints)^[Cont], T);
-    PVectPoints2D(fPoints)^[Cont] := TmpPt;
-  end;
-  CallOnChange;
-end;
-
-procedure TPointsSet2D.Copy(const S: TPointsSet2D; const StIdx,
-  EndIdx: Integer);
-var
-  Cont: Integer;
-begin
-  try
-    Expand(EndIdx + 1);
-    for Cont := StIdx to EndIdx do
-      Put(Cont, Cont, S[Cont]);
-  except
-  end;
-  CallOnChange;
-end;
-
-procedure TPointsSet2D.DrawAsPolygon(const Cnv:
-  TDecorativeCanvas;
-  const Clip, Extent: TRect2D;
-  const S: TTransf2D);
-var
-  PenStyle0: TPenStyle;
-begin
-  //TSY: remove line drawing
-  PenStyle0 := Cnv.Canvas.Pen.Style;
-  Cnv.Canvas.Pen.Style := psClear;
-  Draw2DSubSetAsPolygon(fPoints, fCount, Cnv, Clip, Extent, S,
-    0, fCount - 1);
-  Cnv.Canvas.Pen.Style := PenStyle0;
-end;
-
-//TSY: added
-
-procedure TPointsSet2D.DrawAsPolygonOutline(const Cnv:
-  TDecorativeCanvas;
-  const Clip, Extent: TRect2D; const S: TTransf2D);
-var
-  BrushStyle0: TBrushStyle;
-  BrushColor0: TColor;
-begin
-  BrushStyle0 := Cnv.Canvas.Brush.Style;
-  BrushColor0 := Cnv.Canvas.Brush.Color;
-  Cnv.Canvas.Brush.Style := bsClear;
-  Draw2DSubSetAsPolygon(fPoints, fCount, Cnv, Clip, Extent, S,
-    0, fCount - 1);
-  Cnv.Canvas.Brush.Style := BrushStyle0;
-  Cnv.Canvas.Brush.Color := BrushColor0;
-end;
-
-procedure TPointsSet2D.DrawAsPolyline(const Cnv:
-  TDecorativeCanvas;
-  const Clip, Extent: TRect2D;
-  const S: TTransf2D);
-begin
-  Draw2DSubSetAsPolyline(fPoints, fCount, Cnv, Clip, Extent, S,
-    0, fCount - 1, False);
-end;
-
-procedure TPointsSet2D.DrawSubsetAsPolygon(const Cnv:
-  TDecorativeCanvas;
-  const Clip, Extent: TRect2D;
-  const S: TTransf2D;
-  const StartIdx, EndIdx: Integer);
-begin
-  Draw2DSubSetAsPolygon(fPoints, fCount, Cnv, Clip, Extent, S,
-    StartIdx, EndIdx);
-end;
-
-procedure TPointsSet2D.DrawSubsetAsPolyline(const Cnv:
-  TDecorativeCanvas;
-  const Clip, Extent: TRect2D;
-  const S: TTransf2D;
-  const StartIdx, EndIdx: Integer;
-  const ToBeClosed: Boolean);
-begin
-  Draw2DSubSetAsPolyline(fPoints, fCount, Cnv, Clip, Extent, S,
-    StartIdx, EndIdx, ToBeClosed);
 end;
 
 // =====================================================================
@@ -8609,10 +5298,14 @@ function CADSysFindClassByIndex(Index: Word):
 begin
   if Index >= MAX_REGISTERED_CLASSES then
     raise
-      ECADOutOfBound.Create('CADSysRegisterClass: Out of bound registration index');
+      Exception.Create(
+      Format('CADSysRegisterClass: Out of bound registration index %d',
+      [Index]));
   if not Assigned(GraphicObjectsRegistered[Index]) then
     raise
-      ECADObjClassNotFound.Create('CADSysFindClassByIndex: Index not registered');
+      ECADObjClassNotFound.Create(
+      Format('CADSysFindClassByIndex: Index not registered %d',
+      [Index]));
   Result := GraphicObjectsRegistered[Index];
 end;
 
@@ -8621,7 +5314,7 @@ procedure CADSysRegisterClass(Index: Word; const GraphClass:
 begin
   if Index >= MAX_REGISTERED_CLASSES then
     raise
-      ECADOutOfBound.Create('CADSysRegisterClass: Out of bound registration index');
+      Exception.Create('CADSysRegisterClass: Out of bound registration index');
   if Assigned(GraphicObjectsRegistered[Index]) then
     raise
       ECADObjClassNotFound.Create(Format('CADSysRegisterClass: Index %d already allocated by %s', [Index, GraphicObjectsRegistered[Index].ClassName]));
@@ -8632,7 +5325,7 @@ procedure CADSysUnregisterClass(Index: Word);
 begin
   if Index >= MAX_REGISTERED_CLASSES then
     raise
-      ECADOutOfBound.Create('CADSysRegisterClass: Out of bound registration index');
+      Exception.Create('CADSysRegisterClass: Out of bound registration index');
   if Assigned(GraphicObjectsRegistered[Index]) then
     GraphicObjectsRegistered[Index] := nil;
 end;
@@ -9229,6 +5922,24 @@ begin
   end;
 end;
 
+procedure TExclusiveGraphicObjIterator.ReplaceDeleteCurrent(
+  const Obj: TGraphicObject);
+var
+  OwnerCAD: TDrawing;
+begin
+  if (fSourceList = nil) or (fCurrent = nil) then Exit;
+  OwnerCAD := nil;
+  if Assigned(TObjBlock(fCurrent^).Obj) and
+    fSourceList.fFreeOnClear then
+  begin
+    OwnerCAD := TObjBlock(fCurrent^).Obj.OwnerCAD;
+    TObjBlock(fCurrent^).Obj.Free;
+  end;
+  Obj.fOwnerCAD := OwnerCAD;
+  TObjBlock(fCurrent^).Obj := Obj;
+end;
+
+
 // =====================================================================
 // TIndexedObjectList
 // =====================================================================
@@ -9264,7 +5975,7 @@ begin
     TIdxObjListArray(fListMemory^)[IDX] := Obj
   else
     raise
-      ECADOutOfBound.Create('TIndexedObjectList.SetObject: Index out of bounds.');
+      Exception.Create('TIndexedObjectList.SetObject: Index out of bounds.');
 end;
 
 function TIndexedObjectList.GetObject(IDX: Integer): TObject;
@@ -9276,7 +5987,7 @@ begin
     Result := TIdxObjListArray(fListMemory^)[IDX]
   else
     raise
-      ECADOutOfBound.Create('TIndexedObjectList.GetObject: Index out of bounds.');
+      Exception.Create('TIndexedObjectList.GetObject: Index out of bounds.');
 end;
 
 constructor TIndexedObjectList.Create(const Size: Integer);
@@ -9383,7 +6094,7 @@ begin
       if fShowGrid and fGridOnTop then
         DrawGrid(fRect, TmpCanvas);
     finally
-      TmpCanvas.UnLock;
+      TmpCanvas.Unlock;
     end;
   except
   end;
@@ -9983,16 +6694,18 @@ begin
   end;
 end;
 
-procedure TDrawing.SaveToFile_EMF(const FileName: string);
+function TDrawing.SaveToFile_EMF(const FileName: string): Boolean;
 var
   MetaFile: TMetaFile;
 begin
   //StopRepaint;
   MetaFile := Self.Viewports[0].AsMetafile;
+  Result := False;
   try
     MetaFile.SaveToFile(FileName);
   finally
     MetaFile.Free;
+    Result := FileExists(FileName);
   end;
 end;
 
@@ -10538,9 +7251,64 @@ var
   E: TRect2D;
 begin
   E := GetSelectionExtension;
-  Result.X := (E.Left + E.Right) / 2;
-  Result.Y := (E.Bottom + E.Top) / 2;
-  Result.W := 1;
+  Result := MidPoint(E.FirstEdge, E.SecondEdge);
+end;
+
+procedure TDrawing.ChangeSelected(ChangeProc: TChangeProc; PData: Pointer);
+var
+  Obj: TGraphicObject;
+  Iter: TGraphicObjIterator;
+begin
+  Iter := SelectedObjects.GetIterator;
+  try
+    Obj := Iter.First;
+    while Assigned(Obj) do
+    begin
+      ChangeProc(Obj, PData);
+      Obj := Iter.Next;
+    end;
+  finally
+    Iter.Free;
+  end;
+  RepaintViewports;
+  NotifyChanged;
+end;
+
+procedure TDrawing.ChangeLineKind(const Obj: TGraphicObject; PData: Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).LineStyle := TLineStyle(PData^);
+end;
+
+procedure TDrawing.ChangeLineColor(const Obj: TGraphicObject; PData: Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).LineColor := TColor(PData^);
+end;
+
+procedure TDrawing.ChangeHatching(const Obj: TGraphicObject; PData: Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).Hatching := THatching(PData^);
+end;
+
+
+procedure TDrawing.ChangeHatchColor(const Obj: TGraphicObject; PData: Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).HatchColor := TColor(PData^);
+end;
+
+procedure TDrawing.ChangeFillColor(const Obj: TGraphicObject; PData: Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).FillColor := TColor(PData^);
+end;
+
+procedure TDrawing.ChangeLineWidth(const Obj: TGraphicObject; PData: Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).LineWidth := TRealType(PData^);
 end;
 
 procedure TDrawing.NotifyChanged;
@@ -10756,7 +7524,7 @@ begin
       CopyBitmapOnCanvas(Canvas, fOffScreenBitmap, Rect,
         fTransparent, fBackGroundColor);
     finally
-      fOffScreenCanvas.Canvas.UnLock;
+      fOffScreenCanvas.Canvas.Unlock;
     end;
   end;
   if Assigned(fOnPaint) and GenEvent and (not fDisablePaintEvent)
@@ -11004,7 +7772,7 @@ begin
         if fShowGrid and fGridOnTop then
           DrawGrid(ARect, TmpCanvas);
       finally
-        TmpCanvas.UnLock;
+        TmpCanvas.Unlock;
       end;
     except
     end;
@@ -11023,8 +7791,9 @@ end;
 procedure TCADViewport.DrawGrid(const ARect: TRect2D; const Cnv:
   TCanvas);
 var
-  CurrX, CurrY: TRealType;
+  CurrX, CurrY, Mult, D, DeltaX, DeltaY: TRealType;
   Pnt1, Pnt2: TPoint2D;
+  I, N: Integer;
   procedure DrawGridLines(const DecCnv: TDecorativeCanvas; const
     DX, DY: TRealType);
   begin
@@ -11059,6 +7828,19 @@ begin
   if (fGridDeltaX <= 0.0) or (fGridDeltaY <= 0.0) then
     Exit;
   TmpCnv := TDecorativeCanvas.Create(Cnv);
+  D := (Log10((VisualRect.Right - VisualRect.Left) / fGridDeltaX)
+    + Log10((VisualRect.Top - VisualRect.Bottom) / fGridDeltaY)) / 2 - 1;
+  N := Round(D);
+  Mult := IntPower(10, N);
+  if N - D > -0.2 then
+  begin
+    if N - D > 0.2 then
+      Mult := Mult / 5
+    else
+      Mult := Mult / 2;
+  end;
+  DeltaX := fGridDeltaX * Mult;
+  DeltaY := fGridDeltaY * Mult;
   with Cnv do
   try
     SetBkMode(Handle, TRANSPARENT);
@@ -11072,13 +7854,13 @@ begin
     if ((fGridSubX > 0) and (fGridSubY > 0)) then
     begin
       TmpCnv.DecorativePen.SetPenStyle('10');
-      DrawGridLines(TmpCnv, fGridDeltaX / fGridSubX, fGridDeltaY
+      DrawGridLines(TmpCnv, DeltaX / fGridSubX, DeltaY
         / fGridSubY);
       TmpCnv.DecorativePen.SetPenStyle('');
     end;
      // Draw the grid main divisions.
     Pen.Style := psSolid;
-    DrawGridLines(TmpCnv, fGridDeltaX, fGridDeltaY);
+    DrawGridLines(TmpCnv, DeltaX, DeltaY);
      // Draw the main axes.
     Pen.Width := 2;
     Pnt1 := ViewportToScreen(Point2D(ARect.Left, 0.0));
@@ -11402,8 +8184,8 @@ begin
   // szlMillimeters device size in mm
   // szlDevice device size in pixels
   //(fDrawing as TDrawing2D).PicUnitLength := 0.005;
-  W := W_MM / (fDrawing as TDrawing2D).PicUnitLength;
-  H := H_MM / (fDrawing as TDrawing2D).PicUnitLength;
+  W := (W_MM - 2 * B_MM) / (fDrawing as TDrawing2D).PicUnitLength;
+  H := (H_MM - 2 * B_MM) / (fDrawing as TDrawing2D).PicUnitLength;
   B := B_MM / (fDrawing as TDrawing2D).PicUnitLength;
   Result.Enhanced := True;
   Inch := Round(25.4 / (fDrawing as TDrawing2D).PicUnitLength);
@@ -12136,9 +8918,16 @@ begin
   end;
 end;
 
-constructor TContainer2D.Create(ID: Longint; const Objs: array
-  of
-  TObject2D);
+constructor TContainer2D.Create(ID: Longint);
+begin
+  inherited Create(ID);
+
+  fObjects := TGraphicObjList.Create;
+  fObjects.FreeOnClear := True;
+end;
+
+constructor TContainer2D.CreateSpec(ID: Longint; const Objs: array
+  of TObject2D);
 var
   Cont: Word;
 begin
@@ -12382,10 +9171,19 @@ end;
 // TSourceBlock2D
 // =====================================================================
 
-constructor TSourceBlock2D.Create(ID: Longint; const Name:
+constructor TSourceBlock2D.Create(ID: Longint);
+begin
+  inherited Create(ID);
+
+  fName := '';
+  fLibraryBlock := False;
+  fNReference := 0;
+end;
+
+constructor TSourceBlock2D.CreateSpec(ID: Longint; const Name:
   TSourceBlockName; const Objs: array of TObject2D);
 begin
-  inherited Create(ID, Objs);
+  inherited CreateSpec(ID, Objs);
 
   fName := Name;
   fLibraryBlock := False;
@@ -12454,7 +9252,17 @@ begin
   UpdateExtension(Self);
 end;
 
-constructor TBlock2D.Create(ID: Longint; const Source:
+constructor TBlock2D.Create(ID: Longint);
+begin
+  inherited Create(ID);
+
+  fOriginPoint := Point2D(0, 0);
+  fSourceName := '';
+  fSourceBlock := nil;
+  fSourceName := '';
+end;
+
+constructor TBlock2D.CreateSpec(ID: Longint; const Source:
   TSourceBlock2D);
 begin
   inherited Create(ID);
@@ -12696,6 +9504,7 @@ begin
   inherited Create(AOwner);
   SetDefaults;
   History := nil;
+  OnPasteMetafileFromClipboard := nil;
 end;
 
 destructor TDrawing2D.Destroy;
@@ -12720,8 +9529,10 @@ begin
   PicScale := PicScale_Default;
   PicUnitLength := PicUnitLength_Default;
   HatchingStep := HatchingStep_Default;
+  HatchingLineWidth := HatchingLineWidth_Default;
   DottedSize := DottedSize_Default;
   DashSize := DashSize_Default;
+  FontName := ''; //FontName_Default;
   TeXMinLine := TeXMinLine_Default;
   TeXCenterFigure := TeXCenterFigure_Default;
   TeXFigure := TeXFigure_Default;
@@ -12730,7 +9541,7 @@ begin
   TeXFigureEpilogue := '';
   TeXPicPrologue := '';
   TeXPicEpilogue := '';
-  LineWidth := LineWidth_Default;
+  LineWidthBase := LineWidthBase_Default;
   MiterLimit := 10;
   //FactorMM := 1;
   Border := Border_Default;
@@ -12919,13 +9730,22 @@ procedure TDrawing2D.PasteFromClipboard;
 var
   Stream: TMemoryStream;
 begin
+  if Clipboard.HasFormat(CF_METAFILEPICT {CF_ENHMETAFILE}) then
+  begin
+    if Assigned(OnPasteMetafileFromClipboard) then
+      OnPasteMetafileFromClipboard(Self);
+    Exit;
+  end;
   if not Clipboard.HasFormat(TpXClipboardFormat) then
     Exit;
   Stream := TMemoryStream.Create;
-  GetStreamFromClipboard(TpXClipboardFormat, Stream);
-  Stream.Position := 0;
-  LoadObjectsFromStream(Stream, Version);
-  Stream.Free;
+  try
+    GetStreamFromClipboard(TpXClipboardFormat, Stream);
+    Stream.Position := 0;
+    LoadObjectsFromStream(Stream, Version);
+  finally
+    Stream.Free;
+  end;
 end;
 
 {$WARNINGS OFF}
@@ -13159,7 +9979,7 @@ function TDrawing2D.BlockObjects(const SrcName:
 var
   TmpObj: TObject2D;
 begin
-  Result := TSourceBlock2D.Create(0, SrcName, [nil]);
+  Result := TSourceBlock2D.CreateSpec(0, SrcName, [nil]);
   try
     TmpObj := Objs.First as TObject2D;
     while TmpObj <> nil do
@@ -13244,7 +10064,7 @@ var
   TmpSource: TSourceBlock2D;
 begin
   TmpSource := FindSourceBlock(SrcName);
-  Tmp := TBlock2D.Create(ID, TmpSource);
+  Tmp := TBlock2D.CreateSpec(ID, TmpSource);
   try
     AddObject(ID, Tmp);
     Result := Tmp;
@@ -13316,19 +10136,30 @@ begin
   TransformObjects([-1], T);
 end;
 
-procedure TDrawing2D.ScaleStandard;
+function TDrawing2D.ScaleStandard(ScaleStandardMaxWidth,
+  ScaleStandardMaxHeight: TRealType): TTransf2D;
 var
   Rect: TRect2D;
-  T: TTransf2D;
-  Scale: TRealType;
+  ScaleX, ScaleY, Scale: TRealType;
 begin
   Rect := GetExtension;
   if Rect.Top <= Rect.Bottom then Exit;
-  T := Translate2D(-Rect.Left, -Rect.Bottom);
-  Scale := 50 / (Rect.Top - Rect.Bottom);
-  //T := MultiplyTransform2D(Scale2D(Scale, Scale), T);
-  T := MultiplyTransform2D(T, Scale2D(Scale, Scale));
-  TransformObjects([-1], T);
+  Result := Translate2D(-Rect.Left, -Rect.Bottom);
+  ScaleX := ScaleStandardMaxWidth / (Rect.Right - Rect.Left);
+  ScaleY := ScaleStandardMaxHeight / (Rect.Top - Rect.Bottom);
+  Scale := Min(ScaleX, ScaleY) / Self.PicScale;
+  Result := MultiplyTransform2D(Result, Scale2D(Scale, Scale));
+  TransformObjects([-1], Result);
+end;
+
+procedure TDrawing2D.ScalePhysical(const S: TRealType);
+begin
+//  fDrawing2D.PicScale := fDrawing2D.PicScale * Magnif;
+  Border := Border * S;
+  LineWidthBase := LineWidthBase * S;
+  HatchingStep := HatchingStep * S;
+  DottedSize := DottedSize * S;
+  DashSize := DashSize * S;
 end;
 
 procedure TDrawing2D.RedrawObject(const Obj: TObject2D);
@@ -13372,7 +10203,10 @@ var
   TmpIter: TGraphicObjIterator;
 begin
   if ObjectsCount = 0 then
+  begin
+    Result := Rect2D(0, 0, 0, 0);
     Exit;
+  end;
   TmpIter := ObjectsIterator;
   try
     Result := GetExtension0(Self, TmpIter);
@@ -13433,19 +10267,18 @@ begin
       //Cnv.Canvas.Brush.Style := bsSolid;
       if (Obj is TPrimitive2D) then
       begin
-        case (Obj as TPrimitive2D).LineKind of
-          liNone: Cnv.Canvas.Pen.Width := 0;
-          liThin: Cnv.Canvas.Pen.Width := 1;
-          liThick: Cnv.Canvas.Pen.Width := 2;
+        if (Obj as TPrimitive2D).LineStyle = liNone
+          then Cnv.Canvas.Pen.Width := 0
+        else
+          Cnv.Canvas.Pen.Width := Round((Obj as TPrimitive2D).LineWidth);
+        case (Obj as TPrimitive2D).LineStyle of
           liDotted:
             begin
-              Cnv.Canvas.Pen.Width := 1;
               Cnv.Canvas.Pen.Style := psDot;
               Cnv.DecorativePen.SetPenStyle('111000');
             end;
           liDashed:
             begin
-              Cnv.Canvas.Pen.Width := 1;
               Cnv.Canvas.Pen.Style := psDash;
               Cnv.DecorativePen.SetPenStyle(
                 '111111111111111111100000000000');
@@ -14031,7 +10864,7 @@ begin
       then
       SetWindowLong(fLinkedViewport.Handle, gwl_wndProc,
         Longint(fOldWndProc));
-    FreeObjectInstance(fNewWndProc);
+    Classes.FreeObjectInstance(fNewWndProc);
     fNewWndProc := nil;
   end;
   // Reassign the old on paint.
@@ -14045,7 +10878,7 @@ begin
   if Assigned(V) then
   begin
     V.FreeNotification(Self);
-    fNewWndProc := MakeObjectInstance(SubclassedWinProc);
+    fNewWndProc := Classes.MakeObjectInstance(SubclassedWinProc);
     fOldWndProc := Pointer(SetWindowLong(V.Handle,
       gwl_wndProc,
       Longint(fNewWndProc)));
@@ -14872,6 +11705,8 @@ initialization
   CADSysRegisterClass(19, TClosedCubicBSpline2D);
   CADSysRegisterClass(20, TSmoothPath2D);
   CADSysRegisterClass(21, TClosedSmoothPath2D);
+  CADSysRegisterClass(22, TBezierPath2D);
+  CADSysRegisterClass(23, TClosedBezierPath2D);
 
   TpXClipboardFormat :=
     RegisterClipboardFormat(TpXClipboardFormatString);

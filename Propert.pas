@@ -37,6 +37,9 @@ type
     Label3: TLabel;
     StarsSheet: TTabSheet;
     StarsFrame1: TStarsFrame;
+    Button3: TButton;
+    LabeledEdit4: TLabeledEdit;
+    ComboBox6: TComboBox;
     procedure FormShow(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action:
       TCloseAction);
@@ -44,6 +47,7 @@ type
     procedure ColorBox_DrawItem(Control: TWinControl; Index: Integer;
       Rect: TRect; State: TOwnerDrawState);
     procedure ColorBox_Select(Sender: TObject);
+    procedure Button3Click(Sender: TObject);
   private
     { Private declarations }
   public
@@ -56,7 +60,7 @@ var
 
 implementation
 
-uses ColorEtc;
+uses ColorEtc, Table, Geometry;
 
 {$R *.dfm}
 
@@ -72,11 +76,12 @@ var
   I: Integer;
 begin
   Caption := PPrimitive.Name;
-  ComboBox1.ItemIndex := Ord(PPrimitive.LineKind);
+  ComboBox1.ItemIndex := Ord(PPrimitive.LineStyle);
   ComboBox2.ItemIndex := Ord(PPrimitive.Hatching);
   ColorBoxSet(ComboBox3, PPrimitive.LineColor);
   ColorBoxSet(ComboBox4, PPrimitive.HatchColor);
   ColorBoxSet(ComboBox5, PPrimitive.FillColor);
+  ComboBox6.Text := Format('%.5g', [PPrimitive.LineWidth]);
   //PropPages.TabHeight := 1;
   for I := 0 to PropPages.PageCount - 1 do
     PropPages.Pages[I].TabVisible := False;
@@ -86,6 +91,7 @@ begin
       LabeledEdit1.Text := Text;
       LabeledEdit3.Text := TeXText;
       LabeledEdit2.Text := Format('%.5g', [Height]);
+      LabeledEdit4.Text := Format('%.6g', [RadToDeg(Rot)]);
       RadioGroup1.ItemIndex := Ord(HJustification);
       RadioGroup2.ItemIndex := Ord(VJustification);
       PropPages.ActivePage := TextSheet;
@@ -121,18 +127,20 @@ var
   I: Integer;
 begin
   if ModalResult <> mrOK then Exit;
-  PPrimitive.LineKind :=
-    TLineKind(ComboBox1.ItemIndex);
+  PPrimitive.LineStyle :=
+    TLineStyle(ComboBox1.ItemIndex);
   PPrimitive.Hatching := THatching(ComboBox2.ItemIndex);
   PPrimitive.LineColor := ColorBoxGet(ComboBox3);
   PPrimitive.HatchColor := ColorBoxGet(ComboBox4);
   PPrimitive.FillColor := ColorBoxGet(ComboBox5);
+  PPrimitive.LineWidth := StrToFloat(ComboBox6.Text);
   if PPrimitive is TText2D then
     with PPrimitive as TText2D do
     begin
       Text := LabeledEdit1.Text;
       TeXText := LabeledEdit3.Text;
       Height := StrToFloat(LabeledEdit2.Text);
+      Rot := DegToRad(StrToFloat(LabeledEdit4.Text));
       HJustification := THJustification(RadioGroup1.ItemIndex);
       VJustification := TVJustification(RadioGroup2.ItemIndex);
     end
@@ -171,5 +179,10 @@ begin
   ColorBoxSelect(Sender as TComboBox);
 end;
 
-end.
+procedure TPropertiesForm.Button3Click(Sender: TObject);
+begin
+  TableForm.PPrimitive := PPrimitive;
+  TableForm.ShowModal;
+end;
 
+end.

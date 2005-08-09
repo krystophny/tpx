@@ -81,7 +81,7 @@ const
   CADPRG_ClipboardCut = CADPRG_ClipboardPaste + 1;
   CADPRG_CustomTransform = CADPRG_ClipboardCut + 1;
   CADPRG_ConvertSelected = CADPRG_CustomTransform + 1;
-  // = CADPRG_ConvertSelected + 50
+  CADPRG_ConvertToGrayScale = CADPRG_ConvertSelected + 50;
 
 type
   { ******************* Zooming states *********************** }
@@ -365,7 +365,6 @@ type
   TCAD2DDrawUnsizedPrimitiveParam = class(TCAD2DCommonParam)
   private
     fPrimObject: TPrimitive2D;
-    fCurrPoint: Word;
     fOrtoIsUsable: Boolean;
   protected
     {: This method updates the on-screen informations during
@@ -1343,6 +1342,7 @@ type
     procedure BackwardForward(Key: Integer);
     procedure DuplicateSelected;
     procedure ConvertSelected(DestClass: TPrimitive2DClass);
+    procedure ConvertToGrayScale;
     procedure ChangePrimitiveProperties(Obj: TPrimitive2D);
     function OnEvent(Event: TCADPrgEvent; MouseButton:
       TCS4MouseButton; Shift: TShiftState; Key: Word;
@@ -1364,7 +1364,7 @@ type
 
 implementation
 
-uses Math, Propert, TransForm;
+uses Math, Propert, TransForm, ColorEtc, Geometry, Draw;
 
 type
 // -----===== Starting Cs4CADPrgTasks.pas =====-----
@@ -1396,6 +1396,7 @@ type
 
 // -----===== Starting Cs4CADPrgTasks2D.pas =====-----
   TCAD2DEditPrimitiveParam = class(TCAD2DCommonParam)
+    Shift: TShiftState;
   private
     fCurrentPrimitive, fOriginalPrimitive: TPrimitive2D;
     fCurrentCtrlPt: Integer;
@@ -1657,7 +1658,7 @@ begin
     Param := TCADPrgParam.Create(StateParam.AfterState)
   else
     Param := TCADPrgParam.Create(nil);
-  Param.UserObject := TLine2D.Create(0, Point2D(0, 0),
+  Param.UserObject := TLine2D.CreateSpec(0, Point2D(0, 0),
     Point2D(0, 0));
   Description := 'Select the start point of the pan.'
 end;
@@ -1888,7 +1889,7 @@ constructor TCAD2DDrawUnsizedPrimitiveParam.Create(AfterS:
 begin
   inherited Create(AfterS);
   fPrimObject := Primitive;
-  fCurrPoint := StartPointIdx;
+  Primitive.FirstDrawPoint := StartPointIdx;
   fOrtoIsUsable := OrtoIsU;
 end;
 
@@ -2025,7 +2026,7 @@ var
       DrawOSD(Viewport2D);
       CurrPoint2D := CurrentViewportSnappedPoint;
       SnapOriginPoint := CurrentViewportSnappedPoint;
-      if fCurrPoint = 0 then
+      if Primitive.FirstDrawPoint = 0 then
       begin
         for Cont := 0 to fnPoints - 1 do
           fPrimObject.Points[Cont] := CurrPoint2D;
@@ -2037,13 +2038,14 @@ var
       else
       begin
         if fOrtoIsUsable and UseOrto then
-          MakeOrto2D(fPrimObject.Points[fCurrPoint - 1],
+          MakeOrto2D(fPrimObject.Points[Primitive.FirstDrawPoint - 1],
             CurrPoint2D);
-        fPrimObject.Points[fCurrPoint] := CurrPoint2D;
+        fPrimObject.Points[Primitive.FirstDrawPoint] := CurrPoint2D;
       end;
-      Inc(fCurrPoint);
-      if fCurrPoint = fnPoints then
+      Inc(Primitive.FirstDrawPoint);
+      if Primitive.FirstDrawPoint = fnPoints then
       begin
+        Primitive.FinishFirstDraw;
         if Assigned(AfterState) then
         begin
           NextState := AfterState;
@@ -2069,7 +2071,7 @@ var
         Exit;
       end
       else
-        fPrimObject.Points[fCurrPoint] := CurrPoint2D;
+        fPrimObject.Points[Primitive.FirstDrawPoint] := CurrPoint2D;
       DrawOSD(Viewport2D);
     end;
   end;
@@ -2121,16 +2123,16 @@ begin
         end;
       ceMouseUp: if MouseButton = cmbLeft then
         begin
-          if fCurrPoint = 1 then PointSelected;
+          if Primitive.FirstDrawPoint = 1 then PointSelected;
         end;
-      ceMouseMove: if fCurrPoint > 0 then
+      ceMouseMove: if Primitive.FirstDrawPoint > 0 then
         begin
           CurrPoint2D := CurrentViewportSnappedPoint;
           if fOrtoIsUsable and UseOrto then
-            MakeOrto2D(fPrimObject.Points[fCurrPoint - 1],
+            MakeOrto2D(fPrimObject.Points[Primitive.FirstDrawPoint - 1],
               CurrPoint2D);
           DrawOSD(Viewport2D);
-          fPrimObject.Points[fCurrPoint] := CurrPoint2D;
+          fPrimObject.Points[Primitive.FirstDrawPoint] := CurrPoint2D;
           DrawOSD(Viewport2D);
         end;
       cePaint: DrawOSD(Viewport2D);
@@ -2172,6 +2174,7 @@ var
     with CADPrg as TCADPrg2D, Param as
       TCAD2DDrawUnsizedPrimitiveParam do
     begin
+      Primitive.FinishFirstDraw;
       if Assigned(AfterState) then
       begin
         NextState := AfterState;
@@ -2203,7 +2206,7 @@ var
       //TSY: delete last point
       fPrimObject.Points.Delete(
         fPrimObject.Points.Count - 1);
-      Dec(fCurrPoint);
+      Dec(Primitive.FirstDrawPoint);
     end;
     AcceptPrimitive;
   end;
@@ -2237,31 +2240,31 @@ begin
           DrawOSD(Viewport2D);
           CurrPoint2D := CurrentViewportSnappedPoint;
           SnapOriginPoint := CurrentViewportSnappedPoint;
-          if fCurrPoint = 0 then
+          if Primitive.FirstDrawPoint = 0 then
             fPrimObject.Points.Add(CurrPoint2D)
           else
           begin
             if fOrtoIsUsable and UseOrto then
-              MakeOrto2D(fPrimObject.Points[fCurrPoint - 1],
+              MakeOrto2D(fPrimObject.Points[Primitive.FirstDrawPoint - 1],
                 CurrPoint2D);
-            fPrimObject.Points[fCurrPoint] := CurrPoint2D;
+            fPrimObject.Points[Primitive.FirstDrawPoint] := CurrPoint2D;
           end;
-          if (fCurrPoint = 0) or not IsSamePoint2D(CurrPoint2D,
-            fPrimObject.Points[fCurrPoint - 1]) then
-            Inc(fCurrPoint);
-          fPrimObject.Points[fCurrPoint] := CurrPoint2D;
+          if (Primitive.FirstDrawPoint = 0) or not IsSamePoint2D(CurrPoint2D,
+            fPrimObject.Points[Primitive.FirstDrawPoint - 1]) then
+            Inc(Primitive.FirstDrawPoint);
+          fPrimObject.Points[Primitive.FirstDrawPoint] := CurrPoint2D;
           DrawOSD(Viewport2D);
         end
         else if MouseButton = cmbRight then
           AcceptPrimitive0;
-      ceMouseMove: if fCurrPoint > 0 then
+      ceMouseMove: if Primitive.FirstDrawPoint > 0 then
         begin
           CurrPoint2D := CurrentViewportSnappedPoint;
           if fOrtoIsUsable and UseOrto then
-            MakeOrto2D(fPrimObject.Points[fCurrPoint - 1],
+            MakeOrto2D(fPrimObject.Points[Primitive.FirstDrawPoint - 1],
               CurrPoint2D);
           DrawOSD(Viewport2D);
-          fPrimObject.Points[fCurrPoint] := CurrPoint2D;
+          fPrimObject.Points[Primitive.FirstDrawPoint] := CurrPoint2D;
           DrawOSD(Viewport2D);
         end;
       cePaint: DrawOSD(Viewport2D);
@@ -3375,7 +3378,8 @@ begin
      // Porto il punto da coordinate mondo a coordinate oggetto
      // perche' i punti di controllo sono in quest'ultimo sistema.
     TmpCPt := Viewport.WorldToObject(fCurrentPrimitive, PT);
-    fCurrentPrimitive.Points[fCurrentCtrlPt] := TmpCPt;
+    //fCurrentPrimitive.Points[fCurrentCtrlPt] := TmpCPt;
+    fCurrentPrimitive.MoveControlPoint0(fCurrentCtrlPt, TmpCPt, Shift);
     DrawModifiedPrim(Viewport);
   end;
 end;
@@ -3537,15 +3541,17 @@ type
 
   TCAD2DMoveControlPointParam = class(TCADPrgParam)
     ControlPoint: Integer;
+    Shift: TShiftState;
     constructor Create(AfterS: TCADStateClass; ControlPoint0:
-      Integer);
+      Integer; Shift0: TShiftState);
   end;
 
 constructor TCAD2DMoveControlPointParam.Create(AfterS:
-  TCADStateClass; ControlPoint0: Integer);
+  TCADStateClass; ControlPoint0: Integer; Shift0: TShiftState);
 begin
   inherited Create(AfterS);
   ControlPoint := ControlPoint0;
+  Shift := Shift0;
 end;
 
 
@@ -3570,6 +3576,7 @@ begin
     NewParam.SetCtrlPoint(Viewport2D,
       TPrimitive2D(TCADPrgParam(StateParam).UserObject).Points[
       TCAD2DMoveControlPointParam(StateParam).ControlPoint]);
+    NewParam.Shift := TCAD2DMoveControlPointParam(StateParam).Shift;
     NewParam.DrawOSD(Viewport2D, Point2D(0, 0), True);
     NewParam.DrawOSD(Viewport2D, CurrentViewportPoint, False);
     NewParam.DrawModifiedPrim(Viewport2D);
@@ -3771,9 +3778,7 @@ begin
 end;
 
 procedure TCAD2D_BasicMode.CustomTransform;
-var
-  CP: TPoint2D;
-  A: TRealType;
+//var  CP: TPoint2D;  A: TRealType;
 begin
   TransfForm.CP :=
     CADPrg.Viewport.Drawing.GetSelectionCenter;
@@ -3783,6 +3788,8 @@ begin
   begin
     TransformSelected(TransfForm.T);
   end;
+//    if MainForm.ScalePhysical.Checked
+//    then CADPrg.Viewport.Drawing.ScalePhysical(IsotropicScale(T));
   CADPrg.Viewport.Repaint;
 end;
 
@@ -3901,12 +3908,11 @@ end;
 procedure TCAD2D_BasicMode.ConvertSelected(DestClass:
   TPrimitive2DClass);
 var
-  ExIter: TExclusiveGraphicObjIterator;
+  ExIter, ExIter2: TExclusiveGraphicObjIterator;
   Current, NewObj: TGraphicObject;
   NewObjs: TGraphicObjList;
-  T: TTransf2D;
 begin
-  with CADPrg as TCADPrg2D do
+(*  with CADPrg as TCADPrg2D do
   begin
     NewObjs := TGraphicObjList.Create;
     NewObjs.FreeOnClear := False;
@@ -3917,25 +3923,20 @@ begin
         Current := ExIter.First;
         while Current <> nil do
         begin
-          NewObj :=
-            CADSysFindClassByName(DestClass.ClassName).CreateDupe(Current);
+          {NewObj :=
+            CADSysFindClassByName(DestClass.ClassName).CreateDupe(Current);}
+          NewObj := DestClass.Create(Current.ID);
+          NewObj.Assign(Current);
           NewObjs.Add(NewObj);
-          NewObj.ID := Current.ID;
+          //NewObj.ID := Current.ID;
           Current := ExIter.Next;
         end;
       finally
         ExIter.Free;
       end;
-      T := Translate2D(Viewport.GetPixelAperture.X * 5,
-        Viewport.GetPixelAperture.Y * 5);
       ExIter := NewObjs.GetExclusiveIterator;
       try
         Current := ExIter.First;
-        {while Current <> nil do
-        begin
-          (Current as TObject2D).TransForm(T);
-          Current := ExIter.Next;
-        end;}
       finally
         ExIter.Free;
       end;
@@ -3947,7 +3948,72 @@ begin
       NewObjs.Free;
       //Viewport2D.Repaint;
     end;
+  end;*)
+  with CADPrg as TCADPrg2D do
+  begin
+    NewObjs := TGraphicObjList.Create;
+    NewObjs.FreeOnClear := False;
+    try
+      ExIter :=
+        SelectedObjs.GetExclusiveIterator;
+      ExIter2 :=
+        Viewport2D.Drawing2D.ObjectsExclusiveIterator;
+      try
+        Current := ExIter.First;
+        while Current <> nil do
+        begin
+          NewObj := DestClass.Create(Current.ID);
+          NewObj.Assign(Current);
+          ExIter.ReplaceDeleteCurrent(NewObj);
+          ExIter2.Search(Current.ID);
+          ExIter2.ReplaceDeleteCurrent(NewObj);
+          NewObjs.Add(NewObj);
+          //NewObj.ID := Current.ID;
+          Current := ExIter.Next;
+        end;
+      finally
+        ExIter.Free;
+        ExIter2.Free;
+      end;
+    finally
+      Viewport.Drawing.SelectionClear;
+      Viewport.Drawing.SelectionAddList(NewObjs);
+      NewObjs.Free;
+      CADPrg.Viewport.Drawing.NotifyChanged;
+      //Viewport2D.Repaint;
+    end;
   end;
+end;
+
+procedure MakeGrayscale(Drawing2D: TDrawing2D);
+var
+  Obj: TGraphicObject; //TPrimitive2D;
+  Iter: TGraphicObjIterator;
+begin
+  Iter := Drawing2D.ObjectsIterator;
+  try
+    Obj := Iter.First;
+    while Assigned(Obj) do
+    begin
+      if Obj is TPrimitive2D then
+        with Obj as TPrimitive2D do
+        begin
+          if LineColor <> clDefault then LineColor := GrayScale(LineColor);
+          if HatchColor <> clDefault then HatchColor := GrayScale(HatchColor);
+          if FillColor <> clDefault then FillColor := GrayScale(FillColor);
+        end;
+      Obj := Iter.Next;
+    end;
+  finally
+    Iter.Free;
+  end;
+  Drawing2D.NotifyChanged;
+end;
+
+procedure TCAD2D_BasicMode.ConvertToGrayScale;
+begin
+  MakeGrayscale((CADPrg as TCADPrg2D).Viewport2D.Drawing2D);
+  (CADPrg as TCADPrg2D).Viewport2D.Repaint;
 end;
 
 procedure TCAD2D_BasicMode.ChangePrimitiveProperties(Obj:
@@ -4024,13 +4090,17 @@ begin
         begin
           //ConvertSelected(TPolyline2D);
           //ConvertSelected(TLine2D);
-          ConvertSelected(TPrimitive2DClass(CADSysFindClassByIndex(
-            Key - CADPRG_ConvertSelected + 3)));
+          ConvertSelected(TPrimitive2DClass(GraphicObjectClasses[
+            Key - CADPRG_ConvertSelected + 1]));
           Viewport.Repaint;
         end
         else if Key = CADPRG_CustomTransform then
         begin
           CustomTransform;
+        end
+        else if Key = CADPRG_ConvertToGrayScale then
+        begin
+          ConvertToGrayScale;
         end
         else if Key = CADPRG_ClipboardCopy then
         begin
@@ -4180,8 +4250,37 @@ begin
         begin
           if SSLeft in Shift then
           begin //Start drag
-            if PointDistance2D(CurrentViewportPoint, fLastPt)
-              < Viewport.GetAperture(3) then Exit;
+            if not (PointDistance2D(CurrentViewportPoint, fLastPt)
+              < Viewport.GetAperture(3)) then
+            begin
+  //with LocalPrg do StopOperation;
+                {NewParam :=
+                  TCAD2DMoveControlPointParam.Create(nil,
+                  CurrentCtrlPt);
+                NewParam.UserObject := TmpObj;}
+              {if AreaSelectInside.Checked then
+                TmpPar := TCAD2DSelectObjectsInAreaParam.Create(gmAllInside,
+                  nil)
+              else}
+    {NewParam :=
+      TCADPrgSelectAreaParam.Create(TCAD2DSelectObjectsInArea,
+      Param);
+    Param := NewParam;
+    NextState := TCADPrgSelectArea;}
+              {NewParam :=
+                TCADPrgSelectAreaParam.Create(TCAD2DSelectObjectsInArea,
+                Param);
+              Param.Free;
+              Param := nil;
+              StartOperation(TCAD2DSelectObjectsInArea, NewParam);}
+              {NewParam :=
+                TCAD2DSelectObjectsInAreaParam.Create(gmCrossFrame,
+                nil);
+              Param.Free;
+              Param := nil;
+              StartOperation(TCAD2DSelectObjectsInArea, NewParam);}
+              Exit;
+            end;
             CurrPoint2D := fLastPt;
             TmpObj := Viewport2D.PickObject(CurrPoint2D,
               fApertureSize, False, fLastSelectedCtrlPoint);
@@ -4196,7 +4295,7 @@ begin
               begin
                 NewParam :=
                   TCAD2DMoveControlPointParam.Create(nil,
-                  CurrentCtrlPt);
+                  CurrentCtrlPt, Shift);
                 NewParam.UserObject := TmpObj;
                 Param.Free;
                 Param := nil;

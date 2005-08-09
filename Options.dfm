@@ -21,9 +21,10 @@ object OptionsForm: TOptionsForm
     Left = 0
     Top = 0
     Width = 468
-    Height = 328
+    Height = 334
     Align = alClient
     TabOrder = 0
+    OnEditButtonClick = VLEEditButtonClick
     OnGetPickList = VLEGetPickList
     OnSelectCell = VLESelectCell
     ColWidths = (
@@ -32,7 +33,7 @@ object OptionsForm: TOptionsForm
   end
   object Panel1: TPanel
     Left = 0
-    Top = 428
+    Top = 434
     Width = 468
     Height = 40
     Align = alBottom
@@ -61,7 +62,7 @@ object OptionsForm: TOptionsForm
   end
   object Memo1: TMemo
     Left = 0
-    Top = 328
+    Top = 334
     Width = 468
     Height = 100
     Align = alBottom
@@ -75,5 +76,17 @@ object OptionsForm: TOptionsForm
     ReadOnly = True
     ScrollBars = ssVertical
     TabOrder = 2
+  end
+  object FontDialog1: TFontDialog
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Font.Style = []
+    MinFontSize = 0
+    MaxFontSize = 0
+    Options = [fdTrueTypeOnly]
+    Left = 132
+    Top = 116
   end
 end

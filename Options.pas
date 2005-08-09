@@ -15,6 +15,7 @@ type
     Button1: TButton;
     Button2: TButton;
     Memo1: TMemo;
+    FontDialog1: TFontDialog;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormShow(Sender: TObject);
@@ -26,6 +27,7 @@ type
     procedure VLEGetPickList(Sender: TObject; const KeyName:
       string;
       Values: TStrings);
+    procedure VLEEditButtonClick(Sender: TObject);
   private
     { Private declarations }
   public
@@ -69,7 +71,7 @@ begin
       @(IncludePath),
       'Path to add before \includegraphics file name (like mypictures/)');
 
-    OptionsList.AddRealType('LineWidth', @LineWidth,
+    OptionsList.AddRealType('LineWidth', @LineWidthBase,
       'Thin line width (mm)');
     OptionsList.AddRealType('ArrowsSize',
       @(ArrowsSize), 'Arrows size');
@@ -77,12 +79,15 @@ begin
       @(StarsSize), 'Stars size');
     OptionsList.AddRealType('HatchingStep',
       @HatchingStep, 'Hatching step (mm)');
+    OptionsList.AddRealType('HatchingLineWidth',
+      @HatchingLineWidth, 'Hatching line width (fraction of LineWidth)');
     OptionsList.AddRealType('DottedSize', @DottedSize,
       'Dotted line size (mm)');
     OptionsList.AddRealType('DashSize', @DashSize,
       'Dashed line size (mm)');
     OptionsList.AddRealType('DefaultFontHeight',
       @(DefaultFontHeight), 'Default font height');
+    OptionsList.AddFontName('FontName', @(FontName), 'Font');
     OptionsList.AddRealType('MiterLimit',
       @(MiterLimit), 'Miter limit. Used to cut off too long spike miter join'
       + ' could have when the angle between two lines is sharp. If the ratio of miter length'
@@ -160,6 +165,8 @@ begin
     VLE.InsertRow(Data.Key, Data.AsString, True);
     if Data.GetMask <> '' then
       VLE.ItemProps[I].EditMask := Data.GetMask;
+    if Data is TFontNameOption then
+      VLE.ItemProps[I].EditStyle := esEllipsis;
     if Data is TChoiceOption then
     begin
       VLE.ItemProps[I].EditStyle := esPickList;
@@ -204,6 +211,18 @@ begin
     with OptionsList[VLE.Row - 1] as TChoiceOption do
       Values.AddStrings(Choices);
   end;
+end;
+
+procedure TOptionsForm.VLEEditButtonClick(Sender: TObject);
+begin
+  if VLE.Row < 1 then Exit;
+  if OptionsList[VLE.Row - 1] is TFontNameOption then
+    with OptionsList[VLE.Row - 1] as TFontNameOption do
+    begin
+      FontDialog1.Font.Name := VLE.Cells[1, VLE.Row];
+      if not FontDialog1.Execute then Exit;
+      VLE.Cells[1, VLE.Row] := FontDialog1.Font.Name;
+    end;
 end;
 
 end.

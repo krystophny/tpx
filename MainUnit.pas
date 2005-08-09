@@ -15,7 +15,6 @@ uses
 type
   TMainForm = class(TForm)
     MainMenu1: TMainMenu;
-    ToolBar1: TToolBar;
     TheDrawing: TDrawing2D;
     StatusBar1: TStatusBar;
     LocalPopUp: TPopupMenu;
@@ -55,7 +54,6 @@ type
     RichEdit1: TRichEdit;
     ImportEMF1: TMenuItem;
     EMFOpenDialog: TOpenPictureDialog;
-    ToolButton4: TToolButton;
     ActionList1: TActionList;
     DeleteSelected: TAction;
     MoveUp: TAction;
@@ -152,17 +150,6 @@ type
     ZoomOut: TAction;
     ZoomAll: TAction;
     HandTool: TAction;
-    ToolButton1: TToolButton;
-    ToolButton3: TToolButton;
-    ToolButton5: TToolButton;
-    ToolButton6: TToolButton;
-    PanningBtn: TToolButton;
-    ToolButton9: TToolButton;
-    ToolButton10: TToolButton;
-    ToolButton11: TToolButton;
-    ToolButton13: TToolButton;
-    BasicModeBtn: TToolButton;
-    ToolButton14: TToolButton;
     Deleteselected2: TMenuItem;
     Scalestandard1: TMenuItem;
     SaveAs: TAction;
@@ -197,7 +184,6 @@ type
     SnapToGrid: TAction;
     UseOrto: TAction;
     N11: TMenuItem;
-    AreaSelect1: TToolButton;
     AreaSelect: TAction;
     Areaselect2: TMenuItem;
     AreaSelectInside: TAction;
@@ -205,10 +191,6 @@ type
     ClipboardCopy: TAction;
     ClipboardPaste: TAction;
     ClipboardCut: TAction;
-    ClipboardCutBtn: TToolButton;
-    ClipboardCopyBtn: TToolButton;
-    ClipboardPasteBtn: TToolButton;
-    ToolButton7: TToolButton;
     Cut1: TMenuItem;
     Copy1: TMenuItem;
     Paste1: TMenuItem;
@@ -217,32 +199,14 @@ type
     Copytoclipboard2: TMenuItem;
     InsertCubicSpline: TAction;
     InsertClosedCubicSpline: TAction;
-    ToolButton12: TToolButton;
-    ToolBar2: TToolBar;
-    InsertLineBtn: TToolButton;
-    InsertRectangleBtn: TToolButton;
-    InsertCircleBtn: TToolButton;
-    InsertEllipseBtn: TToolButton;
-    InsertArcBtn: TToolButton;
-    InsertSectorBtn: TToolButton;
-    InsertSegmentBtn: TToolButton;
-    InsertPolylineBtn: TToolButton;
-    InsertPolygonBtn: TToolButton;
-    InsertTextBtn: TToolButton;
-    InsertStarBtn: TToolButton;
     ConvertToPolyline: TAction;
-    ToolButton2: TToolButton;
     HatchingImageList: TImageList;
-    ToolButton8: TToolButton;
     BitBtn1: TBitBtn;
     N16: TMenuItem;
     pXsettings1: TMenuItem;
     ProgressBar1: TProgressBar;
     Undo: TAction;
     Redo: TAction;
-    UndoBtn: TToolButton;
-    RedoBtn: TToolButton;
-    ToolButton17: TToolButton;
     N17: TMenuItem;
     Undo1: TMenuItem;
     Redo1: TMenuItem;
@@ -253,27 +217,20 @@ type
     About1: TMenuItem;
     CustomTransform: TAction;
     Areaselect3: TMenuItem;
-    N18: TMenuItem;
     Panel2: TPanel;
     Ruler2: TRuler;
     Panel3: TPanel;
     Ruler1: TRuler;
     Scale2: TMenuItem;
     InsertCurve: TAction;
-    InsertCurveBtn: TToolButton;
     InsertClosedCurve: TAction;
-    InsertClosedCurveBtn: TToolButton;
     Insertcurve1: TMenuItem;
     Insertclosedcurve1: TMenuItem;
-    ToolButton15: TToolButton;
     HScrollBar: TScrollBar;
     VScrollBar: TScrollBar;
     ShowRulers: TAction;
     ShowScrollBars: TAction;
     Showscrollbars1: TMenuItem;
-    ToolButton16: TToolButton;
-    ToolButton18: TToolButton;
-    ToolButton19: TToolButton;
     CaptureEMF_Dialog: TSaveDialog;
     Converttopolyline1: TMenuItem;
     ConvertPopup: TPopupMenu;
@@ -307,6 +264,99 @@ type
     ImportMetafile: TAction;
     ImportEPS: TAction;
     ImportEPS1: TMenuItem;
+    ConvertToGrayScale: TAction;
+    N19: TMenuItem;
+    Converttograyscale1: TMenuItem;
+    ControlBar1: TControlBar;
+    ToolBar1: TToolBar;
+    ToolButton9: TToolButton;
+    ToolButton10: TToolButton;
+    ToolButton11: TToolButton;
+    ToolButton13: TToolButton;
+    BasicModeBtn: TToolButton;
+    AreaSelect1: TToolButton;
+    ToolButton17: TToolButton;
+    ClipboardCutBtn: TToolButton;
+    ClipboardCopyBtn: TToolButton;
+    ClipboardPasteBtn: TToolButton;
+    ToolButton7: TToolButton;
+    UndoBtn: TToolButton;
+    RedoBtn: TToolButton;
+    ToolButton14: TToolButton;
+    ToolButton1: TToolButton;
+    ToolButton3: TToolButton;
+    ToolButton5: TToolButton;
+    ToolButton6: TToolButton;
+    PanningBtn: TToolButton;
+    ToolButton12: TToolButton;
+    ToolButton4: TToolButton;
+    ToolButton2: TToolButton;
+    ToolButton8: TToolButton;
+    ToolButton15: TToolButton;
+    ToolButton16: TToolButton;
+    ToolButton18: TToolButton;
+    ToolButton19: TToolButton;
+    ControlBar2: TControlBar;
+    ToolBar2: TToolBar;
+    InsertLineBtn: TToolButton;
+    InsertRectangleBtn: TToolButton;
+    InsertCircleBtn: TToolButton;
+    InsertEllipseBtn: TToolButton;
+    InsertArcBtn: TToolButton;
+    InsertSectorBtn: TToolButton;
+    InsertSegmentBtn: TToolButton;
+    InsertPolylineBtn: TToolButton;
+    InsertPolygonBtn: TToolButton;
+    InsertCurveBtn: TToolButton;
+    InsertClosedCurveBtn: TToolButton;
+    InsertTextBtn: TToolButton;
+    InsertStarBtn: TToolButton;
+    ControlBar3: TControlBar;
+    ToolBar3: TToolBar;
+    ComboBox1: TComboBox;
+    ComboBox3: TComboBox;
+    ComboBox2: TComboBox;
+    ComboBox4: TComboBox;
+    ComboBox5: TComboBox;
+    ComboBox6: TComboBox;
+    ScalePhysical: TAction;
+    Scalephysicalunits1: TMenuItem;
+    InsertBezierPath: TAction;
+    InsertBezierPathBtn: TToolButton;
+    InsertClosedBezierPath: TAction;
+    InsertClosedBezierPathBtn: TToolButton;
+    Panel4: TPanel;
+    Panel5: TPanel;
+    Panel6: TPanel;
+    ImageTool: TAction;
+    ImagetoEPStool1: TMenuItem;
+    PreviewLaTeX_PS: TAction;
+    ToolButton20: TToolButton;
+    PreviewLaTeXDVIPS1: TMenuItem;
+    ToolButton21: TToolButton;
+    Pictureinfo1: TMenuItem;
+    SmoothBezierNodesAction: TAction;
+    Smoothbeziernodes1: TMenuItem;
+    InsertBezierpath1: TMenuItem;
+    InsertclosedBezierpath1: TMenuItem;
+    PopupMenuDVI: TPopupMenu;
+    tex1: TMenuItem;
+    pstricks1: TMenuItem;
+    pgf1: TMenuItem;
+    pdf1: TMenuItem;
+    png1: TMenuItem;
+    emf1: TMenuItem;
+    bmp1: TMenuItem;
+    metapost1: TMenuItem;
+    PopupMenuPdf: TPopupMenu;
+    MenuItem1: TMenuItem;
+    MenuItem2: TMenuItem;
+    MenuItem4: TMenuItem;
+    MenuItem5: TMenuItem;
+    MenuItem7: TMenuItem;
+    MenuItem8: TMenuItem;
+    NewWindow: TAction;
+    Newwindow1: TMenuItem;
     procedure InsertLineBtnClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure InsertArcBtnClick(Sender: TObject);
@@ -355,7 +405,6 @@ type
     procedure Actualview1Click(Sender: TObject);
     procedure Fit1Click(Sender: TObject);
     procedure Scale1Click(Sender: TObject);
-    procedure Copytoclipboard1Click(Sender: TObject);
     procedure Setpoint1Click(Sender: TObject);
     procedure LocalViewKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
@@ -395,7 +444,7 @@ type
     procedure Copytoclipboard2Click(Sender: TObject);
     procedure InsertCubicSplineExecute(Sender: TObject);
     procedure InsertClosedCubicSplineExecute(Sender: TObject);
-    procedure ToolButton8Click(Sender: TObject);
+    procedure ImageToolExecute(Sender: TObject);
     procedure BitBtn1Click(Sender: TObject);
     procedure pXsettings1Click(Sender: TObject);
     procedure TheDrawingChangeDrawing(Drawing: TDrawing);
@@ -425,6 +474,26 @@ type
     procedure OpenRecentExecute(Sender: TObject);
     procedure PicturePreviewExecute(Sender: TObject);
     procedure ImportEPSExecute(Sender: TObject);
+    procedure ColorBox_DrawItem(Control: TWinControl; Index: Integer;
+      Rect: TRect; State: TOwnerDrawState);
+    procedure ComboBox3Select(Sender: TObject);
+    procedure ComboBox1Select(Sender: TObject);
+    procedure ComboBox4Select(Sender: TObject);
+    procedure ComboBox2Select(Sender: TObject);
+    procedure ComboBox5Select(Sender: TObject);
+    procedure ComboBox6Change(Sender: TObject);
+    procedure ScalePhysicalExecute(Sender: TObject);
+    procedure InsertBezierPathExecute(Sender: TObject);
+    procedure InsertClosedBezierPathExecute(Sender: TObject);
+    procedure PreviewLaTeX_PSExecute(Sender: TObject);
+    procedure Pictureinfo1Click(Sender: TObject);
+    procedure ToolButton22Click(Sender: TObject);
+    procedure SmoothBezierNodesActionExecute(Sender: TObject);
+    procedure PopupMenuDVIPopup(Sender: TObject);
+    procedure DVI_Format_Click(Sender: TObject);
+    procedure PopupMenuPdfPopup(Sender: TObject);
+    procedure Pdf_Format_Click(Sender: TObject);
+    procedure NewWindowExecute(Sender: TObject);
   private
     { Private declarations }
     fCurrentOpBtn: TToolButton;
@@ -432,6 +501,7 @@ type
 
     procedure OnSelectedObj(Sender: TCAD2DSelectObjectsParam;
       Obj: TObject2D; CtrlPt: Integer; Added: Boolean);
+    procedure OnPasteMetafileFromClipboard(Drawing: TDrawing2D);
   public
     { Public declarations }
     RecentFiles: THistoryList;
@@ -464,7 +534,8 @@ var TpXExtAssoc: TTpXExtAssocOption;
 implementation
 
 uses InOut, StrUtils, Options, EMF_Add, Settings,
-  AboutUnit, TransForm, PreView;
+  AboutUnit, TransForm, PreView, ColorEtc, EMF_Unit, Geometry,
+  ScaleStandardUnit;
 
 {$R *.DFM}
 
@@ -545,6 +616,7 @@ begin
     UseOrto := Self.UseOrto.Checked;
     DefaultState := TCAD2D_BasicMode;
   end;
+  SmoothBezierNodes := SmoothBezierNodesAction.Checked;
   DeleteSelected.Tag := CADPRG_DeleteSelected;
   SelectAll.Tag := CADPRG_SelectAll;
   MoveUp.Tag := CADPRG_MoveUp;
@@ -580,6 +652,15 @@ begin
   ClipboardCut.Tag := CADPRG_ClipboardCut;
   ConvertToPolyline.Tag := CADPRG_ConvertSelected;
   CustomTransform.Tag := CADPRG_CustomTransform;
+  ConvertToGrayScale.Tag := CADPRG_ConvertToGrayScale;
+  TheDrawing.OnPasteMetafileFromClipboard :=
+    OnPasteMetafileFromClipboard;
+
+  MakeColorBox(ComboBox3);
+  MakeColorBox(ComboBox4);
+  MakeColorBox(ComboBox5);
+  ComboBox1.ItemIndex := 0;
+  ComboBox2.ItemIndex := 0;
 
   PreviewSVG.Tag := Ord(pview_SVG);
   PreviewEPS.Tag := Ord(pview_EPS);
@@ -615,7 +696,7 @@ begin
     fCurrentOpBtn := InsertLineBtn;
     StartOperation(TCAD2DDrawSizedPrimitive,
       TCAD2DDrawSizedPrimitiveParam.Create(nil,
-      TLine2D.Create(-1, Point2D(0, 0), Point2D(0, 0)),
+      TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(0, 0)),
       0, -1, True));
   end;
 end;
@@ -628,7 +709,7 @@ begin
     fCurrentOpBtn := InsertArcBtn;
     StartOperation(TCAD2DDrawSizedPrimitive,
       TCAD2DDrawSizedPrimitiveParam.Create(nil,
-      TArc2D.Create(-1, Point2D(0, 0), 0, 0, 0),
+      TArc2D.CreateSpec(-1, Point2D(0, 0), 0, 0, 0),
       0, -1, True));
   end;
 end;
@@ -641,7 +722,7 @@ begin
     fCurrentOpBtn := InsertPolylineBtn;
     StartOperation(TCAD2DDrawUnsizedPrimitive,
       TCAD2DDrawUnsizedPrimitiveParam.Create(nil,
-      TPolyline2D.Create(-1, [Point2D(0, 0)]), 0, True));
+      TPolyline2D.CreateSpec(-1, [Point2D(0, 0)]), 0, True));
   end;
 end;
 
@@ -679,7 +760,7 @@ begin
     fCurrentOpBtn := InsertPolygonBtn;
     StartOperation(TCAD2DDrawUnsizedPrimitive,
       TCAD2DDrawUnsizedPrimitiveParam.Create(nil,
-      TPolygon2D.Create(-1, [Point2D(0, 0)]), 0, True));
+      TPolygon2D.CreateSpec(-1, [Point2D(0, 0)]), 0, True));
   end;
 end;
 
@@ -691,7 +772,7 @@ begin
   begin
     StopOperation;
     //fCurrentOpBtn := InsertClosedCurveBtn;
-    TmpSpline := TBSpline2D.Create(-1, [Point2D(0, 0)]);
+    TmpSpline := TBSpline2D.CreateSpec(-1, [Point2D(0, 0)]);
     TmpSpline.SavingType := stSpace;
     StartOperation(TCAD2DDrawUnsizedPrimitive,
       TCAD2DDrawUnsizedPrimitiveParam.Create(nil,
@@ -708,8 +789,8 @@ begin
   if not InputQuery('Add Text', 'String', TmpStr) then
     Exit;
   if TmpStr = '' then Exit;
-  TmpText := TText2D.Create(-1,
-    Point2D(0, 0), TheDrawing.DefaultFontHeight, TmpStr);
+  TmpText := TText2D.CreateSpec(-1,
+    Point2D(1, 1), TheDrawing.DefaultFontHeight, TmpStr);
   TmpText.AutoSize := True;
   LocalPrg.StartOperation(TCAD2DPositionObject,
     TCAD2DPositionObjectParam.Create(nil, TmpText));
@@ -835,6 +916,12 @@ begin
   LocalPrg.UseOrto := UseOrto.Checked;
 end;
 
+procedure TMainForm.SmoothBezierNodesActionExecute(Sender: TObject);
+begin
+  SmoothBezierNodesAction.Checked := not SmoothBezierNodesAction.Checked;
+  SmoothBezierNodes := SmoothBezierNodesAction.Checked;
+end;
+
 procedure TMainForm.Useareatoselectobjects1Click(Sender:
   TObject);
 begin
@@ -925,7 +1012,9 @@ begin
     9:
       StoreToFile_MPS(TheDrawing, CADSaveDlg.FileName);
     10:
-      StoreToFile_EpsToPdf(TheDrawing, CADSaveDlg.FileName, False);
+      //StoreToFile_EpsToPdf(TheDrawing, CADSaveDlg.FileName, False);
+      StoreToFile_Saver(TheDrawing,
+        CADSaveDlg.FileName, T_EpsToPdf_Export);
   else
     DoSaveDrawing(CADSaveDlg.FileName);
   end;
@@ -1038,29 +1127,6 @@ begin
     finally
       Printer.EndDoc;
     end;
-  end;
-end;
-
-procedure TMainForm.Copytoclipboard1Click(Sender: TObject);
-var
-  Saver: T_TeX_Picture_Export;
-  Loader: T_TpX_Loader;
-begin
-  Saver := T_TeX_Picture_Export.Create(TheDrawing);
-  try
-    Saver.StoreToClipboard;
-  finally
-    Saver.Free;
-  end;
-  LocalPrg.Reset;
-  TheDrawing.Clear;
-  Loader := T_TpX_Loader.Create(TheDrawing);
-  try
-    Loader.LoadFromClipboard;
-    LocalView.ZoomToExtension;
-    LocalView.Repaint;
-  finally
-    Loader.Free;
   end;
 end;
 
@@ -1374,7 +1440,7 @@ begin
     fCurrentOpBtn := InsertStarBtn;
     StartOperation(TCAD2DDrawSizedPrimitive,
       TCAD2DDrawSizedPrimitiveParam.Create(nil,
-      TStar2D.Create(-1, Point2D(0, 0)),
+      TStar2D.CreateSpec(-1, Point2D(0, 0)),
       0, -1, True));
   end;
 end;
@@ -1386,8 +1452,14 @@ begin
 end;
 
 procedure TMainForm.Scalestandard1Click(Sender: TObject);
+var
+  T: TTransf2D;
 begin
-  TheDrawing.ScaleStandard;
+  if not (ScaleStandardForm.ShowModal = mrOK) then Exit;
+  T := TheDrawing.ScaleStandard(ScaleStandardForm.ScaleStandardMaxWidth,
+    ScaleStandardForm.ScaleStandardMaxHeight);
+  if ScaleStandardForm.ScalePhysical.Checked
+    then TheDrawing.ScalePhysical(IsotropicScale(T));
   LocalView.ZoomToExtension;
   //LocalView.Repaint;
 end;
@@ -1406,7 +1478,7 @@ begin
     fCurrentOpBtn := InsertSectorBtn;
     StartOperation(TCAD2DDrawSizedPrimitive,
       TCAD2DDrawSizedPrimitiveParam.Create(nil,
-      TSector2D.Create(-1, Point2D(0, 0), 0, 0, 0),
+      TSector2D.CreateSpec(-1, Point2D(0, 0), 0, 0, 0),
       0, -1, True));
   end;
 end;
@@ -1420,7 +1492,7 @@ begin
     fCurrentOpBtn := InsertSegmentBtn;
     StartOperation(TCAD2DDrawSizedPrimitive,
       TCAD2DDrawSizedPrimitiveParam.Create(nil,
-      TSegment2D.Create(-1, Point2D(0, 0), 0, 0, 0),
+      TSegment2D.CreateSpec(-1, Point2D(0, 0), 0, 0, 0),
       0, -1, True));
   end;
 end;
@@ -1434,7 +1506,7 @@ begin
     if IsBusy then
       StopOperation;
     //fCurrentOpBtn := InsertClosedSplineBtn;
-    TmpPath := TClosedBSpline2D.Create(-1, [Point2D(0, 0)]);
+    TmpPath := TClosedBSpline2D.CreateSpec(-1, [Point2D(0, 0)]);
     TmpPath.SavingType := stSpace;
     StartOperation(TCAD2DDrawUnsizedPrimitive,
       TCAD2DDrawUnsizedPrimitiveParam.Create(nil,
@@ -1536,7 +1608,7 @@ begin
   begin
     StopOperation;
     //fCurrentOpBtn := InsertCubicSplineBtn;
-    TmpSpline := TCubicBSpline2D.Create(-1, [Point2D(0, 0)]);
+    TmpSpline := TCubicBSpline2D.CreateSpec(-1, [Point2D(0, 0)]);
     TmpSpline.SavingType := stSpace;
     StartOperation(TCAD2DDrawUnsizedPrimitive,
       TCAD2DDrawUnsizedPrimitiveParam.Create(nil,
@@ -1554,26 +1626,13 @@ begin
     if IsBusy then
       StopOperation;
     //fCurrentOpBtn := InsertClosedCubicSplineBtn;
-    TmpPath := TClosedCubicBSpline2D.Create(-1, [Point2D(0,
+    TmpPath := TClosedCubicBSpline2D.CreateSpec(-1, [Point2D(0,
         0)]);
     TmpPath.SavingType := stSpace;
     StartOperation(TCAD2DDrawUnsizedPrimitive,
       TCAD2DDrawUnsizedPrimitiveParam.Create(nil,
       TmpPath, 0, True));
   end;
-end;
-
-procedure TMainForm.ToolButton8Click(Sender: TObject);
-//var  EMF_Struct: T_EMF_Structure;
-begin
-{  if not EMFOpenDialog.Execute then Exit;
-  EMF_Struct := T_EMF_Structure.Create;
-  EMF_Struct.pLogStrings := RichEdit1.Lines;
-  try
-    EMF_Struct.LoadFromFile(EMFOpenDialog.FileName);
-  finally
-    EMF_Struct.Free;
-  end;}
 end;
 
 procedure TMainForm.BitBtn1Click(Sender: TObject);
@@ -1664,6 +1723,7 @@ begin
   HScrollBar.Visible := ShowScrollBars.Checked;
   VScrollBar.Visible := ShowScrollBars.Checked;
   Showscrollbars1.Checked := ShowScrollBars.Checked;
+  //Scalephysicalunits1.Checked := ScalePhysical.Checked;
 end;
 
 procedure TMainForm.About1Click(Sender: TObject);
@@ -1686,7 +1746,7 @@ begin
     if IsBusy then
       StopOperation;
     fCurrentOpBtn := InsertCurveBtn;
-    TmpPath := TSmoothPath2D.Create(-1, [Point2D(0, 0)]);
+    TmpPath := TSmoothPath2D.CreateSpec(-1, [Point2D(0, 0)]);
     TmpPath.SavingType := stSpace;
     StartOperation(TCAD2DDrawUnsizedPrimitive,
       TCAD2DDrawUnsizedPrimitiveParam.Create(nil,
@@ -1703,7 +1763,7 @@ begin
     if IsBusy then
       StopOperation;
     fCurrentOpBtn := InsertClosedCurveBtn;
-    TmpPath := TClosedSmoothPath2D.Create(-1, [Point2D(0, 0)]);
+    TmpPath := TClosedSmoothPath2D.CreateSpec(-1, [Point2D(0, 0)]);
     TmpPath.SavingType := stSpace;
     StartOperation(TCAD2DDrawUnsizedPrimitive,
       TCAD2DDrawUnsizedPrimitiveParam.Create(nil,
@@ -1714,6 +1774,7 @@ end;
 procedure TMainForm.ToolButton15Click(Sender: TObject);
 var
   Dlg: TOpenDialog;
+  Descent: TRealType;
 begin
   Dlg := TOpenDialog.Create(Self);
   try
@@ -1723,7 +1784,7 @@ begin
       Dlg.Free;
       Exit;
     end;
-    pfb2pfa(Dlg.FileName, ChangeFileExt(Dlg.FileName, '.pfa'));
+    pfb2pfa(Dlg.FileName, ChangeFileExt(Dlg.FileName, '.pfa'), Descent);
   finally
     Dlg.Free;
   end;
@@ -1810,6 +1871,11 @@ begin
   Preview_LaTeX(TheDrawing, ltxview_Pdf);
 end;
 
+procedure TMainForm.PreviewLaTeX_PSExecute(Sender: TObject);
+begin
+  Preview_LaTeX(TheDrawing, ltxview_PS);
+end;
+
 procedure TMainForm.ConvertToExecute(Sender: TObject);
 var
   Item: TMenuItem;
@@ -1818,13 +1884,12 @@ var
 begin
   {if Sender is TControl then (Sender as TControl).ClientOrigin.X}
   ConvertPopup.Items.Clear;
-  for I := 3 to 21 do
+  for I := 1 to High(GraphicObjectClasses) do
   begin
-    if I in [10, 11, 12, 17, 18, 19] then Continue;
-    GOClass := CADSysFindClassByIndex(I);
+    GOClass := GraphicObjectClasses[I];
     Item := TMenuItem.Create(ConvertPopup);
     Item.Caption := TPrimitive2DClass(GOClass).GetName; //
-    Item.Tag := CADPRG_ConvertSelected + I - 3;
+    Item.Tag := CADPRG_ConvertSelected + I - 1;
     //Item.Action := DoConvertTo;
     Item.OnClick := DoConvertToExecute;
     ConvertPopup.Items.Add(Item);
@@ -1993,6 +2058,205 @@ function TTpXExtAssocOption.GetAsString: string;
 begin
   if fTpXExtAssoc then Result := '1'
   else Result := '0';
+end;
+
+procedure TMainForm.ColorBox_DrawItem(Control: TWinControl; Index: Integer;
+  Rect: TRect; State: TOwnerDrawState);
+begin
+  ColorBoxDrawItem(Control as TComboBox, Index, Rect, State);
+end;
+
+procedure TMainForm.ComboBox1Select(Sender: TObject);
+var
+  NewLineStyle: TLineStyle;
+begin
+  NewLineStyle := TLineStyle((Sender as TComboBox).ItemIndex);
+  TheDrawing.ChangeSelected(TheDrawing.ChangeLineKind, @NewLineStyle);
+end;
+
+procedure TMainForm.ComboBox3Select(Sender: TObject);
+var
+  NewLineColor: TColor;
+begin
+  ColorBoxSelect(Sender as TComboBox);
+  NewLineColor := ColorBoxGet(Sender as TComboBox);
+  TheDrawing.ChangeSelected(TheDrawing.ChangeLineColor, @NewLineColor);
+end;
+
+procedure TMainForm.ComboBox2Select(Sender: TObject);
+var
+  NewHatching: THatching;
+begin
+  NewHatching := THatching((Sender as TComboBox).ItemIndex);
+  TheDrawing.ChangeSelected(TheDrawing.ChangeHatching, @NewHatching);
+end;
+
+procedure TMainForm.ComboBox4Select(Sender: TObject);
+var
+  NewHatchColor: TColor;
+begin
+  ColorBoxSelect(Sender as TComboBox);
+  NewHatchColor := ColorBoxGet(Sender as TComboBox);
+  TheDrawing.ChangeSelected(TheDrawing.ChangeHatchColor, @NewHatchColor);
+end;
+
+procedure TMainForm.ComboBox5Select(Sender: TObject);
+var
+  NewFillColor: TColor;
+begin
+  ColorBoxSelect(Sender as TComboBox);
+  NewFillColor := ColorBoxGet(Sender as TComboBox);
+  TheDrawing.ChangeSelected(TheDrawing.ChangeFillColor, @NewFillColor);
+end;
+
+procedure TMainForm.ComboBox6Change(Sender: TObject);
+var
+  NewLineWidth: TRealType;
+begin
+  NewLineWidth := StrToFloat((Sender as TComboBox).Text);
+  if NewLineWidth <= 0 then Exit;
+  TheDrawing.ChangeSelected(TheDrawing.ChangeLineWidth, @NewLineWidth);
+end;
+
+procedure TMainForm.ImageToolExecute(Sender: TObject);
+//var  EMF_Struct: T_EMF_Structure;
+begin
+{  if not EMFOpenDialog.Execute then Exit;
+  EMF_Struct := T_EMF_Structure.Create;  TCanvas
+  EMF_Struct.pLogStrings := RichEdit1.Lines;
+  try
+    EMF_Struct.LoadFromFile(EMFOpenDialog.FileName);
+  finally
+    EMF_Struct.Free;
+  end;}
+  EMF_Form.ShowModal;
+end;
+
+procedure TMainForm.OnPasteMetafileFromClipboard(Drawing: TDrawing2D);
+begin
+  PasteMetafileFromClipboard(Drawing);
+end;
+
+procedure TMainForm.ScalePhysicalExecute(Sender: TObject);
+begin
+  ScalePhysical.Checked := not ScalePhysical.Checked;
+end;
+
+procedure TMainForm.InsertBezierPathExecute(Sender: TObject);
+var
+  TmpPath: TBezierPath2D;
+begin
+  with LocalPrg do
+  begin
+    if IsBusy then
+      StopOperation;
+    fCurrentOpBtn := InsertBezierPathBtn;
+    TmpPath := TBezierPath2D.CreateSpec(-1, [Point2D(0, 0)]);
+    TmpPath.SavingType := stSpace;
+    StartOperation(TCAD2DDrawUnsizedPrimitive,
+      TCAD2DDrawUnsizedPrimitiveParam.Create(nil,
+      TmpPath, 0, True));
+  end;
+end;
+
+
+procedure TMainForm.InsertClosedBezierPathExecute(Sender: TObject);
+var
+  TmpPath: TClosedBezierPath2D;
+begin
+  with LocalPrg do
+  begin
+    if IsBusy then
+      StopOperation;
+    fCurrentOpBtn := InsertClosedBezierPathBtn;
+    TmpPath := TClosedBezierPath2D.CreateSpec(-1, [Point2D(0, 0)]);
+    TmpPath.SavingType := stSpace;
+    StartOperation(TCAD2DDrawUnsizedPrimitive,
+      TCAD2DDrawUnsizedPrimitiveParam.Create(nil,
+      TmpPath, 0, True));
+  end;
+end;
+
+procedure TMainForm.Pictureinfo1Click(Sender: TObject);
+var
+  List: TStringList;
+  R: TRect2D;
+var
+  MS: TMEMORYSTATUS;
+begin
+  List := TStringList.Create;
+  R := TheDrawing.DrawingExtension;
+  try
+    List.Add('Picture bounds (left, bottom, right, top):');
+    List.Add(Format('   %.5g, %.5g, %.5g, %.5g',
+      [R.Left, R.Bottom, R.Right, R.Top]));
+    List.Add(Format('Size: %.5g x %.5g (%.5gmm x %.5gmm)',
+      [R.Right - R.Left, R.Top - R.Bottom,
+      (R.Right - R.Left) * TheDrawing.PicScale,
+        (R.Top - R.Bottom) * TheDrawing.PicScale]));
+    List.Add(Format('Output size: %.5gmm x %.5gmm',
+      [(R.Right - R.Left) * TheDrawing.PicScale
+      * TheDrawing.PicMagnif,
+        (R.Top - R.Bottom) * TheDrawing.PicScale
+        * TheDrawing.PicMagnif]));
+    MS.dwLength := SizeOf(TMEMORYSTATUS);
+    GlobalMemoryStatus(MS);
+    List.Add('');
+    List.Add('Memory status:');
+    List.Add(Format(' allocated = %d k %d b',
+      [AllocMemSize div 1024, AllocMemSize mod 1024]));
+    List.Add(Format(' available physical = %d k',
+      [MS.dwAvailPhys div 1024]));
+    List.Add(Format(' available virtual = %d k',
+      [MS.dwAvailVirtual div 1024]));
+    Application.MessageBox(List.GetText, 'Picture info');
+  finally
+    List.Free;
+  end;
+end;
+
+procedure TMainForm.ToolButton22Click(Sender: TObject);
+var
+  //cColorString: PChar;
+  PColorRef: ^COLORREF;
+begin
+  //LaBoiteACouleursLoadWindow;
+  ////GetMem(cColorString, 255);
+  ////cColorString := 'RGB|10|50|85';
+  ////LaBoiteACouleursSelectColorStr(cColorString);
+  ////FreeMem(cColorString, 255);
+  //GetMem(PColorRef, SizeOf(COLORREF));
+  //PColorRef^ := clBlue;
+  ////LaBoiteACouleursSelectColor(PColorRef^);
+  //Self.Color := PColorRef^;
+  //LaBoiteACouleursUnloadWindow;
+end;
+
+procedure TMainForm.PopupMenuDVIPopup(Sender: TObject);
+begin
+  PopupMenuDVI.Items[Ord(TheDrawing.TeXFormat)].Checked := True;
+end;
+
+procedure TMainForm.DVI_Format_Click(Sender: TObject);
+begin
+  if not (Sender is TMenuItem) then Exit;
+  TheDrawing.TeXFormat := TeXFormatKind((Sender as TMenuItem).MenuIndex);
+end;
+
+procedure TMainForm.PopupMenuPdfPopup(Sender: TObject);
+begin
+  PopupMenuPdf.Items[Ord(TheDrawing.PdfTeXFormat)].Checked := True;
+end;
+
+procedure TMainForm.Pdf_Format_Click(Sender: TObject);
+begin
+  if not (Sender is TMenuItem) then Exit;
+  TheDrawing.PdfTeXFormat := PdfTeXFormatKind((Sender as TMenuItem).MenuIndex);
+end;
+
+procedure TMainForm.NewWindowExecute(Sender: TObject);
+begin
+  OpenOrExec('', Application.ExeName);
 end;
 
 initialization

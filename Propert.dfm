@@ -3,8 +3,8 @@ object PropertiesForm: TPropertiesForm
   Top = 222
   BorderStyle = bsSingle
   Caption = 'Primitive properties'
-  ClientHeight = 392
-  ClientWidth = 449
+  ClientHeight = 401
+  ClientWidth = 460
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -22,13 +22,13 @@ object PropertiesForm: TPropertiesForm
   object PropPages: TPageControl
     Left = 0
     Top = 101
-    Width = 449
-    Height = 258
-    ActivePage = StarsSheet
+    Width = 460
+    Height = 267
+    ActivePage = TextSheet
     Align = alClient
     MultiLine = True
     TabHeight = 1
-    TabIndex = 3
+    TabIndex = 2
     TabOrder = 0
     object VoidSheet: TTabSheet
       Caption = ' '
@@ -102,7 +102,7 @@ object PropertiesForm: TPropertiesForm
       end
       object RadioGroup1: TRadioGroup
         Left = 20
-        Top = 156
+        Top = 152
         Width = 125
         Height = 85
         Caption = 'H. justification'
@@ -115,12 +115,13 @@ object PropertiesForm: TPropertiesForm
       end
       object RadioGroup2: TRadioGroup
         Left = 192
-        Top = 156
+        Top = 152
         Width = 125
-        Height = 85
+        Height = 101
         Caption = 'V. justification'
         ItemIndex = 0
         Items.Strings = (
+          'Baseline'
           'Bottom'
           'Center'
           'Top')
@@ -137,6 +138,18 @@ object PropertiesForm: TPropertiesForm
         LabelPosition = lpAbove
         LabelSpacing = 3
         TabOrder = 1
+      end
+      object LabeledEdit4: TLabeledEdit
+        Left = 164
+        Top = 120
+        Width = 121
+        Height = 24
+        EditLabel.Width = 35
+        EditLabel.Height = 16
+        EditLabel.Caption = 'Angle'
+        LabelPosition = lpAbove
+        LabelSpacing = 3
+        TabOrder = 5
       end
     end
     object StarsSheet: TTabSheet
@@ -215,8 +228,8 @@ object PropertiesForm: TPropertiesForm
   end
   object Panel1: TPanel
     Left = 0
-    Top = 359
-    Width = 449
+    Top = 368
+    Width = 460
     Height = 33
     Align = alBottom
     BevelOuter = bvNone
@@ -244,11 +257,20 @@ object PropertiesForm: TPropertiesForm
       ModalResult = 2
       TabOrder = 1
     end
+    object Button3: TButton
+      Left = 20
+      Top = 4
+      Width = 75
+      Height = 25
+      Caption = 'Points'
+      TabOrder = 2
+      OnClick = Button3Click
+    end
   end
   object Panel2: TPanel
     Left = 0
     Top = 0
-    Width = 449
+    Width = 460
     Height = 101
     Align = alTop
     Caption = ' '
@@ -277,23 +299,23 @@ object PropertiesForm: TPropertiesForm
     object ComboBox1: TComboBox
       Left = 84
       Top = 8
-      Width = 145
+      Width = 100
       Height = 24
+      Style = csDropDownList
       ItemHeight = 16
       TabOrder = 0
-      Text = 'Thick'
       Items.Strings = (
         'None'
-        'Thick'
-        'Thin'
+        'Solid'
         'Dotted'
         'Dashed')
     end
     object ComboBox2: TComboBox
       Left = 84
       Top = 40
-      Width = 145
+      Width = 100
       Height = 24
+      Style = csDropDownList
       ItemHeight = 16
       ItemIndex = 0
       TabOrder = 1
@@ -308,7 +330,7 @@ object PropertiesForm: TPropertiesForm
         'DiagCross')
     end
     object ComboBox3: TComboBox
-      Left = 232
+      Left = 188
       Top = 8
       Width = 157
       Height = 22
@@ -319,7 +341,7 @@ object PropertiesForm: TPropertiesForm
       OnSelect = ColorBox_Select
     end
     object ComboBox4: TComboBox
-      Left = 232
+      Left = 188
       Top = 40
       Width = 157
       Height = 22
@@ -339,6 +361,20 @@ object PropertiesForm: TPropertiesForm
       TabOrder = 4
       OnDrawItem = ColorBox_DrawItem
       OnSelect = ColorBox_Select
+    end
+    object ComboBox6: TComboBox
+      Left = 348
+      Top = 8
+      Width = 100
+      Height = 24
+      ItemHeight = 16
+      TabOrder = 5
+      Text = ' '
+      Items.Strings = (
+        '0.5'
+        '1'
+        '2'
+        '4')
     end
   end
 end

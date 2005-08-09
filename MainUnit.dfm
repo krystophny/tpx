@@ -1,8 +1,8 @@
 object MainForm: TMainForm
-  Left = 262
-  Top = 127
-  Width = 689
-  Height = 478
+  Left = 319
+  Top = 182
+  Width = 705
+  Height = 586
   HelpKeyword = 'About TpX'
   HelpContext = 101
   Caption = 'TpX Editor'
@@ -25,18 +25,18 @@ object MainForm: TMainForm
   PixelsPerInch = 120
   TextHeight = 13
   object Panel1: TPanel
-    Left = 85
+    Left = 98
     Top = 26
-    Width = 596
-    Height = 371
+    Width = 599
+    Height = 459
     Align = alClient
     Caption = 'Panel1'
-    TabOrder = 6
+    TabOrder = 4
     object LocalView: TCADViewport2D
       Left = 1
       Top = 1
-      Width = 582
-      Height = 331
+      Width = 585
+      Height = 419
       Align = alClient
       AspectRatio = 1
       RubberPenColor = clMaroon
@@ -59,8 +59,8 @@ object MainForm: TMainForm
     end
     object Panel2: TPanel
       Left = 1
-      Top = 344
-      Width = 594
+      Top = 432
+      Width = 597
       Height = 26
       Align = alBottom
       BevelOuter = bvNone
@@ -72,7 +72,7 @@ object MainForm: TMainForm
       object Ruler2: TRuler
         Left = 0
         Top = 0
-        Width = 594
+        Width = 597
         Height = 26
         Align = alClient
         LinkedViewport = LocalView
@@ -84,11 +84,12 @@ object MainForm: TMainForm
     end
     object HScrollBar: TScrollBar
       Left = 1
-      Top = 332
-      Width = 594
+      Top = 420
+      Width = 597
       Height = 12
       Align = alBottom
       Ctl3D = False
+      LargeChange = 4
       PageSize = 0
       ParentCtl3D = False
       Position = 50
@@ -97,13 +98,14 @@ object MainForm: TMainForm
       OnScroll = ScrollBarScroll
     end
     object VScrollBar: TScrollBar
-      Left = 583
+      Left = 586
       Top = 1
       Width = 12
-      Height = 331
+      Height = 419
       Align = alRight
       Ctl3D = False
       Kind = sbVertical
+      LargeChange = 4
       PageSize = 0
       ParentCtl3D = False
       Position = 50
@@ -112,188 +114,10 @@ object MainForm: TMainForm
       OnScroll = ScrollBarScroll
     end
   end
-  object ToolBar1: TToolBar
-    Left = 0
-    Top = 0
-    Width = 681
-    Height = 26
-    AutoSize = True
-    EdgeBorders = [ebTop, ebBottom]
-    Flat = True
-    Images = ImageList2
-    ParentShowHint = False
-    ShowHint = True
-    TabOrder = 0
-    object ToolButton9: TToolButton
-      Left = 0
-      Top = 0
-      Action = NewDoc
-    end
-    object ToolButton10: TToolButton
-      Left = 23
-      Top = 0
-      Action = OpenDoc
-    end
-    object ToolButton11: TToolButton
-      Left = 46
-      Top = 0
-      Action = SaveDoc
-    end
-    object ToolButton13: TToolButton
-      Left = 69
-      Top = 0
-      Width = 8
-      Caption = 'ToolButton13'
-      ImageIndex = 1
-      Style = tbsSeparator
-    end
-    object BasicModeBtn: TToolButton
-      Left = 77
-      Top = 0
-      Hint = 'Basic mode'
-      Caption = 'BasicModeBtn'
-      ImageIndex = 21
-      OnClick = BasicModeBtnClick
-    end
-    object AreaSelect1: TToolButton
-      Left = 100
-      Top = 0
-      Action = AreaSelect
-    end
-    object ToolButton17: TToolButton
-      Left = 123
-      Top = 0
-      Width = 8
-      Caption = 'ToolButton17'
-      ImageIndex = 40
-      Style = tbsSeparator
-    end
-    object ClipboardCutBtn: TToolButton
-      Left = 131
-      Top = 0
-      Action = ClipboardCut
-    end
-    object ClipboardCopyBtn: TToolButton
-      Left = 154
-      Top = 0
-      Action = ClipboardCopy
-    end
-    object ClipboardPasteBtn: TToolButton
-      Left = 177
-      Top = 0
-      Action = ClipboardPaste
-    end
-    object ToolButton7: TToolButton
-      Left = 200
-      Top = 0
-      Width = 8
-      Caption = 'ToolButton7'
-      ImageIndex = 0
-      Style = tbsSeparator
-    end
-    object UndoBtn: TToolButton
-      Left = 208
-      Top = 0
-      Action = Undo
-    end
-    object RedoBtn: TToolButton
-      Left = 231
-      Top = 0
-      Action = Redo
-    end
-    object ToolButton14: TToolButton
-      Left = 254
-      Top = 0
-      Width = 8
-      Caption = 'ToolButton14'
-      ImageIndex = 0
-      Style = tbsSeparator
-    end
-    object ToolButton1: TToolButton
-      Left = 262
-      Top = 0
-      Action = ZoomArea
-    end
-    object ToolButton3: TToolButton
-      Left = 285
-      Top = 0
-      Action = ZoomIn
-    end
-    object ToolButton5: TToolButton
-      Left = 308
-      Top = 0
-      Action = ZoomOut
-    end
-    object ToolButton6: TToolButton
-      Left = 331
-      Top = 0
-      Action = ZoomAll
-    end
-    object PanningBtn: TToolButton
-      Left = 354
-      Top = 0
-      Action = HandTool
-    end
-    object ToolButton12: TToolButton
-      Left = 377
-      Top = 0
-      Width = 8
-      Caption = 'ToolButton12'
-      ImageIndex = 0
-      Style = tbsSeparator
-    end
-    object ToolButton4: TToolButton
-      Left = 385
-      Top = 0
-      Caption = 'ToolButton4'
-      Visible = False
-      OnClick = ToolButton4Click
-    end
-    object ToolButton2: TToolButton
-      Left = 408
-      Top = 0
-      Action = ConvertToPolyline
-      Visible = False
-    end
-    object ToolButton8: TToolButton
-      Left = 431
-      Top = 0
-      Caption = 'ToolButton8'
-      ImageIndex = 39
-      Visible = False
-      OnClick = ToolButton8Click
-    end
-    object ToolButton15: TToolButton
-      Left = 454
-      Top = 0
-      Caption = 'ToolButton15'
-      ImageIndex = 40
-      Visible = False
-      OnClick = ToolButton15Click
-    end
-    object ToolButton16: TToolButton
-      Left = 477
-      Top = 0
-      Caption = 'ToolButton16'
-      ImageIndex = 41
-      Visible = False
-      OnClick = ToolButton16Click
-    end
-    object ToolButton18: TToolButton
-      Left = 500
-      Top = 0
-      Action = PreviewLaTeX
-    end
-    object ToolButton19: TToolButton
-      Left = 523
-      Top = 0
-      Action = PreviewPdfLaTeX
-    end
-  end
   object StatusBar1: TStatusBar
     Left = 0
-    Top = 403
-    Width = 681
+    Top = 491
+    Width = 697
     Height = 15
     Panels = <
       item
@@ -320,109 +144,15 @@ object MainForm: TMainForm
       'RichEdit1')
     ParentFont = False
     ScrollBars = ssBoth
-    TabOrder = 1
+    TabOrder = 0
     Visible = False
-  end
-  object ToolBar2: TToolBar
-    Left = 0
-    Top = 26
-    Width = 23
-    Height = 371
-    Align = alLeft
-    AutoSize = True
-    EdgeBorders = [ebTop, ebBottom]
-    Flat = True
-    Images = ImageList2
-    ParentShowHint = False
-    ShowHint = True
-    TabOrder = 2
-    object InsertLineBtn: TToolButton
-      Left = 0
-      Top = 0
-      Action = InsertLine
-      Wrap = True
-    end
-    object InsertRectangleBtn: TToolButton
-      Left = 0
-      Top = 22
-      Action = InsertRectangle
-      Wrap = True
-    end
-    object InsertCircleBtn: TToolButton
-      Left = 0
-      Top = 44
-      Action = InsertCircle
-      Wrap = True
-    end
-    object InsertEllipseBtn: TToolButton
-      Left = 0
-      Top = 66
-      Action = InsertEllipse
-      Wrap = True
-    end
-    object InsertArcBtn: TToolButton
-      Left = 0
-      Top = 88
-      Action = InsertArc
-      Wrap = True
-    end
-    object InsertSectorBtn: TToolButton
-      Left = 0
-      Top = 110
-      Action = InsertSector
-      Wrap = True
-    end
-    object InsertSegmentBtn: TToolButton
-      Left = 0
-      Top = 132
-      Action = InsertSegment
-      Wrap = True
-    end
-    object InsertPolylineBtn: TToolButton
-      Left = 0
-      Top = 154
-      Action = InsertPolyline
-      Wrap = True
-    end
-    object InsertPolygonBtn: TToolButton
-      Left = 0
-      Top = 176
-      Action = InsertPolygon
-      Wrap = True
-    end
-    object InsertCurveBtn: TToolButton
-      Left = 0
-      Top = 198
-      Hint = 'Insert curve'
-      Action = InsertCurve
-      Wrap = True
-    end
-    object InsertClosedCurveBtn: TToolButton
-      Left = 0
-      Top = 220
-      Hint = 'Insert closed curve'
-      Action = InsertClosedCurve
-      Wrap = True
-    end
-    object InsertTextBtn: TToolButton
-      Left = 0
-      Top = 242
-      Action = InsertText
-      Wrap = True
-    end
-    object InsertStarBtn: TToolButton
-      Left = 0
-      Top = 264
-      Action = InsertStar
-      Wrap = True
-    end
   end
   object BitBtn1: TBitBtn
     Left = 584
     Top = 40
     Width = 25
     Height = 25
-    TabOrder = 3
+    TabOrder = 1
     Visible = False
     OnClick = BitBtn1Click
     Kind = bkAll
@@ -430,8 +160,8 @@ object MainForm: TMainForm
   end
   object ProgressBar1: TProgressBar
     Left = 0
-    Top = 397
-    Width = 681
+    Top = 485
+    Width = 697
     Height = 6
     Align = alBottom
     Min = 0
@@ -439,30 +169,505 @@ object MainForm: TMainForm
     Position = 50
     Smooth = True
     Step = 1
-    TabOrder = 4
+    TabOrder = 2
   end
   object Panel3: TPanel
-    Left = 23
+    Left = 36
     Top = 26
     Width = 62
-    Height = 371
+    Height = 459
     Align = alLeft
     BevelOuter = bvNone
     Caption = ' '
     Ctl3D = False
     ParentCtl3D = False
-    TabOrder = 7
+    TabOrder = 5
     Visible = False
     object Ruler1: TRuler
       Left = 0
       Top = 0
       Width = 62
-      Height = 371
+      Height = 459
       Align = alClient
       LinkedViewport = LocalView
       Color = clBtnFace
       StepSize = 10
       Size = 10
+    end
+  end
+  object ControlBar1: TControlBar
+    Left = 0
+    Top = 0
+    Width = 697
+    Height = 26
+    Align = alTop
+    AutoSize = True
+    BevelInner = bvNone
+    BevelOuter = bvNone
+    BevelKind = bkNone
+    TabOrder = 6
+    object ToolBar1: TToolBar
+      Left = 11
+      Top = 2
+      Width = 672
+      Height = 22
+      Anchors = [akLeft, akTop, akRight, akBottom]
+      AutoSize = True
+      Customizable = True
+      DragKind = dkDock
+      DragMode = dmAutomatic
+      EdgeBorders = [ebTop, ebBottom]
+      EdgeInner = esNone
+      EdgeOuter = esNone
+      Flat = True
+      Images = ImageList2
+      ParentShowHint = False
+      ShowHint = True
+      TabOrder = 0
+      object ToolButton9: TToolButton
+        Left = 0
+        Top = 0
+        Action = NewDoc
+      end
+      object ToolButton10: TToolButton
+        Left = 23
+        Top = 0
+        Action = OpenDoc
+      end
+      object ToolButton11: TToolButton
+        Left = 46
+        Top = 0
+        Action = SaveDoc
+      end
+      object ToolButton13: TToolButton
+        Left = 69
+        Top = 0
+        Width = 8
+        Caption = 'ToolButton13'
+        ImageIndex = 1
+        Style = tbsSeparator
+      end
+      object BasicModeBtn: TToolButton
+        Left = 77
+        Top = 0
+        Hint = 'Basic mode'
+        Caption = 'BasicModeBtn'
+        ImageIndex = 21
+        OnClick = BasicModeBtnClick
+      end
+      object AreaSelect1: TToolButton
+        Left = 100
+        Top = 0
+        Action = AreaSelect
+      end
+      object ToolButton17: TToolButton
+        Left = 123
+        Top = 0
+        Width = 8
+        Caption = 'ToolButton17'
+        ImageIndex = 40
+        Style = tbsSeparator
+      end
+      object ClipboardCutBtn: TToolButton
+        Left = 131
+        Top = 0
+        Action = ClipboardCut
+      end
+      object ClipboardCopyBtn: TToolButton
+        Left = 154
+        Top = 0
+        Action = ClipboardCopy
+      end
+      object ClipboardPasteBtn: TToolButton
+        Left = 177
+        Top = 0
+        Action = ClipboardPaste
+      end
+      object ToolButton7: TToolButton
+        Left = 200
+        Top = 0
+        Width = 8
+        Caption = 'ToolButton7'
+        ImageIndex = 0
+        Style = tbsSeparator
+      end
+      object UndoBtn: TToolButton
+        Left = 208
+        Top = 0
+        Action = Undo
+      end
+      object RedoBtn: TToolButton
+        Left = 231
+        Top = 0
+        Action = Redo
+      end
+      object ToolButton14: TToolButton
+        Left = 254
+        Top = 0
+        Width = 8
+        Caption = 'ToolButton14'
+        ImageIndex = 0
+        Style = tbsSeparator
+      end
+      object ToolButton1: TToolButton
+        Left = 262
+        Top = 0
+        Action = ZoomArea
+      end
+      object ToolButton3: TToolButton
+        Left = 285
+        Top = 0
+        Action = ZoomIn
+      end
+      object ToolButton5: TToolButton
+        Left = 308
+        Top = 0
+        Action = ZoomOut
+      end
+      object ToolButton6: TToolButton
+        Left = 331
+        Top = 0
+        Action = ZoomAll
+      end
+      object PanningBtn: TToolButton
+        Left = 354
+        Top = 0
+        Action = HandTool
+      end
+      object ToolButton12: TToolButton
+        Left = 377
+        Top = 0
+        Width = 8
+        Caption = 'ToolButton12'
+        ImageIndex = 0
+        Style = tbsSeparator
+      end
+      object ToolButton4: TToolButton
+        Left = 385
+        Top = 0
+        Caption = 'ToolButton4'
+        Visible = False
+        OnClick = ToolButton4Click
+      end
+      object ToolButton2: TToolButton
+        Left = 408
+        Top = 0
+        Action = ConvertToPolyline
+        Visible = False
+      end
+      object ToolButton8: TToolButton
+        Left = 431
+        Top = 0
+        Action = ImageTool
+      end
+      object ToolButton15: TToolButton
+        Left = 454
+        Top = 0
+        Caption = 'ToolButton15'
+        ImageIndex = 40
+        Visible = False
+        OnClick = ToolButton15Click
+      end
+      object ToolButton16: TToolButton
+        Left = 477
+        Top = 0
+        Caption = 'ToolButton16'
+        ImageIndex = 41
+        Visible = False
+        OnClick = ToolButton16Click
+      end
+      object ToolButton21: TToolButton
+        Left = 500
+        Top = 0
+        Width = 8
+        Caption = 'ToolButton21'
+        ImageIndex = 59
+        Style = tbsSeparator
+      end
+      object ToolButton18: TToolButton
+        Left = 508
+        Top = 0
+        Action = PreviewLaTeX
+        DropdownMenu = PopupMenuDVI
+        Style = tbsDropDown
+      end
+      object ToolButton20: TToolButton
+        Left = 548
+        Top = 0
+        Action = PreviewLaTeX_PS
+        DropdownMenu = PopupMenuDVI
+        Style = tbsDropDown
+      end
+      object ToolButton19: TToolButton
+        Left = 588
+        Top = 0
+        Action = PreviewPdfLaTeX
+        DropdownMenu = PopupMenuPdf
+        Style = tbsDropDown
+      end
+    end
+  end
+  object ControlBar2: TControlBar
+    Left = 0
+    Top = 26
+    Width = 36
+    Height = 459
+    Align = alLeft
+    AutoSize = True
+    BevelInner = bvNone
+    BevelOuter = bvNone
+    TabOrder = 7
+    object ToolBar2: TToolBar
+      Left = 11
+      Top = 2
+      Width = 23
+      Height = 386
+      Align = alLeft
+      AutoSize = True
+      Customizable = True
+      DragKind = dkDock
+      DragMode = dmAutomatic
+      EdgeBorders = [ebTop, ebBottom]
+      EdgeInner = esNone
+      EdgeOuter = esNone
+      Flat = True
+      Images = ImageList2
+      ParentShowHint = False
+      ShowHint = True
+      TabOrder = 0
+      object InsertLineBtn: TToolButton
+        Left = 0
+        Top = 0
+        Action = InsertLine
+        Wrap = True
+      end
+      object InsertRectangleBtn: TToolButton
+        Left = 0
+        Top = 22
+        Action = InsertRectangle
+        Wrap = True
+      end
+      object InsertCircleBtn: TToolButton
+        Left = 0
+        Top = 44
+        Action = InsertCircle
+        Wrap = True
+      end
+      object InsertEllipseBtn: TToolButton
+        Left = 0
+        Top = 66
+        Action = InsertEllipse
+        Wrap = True
+      end
+      object InsertArcBtn: TToolButton
+        Left = 0
+        Top = 88
+        Action = InsertArc
+        Wrap = True
+      end
+      object InsertSectorBtn: TToolButton
+        Left = 0
+        Top = 110
+        Action = InsertSector
+        Wrap = True
+      end
+      object InsertSegmentBtn: TToolButton
+        Left = 0
+        Top = 132
+        Action = InsertSegment
+        Wrap = True
+      end
+      object InsertPolylineBtn: TToolButton
+        Left = 0
+        Top = 154
+        Action = InsertPolyline
+        Wrap = True
+      end
+      object InsertPolygonBtn: TToolButton
+        Left = 0
+        Top = 176
+        Action = InsertPolygon
+        Wrap = True
+      end
+      object InsertCurveBtn: TToolButton
+        Left = 0
+        Top = 198
+        Action = InsertCurve
+        Wrap = True
+      end
+      object InsertClosedCurveBtn: TToolButton
+        Left = 0
+        Top = 220
+        Action = InsertClosedCurve
+        Wrap = True
+      end
+      object InsertBezierPathBtn: TToolButton
+        Left = 0
+        Top = 242
+        Action = InsertBezierPath
+        Wrap = True
+      end
+      object InsertClosedBezierPathBtn: TToolButton
+        Left = 0
+        Top = 264
+        Action = InsertClosedBezierPath
+        Wrap = True
+      end
+      object InsertTextBtn: TToolButton
+        Left = 0
+        Top = 286
+        Action = InsertText
+        Wrap = True
+      end
+      object InsertStarBtn: TToolButton
+        Left = 0
+        Top = 308
+        Action = InsertStar
+        Wrap = True
+      end
+    end
+  end
+  object ControlBar3: TControlBar
+    Left = 0
+    Top = 506
+    Width = 697
+    Height = 28
+    Align = alBottom
+    AutoSize = True
+    BevelInner = bvNone
+    BevelOuter = bvNone
+    BevelKind = bkNone
+    TabOrder = 8
+    object ToolBar3: TToolBar
+      Left = 11
+      Top = 2
+      Width = 581
+      Height = 24
+      Align = alNone
+      AutoSize = True
+      Caption = 'ToolBar3'
+      Customizable = True
+      DragKind = dkDock
+      DragMode = dmAutomatic
+      EdgeInner = esNone
+      EdgeOuter = esNone
+      TabOrder = 0
+      object Panel4: TPanel
+        Left = 0
+        Top = 2
+        Width = 37
+        Height = 22
+        Alignment = taRightJustify
+        BevelOuter = bvNone
+        BorderWidth = 5
+        Caption = 'Line'
+        TabOrder = 6
+      end
+      object ComboBox1: TComboBox
+        Left = 37
+        Top = 2
+        Width = 63
+        Height = 21
+        Style = csDropDownList
+        ItemHeight = 13
+        TabOrder = 0
+        OnSelect = ComboBox1Select
+        Items.Strings = (
+          'None'
+          'Solid'
+          'Dotted'
+          'Dashed')
+      end
+      object ComboBox3: TComboBox
+        Left = 100
+        Top = 2
+        Width = 72
+        Height = 22
+        Style = csOwnerDrawFixed
+        ItemHeight = 16
+        TabOrder = 1
+        OnDrawItem = ColorBox_DrawItem
+        OnSelect = ComboBox3Select
+      end
+      object ComboBox6: TComboBox
+        Left = 172
+        Top = 2
+        Width = 100
+        Height = 21
+        ItemHeight = 13
+        TabOrder = 5
+        Text = ' '
+        OnChange = ComboBox6Change
+        Items.Strings = (
+          '0.5'
+          '1'
+          '2'
+          '4')
+      end
+      object Panel5: TPanel
+        Left = 272
+        Top = 2
+        Width = 65
+        Height = 22
+        Alignment = taRightJustify
+        BevelOuter = bvNone
+        BorderWidth = 5
+        Caption = 'Hatching'
+        TabOrder = 7
+      end
+      object ComboBox2: TComboBox
+        Left = 337
+        Top = 2
+        Width = 68
+        Height = 21
+        Style = csDropDownList
+        ItemHeight = 13
+        ItemIndex = 0
+        TabOrder = 2
+        Text = 'None'
+        OnSelect = ComboBox2Select
+        Items.Strings = (
+          'None'
+          'Horizontal'
+          'Vertical'
+          'FDiagonal'
+          'BDiagonal'
+          'Cross'
+          'DiagCross')
+      end
+      object ComboBox4: TComboBox
+        Left = 405
+        Top = 2
+        Width = 72
+        Height = 22
+        Style = csOwnerDrawFixed
+        ItemHeight = 16
+        TabOrder = 3
+        OnDrawItem = ColorBox_DrawItem
+        OnSelect = ComboBox4Select
+      end
+      object Panel6: TPanel
+        Left = 477
+        Top = 2
+        Width = 32
+        Height = 22
+        Alignment = taRightJustify
+        BevelOuter = bvNone
+        BorderWidth = 5
+        Caption = 'Fill'
+        TabOrder = 8
+      end
+      object ComboBox5: TComboBox
+        Left = 509
+        Top = 2
+        Width = 72
+        Height = 22
+        Style = csOwnerDrawFixed
+        ItemHeight = 16
+        TabOrder = 4
+        OnDrawItem = ColorBox_DrawItem
+        OnSelect = ComboBox5Select
+      end
     end
   end
   object MainMenu1: TMainMenu
@@ -472,9 +677,13 @@ object MainForm: TMainForm
     Top = 56
     object File1: TMenuItem
       Caption = 'File'
+      ImageIndex = 61
       OnClick = File1Click
       object New1: TMenuItem
         Action = NewDoc
+      end
+      object Newwindow1: TMenuItem
+        Action = NewWindow
       end
       object OpenDoc1: TMenuItem
         Action = OpenDoc
@@ -598,17 +807,18 @@ object MainForm: TMainForm
       object Useorto2: TMenuItem
         Action = UseOrto
       end
+      object Smoothbeziernodes1: TMenuItem
+        Action = SmoothBezierNodesAction
+      end
       object N10: TMenuItem
         Caption = '-'
       end
       object Converttopolyline1: TMenuItem
         Action = ConvertTo
-        Visible = False
       end
       object Copytoclipboard1: TMenuItem
         Caption = 'Copy drawing to clipboard'
         Visible = False
-        OnClick = Copytoclipboard1Click
       end
       object Options1: TMenuItem
         Caption = 'Picture properties'
@@ -651,6 +861,14 @@ object MainForm: TMainForm
       end
       object Insertclosedcurve1: TMenuItem
         Action = InsertClosedCurve
+      end
+      object InsertBezierpath1: TMenuItem
+        Action = InsertBezierPath
+        ShortCut = 32858
+      end
+      object InsertclosedBezierpath1: TMenuItem
+        Action = InsertClosedBezierPath
+        ShortCut = 32836
       end
       object InsertText1: TMenuItem
         Action = InsertText
@@ -748,13 +966,20 @@ object MainForm: TMainForm
       object Areaselect3: TMenuItem
         Action = CustomTransform
       end
-      object N18: TMenuItem
-        Caption = '-'
-      end
       object Scalestandard1: TMenuItem
         Caption = 'Scale standard'
         Hint = 'Scale standard'
         OnClick = Scalestandard1Click
+      end
+      object Scalephysicalunits1: TMenuItem
+        Action = ScalePhysical
+        Visible = False
+      end
+      object N19: TMenuItem
+        Caption = '-'
+      end
+      object Converttograyscale1: TMenuItem
+        Action = ConvertToGrayScale
       end
     end
     object Edit1: TMenuItem
@@ -778,11 +1003,14 @@ object MainForm: TMainForm
       object PreviewLaTeX1: TMenuItem
         Action = PreviewLaTeX
       end
+      object PreviewLaTeXDVIPS1: TMenuItem
+        Action = PreviewLaTeX_PS
+      end
       object PreviewPdfLaTeX1: TMenuItem
         Action = PreviewPdfLaTeX
       end
       object Preview1: TMenuItem
-        Caption = 'Preview'
+        Caption = 'Preview as image'
         object PreviewEPS1: TMenuItem
           Action = PreviewEPS
         end
@@ -807,6 +1035,9 @@ object MainForm: TMainForm
       end
       object CaptureEMF1: TMenuItem
         Action = CaptureEMF
+      end
+      object ImagetoEPStool1: TMenuItem
+        Action = ImageTool
       end
     end
     object u1: TMenuItem
@@ -857,6 +1088,10 @@ object MainForm: TMainForm
       object Help1: TMenuItem
         Caption = 'TpX help'
         OnClick = Help1Click
+      end
+      object Pictureinfo1: TMenuItem
+        Caption = 'Picture info'
+        OnClick = Pictureinfo1Click
       end
       object About1: TMenuItem
         Caption = 'About'
@@ -949,7 +1184,7 @@ object MainForm: TMainForm
     OnStartOperation = LocalPrgStartOperation
     OnDescriptionChanged = LocalPrgDescriptionChanged
     Viewport2D = LocalView
-    Left = 63
+    Left = 64
     Top = 90
   end
   object CADOpenDlg: TOpenDialog
@@ -992,6 +1227,7 @@ object MainForm: TMainForm
     object Undo: TAction
       Category = 'Edit'
       Caption = 'Undo'
+      Hint = 'Undo'
       ImageIndex = 50
       ShortCut = 16474
       SecondaryShortCuts.Strings = (
@@ -1001,6 +1237,7 @@ object MainForm: TMainForm
     object Redo: TAction
       Category = 'Edit'
       Caption = 'Redo'
+      Hint = 'Redo'
       ImageIndex = 51
       ShortCut = 24666
       SecondaryShortCuts.Strings = (
@@ -1111,18 +1348,21 @@ object MainForm: TMainForm
     object SelectAll: TAction
       Category = 'Edit'
       Caption = 'Select all'
+      Hint = 'Select all'
       ShortCut = 16449
       OnExecute = SendUserEventExecute
     end
     object SelNext: TAction
       Category = 'Edit'
       Caption = 'Select next'
+      Hint = 'Select next'
       ShortCut = 9
       OnExecute = SendUserEventExecute
     end
     object SelPrev: TAction
       Category = 'Edit'
       Caption = 'Select previous'
+      Hint = 'Select previous'
       ShortCut = 8201
       OnExecute = SendUserEventExecute
     end
@@ -1188,6 +1428,7 @@ object MainForm: TMainForm
     object MoveForward: TAction
       Category = 'Arrange'
       Caption = 'Move forward'
+      Hint = 'Move forward'
       ImageIndex = 24
       ShortCut = 33
       OnExecute = SendUserEventExecute
@@ -1195,6 +1436,7 @@ object MainForm: TMainForm
     object MoveBackward: TAction
       Category = 'Arrange'
       Caption = 'Move backward'
+      Hint = 'Move backward'
       ImageIndex = 25
       ShortCut = 34
       OnExecute = SendUserEventExecute
@@ -1202,6 +1444,7 @@ object MainForm: TMainForm
     object MoveToFront: TAction
       Category = 'Arrange'
       Caption = 'Bring to front'
+      Hint = 'Bring to front'
       ImageIndex = 26
       ShortCut = 36
       OnExecute = SendUserEventExecute
@@ -1209,6 +1452,7 @@ object MainForm: TMainForm
     object MoveToBack: TAction
       Category = 'Arrange'
       Caption = 'Put to  back'
+      Hint = 'Put to  back'
       ImageIndex = 27
       ShortCut = 35
       OnExecute = SendUserEventExecute
@@ -1315,6 +1559,12 @@ object MainForm: TMainForm
       ShortCut = 16462
       OnExecute = New1Click
     end
+    object NewWindow: TAction
+      Category = 'File'
+      Caption = 'New window'
+      ImageIndex = 61
+      OnExecute = NewWindowExecute
+    end
     object OpenDoc: TAction
       Category = 'File'
       Caption = 'Open'
@@ -1375,18 +1625,21 @@ object MainForm: TMainForm
     object SaveAs: TAction
       Category = 'File'
       Caption = 'Save as...'
+      Hint = 'Save as...'
       ImageIndex = 22
       OnExecute = SaveAsExecute
     end
     object InsertSector: TAction
       Category = 'Insert'
       Caption = 'Insert sector'
+      Hint = 'Insert sector'
       ImageIndex = 33
       OnExecute = InsertSectorExecute
     end
     object InsertSegment: TAction
       Category = 'Insert'
       Caption = 'Insert segment'
+      Hint = 'Insert segment'
       ImageIndex = 34
       OnExecute = InsertSegmentExecute
     end
@@ -1414,7 +1667,7 @@ object MainForm: TMainForm
     object InsertCurve: TAction
       Category = 'Insert'
       Caption = 'Insert curve'
-      Hint = 'Insert cubic spline'
+      Hint = 'Insert curve'
       ImageIndex = 52
       ShortCut = 32853
       OnExecute = InsertCurveExecute
@@ -1422,7 +1675,7 @@ object MainForm: TMainForm
     object InsertClosedCurve: TAction
       Category = 'Insert'
       Caption = 'Insert closed curve'
-      Hint = 'Insert cubic spline'
+      Hint = 'Insert closed curve'
       ImageIndex = 53
       ShortCut = 32847
       OnExecute = InsertClosedCurveExecute
@@ -1430,6 +1683,7 @@ object MainForm: TMainForm
     object DuplicateSelected: TAction
       Category = 'Edit'
       Caption = 'Duplicate selected'
+      Hint = 'Duplicate selected'
       ImageIndex = 48
       OnExecute = SendUserEventExecute
     end
@@ -1448,12 +1702,21 @@ object MainForm: TMainForm
     object SnapToGrid: TAction
       Category = 'Edit'
       Caption = 'Snap to grid'
+      Hint = 'Snap to grid'
       OnExecute = SnapToGridExecute
     end
     object UseOrto: TAction
       Category = 'Edit'
       Caption = 'Use orto'
+      Hint = 'Use orto'
       OnExecute = UseOrtoExecute
+    end
+    object SmoothBezierNodesAction: TAction
+      Category = 'Edit'
+      Caption = 'Smooth bezier nodes'
+      Checked = True
+      Hint = 'Smooth bezier nodes'
+      OnExecute = SmoothBezierNodesActionExecute
     end
     object AreaSelect: TAction
       Category = 'Edit'
@@ -1466,11 +1729,13 @@ object MainForm: TMainForm
       Category = 'Edit'
       Caption = 'Area select inside only'
       Checked = True
+      Hint = 'Area select inside only'
       OnExecute = AreaSelectInsideExecute
     end
     object ConvertToPolyline: TAction
       Category = 'Convert'
       Caption = 'Convert to polyline'
+      Hint = 'Convert to polyline'
       ImageIndex = 4
       OnExecute = SendUserEventExecute
     end
@@ -1492,6 +1757,7 @@ object MainForm: TMainForm
     object ConvertTo: TAction
       Category = 'Convert'
       Caption = 'Convert to...'
+      Hint = 'Convert to...'
       OnExecute = ConvertToExecute
     end
     object DoConvertTo: TAction
@@ -1506,15 +1772,24 @@ object MainForm: TMainForm
     end
     object PreviewLaTeX: TAction
       Category = 'Tools'
-      Caption = 'Preview LaTeX'
+      Caption = 'Preview LaTeX->DVI'
+      Hint = 'Preview LaTeX->DVI'
       ImageIndex = 54
       OnExecute = PreviewLaTeXExecute
     end
     object PreviewPdfLaTeX: TAction
       Category = 'Tools'
       Caption = 'Preview PdfLaTeX'
+      Hint = 'Preview PdfLaTeX'
       ImageIndex = 55
       OnExecute = PreviewPdfLaTeXExecute
+    end
+    object PreviewLaTeX_PS: TAction
+      Category = 'Tools'
+      Caption = 'Preview LaTeX->DVI->PS'
+      Hint = 'Preview LaTeX->DVI->PS'
+      ImageIndex = 58
+      OnExecute = PreviewLaTeX_PSExecute
     end
     object OpenRecent: TAction
       Category = 'File'
@@ -1554,20 +1829,54 @@ object MainForm: TMainForm
     object ImportMetafile: TAction
       Category = 'File'
       Caption = 'Import EMF/WMF'
+      Hint = 'Import EMF/WMF'
       OnExecute = ImportMetafileExecute
     end
     object ImportEPS: TAction
       Category = 'File'
       Caption = 'Import EPS/PDF'
+      Hint = 'Import EPS/PDF'
       OnExecute = ImportEPSExecute
+    end
+    object ConvertToGrayScale: TAction
+      Category = 'Transform'
+      Caption = 'Convert to grayscale'
+      OnExecute = SendUserEventExecute
+    end
+    object ScalePhysical: TAction
+      Category = 'Transform'
+      Caption = 'Scale physical units'
+      OnExecute = ScalePhysicalExecute
+    end
+    object InsertBezierPath: TAction
+      Category = 'Insert'
+      Caption = 'Insert Bezier path'
+      Hint = 'Insert Bezier path'
+      ImageIndex = 59
+      OnExecute = InsertBezierPathExecute
+    end
+    object InsertClosedBezierPath: TAction
+      Category = 'Insert'
+      Caption = 'Insert closed Bezier path'
+      Hint = 'Insert closed Bezier path'
+      ImageIndex = 60
+      OnExecute = InsertClosedBezierPathExecute
+    end
+    object ImageTool: TAction
+      Category = 'Tools'
+      Caption = 'Image tool'
+      Hint = 'Image tool'
+      ImageIndex = 56
+      OnExecute = ImageToolExecute
     end
   end
   object ImageList2: TImageList
     Left = 164
     Top = 44
     Bitmap = {
-      494C010138003B00040010001000FFFFFFFFFF10FFFFFFFFFFFFFFFF424D3600
-      000000000000360000002800000040000000F0000000010020000000000000F0
+      494C01013E004000040010001000FFFFFFFFFF10FFFFFFFFFFFFFFFF424D3600
+      0000000000003600000028000000400000000001000001002000000000000000
+      0100000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
@@ -1583,62 +1892,107 @@ object MainForm: TMainForm
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000080000000800000008080
+      8000808080008080800080000000800000008080800080808000808080008000
+      0000800000000000000000000000000000008080800000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000080000000800000000000
+      0000000000000000000080000000800000000000000000000000000000008000
+      00008000000000000000000000000000000080808000FFFFFF00C0C0C000FFFF
+      FF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFF
+      FF00C0C0C000FFFFFF0000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      00000000000000000000000000000000000080808000FFFFFF00FFFFFF00C0C0
+      C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0
+      C000FFFFFF00C0C0C00000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      00000000000000000000000000000000000080808000FFFFFF00C0C0C000FFFF
+      FF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFF
+      FF00C0C0C000FFFFFF0000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      00000000000000000000000000000000000080808000FFFFFF00FFFFFF00C0C0
+      C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0
+      C000FFFFFF00C0C0C00000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      00000000000000000000000000000000000080808000FFFFFF00C0C0C000FFFF
+      FF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFF
+      FF00C0C0C000FFFFFF0000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      00000000000000000000000000000000000080808000FFFFFF00FFFFFF00C0C0
+      C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0
+      C000FFFFFF00C0C0C00000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      00000000000000000000000000000000000080808000FFFFFF00C0C0C000FFFF
+      FF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFF
+      FF00C0C0C000FFFFFF0000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      00000000000000000000000000000000000080808000FFFFFF00FFFFFF00C0C0
+      C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0
+      C000FFFFFF00C0C0C00000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      00000000000000000000000000000000000080808000FFFFFF00FFFFFF00FFFF
+      FF00FFFFFF00FFFFFF00FFFFFF00FFFFFF00FFFFFF00FFFFFF00FFFFFF00FFFF
+      FF00FFFFFF00FFFFFF0000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000080000000800000000000
+      0000000000000000000080000000800000000000000000000000000000000000
+      0000800000008000000000000000000000008080800080000000800000008000
+      0000800000008000000080000000800000008000000080000000800000008000
+      0000800000008000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000080000000800000008080
+      8000808080008080800080000000800000008080800080808000808080008080
+      80008000000080000000000000000000000080808000FFFFFF00800000008000
+      000080000000800000008000000080000000800000008000000080000000FFFF
+      FF0080000000FFFFFF0000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000008080800080808000808080008080
+      8000808080008080800080808000808080008080800080808000808080008080
+      8000808080008080800080808000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
@@ -1652,42 +2006,124 @@ object MainForm: TMainForm
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000080000000800000008000
+      0000000000008000000000000000000000000000000080000000800000008000
+      000000000000000000000000000000000000000000000000000000000000FF00
+      0000000000000000000000000000FF000000FF00000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000080000000000000000000
+      0000000000008000000000000000000000000000000000000000000000008000
+      000000000000000000000000000000000000000000000000000000000000FF00
+      0000FF000000000000000000000000000000FF00000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000080808000000000000000
+      0000000000000000000000000000000000000000000080000000800000000000
+      0000000000008000000080000000800000000000000080000000800000008000
+      000000000000000000000000000000000000000000000000000000000000FF00
+      000000000000FF00000000000000FF0000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      000000000000000000000000000000000000808080000000000000FFFF000000
+      0000000000000000000000000000000000000000000080000000000000000000
+      0000000000008000000000000000800000000000000080000000000000000000
+      000000000000000000000000000000000000000000000000000000000000FF00
+      0000FF0000000000000000000000FF000000FF00000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000008000000080000000808080000000000000FFFF00000000008080
+      8000800000008000000080000000000000000000000080000000800000008000
+      0000000000008000000080000000800000000000000080000000800000008000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      00000000000080000000808080000000000000FFFF000000000080808000FFFF
+      FF00C0C0C000FFFFFF0080000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      000000000000808080000000000000FFFF000000000080808000FFFFFF00C0C0
+      C000FFFFFF00C0C0C00080000000000000000000000000000000808080000000
+      0000808080000000000080808000000000008080800000000000808080000000
+      0000808080000000000000000000000000000000000000000000C0C0C000FFFF
+      FF000000FF00FFFFFF00C0C0C000FFFFFF00C0C0C00000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000808080000000000000FFFF0000000000808080000000FF000000FF00FFFF
+      FF00C0C0C000FFFFFF00800000000000000000000000FFFFFF00C0C0C000C0C0
+      C000C0C0C000C0C0C000C0C0C000C0C0C000C0C0C000C0C0C000C0C0C000C0C0
+      C000C0C0C0008080800000000000000000000000000000000000FFFFFF000000
+      FF000000FF000000FF00FFFFFF00C0C0C000FFFFFF0000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000080000000800000000000000000000000000000000000
+      00000000000000FFFF0000000000808080000000FF000000FF000000FF000080
+      000000800000C0C0C000800000000000000000000000FFFFFF000000FF000000
+      FF00C0C0C000C0C0C000C0C0C000C0C0C000C0C0C000C0C0C000C0C0C000C0C0
+      C000C0C0C0008080800080808000000000000000000000000000C0C0C0000000
+      FF000000FF000000FF00FF000000C0C0C0000000000000000000000000000000
+      0000808080000000000000000000000000008000000080000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000080000000800000000000000000000000000000000000
+      00000000000000000000808080000000FF000000FF000000FF000000FF000080
+      000000800000FFFFFF00800000000000000000000000FFFFFF00FFFFFF00FFFF
+      FF00FFFFFF00FFFFFF00FFFFFF00FFFFFF00FFFFFF00FFFFFF00FFFFFF00FFFF
+      FF00FFFFFF008080800080808000000000000000000000000000FFFFFF000000
+      FF000000FF00FF000000FF0000000000000080808000C0C0C000C0C0C0008080
+      8000000000008080800000000000000000008000000080000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000008080800000000000000000000000000000000000000000000000
+      0000000000000000000080808000C0C0C0000000FF000000FF00008000000080
+      000000800000C0C0C00080000000000000008080800080808000C0C0C000C0C0
+      C000C0C0C000C0C0C000C0C0C000C0C0C000C0C0C000C0C0C000C0C0C000C0C0
+      C000C0C0C000FFFFFF0080808000000000000000000000000000C0C0C000FFFF
+      FF000000FF00FF0000000000000080808000C0C0C000C0C0C000FFFF00008080
+      8000808080000000000000000000000000000000000000000000808080000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000008080800000000000000000000000000000000000000000000000
+      0000000000000000000080808000FFFFFF00C0C0C00000800000008000000080
+      000000800000FFFFFF0080000000000000000000000000000000C0C0C0008080
+      8000000000000000000000000000000000000000000000000000000000000000
+      000080808000C0C0C000FFFFFF00000000000000000000000000FFFFFF00C0C0
+      C000FF000000FF00000000000000C0C0C000C0C0C000C0C0C000C0C0C0008080
+      8000C0C0C0000000000000000000000000000000000000000000000000008080
+      8000000000000000000000000000000000000000000000000000000000000000
+      0000808080000000000000000000000000000000000000000000000000000000
+      00000000000000000000FFFFFF00C0C0C000FFFFFF00C0C0C000FFFFFF00C0C0
+      C000FFFFFF00C0C0C00080000000000000000000000000000000000000000000
+      00000000000080808000FFFFFF0080808000FFFFFF0080808000FFFFFF000000
+      0000000000000000000000000000000000000000000000000000C0C0C000FFFF
+      FF00C0C0C000FFFFFF0000000000C0C0C000FFFF0000C0C0C000C0C0C0008080
+      8000C0C0C0000000000000000000000000000000000000000000000000000000
+      0000808080000000000000000000000000000000000000000000800000008000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000008000000080000000800000008000000080000000800000008000
+      0000800000008000000080000000000000000000000000000000000000000000
+      000000000000FFFFFF0080808000FFFFFF0080808000FFFFFF00C0C0C0000000
       0000000000000000000000000000000000000000000000000000000000000000
+      000000000000000000000000000080808000FFFF0000FFFF0000C0C0C0008080
+      8000808080000000000000000000000000000000000000000000000000000000
+      0000000000008000000080000000000000000000000000000000800000008000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      00000000000000000000FFFFFF0080808000FFFFFF0080808000FFFFFF00FFFF
+      FF00000000000000000000000000000000000000000000000000000000000000
+      00000000000000000000000000000000000080808000C0C0C000C0C0C0008080
+      8000000000000000000000000000000000000000000000000000000000000000
+      0000000000008000000080000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
@@ -3489,12 +3925,16 @@ object MainForm: TMainForm
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       000000000000000000000000000000000000424D3E000000000000003E000000
-      2800000040000000F00000000100010000000000800700000000000000000000
-      000000000000000000000000FFFFFF0000000000000000000000000000000000
-      0000000000000000000000000000000000000000000000000000000000000000
-      0000000000000000000000000000000000000000000000000000000000000000
-      0000000000000000000000000000000000000000000000000000000000000000
-      00000000000000000000000000000000FFFFFFFFCEDFDCDFFFE3F07FD55FCD4F
+      2800000040000000000100000100010000000000000800000000000000000000
+      000000000000000000000000FFFFFF00FFFFFFFF00000000FFFFFFFF00000000
+      80070001000000009067000100000000EF9F000100000000DFEF000100000000
+      BFF7000100000000BFF7000100000000BFFB000100000000DFFB000100000000
+      EFF7000100000000F7CF00010000000098330001000000008003000100000000
+      FFFF000100000000FFFFFFFF00000000FFFF8B8FEE7FFFFFFFFFBBEFE77FF07F
+      FF8F988FEAFFEFBFFF0FBABFE67FDFDFF801888FFFFFBFEFF801FFFF803FBFEF
+      F8018003803CBFF7F00100018038DFF48001000080012FF48001000080032FF3
+      B00100008003D7F3F00180008003EBE7E001C0018003F5CFF801F00F8003F9CF
+      FFFFF807FE07F9FFFFFFF807FF0FFFFFFFFFFFFFCEDFDCDFFFE3F07FD55FCD4F
       FFDDEF9FD55FD55FFFDFDFEFCD5FCCC7E3EFBFF7FFFFFFFFEDEFBFF7803F803F
       DDF7BFFB803C803CDEF7DFFB80388038BEF7EFFB80018001BF7BF7FB80038003
       DF7BFBFB80038003EFBBFBF780038003FFB7FDF780038003FFCFFDEF80038003
@@ -4212,9 +4652,89 @@ object MainForm: TMainForm
   end
   object EPSOpenDialog: TOpenDialog
     Filter = 
-      'Encapsulated Postscript (*.eps)|*.eps|Portable document format (' +
-      '*.pdf)|*.pdf'
+      'Encapsulated Postscript (*.eps)|*.eps|All Postscripts (*.eps, *.' +
+      'ps)|*.eps;*.ps|Portable document format (*.pdf)|*.pdf'
     Left = 200
     Top = 116
+  end
+  object PopupMenuDVI: TPopupMenu
+    OnPopup = PopupMenuDVIPopup
+    Left = 364
+    Top = 108
+    object tex1: TMenuItem
+      Caption = 'tex'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object pgf1: TMenuItem
+      Caption = 'pgf'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object pstricks1: TMenuItem
+      Caption = 'pstricks'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object pdf1: TMenuItem
+      Caption = 'eps'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object png1: TMenuItem
+      Caption = 'png'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object bmp1: TMenuItem
+      Caption = 'bmp'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object metapost1: TMenuItem
+      Caption = 'metapost'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object emf1: TMenuItem
+      Caption = 'emf'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+  end
+  object PopupMenuPdf: TPopupMenu
+    OnPopup = PopupMenuPdfPopup
+    Left = 400
+    Top = 108
+    object MenuItem1: TMenuItem
+      Caption = 'tex'
+      RadioItem = True
+      OnClick = Pdf_Format_Click
+    end
+    object MenuItem2: TMenuItem
+      Caption = 'pgf'
+      RadioItem = True
+      OnClick = Pdf_Format_Click
+    end
+    object MenuItem4: TMenuItem
+      Caption = 'pdf'
+      RadioItem = True
+      OnClick = Pdf_Format_Click
+    end
+    object MenuItem5: TMenuItem
+      Caption = 'png'
+      RadioItem = True
+      OnClick = Pdf_Format_Click
+    end
+    object MenuItem7: TMenuItem
+      Caption = 'metapost'
+      RadioItem = True
+      OnClick = Pdf_Format_Click
+    end
+    object MenuItem8: TMenuItem
+      Caption = 'epstopdf'
+      RadioItem = True
+      OnClick = Pdf_Format_Click
+    end
   end
 end

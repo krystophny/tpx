@@ -239,7 +239,6 @@ type
     FEntities: TXmlDNamedNodeMap;
     FNotations: TXmlDNamedNodeMap;
   protected
-    procedure SetName(const aName: string);
     function InternalGetNodeName: string; override;
     function GetNodeValue: string; override;
     procedure SetNodeValue(const aValue: string); override;
@@ -248,6 +247,7 @@ type
     function GetXml: string; override;
     function Clone: TXmlDNode; override;
   public
+    procedure SetName(const aName: string);//:Moved from protected
     constructor Create(const aName: string);
     destructor Destroy; override;
     //TSY: added WriteToStream
@@ -279,7 +279,6 @@ type
     function GetAttributeNode(const aName: string):
       TXmlDAttribute;
   protected
-    procedure SetTagName(const aName: string);
     function InternalGetNodeName: string; override;
     function GetNodeValue: string; override;
     procedure SetNodeValue(const aValue: string); override;
@@ -288,6 +287,7 @@ type
     function GetXml: string; override;
     function Clone: TXmlDNode; override;
   public
+    procedure SetTagName(const aName: string);//:Moved from protected
     constructor Create(const aName: string);
 
     function GetAttr(const aName: string; const aDefault: string
@@ -325,7 +325,6 @@ type
     FName: string;
     FValue: string;
   protected
-    procedure SetName(const aName: string);
     function InternalGetNodeName: string; override;
     function GetNodeValue: string; override;
     procedure SetNodeValue(const aValue: string); override;
@@ -334,6 +333,7 @@ type
     function GetXml: string; override;
     function Clone: TXmlDNode; override;
   public
+    procedure SetName(const aName: string);//:Moved from protected
     constructor Create(const aName: string);
 
   {Contains the attribute name}
@@ -456,7 +456,6 @@ type
   private
     FName: string;
   protected
-    procedure SetName(const aName: string);
     function InternalGetNodeName: string; override;
     function GetNodeValue: string; override;
     procedure SetNodeValue(const aValue: string); override;
@@ -465,6 +464,7 @@ type
     function GetXml: string; override;
     function Clone: TXmlDNode; override;
   public
+    procedure SetName(const aName: string);//:Moved from protected
     constructor Create(const aName: string);
 
     property Name: string read FName;

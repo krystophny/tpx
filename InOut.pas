@@ -4,7 +4,7 @@ interface
 
 uses Types, SysUtils, Classes, Windows, Graphics, ComCtrls,
   Variants, CADSys4, CS4BaseTypes, CS4Shapes,
-  XUtils, XXmlDom, PdfDoc, Gr32, Gr32_Polygons;
+  XUtils, XXmlDom, PdfDoc, Gr32, Gr32_Polygons, Geometry;
 
 type
 
@@ -29,7 +29,8 @@ type
     procedure WriteStreamPoint(Pnt: TPoint2D); virtual;
     procedure WritePoly0(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
-      const LineKind: TLineKind; const Hatching: THatching;
+      const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+      THatching;
       const Closed: Boolean); virtual;
     procedure WritePiece(Piece: TPiece; Obj: TPrimitive2D); virtual;
     procedure WritePieces(Obj: TPrimitive2D); virtual;
@@ -51,20 +52,24 @@ type
     procedure WriteStar2D(Obj: TStar2D); virtual;
     procedure WriteSmooth2D(Obj: TSmoothPath2D0); virtual;
       abstract;
+    procedure WriteBezier2D(Obj: TBezierPath2D0); virtual;
+      abstract;
     procedure WriteEntity(Obj: TObject2D);
     function GetPathString(PP: TPointsSet2D): string;
     function GetTeXText(Obj: TText2D;
       UnitLength: TRealType): string;
+    function GetFontDescent: TRealType; virtual;
   public
     constructor Create(Drawing: TDrawing2D); virtual;
     procedure WriteEntities;
     procedure WriteHeader; virtual;
     procedure WriteFooter; virtual;
+    procedure WriteAll0;
     procedure WriteAll; virtual;
     procedure WriteAllToStream; virtual;
     procedure WriteToTpX(Stream: TStream;
       const FileName: string); virtual;
-    procedure StoreToFile(const FileName: string); virtual;
+    function StoreToFile(const FileName: string): Boolean; virtual;
   end;
 
   T_CADSaverClass = class of T_CAD_Saver;
@@ -85,6 +90,7 @@ type
     procedure WriteText2D(Obj: TText2D); override;
     procedure WriteStar2D(Obj: TStar2D); override;
     procedure WriteSmooth2D(Obj: TSmoothPath2D0); override;
+    procedure WriteBezier2D(Obj: TBezierPath2D0); override;
   public
     constructor Create(Drawing: TDrawing2D); override;
     destructor Destroy; override;
@@ -99,21 +105,27 @@ type
     fXML: TXMLDDocument;
     fDefsNode: TXMLDElement;
     fPattIDs: TStringList;
+    FFontName: string;
+    fDescent: TRealType;
   protected
     function ConvertY(Y: TRealType): TRealType; override;
     function RegisterPatt(Hatching: THatching;
       HatchColor, FillColor: TColor): string;
-    procedure WritePrimitiveAttr0(LineColor,
+    procedure WritePrimitiveAttr0(const LineColor,
       HatchColor, FillColor: TColor;
-      LineKind: TLineKind; Hatching: THatching;
+      const LineStyle: TLineStyle; const LineWidth: TRealType;
+      const Hatching: THatching;
       MiterLimit: TRealType; XMLNode: TXMLDElement);
     procedure WritePrimitiveAttr(Obj: TPrimitive2D;
       XMLNode: TXMLDElement);
     procedure WritePoly0(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
-      const LineKind: TLineKind; const Hatching: THatching;
+      const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+      THatching;
       const Closed: Boolean); override;
     procedure WritePoly(PP: TPointsSet2D;
+      Obj: TPrimitive2D; Closed: Boolean);
+    procedure WriteBezier(PP: TPointsSet2D;
       Obj: TPrimitive2D; Closed: Boolean);
     procedure WriteRectangle2D(Obj: TRectangle2D); override;
     procedure WriteEllipse2D(Obj: TEllipse2D); override;
@@ -127,6 +139,8 @@ type
     procedure WriteText2D(Obj: TText2D); override;
     procedure WriteStar2D(Obj: TStar2D); override;
     procedure WriteSmooth2D(Obj: TSmoothPath2D0); override;
+    procedure WriteBezier2D(Obj: TBezierPath2D0); override;
+    function GetFontDescent: TRealType; override;
   public
     constructor Create(Drawing: TDrawing2D); override;
     destructor Destroy; override;
@@ -135,27 +149,31 @@ type
     function GetY(Y: TRealType): Integer;
     procedure WriteAll; override;
     procedure WriteAllToStream; override;
-    procedure StoreToClipboard;
   end;
 
   T_PostScript_Export = class(T_CAD_Saver)
   private
     fHatchingStep: TRealType;
+    fDescent: TRealType;
   protected
     TextLabels: TStringList;
     procedure WriteStreamPoint0(const X, Y: TRealType); override;
     procedure WriteColor(Color: TColor);
-    procedure WriteLineAttr(const LineKind: TLineKind; const LineColor: TColor);
-    procedure WriteFill0(const FillColor: TColor; const LineKind: TLineKind);
+    procedure WriteLineAttr(const LineStyle: TLineStyle; const LineWidth:
+      TRealType; const LineColor: TColor);
+    procedure WriteFill0(const FillColor: TColor; const LineStyle: TLineStyle);
     procedure WriteFill(Obj: TPrimitive2D);
-    procedure WriteStroke(const LineKind: TLineKind; const LineColor: TColor);
+    procedure WriteStroke(const LineStyle: TLineStyle; const LineWidth:
+      TRealType; const LineColor: TColor);
     procedure WritePoly00(PP: TPointsSet2D;
-      LineColor, HatchColor, FillColor: TColor;
-      LineKind: TLineKind; Hatching: THatching;
-      Closed: Boolean);
+      const LineColor, HatchColor, FillColor: TColor;
+      const LineStyle: TLineStyle; const LineWidth: TRealType;
+      const Hatching: THatching;
+      const Closed: Boolean);
     procedure WritePoly0(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
-      const LineKind: TLineKind; const Hatching: THatching;
+      const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+      THatching;
       const Closed: Boolean); override;
     procedure WritePoly(PP: TPointsSet2D;
       Obj: TPrimitive2D; Closed: Boolean);
@@ -174,6 +192,7 @@ type
     procedure WriteText2D(Obj: TText2D); override;
     procedure WriteStar2D(Obj: TStar2D); override;
     procedure WriteSmooth2D(Obj: TSmoothPath2D0); override;
+    procedure WriteBezier2D(Obj: TBezierPath2D0); override;
   public
     FontName: string;
     constructor Create(Drawing: TDrawing2D); override;
@@ -182,11 +201,22 @@ type
     procedure WriteFooter; override;
     procedure WriteToTpX(Stream: TStream;
       const FileName: string); override;
-    procedure StoreToClipboard;
   end;
 
   // Export without text and font
   T_PostScript_Light_Export = class(T_PostScript_Export)
+  protected
+    procedure WriteFont; override;
+    procedure WriteText2D(Obj: TText2D); override;
+  end;
+
+  T_EpsToPdf_Export = class(T_PostScript_Export)
+  public
+    function StoreToFile(const FileName: string): Boolean; override;
+  end;
+
+  // uses "light" Postscript (without text):
+  T_EpsToPdf_Light_Export = class(T_EpsToPdf_Export)
   protected
     procedure WriteFont; override;
     procedure WriteText2D(Obj: TText2D); override;
@@ -197,13 +227,15 @@ type
     fH, fW, fUnitLength, fHatchingStep: TRealType;
   protected
     procedure WriteStreamPoint0(const X, Y: TRealType); override;
-    procedure WriteLineThickness0(LineKind: TLineKind);
+    procedure WriteLineThickness0(const LineWidth: TRealType);
     procedure WriteLineThickness(Obj: TPrimitive2D);
     procedure WritePoly0(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
-      const LineKind: TLineKind; const Hatching: THatching;
+      const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+      THatching;
       const Closed: Boolean); override;
-    procedure WriteLine(P0, P1: TPoint2D; Kind: TLineKind);
+    procedure WriteLine(P0, P1: TPoint2D; const LineStyle: TLineStyle;
+      const LineWidth: TRealType);
     procedure WriteCBezier(P0, P1, P2, P3: TPoint2D);
     procedure WriteHatching(const P: TPointsSet2D;
       Hatching: THatching; Step: TRealType);
@@ -219,15 +251,16 @@ type
     procedure WriteText2D(Obj: TText2D); override;
     procedure WriteStar2D(Obj: TStar2D); override;
     procedure WriteSmooth2D(Obj: TSmoothPath2D0); override;
+    procedure WriteBezier2D(Obj: TBezierPath2D0); override;
   public
     constructor Create(Drawing: TDrawing2D); override;
     procedure WriteHeader; override;
     procedure WriteFooter; override;
-    procedure StoreToClipboard;
   end;
 
   TPathProcAttr = procedure(const PP: TPointsSet2D;
-    const Attr: string; Closed: Boolean) of object;
+    const Attr: string; const LineWidth: TRealType;
+    Closed: Boolean) of object;
 
   T_PSTricks_Export = class(T_CAD_Saver)
   private
@@ -236,36 +269,39 @@ type
   protected
     procedure WriteStreamPoint0(const X, Y: TRealType); override;
     function WriteNewColor(Color: TColor): string;
-    function LineArg(Kind: TLineKind; Color: string): string;
+    function LineArg(const LineStyle: TLineStyle; const LineWidth: TRealType;
+      Color: string): string;
     procedure WriteLine(P0, P1: TPoint2D; Obj: TPrimitive2D);
     procedure WritePoly(const PP: TPointsSet2D;
-      const Attr: string; Closed: Boolean);
+      const Attr: string; const LineWidth: TRealType; Closed: Boolean);
     procedure WriteHatching(const P: TPointsSet2D;
       const Hatching: THatching;
       const HatchColor: TColor; Step: TRealType);
     procedure WritePath(const PP, HatchPP: TPointsSet2D;
       PathProc: TPathProcAttr;
       const LineColor, HatchColor, FillColor: TColor;
-      const LineKind: TLineKind; const Hatching: THatching;
+      const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+      THatching;
       const Closed: Boolean);
     procedure WritePoly0(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
-      const LineKind: TLineKind; const Hatching: THatching;
+      const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+      THatching;
       const Closed: Boolean); override;
-    procedure WriteBezier(const P0, P1, P2, P3: TPoint2D;
-      const Attr: string);
+    {procedure WriteBezier(const P0, P1, P2, P3: TPoint2D;
+      const Attr: string);}
     procedure WriteBezierPath(const PP: TPointsSet2D;
-      const Attr: string; Closed: Boolean);
+      const Attr: string; const LineWidth: TRealType; Closed: Boolean);
     procedure WriteCircle(const PP: TPointsSet2D;
-      const Attr: string; Closed: Boolean);
+      const Attr: string; const LineWidth: TRealType; Closed: Boolean);
     procedure WriteCircular0(const PP: TPointsSet2D;
-      const Attr: string; ObjClass: TClass);
+      const Attr: string; const LineWidth: TRealType; ObjClass: TClass);
     procedure WriteArc(const PP: TPointsSet2D;
-      const Attr: string; Closed: Boolean);
+      const Attr: string; const LineWidth: TRealType; Closed: Boolean);
     procedure WriteSector(const PP: TPointsSet2D;
-      const Attr: string; Closed: Boolean);
+      const Attr: string; const LineWidth: TRealType; Closed: Boolean);
     procedure WriteSegment(const PP: TPointsSet2D;
-      const Attr: string; Closed: Boolean);
+      const Attr: string; const LineWidth: TRealType; Closed: Boolean);
     procedure WriteRectangle2D(Obj: TRectangle2D); override;
     procedure WriteEllipse2D(Obj: TEllipse2D); override;
     procedure WriteCircle2D(Obj: TCircle2D); override;
@@ -275,12 +311,71 @@ type
     procedure WriteText2D(Obj: TText2D); override;
     procedure WriteStar2D(Obj: TStar2D); override;
     procedure WriteSmooth2D(Obj: TSmoothPath2D0); override;
+    procedure WriteBezier2D(Obj: TBezierPath2D0); override;
   public
     constructor Create(Drawing: TDrawing2D); override;
     destructor Destroy; override;
     procedure WriteHeader; override;
     procedure WriteFooter; override;
-    procedure StoreToClipboard;
+  end;
+
+  TPathKind = (path_Fill, path_Stroke, path_FillStroke);
+
+  TPathProcPathKind = procedure(const PP: TPointsSet2D;
+    const PathKind: TPathKind; Closed: Boolean) of object;
+
+  T_PGF_Export = class(T_CAD_Saver)
+  private
+    fUnitLength, fHatchingStep: TRealType;
+    CurrColor: TColor;
+    CurrLineWidth: TRealType;
+    CurrLineStyle: TLineStyle;
+  protected
+    procedure WriteStreamPoint0(const X, Y: TRealType); override;
+    function GetColor(Color: TColor): string;
+    procedure WriteColor(Color: TColor);
+    procedure WriteDash(LineStyle: TLineStyle);
+    procedure WriteLineWidth(W: TRealType);
+    procedure WriteLineThickness0(const LineStyle: TLineStyle;
+      const LineWidth: TRealType);
+    procedure WriteLineThickness(Obj: TPrimitive2D);
+    procedure WritePoly(const PP: TPointsSet2D;
+      const PathKind: TPathKind; Closed: Boolean);
+    procedure WriteHatching(const P: TPointsSet2D;
+      const Hatching: THatching;
+      const HatchColor: TColor; Step: TRealType);
+    procedure WritePathKind(const PathKind: TPathKind);
+    function GetPathKindString(const PathKind: TPathKind): string;
+    procedure WritePath(const PP, HatchPP: TPointsSet2D;
+      PathProc: TPathProcPathKind;
+      const LineColor, HatchColor, FillColor: TColor;
+      const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+      THatching;
+      const Closed: Boolean);
+    procedure WritePoly0(PP: TPointsSet2D;
+      const LineColor, HatchColor, FillColor: TColor;
+      const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+      THatching;
+      const Closed: Boolean); override;
+    procedure WriteBezierPath(const PP: TPointsSet2D;
+      const PathKind: TPathKind; Closed: Boolean);
+    procedure WriteCircle(const PP: TPointsSet2D;
+      const PathKind: TPathKind; Closed: Boolean);
+    procedure WriteEllipse(const PP: TPointsSet2D;
+      const PathKind: TPathKind; Closed: Boolean);
+    procedure WriteRectangle2D(Obj: TRectangle2D); override;
+    procedure WriteEllipse2D(Obj: TEllipse2D); override;
+    procedure WriteCircle2D(Obj: TCircle2D); override;
+    procedure WriteCircular2D(Obj: TCircular2D); override;
+    procedure WriteSpline2D(Obj: TSpline2D0); override;
+    procedure WritePoly2D(Obj: TPolyline2D0); override;
+    procedure WriteText2D(Obj: TText2D); override;
+    procedure WriteStar2D(Obj: TStar2D); override;
+    procedure WriteSmooth2D(Obj: TSmoothPath2D0); override;
+    procedure WriteBezier2D(Obj: TBezierPath2D0); override;
+  public
+    procedure WriteHeader; override;
+    procedure WriteFooter; override;
   end;
 
   TPathProc = procedure(const PP: TPointsSet2D; Closed: Boolean) of object;
@@ -290,7 +385,8 @@ type
   protected
     procedure WriteStreamPoint0(const X, Y: TRealType); override;
     procedure WriteColor(const Color, DefaultColor: TColor);
-    procedure WriteLineAttr(const LineKind: TLineKind;
+    procedure WriteLineAttr(const LineStyle: TLineStyle; const LineWidth:
+      TRealType;
       const LineColor: TColor);
     procedure WritePoly(const PP: TPointsSet2D; Closed: Boolean);
     procedure WriteBezierPath(const PP: TPointsSet2D;
@@ -303,11 +399,13 @@ type
     procedure WritePath(const PP, HatchPP: TPointsSet2D;
       PathProc: TPathProc;
       const LineColor, HatchColor, FillColor: TColor;
-      const LineKind: TLineKind; const Hatching: THatching;
+      const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+      THatching;
       const Closed: Boolean);
     procedure WritePoly0(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
-      const LineKind: TLineKind; const Hatching: THatching;
+      const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+      THatching;
       const Closed: Boolean); override;
     procedure WriteRectangle2D(Obj: TRectangle2D); override;
     procedure WriteEllipse2D(Obj: TEllipse2D); override;
@@ -318,19 +416,20 @@ type
     procedure WriteText2D(Obj: TText2D); override;
     procedure WriteStar2D(Obj: TStar2D); override;
     procedure WriteSmooth2D(Obj: TSmoothPath2D0); override;
+    procedure WriteBezier2D(Obj: TBezierPath2D0); override;
   public
     procedure WriteHeader; override;
     procedure WriteFooter; override;
     procedure WriteToTpX(Stream: TStream;
       const FileName: string); override;
-    procedure StoreToClipboard;
   end;
 
   T_PDF_Export = class(T_CAD_Saver)
   private
     fPDF: TPdfDoc;
     fHatchingStep: TRealType;
-    procedure WriteLineAttr(const LineKind: TLineKind;
+    procedure WriteLineAttr(const LineStyle: TLineStyle; const LineWidth:
+      TRealType;
       const LineColor: TColor);
     procedure WritePoly(const PP: TPointsSet2D; Closed: Boolean);
     procedure WriteBezierPath(const PP: TPointsSet2D;
@@ -341,13 +440,15 @@ type
     procedure WritePath(const PP, HatchPP: TPointsSet2D;
       PathProc: TPathProc;
       const LineColor, HatchColor, FillColor: TColor;
-      const LineKind: TLineKind; const Hatching: THatching;
+      const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+      THatching;
       const Closed: Boolean);
   protected
     TextLabels: TStringList;
     procedure WritePoly0(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
-      const LineKind: TLineKind; const Hatching: THatching;
+      const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+      THatching;
       const Closed: Boolean); override;
     procedure WriteRectangle2D(Obj: TRectangle2D); override;
     procedure WriteEllipse2D(Obj: TEllipse2D); override;
@@ -358,6 +459,7 @@ type
     procedure WriteText2D(Obj: TText2D); override;
     procedure WriteStar2D(Obj: TStar2D); override;
     procedure WriteSmooth2D(Obj: TSmoothPath2D0); override;
+    procedure WriteBezier2D(Obj: TBezierPath2D0); override;
   public
     constructor Create(Drawing: TDrawing2D); override;
     destructor Destroy; override;
@@ -387,7 +489,8 @@ type
   protected
     procedure WritePoly0(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
-      const LineKind: TLineKind; const Hatching: THatching;
+      const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+      THatching;
       const Closed: Boolean); override;
     function ConvertY(Y: TRealType): TRealType; override;
     procedure WriteRectangle2D(Obj: TRectangle2D); override;
@@ -398,13 +501,14 @@ type
     procedure WritePoly2D(Obj: TPolyline2D0); override;
     procedure WriteText2D(Obj: TText2D); override;
     procedure WriteSmooth2D(Obj: TSmoothPath2D0); override;
+    procedure WriteBezier2D(Obj: TBezierPath2D0); override;
   public
     constructor Create(Drawing: TDrawing2D); override;
     destructor Destroy; override;
     procedure WriteHeader; override;
     procedure WriteAll; override;
     procedure WriteAllToStream; override;
-    procedure StoreToFile(const FileName: string); override;
+    function StoreToFile(const FileName: string): Boolean; override;
   end;
 
   T_Bitmap_Export = class(T_Bitmap0_Export)
@@ -416,25 +520,14 @@ type
   public
     procedure WriteToTpX(Stream: TStream;
       const FileName: string); override;
-    procedure StoreToFile(const FileName: string); override;
+    function StoreToFile(const FileName: string): Boolean; override;
   end;
 
   T_EMF_Export = class(T_CAD_Saver)
   public
     procedure WriteToTpX(Stream: TStream;
       const FileName: string); override;
-    procedure StoreToFile(const FileName: string); override;
-  end;
-
-  T_EpsToPdf_Export = class(T_CAD_Saver)
-  public
-    procedure WriteToTpX(Stream: TStream;
-      const FileName: string); override;
-    procedure StoreToFile(const FileName: string); override;
-  end;
-
-  // uses "light" Postscript:
-  T_EpsToPdf_Light_Export = class(T_EpsToPdf_Export)
+    function StoreToFile(const FileName: string): Boolean; override;
   end;
 
   T_TpX_Loader = class(TObject)
@@ -457,6 +550,7 @@ type
       TheClass: TPrimitive2DClass): TPrimitive2D;
     function ReadSpline(XMLNode: TXMLDElement): TPrimitive2D;
     function ReadSmooth(XMLNode: TXMLDElement): TPrimitive2D;
+    function ReadBezier(XMLNode: TXMLDElement): TPrimitive2D;
     function ReadPolygon(XMLNode: TXMLDElement): TPrimitive2D;
     function ReadPolyline(XMLNode: TXMLDElement): TPrimitive2D;
     function ReadStar(XMLNode: TXMLDElement): TPrimitive2D;
@@ -486,34 +580,42 @@ procedure StoreToFile_TpX0(const Drawing: TDrawing2D;
   AClass_TeX, AClass_PdfTeX: T_CADSaverClass);
 procedure StoreToFile_TpX(const Drawing: TDrawing2D;
   const FileName: string);
-procedure StoreToFile_MPS(const Drawing: TDrawing2D;
-  const FileName: string);
-procedure StoreToFile_EpsToPdf(const Drawing: TDrawing2D;
-  const FileName: string; Light: Boolean);
+function StoreToFile_MPS(const Drawing: TDrawing2D;
+  const FileName: string): Boolean;
+function Run_EpsToPdf(const EpsFileName, PdfFileName: string): Boolean;
 procedure ParseParamStr(var FileName, IncludePath: string);
 procedure FindPicturePath(const TeXFileName: string; const Line: Integer;
   var PicturePath, IncludePath: string);
-procedure pfb2pfa(const FileName_pfb, FileName_pfa: string);
+procedure pfb2pfa(const FileName_pfb, FileName_pfa: string;
+  var Descent: TRealType);
 procedure Parse_PL(const FileName: string; var Heights, Depths: T_FM_Arr);
 function FileExec(const aCmdLine, InFile, OutFile, Directory:
   string; aHide, aWait: Boolean): Boolean;
+procedure OpenOrExec(const ViewerPath, FileName: string);
 function TryDeleteFile(const FileName: string): Boolean;
 function GetTempDir: string;
 function XMLNodeText(Node: TXMLDNode; Level: Integer): string;
-procedure Import_Metafile(Drawing: TDrawing2D; const FileName: string;
+procedure Import_Metafile(const Drawing: TDrawing2D;
+  const MF_FileName: string;
   Lines: TStrings);
-procedure Import_Eps(Drawing: TDrawing2D; const EpsFileName: string);
+procedure Import_MetafileFromStream(const Drawing: TDrawing2D;
+  const Stream: TStream; const IsOld: Boolean);
+procedure Import_MetafileFromClipboard(const Drawing: TDrawing2D);
+procedure PasteMetafileFromClipboard(const Drawing: TDrawing2D);
+procedure Import_Eps(const Drawing: TDrawing2D;
+  const EpsFileName: string);
 
 var
   MetaPostPath: string = 'mpost.exe';
   Font_pfb_Path: string = '';
   EpsToPdfPath: string = 'epstopdf.exe';
   PsToEditPath: string = 'pstoedit.exe';
+  PsToEditFormat: string = 'emf';
 
 implementation
 
 uses Math, Dialogs, Forms, Clipbrd, StrUtils, MainUnit,
-  PdfTypes, pngimage, ColorEtc, EMF;
+  PdfTypes, pngimage, ColorEtc, EMF, PreView, ShellAPI;
 
 function GetColor(C, Default: TColor): TColor;
 begin
@@ -533,19 +635,21 @@ end;
 procedure T_CAD_Saver.MeasureDrawing;
 var
   ARect: TRect2D;
-  B: TRealType;
+  B, S: TRealType;
 begin
   B := fDrawing2D.Border;
   ARect := fDrawing2D.DrawingExtension;
   with ARect do
   begin
-    fFactorW := fDrawing2D.PicScale * fFactorMM;
-    fFactorH := fDrawing2D.PicScale * fFactorMM;
-    fExtLeft := Left - B / fDrawing2D.PicScale;
-    fExtBottom := Bottom - B / fDrawing2D.PicScale;
-    fExtTop := Top + B / fDrawing2D.PicScale;
-    fW_MM := (Right - Left) * fDrawing2D.PicScale + B * 2;
-    fH_MM := (Top - Bottom) * fDrawing2D.PicScale + B * 2;
+    S := fDrawing2D.PicScale;
+    if S <= 0 then S := 1;
+    fFactorW := S * fFactorMM;
+    fFactorH := S * fFactorMM;
+    fExtLeft := Left - B / S;
+    fExtBottom := Bottom - B / S;
+    fExtTop := Top + B / S;
+    fW_MM := (Right - Left) * S + B * 2;
+    fH_MM := (Top - Bottom) * S + B * 2;
   end;
 end;
 
@@ -618,7 +722,8 @@ end;
 
 procedure T_CAD_Saver.WritePoly0(PP: TPointsSet2D;
   const LineColor, HatchColor, FillColor: TColor;
-  const LineKind: TLineKind; const Hatching: THatching;
+  const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+  THatching;
   const Closed: Boolean);
 begin
 
@@ -632,7 +737,8 @@ begin
   if Piece.Count <= 1 then Exit;
   IsClosed := IsSamePoint2D(Piece[0], Piece[Piece.Count - 1]);
   WritePoly0(Piece, Piece.GetLineColor(Obj), Obj.HatchColor,
-    Piece.GetFillColor(Obj), Piece.GetLineKind(Obj), Piece.GetHatching(Obj),
+    Piece.GetFillColor(Obj), Piece.GetLineStyle(Obj),
+    Piece.GetLineWidth(Obj), Piece.GetHatching(Obj),
     IsClosed);
 end;
 
@@ -640,6 +746,7 @@ procedure T_CAD_Saver.WritePieces(Obj: TPrimitive2D);
 var
   I: Integer;
 begin
+  if Obj.Pieces = nil then Exit;
   for I := 0 to Obj.Pieces.Count - 1 do
     if Obj.Pieces[I] <> nil then
       WritePiece(Obj.Pieces[I], Obj);
@@ -702,6 +809,10 @@ begin
   else if Obj is TSmoothPath2D0 then
   begin
     WriteSmooth2D(Obj as TSmoothPath2D0);
+  end
+  else if Obj is TBezierPath2D0 then
+  begin
+    WriteBezier2D(Obj as TBezierPath2D0);
   end
   else if Obj is TStar2D then
   begin
@@ -772,62 +883,129 @@ begin
   Result := AnsiReplaceStr(Result, '^', '\symbol{94}'); // \^
   Result := AnsiReplaceStr(Result, '\backs-lash',
     '$\backslash$');
+  Result := AnsiReplaceStr(Result, ' ', '~');
 end;
 
-function T_CAD_Saver.GetTeXText(Obj: TText2D;
-  UnitLength: TRealType): string;
+function GetTeXTextFontSize(Obj: TText2D;
+  FactorH, UnitLength: TRealType): string;
 var
-  P, Point: TPoint2D;
-  Rect: TRect2D;
-  Width, H: TRealType;
-  St: string;
+  H: TRealType;
+begin
+  with Obj do
+  begin
+    H := Height * FactorH * UnitLength * 2.845; //in pt // mm=2.845pt
+    // TeX uses small points (1 inch = 72.27pt),
+    // not big points (1 inch = 72bp) as Adobe PS/PDF/SVG
+    Result := Format('\fontsize{%.2f}{%.2f}\selectfont ',
+      [H, H * 1.2]);
+  end;
+end;
+
+function GetTeXTextFontColor(Obj: TText2D): string;
+var
   RGB: T_PS_RGB;
 begin
   with Obj do
   begin
-    Rect := GetExtension;
-    Width := (Rect.Right - Rect.Left);
-    P := Points[0];
-    Point := ConvertPnt(P);
-    case HJustification of
-      //jhLeft: Point.X := Point.X;
-      jhCenter: Point.X := Point.X
-        - Round(Width * fFactorW / 2);
-      jhRight: Point.X := Point.X - Round(Width * fFactorW);
-    end;
-    case VJustification of
-      //jvBottom:
-      jvCenter: Point.Y := Point.Y
-        - Round(Height * fFactorH / 2);
-      jvTop: Point.Y := Point.Y - Round(Height * fFactorH);
-    end;
-    Result := Format('\put(%.1f, %.1f){', [Point.X, Point.Y]);
-    H := Height * fFactorH * UnitLength * 2.845; //in pt // mm=2.845pt
-    Result := Result + Format('\fontsize{%d}{%d}\selectfont',
-      [Round(H / 1.2), Round(H)]);
     if Obj.LineColor <> clDefault then
     begin
       RGB := PS_RGB(Obj.LineColor);
-      Result := Result + Format('\textcolor[rgb]{%.5g, %.5g, %.5g}{',
+      Result := Result + Format('\textcolor[rgb]{%.5g, %.5g, %.5g}',
         [RGB.R, RGB.G, RGB.B]);
     end;
+  end;
+end;
+
+function GetTeXTextMakebox(Obj: TText2D;
+  FactorW, FactorH, UnitLength: TRealType): string;
+var
+  Rect: TRect2D;
+  Width: TRealType;
+  St: string;
+begin
+  with Obj do
+  begin
+    Rect := GetExtension0;
+    Width := (Rect.Right - Rect.Left);
+    Result := GetTeXTextFontSize(Obj, FactorH, UnitLength);
+    Result := Result + GetTeXTextFontColor(Obj);
+    if Obj.LineColor <> clDefault then Result := Result + '{';
     Result := Result +
-      Format('\makebox(%.1f, %.1f)[', [Width * fFactorW, Height * fFactorH]);
+      Format('\makebox(%.1f, %.1f)[', [Width * FactorW, Height * FactorH]);
     case HJustification of
       jhLeft: Result := Result + 'l';
       jhCenter: Result := Result + 'c';
       jhRight: Result := Result + 'r';
     end;
     case VJustification of
-      jvBottom: Result := Result + 't';
+      jvBottom: Result := Result + 'b';
       jvCenter: Result := Result + 'c';
-      jvTop: Result := Result + 'b';
+      jvTop: Result := Result + 't';
     end;
     if TeXText <> '' then St := TeXText
     else St := TeX_Replace_Special(Text);
-    Result := Result + ']{' + St + '\strut}}';
+    Result := Result + ']{' + St + {} '\strut}';
     if Obj.LineColor <> clDefault then Result := Result + '}';
+    if Rot = 0 then
+    else
+    begin
+      Result :=
+        Format('\rotatebox{%.2f}{%s}', //\frame{} \fbox{}
+        [RadToDeg(Rot), Result]);
+    end;
   end;
+end;
+
+procedure GetTeXTextPoint(var P: TPoint2D; Obj: TText2D;
+  FactorW, FactorH: TRealType);
+var
+  Rect: TRect2D;
+  D: TVector2D;
+  BL: TPoint2D;
+  T: TTransf2D;
+begin
+  //Exit;
+  with Obj do
+  begin
+    Rect := GetExtension0;
+    BL := Rect.FirstEdge;
+    //Windows and TeX fonts are vertically aligned in different ways!
+    case VJustification of
+      jvBottom: BL := Point2D(BL.X, BL.Y + Obj.Height * (-0.1));
+      jvCenter: BL := Point2D(BL.X, BL.Y + Obj.Height * (-0.0));
+      jvTop: BL := Point2D(BL.X, BL.Y + Obj.Height * (+0.1));
+      jvBaseline: ;
+    end;
+    BL := Point2D(BL.X, BL.Y + Obj.Height * (-0.03));
+    T := RotateCenter2D(Rot, Points[0]);
+    BL := TransformPoint2D(BL, T);
+    Rect := TransformBoundingBox2D(Rect, T);
+    D := Vector2D(Points[0], Point2D(Rect.Left, BL.Y));
+    D := TransformVector2D(D, Scale2D(FactorW, FactorH));
+    P := ShiftPoint(P, D);
+  end;
+end;
+
+function T_CAD_Saver.GetTeXText(Obj: TText2D;
+  UnitLength: TRealType): string;
+var
+  P: TPoint2D;
+begin
+  with Obj do
+  begin
+    P := ConvertPnt(Points[0]);
+    GetTeXTextPoint(P, Obj, fFactorW, fFactorH);
+    Result := Format('\put(%.1f, %.1f){%s}', [P.X, P.Y,
+      GetTeXTextMakebox(Obj, fFactorW, fFactorH, UnitLength)]);
+    //Result := Result + EOL + Format('\put(%.1f, %.1f){\circle{14}}',      [P.X, P.Y]);
+    //P := ConvertPnt(Points[0]);
+    //Result := Result + EOL + Format('\put(%.1f, %.1f){\circle{24}}',      [P.X, P.Y]);
+  end;
+end;
+
+function T_CAD_Saver.GetFontDescent: TRealType;
+begin
+  Result := 0.2;
 end;
 
 procedure T_CAD_Saver.WriteHeader;
@@ -840,6 +1018,15 @@ begin
 
 end;
 
+procedure T_CAD_Saver.WriteAll0;
+begin
+  if fDrawing2D.PicScale <= 0
+    then fDrawing2D.PicScale := 1;
+  WriteHeader;
+  WriteEntities;
+  WriteFooter;
+end;
+
 procedure T_CAD_Saver.WriteAll;
 var
   Magnif, PicScale0, Border0, LineWidth0, HatchingStep0,
@@ -848,29 +1035,32 @@ begin
   if fDrawing2D = nil then Exit;
   //Changing meaning of millimeters for output picture
   Magnif := fDrawing2D.PicMagnif;
-  PicScale0 := fDrawing2D.PicScale;
-  Border0 := fDrawing2D.Border;
-  LineWidth0 := fDrawing2D.LineWidth;
-  HatchingStep0 := fDrawing2D.HatchingStep;
-  DottedSize0 := fDrawing2D.DottedSize;
-  DashSize0 := fDrawing2D.DashSize;
-  fDrawing2D.PicScale := fDrawing2D.PicScale * Magnif;
-  fDrawing2D.Border := fDrawing2D.Border * Magnif;
-  fDrawing2D.LineWidth := fDrawing2D.LineWidth * Magnif;
-  fDrawing2D.HatchingStep := fDrawing2D.HatchingStep * Magnif;
-  fDrawing2D.DottedSize := fDrawing2D.DottedSize * Magnif;
-  fDrawing2D.DashSize := fDrawing2D.DashSize * Magnif;
-
-  WriteHeader;
-  WriteEntities;
-  WriteFooter;
-
-  fDrawing2D.PicScale := PicScale0;
-  fDrawing2D.Border := Border0;
-  fDrawing2D.LineWidth := LineWidth0;
-  fDrawing2D.HatchingStep := HatchingStep0;
-  fDrawing2D.DottedSize := DottedSize0;
-  fDrawing2D.DashSize := DashSize0;
+  if Magnif <> 1 then
+  begin
+    PicScale0 := fDrawing2D.PicScale;
+    Border0 := fDrawing2D.Border;
+    LineWidth0 := fDrawing2D.LineWidthBase;
+    HatchingStep0 := fDrawing2D.HatchingStep;
+    DottedSize0 := fDrawing2D.DottedSize;
+    DashSize0 := fDrawing2D.DashSize;
+    fDrawing2D.PicScale := fDrawing2D.PicScale * Magnif;
+    if fDrawing2D.PicScale <= 0 then fDrawing2D.PicScale := 1;
+    fDrawing2D.Border := fDrawing2D.Border * Magnif;
+    fDrawing2D.LineWidthBase := fDrawing2D.LineWidthBase * Magnif;
+    fDrawing2D.HatchingStep := fDrawing2D.HatchingStep * Magnif;
+    fDrawing2D.DottedSize := fDrawing2D.DottedSize * Magnif;
+    fDrawing2D.DashSize := fDrawing2D.DashSize * Magnif;
+  end;
+  WriteAll0;
+  if Magnif <> 1 then
+  begin
+    fDrawing2D.PicScale := PicScale0;
+    fDrawing2D.Border := Border0;
+    fDrawing2D.LineWidthBase := LineWidth0;
+    fDrawing2D.HatchingStep := HatchingStep0;
+    fDrawing2D.DottedSize := DottedSize0;
+    fDrawing2D.DashSize := DashSize0;
+  end;
 end;
 
 procedure T_CAD_Saver.WriteAllToStream;
@@ -890,15 +1080,17 @@ begin
   fStream := Stream0;
 end;
 
-procedure T_CAD_Saver.StoreToFile(const FileName: string);
+function T_CAD_Saver.StoreToFile(const FileName: string): Boolean;
 begin
   fStream.Free;
   fStream := TFileStream.Create(FileName, fmCreate);
+  Result := False;
   try
     WriteAllToStream;
   finally
     fStream.Free;
     fStream := nil;
+    Result := FileExists(FileName);
   end;
 end;
 
@@ -981,10 +1173,11 @@ begin
       WriteLnStream(Drawing.TeXPicPrologue);
     if AClass_PdfTeX <> AClass_TeX then
     begin
-      WriteLnStream('\ifx\pdftexversion\undefined');
-      WriteAsClass(AClass_TeX);
-      WriteLnStream('\else');
+      //WriteLnStream('\ifx\pdftexversion\undefined');
+      WriteLnStream('\ifpdf');
       WriteAsClass(AClass_PdfTeX);
+      WriteLnStream('\else');
+      WriteAsClass(AClass_TeX);
       WriteLnStream('\fi');
     end
     else WriteAsClass(AClass_TeX);
@@ -1021,6 +1214,8 @@ var
 begin
   //TheDrawing.UsePSTricks then
   case Drawing.TeXFormat of
+    tex_pgf:
+      AClass_TeX := T_PGF_Export;
     tex_pstricks:
       AClass_TeX := T_PSTricks_Export;
     tex_eps:
@@ -1037,6 +1232,8 @@ begin
     AClass_TeX := T_TeX_Picture_Export;
   end;
   case Drawing.PdfTeXFormat of
+    pdftex_pgf:
+      AClass_PdfTeX := T_PGF_Export;
     pdftex_pdf:
       AClass_PdfTeX := T_PDF_Light_Export;
     pdftex_png:
@@ -1069,7 +1266,7 @@ end;
 procedure T_TpX_Saver.WriteAll;
 begin
   fXML.LoadXML('');
-  inherited WriteAll;
+  WriteAll0;
 end;
 
 procedure T_TpX_Saver.WriteAllToStream;
@@ -1083,7 +1280,7 @@ var
   end;
 begin
   if fStream = nil then Exit;
-  WriteAll;
+  WriteAll0;
   Lines := TStringList.Create;
   MemStream := TMemoryStream.Create;
   try
@@ -1112,6 +1309,39 @@ begin
   end;
 end;
 
+function XmlReplaceChars(const St: string): string;
+var
+  I: Integer;
+  function ReplaceChar(Ch: Char): string;
+  begin
+    case Ch of
+      '<': Result := '&lt;';
+      '>': Result := '&gt;';
+      //'&': Result := '&amp;';
+    else
+      if Ch < #32 then Result := '&#' + IntToStr(Ord(Ch)) + ';'
+      else Result := Ch;
+    end;
+  end;
+begin
+  Result := '';
+  for I := 1 to Length(St) do
+    Result := Result + ReplaceChar(St[I]);
+end;
+
+function XmlUnReplaceChars(const St: string): string;
+begin
+  Result := St;
+  Result := AnsiReplaceStr(Result, '&lt;', '<');
+  Result := AnsiReplaceStr(Result, '&gt;', '>');
+  Result := AnsiReplaceStr(Result, '&amp;', '&');
+  Result := AnsiReplaceStr(Result, '&quot;', '"');
+  Result := AnsiReplaceStr(Result, '&apos;', '''');
+  Result := AnsiReplaceStr(Result, '&#9;', #9);
+  Result := AnsiReplaceStr(Result, '&#10;', #10);
+  Result := AnsiReplaceStr(Result, '&#13;', #13);
+end;
+
 procedure T_TpX_Saver.WriteHeader;
 var
   Rect: TRect2D;
@@ -1120,7 +1350,7 @@ begin
   fXML.LoadXML('<TpX/>');
   with fXML.DocumentElement do
   begin
-    AttributeValue['v'] := 1;
+    AttributeValue['v'] := 2;
     with Rect do
     begin
       AttributeValue['l'] := FF(Left);
@@ -1139,6 +1369,8 @@ begin
       AttributeValue['StarsSize'] := FF(fDrawing2D.StarsSize);
       AttributeValue['DefaultFontHeight'] :=
         FF(fDrawing2D.DefaultFontHeight);
+      if Trim(fDrawing2D.FontName) <> '' then
+        AttributeValue['FontName'] := fDrawing2D.FontName;
       {AttributeValue['PicWidth'] := fDrawing2D.PicWidth;
       AttributeValue['PicHeight'] := fDrawing2D.PicHeight;}
       AttributeValue['PicScale'] := fDrawing2D.PicScale;
@@ -1147,10 +1379,13 @@ begin
         FF(fDrawing2D.PicUnitLength);
       AttributeValue['HatchingStep'] :=
         FF(fDrawing2D.HatchingStep);
+      if fDrawing2D.HatchingLineWidth <> HatchingLineWidth_Default then
+        AttributeValue['HatchingLineWidth'] :=
+          FF(fDrawing2D.HatchingLineWidth);
       AttributeValue['DottedSize'] := fDrawing2D.DottedSize;
       AttributeValue['DashSize'] := fDrawing2D.DashSize;
       AttributeValue['TeXMinLine'] := FF(fDrawing2D.TeXMinLine);
-      AttributeValue['LineWidth'] := FF(fDrawing2D.LineWidth);
+      AttributeValue['LineWidth'] := FF(fDrawing2D.LineWidthBase);
       if fDrawing2D.MiterLimit <> 10 then
         AttributeValue['MiterLimit'] := FF(fDrawing2D.MiterLimit);
       if fDrawing2D.TeXCenterFigure <> TeXCenterFigure_Default
@@ -1190,19 +1425,21 @@ begin
     (fDrawing2D.FigLabel <> '') then
     with fXML.DocumentElement.AddElement('caption') do
     begin
-      Text := fDrawing2D.Caption;
-      AttributeValue['label'] := fDrawing2D.FigLabel;
+      Text := XmlReplaceChars(fDrawing2D.Caption);
+      AttributeValue['label'] := XmlReplaceChars(fDrawing2D.FigLabel);
     end;
   if fDrawing2D.Comment <> '' then
     with fXML.DocumentElement.AddElement('comment') do
-      Text := fDrawing2D.Comment;
+      Text := XmlReplaceChars(fDrawing2D.Comment);
 end;
 
 procedure T_TpX_Saver.WritePrimitiveAttr(Obj: TPrimitive2D;
   XMLNode: TXMLDElement);
 begin
-  if Obj.LineKind <> liThick then
-    XMLNode.AttributeValue['li'] := Obj.LineKind;
+  if Obj.LineStyle <> liSolid then
+    XMLNode.AttributeValue['li'] := GetLineStyleString(Obj.LineStyle);
+  if Obj.LineWidth <> 1 then
+    XMLNode.AttributeValue['lw'] := Format('%.2f', [Obj.LineWidth]);
   if Obj.Hatching <> haNone then
     XMLNode.AttributeValue['ha'] := Obj.Hatching;
   if Obj.LineColor <> clDefault then
@@ -1238,7 +1475,7 @@ end;
 procedure T_TpX_Saver.WriteRectangle2D(Obj: TRectangle2D);
 var
   P0, P1, P2: TPoint2D;
-  A: TRealType;
+  ARot: TRealType;
   XMLNode: TXMLDElement;
 begin
   XMLNode := fXML.DocumentElement.AddElement('rect');
@@ -1251,9 +1488,9 @@ begin
     XMLNode.AttributeValue['y1'] := FF(P0.Y);
     XMLNode.AttributeValue['x2'] := FF(P1.X);
     XMLNode.AttributeValue['y2'] := FF(P1.Y);
-    A := CalcRotationAngle(P0, P2);
-    if A <> 0 then
-      XMLNode.AttributeValue['rot'] := FF(A);
+    ARot := CalcAngle2Points(P0, P2);
+    if ARot <> 0 then
+      XMLNode.AttributeValue['rotdeg'] := FF(RadToDeg(ARot));
     WritePrimitiveAttr(Obj, XMLNode);
   end;
 end;
@@ -1274,7 +1511,7 @@ begin
       XMLNode.AttributeValue['tex'] := TeXText;
     XMLNode.AttributeValue['h'] := FF(Height);
     case HJustification of
-      jhLeft: XMLNode.AttributeValue['jh'] := 'l';
+      //jhLeft: XMLNode.AttributeValue['jh'] := 'l'; //default
       jhCenter: XMLNode.AttributeValue['jh'] := 'c';
       jhRight: XMLNode.AttributeValue['jh'] := 'r';
     end;
@@ -1282,7 +1519,10 @@ begin
       jvBottom: XMLNode.AttributeValue['jv'] := 'b';
       jvCenter: XMLNode.AttributeValue['jv'] := 'c';
       jvTop: XMLNode.AttributeValue['jv'] := 't';
+      //jvBaseline: XMLNode.AttributeValue['jv'] := '0'; //default
     end;
+    if Rot <> 0 then
+      XMLNode.AttributeValue['rotdeg'] := FF(RadToDeg(Rot));
     WritePrimitiveAttr(Obj, XMLNode);
   end;
 end;
@@ -1318,7 +1558,7 @@ begin
     XMLNode.AttributeValue['dx'] := FF(RX * 2);
     XMLNode.AttributeValue['dy'] := FF(RY * 2);
     if ARot <> 0 then
-      XMLNode.AttributeValue['rot'] := FF(ARot);
+      XMLNode.AttributeValue['rotdeg'] := FF(RadToDeg(ARot));
     WritePrimitiveAttr(Obj, XMLNode);
   end;
 end;
@@ -1380,6 +1620,16 @@ var
   XMLNode: TXMLDElement;
 begin
   XMLNode := fXML.DocumentElement.AddElement('curve');
+  if Obj.IsClosed then XMLNode.AttributeValue['closed'] := '1';
+  XMLNode.Text := GetPathString(Obj.Points);
+  WritePrimitiveAttr(Obj, XMLNode);
+end;
+
+procedure T_TpX_Saver.WriteBezier2D(Obj: TBezierPath2D0);
+var
+  XMLNode: TXMLDElement;
+begin
+  XMLNode := fXML.DocumentElement.AddElement('bezier');
   if Obj.IsClosed then XMLNode.AttributeValue['closed'] := '1';
   XMLNode.Text := GetPathString(Obj.Points);
   WritePrimitiveAttr(Obj, XMLNode);
@@ -1560,7 +1810,8 @@ begin
         {Format('%.4gmm',
         [fDrawing2D.LineWidth / 2]);}
       Format('%.1f',
-        [fDrawing2D.LineWidth / 2 * fFactorMM]);
+        [fDrawing2D.LineWidthBase * fDrawing2D.HatchingLineWidth
+        * fFactorMM]);
     end;
   end;
 end;
@@ -1589,6 +1840,16 @@ begin
       [fH_MM]);
     AttributeValue['viewBox'] := Format('0 0 %.1f %.1f',
       [fW_MM * fFactorMM, fH_MM * fFactorMM]);
+    //AttributeValue['fill-rule'] := 'evenodd';
+    AttributeValue['fill-rule'] := 'nonzero';
+    AttributeValue['stroke-miterlimit'] :=
+      Format('%.5g', [fDrawing2D.MiterLimit]);
+    if fDrawing2D.FontName <> '' then FFontName := fDrawing2D.FontName
+    else if FontName_Default <> '' then FFontName := FontName_Default
+    else FFontName := 'Times New Roman';
+    fDescent := GetFontDescent;
+    AttributeValue['style'] :=
+      'font-family: ''' + FFontName + '''; font-weight:normal';
     fXML.DocumentElement.InsertChild(
       TXmlDComment.Create('Exported from TpX drawing'));
     XMLNode := fXML.DocumentElement.AddElement('title');
@@ -1615,34 +1876,30 @@ begin
   Result := Round(ConvertY(Y));
 end;
 
-procedure T_SVG_Export.WritePrimitiveAttr0(LineColor,
+procedure T_SVG_Export.WritePrimitiveAttr0(const LineColor,
   HatchColor, FillColor: TColor;
-  LineKind: TLineKind; Hatching: THatching;
+  const LineStyle: TLineStyle; const LineWidth: TRealType;
+  const Hatching: THatching;
   MiterLimit: TRealType; XMLNode: TXMLDElement);
 begin
-  if LineKind = liNone then
+  if LineStyle = liNone then
     XMLNode.AttributeValue['stroke'] := 'none'
   else
   begin
-    XMLNode.AttributeValue['stroke-miterlimit'] := MiterLimit;
+    //XMLNode.AttributeValue['stroke-miterlimit'] := MiterLimit;
     if LineColor = clDefault then
       XMLNode.AttributeValue['stroke'] := 'black'
     else
       XMLNode.AttributeValue['stroke'] := ColorToHtml(LineColor);
-    case LineKind of
-      liThick, liDotted:
-        XMLNode.AttributeValue['stroke-width'] :=
-          Format('%.1f', [fDrawing2D.LineWidth * 2 *
-          fFactorMM]);
-      liThin, liDashed:
-        XMLNode.AttributeValue['stroke-width'] :=
-          Format('%.1f', [fDrawing2D.LineWidth * fFactorMM]);
-    end;
-    case LineKind of
+    if LineStyle <> liNone then
+      XMLNode.AttributeValue['stroke-width'] :=
+        Format('%.1f', [fDrawing2D.LineWidthBase * LineWidth *
+        fFactorMM]);
+    case LineStyle of
       liDotted:
         XMLNode.AttributeValue['stroke-dasharray']
           := Format('%.1f,%.1f',
-          [fDrawing2D.LineWidth * 2 * fFactorMM,
+          [fDrawing2D.LineWidthBase * 2 * fFactorMM,
           fDrawing2D.DottedSize * fFactorMM]);
       liDashed:
         XMLNode.AttributeValue['stroke-dasharray']
@@ -1660,12 +1917,14 @@ procedure T_SVG_Export.WritePrimitiveAttr(Obj: TPrimitive2D;
 begin
   WritePrimitiveAttr0(Obj.LineColor,
     Obj.HatchColor, Obj.FillColor,
-    Obj.LineKind, Obj.Hatching, fDrawing2D.MiterLimit, XMLNode);
+    Obj.LineStyle, Obj.LineWidth,
+    Obj.Hatching, fDrawing2D.MiterLimit, XMLNode);
 end;
 
 procedure T_SVG_Export.WritePoly0(PP: TPointsSet2D;
   const LineColor, HatchColor, FillColor: TColor;
-  const LineKind: TLineKind; const Hatching: THatching;
+  const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+  THatching;
   const Closed: Boolean);
 var
   P1, PPrev: TPoint2D;
@@ -1695,7 +1954,7 @@ begin
     if I < PP.Count - 1 then AddSt(' ');
   end;
   WritePrimitiveAttr0(LineColor, HatchColor, FillColor,
-    LineKind, Hatching, fDrawing2D.MiterLimit, XMLNode);
+    LineStyle, LineWidth, Hatching, fDrawing2D.MiterLimit, XMLNode);
   XMLNode.AttributeValue['points'] := PathSt;
 end;
 
@@ -1704,7 +1963,37 @@ procedure T_SVG_Export.WritePoly(PP: TPointsSet2D;
 begin
   WritePoly0(PP,
     Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-    Obj.LineKind, Obj.Hatching, Closed);
+    Obj.LineStyle, Obj.LineWidth, Obj.Hatching, Closed);
+end;
+
+procedure T_SVG_Export.WriteBezier(PP: TPointsSet2D;
+  Obj: TPrimitive2D; Closed: Boolean);
+var
+  I: Integer;
+  XMLNode: TXMLDElement;
+  PathSt: string;
+  procedure AddSt(St: string);
+  begin
+    PathSt := PathSt + St;
+  end;
+  procedure AddPoint(P: TPoint2D);
+  begin
+    AddSt(IntToStr(GetX(P.X)) + ','
+      + IntToStr(GetY(P.Y)));
+  end;
+begin
+  XMLNode := fXML.DocumentElement.AddElement('path');
+  PathSt := 'M ';
+  AddPoint(PP[0]);
+  for I := 1 to PP.Count - 1 do
+  begin
+    if I mod 3 = 1 then AddSt(' C');
+    AddSt(' ');
+    AddPoint(PP[I]);
+  end;
+  if Closed then AddSt(' Z');
+  XMLNode.AttributeValue['d'] := PathSt;
+  WritePrimitiveAttr(Obj, XMLNode);
 end;
 
 procedure T_SVG_Export.WriteRectangle2D(Obj: TRectangle2D);
@@ -1728,73 +2017,94 @@ begin
     XMLNode.AttributeValue['y'] := GetY(CP.Y + H / 2);
     XMLNode.AttributeValue['width'] := Round(W * fFactorW);
     XMLNode.AttributeValue['height'] := Round(H * fFactorH);
-    A := CalcRotationAngle(P0, P1) + Pi;
+    A := CalcAngle2Points(P0, P1) + Pi;
     if A <> 0 then
+    begin
       XMLNode.AttributeValue['transform'] :=
         'rotate(' + FF(A)
         + 'rad ' + IntToStr(GetX(CP.X))
         + ' ' + IntToStr(GetY(CP.Y)) + ')';
+    end;
     WritePrimitiveAttr(Obj, XMLNode);
   end;
 end;
 
+function T_SVG_Export.GetFontDescent: TRealType;
+var
+  ExtendedFont: TExtendedFont;
+  //LogFont: TLogFontW;
+  h_DC: HDC;
+  h_FONT: HFONT;
+  Text_Metric: tagTEXTMETRIC;
+  I: TRealType;
+begin
+  ExtendedFont := TExtendedFont.Create;
+  ExtendedFont.FaceName := FFontName;
+  ExtendedFont.Height := -1000;
+  h_DC := GetWindowDC(0);
+  h_FONT := CreateFontIndirectA(ExtendedFont.LogFont);
+  SelectObject(h_DC, h_FONT);
+  GetTextMetrics(h_DC, Text_Metric);
+  DeleteObject(h_FONT);
+  ReleaseDC(0, h_DC);
+  ExtendedFont.Free;
+  I := Text_Metric.tmDescent / 1000;
+  Result := I;
+end;
+
 procedure T_SVG_Export.WriteText2D(Obj: TText2D);
 var
-  P: TPoint2D;
   XMLNode: TXMLDElement;
-  E: TRect2D;
-  FontH, WW: TRealType;
+  St: string;
+  P: TPoint2D;
+  D: TVector2D;
 begin
   XMLNode := fXML.DocumentElement.AddElement('text');
   with Obj do
   begin
     P := Points[0];
+    D.X := 0;
+    case VJustification of
+      jvBottom: D.Y := fDescent;
+      jvCenter: D.Y := fDescent - 0.5;
+      jvTop: D.Y := fDescent - 1;
+      jvBaseline: D.Y := 0;
+    end;
+    if Rot <> 0 then D := TransformVector2D(D, Rotate2D(Rot));
+    D := TransformVector2D(D, Scale2D(Height, Height));
+    P := ShiftPoint(P, D); //ConvertPnt(
     XMLNode.AttributeValue['x'] := GetX(P.X);
     XMLNode.AttributeValue['y'] := GetY(P.Y);
-    FontH := Height * fFactorH;
-    XMLNode.AttributeValue['font-size'] := Round(FontH);
-    XMLNode.Text := AnsiToUtf8(Text);
-    E := GetExtension;
-    WW := E.Right - E.Left;
-    XMLNode.AttributeValue['textLength'] :=
-      Round(WW * fFactorW);
-    {case HJustification of
-      jhCenter: XMLNode.AttributeValue['dx']
-        := -Round(WW * fFactorW / 2);
-      jhRight: XMLNode.AttributeValue['dx']
-        := -Round(WW * fFactorW);
-    end;}
-    case VJustification of
-      jvBottom:
-        XMLNode.AttributeValue['dy'] := -Round(FontH * 0.2);
-      jvCenter:
-        XMLNode.AttributeValue['dy'] := Round(FontH * 0.3);
-      jvTop:
-        XMLNode.AttributeValue['dy'] := Round(FontH * 0.8);
-    end;
+    XMLNode.AttributeValue['font-size'] := Round(Height * fFactorH);
+    if Rot <> 0 then
+      XMLNode.AttributeValue['transform'] :=
+        'rotate(' + FF(-Rot)
+        + 'rad ' + IntToStr(GetX(P.X))
+        + ' ' + IntToStr(GetY(P.Y)) + ')';
+    //if Rot <> 0 then XMLNode.AttributeValue['rotate'] := Format('%.2f', [-RadToDeg(Rot)]);
+    St := Text;
+    //St := AnsiReplaceStr(St, '   ', ' _ ');
+    //St := AnsiReplaceStr(St, '   ', ' _ ');
+    //St := AnsiReplaceStr(St, '  ', ' _');
+    St := AnsiToUtf8(St);
+    XMLNode.Text := St;
+    XMLNode.AttributeValue['xml:space'] := 'preserve';
     case HJustification of
-      jhLeft: XMLNode.AttributeValue['text-anchor']
-        := 'start';
-      jhCenter: XMLNode.AttributeValue['text-anchor']
-        := 'middle';
+      jhLeft: XMLNode.AttributeValue['text-anchor'] := 'start';
+      jhCenter: XMLNode.AttributeValue['text-anchor'] := 'middle';
       jhRight: XMLNode.AttributeValue['text-anchor'] := 'end';
     end;
-    {case VJustification of
-      jvBottom: XMLNode.AttributeValue['dominant-baseline']
-        := 'bottom';
-      jvCenter: XMLNode.AttributeValue['dominant-baseline']
-        := 'central';
-      jvTop: XMLNode.AttributeValue['dominant-baseline']
-        := 'top';
-    end;}
     if Obj.LineColor <> clDefault then
       XMLNode.AttributeValue['fill'] := ColorToHtml(Obj.LineColor)
     else
       XMLNode.AttributeValue['fill'] := 'black';
-    XMLNode.AttributeValue['style'] :=
-      'font-family: ''Times New Roman''; font-weight:normal';
     //WritePrimitiveAttr(Obj, XMLNode);
   end;
+  {XMLNode := fXML.DocumentElement.AddElement('circle');
+  XMLNode.AttributeValue['cx'] := GetX(P.X);
+  XMLNode.AttributeValue['cy'] := GetY(P.Y);
+  XMLNode.AttributeValue['r'] := 100;
+  XMLNode.AttributeValue['fill'] := 'black';}
 end;
 
 procedure T_SVG_Export.WriteStar2D(Obj: TStar2D);
@@ -2014,95 +2324,49 @@ end;
 
 procedure T_SVG_Export.WriteCubicSpline2D(Obj: TSpline2D0);
 var
-  I: Integer;
-  XMLNode: TXMLDElement;
   PP: TPointsSet2D;
-  PathSt: string;
-  procedure AddSt(St: string);
-  begin
-    PathSt := PathSt + St;
-  end;
-  procedure AddPoint(P: TPoint2D);
-  begin
-    AddSt(IntToStr(GetX(P.X)) + ','
-      + IntToStr(GetY(P.Y)));
-  end;
 begin
   if Obj.Points.Count < 2 then Exit;
-  XMLNode := fXML.DocumentElement.AddElement('path');
   PP := nil;
   try
     Obj.BezierPoints(PP, IdentityTransf2D);
-    PathSt := 'M ';
-    AddPoint(PP[0]);
-    for I := 1 to PP.Count - 1 do
-    begin
-      if I mod 3 = 1 then AddSt(' C');
-      AddSt(' ');
-      AddPoint(PP[I]);
-    end;
-    if Obj.IsClosed then AddSt(' Z');
+    WriteBezier(PP, Obj, Obj.IsClosed);
   finally
     PP.Free;
   end;
-  XMLNode.AttributeValue['d'] := PathSt;
-  WritePrimitiveAttr(Obj, XMLNode);
 end;
 
 procedure T_SVG_Export.WriteSmooth2D(Obj: TSmoothPath2D0);
 var
-  I: Integer;
-  XMLNode: TXMLDElement;
   PP: TPointsSet2D;
-  PathSt: string;
-  procedure AddSt(St: string);
-  begin
-    PathSt := PathSt + St;
-  end;
-  procedure AddPoint(P: TPoint2D);
-  begin
-    AddSt(IntToStr(GetX(P.X)) + ','
-      + IntToStr(GetY(P.Y)));
-  end;
 begin
   if Obj.Points.Count < 2 then Exit;
-  XMLNode := fXML.DocumentElement.AddElement('path');
   PP := nil;
   try
     Obj.BezierPoints(PP, IdentityTransf2D);
-    PathSt := 'M ';
-    AddPoint(PP[0]);
-    for I := 1 to PP.Count - 1 do
-    begin
-      if I mod 3 = 1 then AddSt(' C');
-      AddSt(' ');
-      AddPoint(PP[I]);
-    end;
-    if Obj.IsClosed then AddSt(' Z');
+    WriteBezier(PP, Obj, Obj.IsClosed);
   finally
     PP.Free;
   end;
-  XMLNode.AttributeValue['d'] := PathSt;
-  WritePrimitiveAttr(Obj, XMLNode);
+end;
+
+procedure T_SVG_Export.WriteBezier2D(Obj: TBezierPath2D0);
+var
+  PP: TPointsSet2D;
+begin
+  if Obj.Points.Count < 2 then Exit;
+  PP := nil;
+  try
+    Obj.BezierPoints(PP, IdentityTransf2D);
+    WriteBezier(PP, Obj, Obj.IsClosed);
+  finally
+    PP.Free;
+  end;
 end;
 
 procedure T_SVG_Export.WritePoly2D(Obj: TPolyline2D0);
 begin
   WritePoly(Obj.Points, Obj, Obj.IsClosed);
-end;
-
-procedure T_SVG_Export.StoreToClipboard;
-begin
-  fStream.Free;
-  fStream := TMemoryStream.Create;
-  try
-    WriteAllToStream;
-    fStream.Position := 0;
-    PutStreamToClipboard0(CF_TEXT, fStream, fStream.Size);
-  finally
-    fStream.Free;
-    fStream := nil;
-  end;
 end;
 
 procedure StoreToFile_SVG(const Drawing: TDrawing2D;
@@ -2121,7 +2385,7 @@ end;
 { --================ T_PostScript_Export ==================-- }
 
 procedure pfb2pfa_Stream(Stream_pfb, Stream_pfa: TStream;
-  var FontName: string);
+  var FontName: string; var Descent: TRealType);
 //	Program converts a binary MSDOS representation for a type1
 //	PostScript font into a readable ASCII version. The MSDOS
 //	newline (\r) is converted into the UNIX newline (\n).
@@ -2131,7 +2395,7 @@ procedure pfb2pfa_Stream(Stream_pfb, Stream_pfa: TStream;
 var
   L, I, J: Integer;
   T: Byte;
-  St: string;
+  St, DescentSt: string;
 const
   NewLine = EOL; //\012 \n
   HEX_PER_LINE = 30;
@@ -2164,7 +2428,24 @@ begin
             Inc(J);
             I := J;
             while not (St[J] in [#10, ' ', '/']) do Inc(J);
-            FontName := Copy(St, I, J - I);
+            FontName := Trim(Copy(St, I, J - I));
+          end;
+          J := Pos('/FontBBox', St);
+          if J > 0 then
+          begin
+            J := J + 8;
+            while St[J] <> '{' do Inc(J);
+            Inc(J);
+            while St[J] in [#10, #13, ' '] do Inc(J);
+            while not (St[J] in [#10, ' ', '/', '}']) do Inc(J);
+            while St[J] in [#10, #13, ' '] do Inc(J);
+            I := J;
+            while not (St[J] in [#10, ' ', '/', '}']) do Inc(J);
+            DescentSt := Trim(Copy(St, I, J - I));
+            Val(DescentSt, I, J);
+            if J > 0 then I := 200;
+            Descent := Abs(I) / 1000;
+            //Application.MessageBox(PChar(DescentSt), nil);
           end;
           for I := 1 to L do
           begin
@@ -2197,7 +2478,8 @@ begin
   end;
 end;
 
-procedure pfb2pfa(const FileName_pfb, FileName_pfa: string);
+procedure pfb2pfa(const FileName_pfb, FileName_pfa: string;
+  var Descent: TRealType);
 var
   Stream_pfb, Stream_pfa: TFileStream;
   FontName: string;
@@ -2205,7 +2487,7 @@ begin
   Stream_pfb := TFileStream.Create(FileName_pfb, fmOpenRead);
   Stream_pfa := TFileStream.Create(FileName_pfa, fmCreate);
   try
-    pfb2pfa_Stream(Stream_pfb, Stream_pfa, FontName);
+    pfb2pfa_Stream(Stream_pfb, Stream_pfa, FontName, Descent);
   finally
     Stream_pfb.Free;
     Stream_pfa.Free;
@@ -2239,7 +2521,8 @@ begin
     Format('%.5g %.5g %.5g setrgbcolor ', [RGB.R, RGB.G, RGB.B]));
 end;
 
-procedure T_PostScript_Export.WriteLineAttr(const LineKind: TLineKind;
+procedure T_PostScript_Export.WriteLineAttr(const LineStyle: TLineStyle; const
+  LineWidth: TRealType;
   const LineColor: TColor);
 var
   A: TRealType;
@@ -2247,20 +2530,17 @@ begin
   A := fFactorMM;
   with fDrawing2D do
   begin
-    case LineKind of
+    case LineStyle of
       liNone: ; //WriteStream('0 setlinewidth [] 0 setdash ');
-      liThick: WriteStream(
-          Format('%.2g setlinewidth [] 0 setdash ',
-          [LineWidth * 2 * A]));
-      liThin: WriteStream(
-          Format('%.2g setlinewidth [] 0 setdash ',
-          [LineWidth * A]));
+      liSolid: WriteStream(
+          Format('%.2f setlinewidth [] 0 setdash ',
+          [LineWidthBase * LineWidth * A]));
       liDashed: WriteStream(
-          Format('%.2g setlinewidth [%.2g %.2g] 0 setdash ',
-          [LineWidth * A, DashSize * 2 * A, DashSize * A]));
+          Format('%.2f setlinewidth [%.2f %.2f] 0 setdash ',
+          [LineWidthBase * LineWidth * A, DashSize * 2 * A, DashSize * A]));
       liDotted: WriteStream(
-          Format('%.2g setlinewidth [%.2g %.2g] 0 setdash ',
-          [LineWidth * 2 * A, LineWidth * 2 * A,
+          Format('%.2f setlinewidth [%.2f %.2f] 0 setdash ',
+          [LineWidthBase * LineWidth * A, LineWidthBase * 2 * A,
           DottedSize * A]));
     end;
   end;
@@ -2272,41 +2552,44 @@ begin
 end;
 
 procedure T_PostScript_Export.WriteFill0(const FillColor: TColor;
-  const LineKind: TLineKind);
+  const LineStyle: TLineStyle);
 begin
-  if LineKind <> liNone then WriteStream('gsave ');
+  if LineStyle <> liNone then WriteStream('gsave ');
   if FillColor = clDefault then Exit;
   WriteColor(FillColor);
-  WriteStream('fill ');
+  //WriteStream('eofill '); // even-odd aka alternate fill rule
+  WriteStream('fill '); // nonzero winding fill rule
 end;
 
 procedure T_PostScript_Export.WriteFill(Obj: TPrimitive2D);
 begin
-  WriteFill0(Obj.FillColor, Obj.LineKind);
+  WriteFill0(Obj.FillColor, Obj.LineStyle);
 end;
 
-procedure T_PostScript_Export.WriteStroke(const LineKind: TLineKind;
+procedure T_PostScript_Export.WriteStroke(const LineStyle: TLineStyle; const
+  LineWidth: TRealType;
   const LineColor: TColor);
 begin
-  if LineKind <> liNone then
+  if LineStyle <> liNone then
   begin
     //if Obj.FillColor <> clDefault then
     WriteStream('grestore ');
-    WriteLineAttr(LineKind, LineColor);
+    WriteLineAttr(LineStyle, LineWidth, LineColor);
     WriteStream('stroke ');
   end;
   WriteLnStream('');
 end;
 
 procedure T_PostScript_Export.WritePoly00(PP: TPointsSet2D;
-  LineColor, HatchColor, FillColor: TColor;
-  LineKind: TLineKind; Hatching: THatching;
-  Closed: Boolean);
+  const LineColor, HatchColor, FillColor: TColor;
+  const LineStyle: TLineStyle; const LineWidth: TRealType;
+  const Hatching: THatching;
+  const Closed: Boolean);
 var
   I: Integer;
 begin
   if PP.Count < 1 then Exit;
-  if (LineKind = liNone) and (FillColor = clDefault) then Exit;
+  if (LineStyle = liNone) and (FillColor = clDefault) then Exit;
   WriteStream('newpath ');
   WriteStreamPoint(PP[0]);
   WriteStream('moveto ');
@@ -2321,16 +2604,17 @@ end;
 
 procedure T_PostScript_Export.WritePoly0(PP: TPointsSet2D;
   const LineColor, HatchColor, FillColor: TColor;
-  const LineKind: TLineKind; const Hatching: THatching;
+  const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+  THatching;
   const Closed: Boolean);
 begin
   if PP.Count <= 1 then Exit;
   WritePoly00(PP, clDefault, clDefault,
     GetColor(FillColor, clBlack),
-    liNone, haNone, Closed);
-  WriteFill0(FillColor, LineKind);
+    liNone, 1, haNone, Closed);
+  WriteFill0(FillColor, LineStyle);
   WriteHatching(PP, Hatching, HatchColor, fHatchingStep);
-  WriteStroke(LineKind, LineColor);
+  WriteStroke(LineStyle, LineWidth, LineColor);
 end;
 
 procedure T_PostScript_Export.WritePoly(PP: TPointsSet2D;
@@ -2338,7 +2622,7 @@ procedure T_PostScript_Export.WritePoly(PP: TPointsSet2D;
 begin
   WritePoly00(PP, clDefault, clDefault,
     GetColor(Obj.FillColor, clBlack),
-    liNone, haNone, Closed);
+    liNone, 1, haNone, Closed);
 end;
 
 procedure T_PostScript_Export.WriteBezierPath(const PP:
@@ -2346,7 +2630,7 @@ procedure T_PostScript_Export.WriteBezierPath(const PP:
 var
   I: Integer;
 begin
-  if (Obj.LineKind = liNone) and (Obj.FillColor = clDefault) then Exit;
+  if (Obj.LineStyle = liNone) and (Obj.FillColor = clDefault) then Exit;
   WriteStream('newpath ');
   WriteStreamPoint(PP[0]);
   WriteStream('moveto ');
@@ -2365,6 +2649,7 @@ procedure T_PostScript_Export.WriteHeader;
 begin //mm=2.845pt ??    // 2.8346 pixel per mm
 
   fFactorMM := 2.8346;
+  fDescent := 0.2;
   MeasureDrawing;
   fHatchingStep := fDrawing2D.HatchingStep / fDrawing2D.PicScale;
   WriteLnStream('%!PS-Adobe-3.0 EPSF-3.0');
@@ -2408,7 +2693,7 @@ begin
     TFileStream.Create(Font_pfb_Path, fmOpenRead);
   try
     WriteLnStream('%%BeginProlog');
-    pfb2pfa_Stream(Stream_pfb, fStream, FontName);
+    pfb2pfa_Stream(Stream_pfb, fStream, FontName, fDescent);
     WriteLnStream('%%Endprolog');
   finally
     Stream_pfb.Free;
@@ -2421,15 +2706,20 @@ begin
   WriteLnStream('%%EOF');
 end;
 
+type TFillRule = (fr_Winding, fr_Alternate);
+
 procedure CalculateHatching(const P: TPointsSet2D;
-  DX, DY, Step: TRealType;
-  Lines: TPointsSet2D);
+  const DX, DY: TRealType; Step: TRealType;
+  const Lines: TPointsSet2D; const FillRule: TFillRule);
 var
   PP: TPointsSet2D;
   PrevP, CurrP, IntersP: TPoint2D;
   PrevV, CurrV, A: TRealType;
   MinValue, MaxValue, Value0, C: TRealType;
   I, J, K: Integer;
+  Sgns: array of Boolean;
+  TmpSgn: Boolean;
+  SgnCount: Integer;
   function GetValue(P: TPoint2D): TRealType;
   begin
     Result := P.X * DX + P.Y * DY;
@@ -2448,6 +2738,7 @@ begin
   end;
   // Collect intersection points in PP:
   Value0 := (Floor(MinValue / Step) + 1) * Step;
+  SetLength(Sgns, P.Count);
   for J := 0 to
     Ceil(MaxValue / Step) - Floor(MinValue / Step) - 2 do
   begin
@@ -2468,11 +2759,13 @@ begin
       IntersP := Point2D(A * CurrP.X + (1 - A) * PrevP.X,
         A * CurrP.Y + (1 - A) * PrevP.Y);
       PP.Add(IntersP);
+      Sgns[PP.Count - 1] := CurrV > PrevV;
     end;
     // Sort PP:
     for I := 0 to PP.Count - 1 do
     begin
       IntersP := PP[I];
+      TmpSgn := Sgns[I];
       for K := I + 1 to PP.Count - 1 do
         if - DY * IntersP.X + DX * IntersP.Y
           > -DY * PP[K].X + DX * PP[K].Y then
@@ -2480,10 +2773,24 @@ begin
           PP[I] := PP[K];
           PP[K] := IntersP;
           IntersP := PP[I];
+          Sgns[I] := Sgns[K];
+          Sgns[K] := TmpSgn;
+          TmpSgn := Sgns[I];
         end;
     end;
-    for K := 0 to (PP.Count div 2) * 2 - 1 do
-      Lines.Add(PP[K]);
+    if FillRule = fr_Winding then
+    begin
+      SgnCount := 0;
+      for K := 0 to (PP.Count div 2) * 2 - 1 do
+      begin
+        if SgnCount = 0 then Lines.Add(PP[K]);
+        if Sgns[K] then Inc(SgnCount) else Dec(SgnCount);
+        if SgnCount = 0 then Lines.Add(PP[K]);
+      end;
+    end
+    else //FillRule = fr_Alternate
+      for K := 0 to (PP.Count div 2) * 2 - 1 do
+        Lines.Add(PP[K]);
   end;
   PP.Free;
 end;
@@ -2507,11 +2814,11 @@ var
     I: Integer;
   begin
     if (DX = 0) and (DY = 0) then Exit;
-    CalculateHatching(P, DX, DY, Step, Lines);
+    CalculateHatching(P, DX, DY, Step, Lines, fr_Winding);
     WriteStream('newpath ');
     with fDrawing2D do WriteStream(
-        Format('%.2g setlinewidth [] 0 setdash ',
-        [LineWidth / 2 * fFactorMM]));
+        Format('%.2f setlinewidth [] 0 setdash ',
+        [LineWidthBase * HatchingLineWidth * fFactorMM]));
     for I := 0 to Lines.Count div 2 - 1 do
     begin
       WriteStreamPoint(Lines[I * 2]);
@@ -2551,66 +2858,104 @@ begin
     finally
       EndUseProfilePoints;
     end;
-    WriteStroke(Obj.LineKind, Obj.LineColor);
+    WriteStroke(Obj.LineStyle, Obj.LineWidth, Obj.LineColor);
   end;
 end;
+
+{procedure T_PDF_Export.WriteText2D(Obj: TText2D);
+var
+  FontH: TRealType;
+  D: TVector2D;
+  P: TPoint2D;
+  T: TTransf2D;
+begin
+  with Obj, fPDF.Canvas do
+  begin
+    P := Points[0];
+    FontH := Height * fFactorH ;// / 1.2;
+    SetFont('Times-Roman', FontH);
+    case HJustification of
+      jhLeft: D.X := 0;
+      jhCenter: D.X := -TextWidth(Text) / 2;
+      jhRight: D.X := -TextWidth(Text);
+    end;
+    case VJustification of
+      jvBottom: D.Y := 0.2 * FontH;
+      jvCenter: D.Y := -0.3 * FontH;
+      jvTop: D.Y := -0.8 * FontH;
+    end;
+    if Obj.LineColor <> clDefault then
+      SetRGBFillColor(Obj.LineColor)
+    else SetRGBFillColor(clBlack);
+    if Rot <> 0 then
+    begin
+      T := Rotate2D(Rot);
+      D := TransformVector2D(D, T);
+    end;
+    P := ShiftPoint(ConvertPnt(P), D);
+    BeginText;
+    if Rot = 0 then
+      MoveTextPoint(P.X, P.Y)
+    else
+      SetPDF_TextMatrix(fPDF.Canvas,
+        MultiplyTransform2D(T, Translate2D(P.X, P.Y)));
+    ShowText(Text);
+    EndText;
+  end;
+end;}
 
 procedure T_PostScript_Export.WriteText2D(Obj: TText2D);
 var
   P: TPoint2D;
-  Point: TPoint2D;
+  D: TVector2D;
   Rect: TRect2D;
-  Width, W, H: TRealType;
   St: string;
 begin
   with Obj do
   begin
     Rect := GetExtension;
-    Width := (Rect.Right - Rect.Left);
     P := Points[0];
-    Point := ConvertPnt(P);
-    W := Width * fFactorW;
-    case HJustification of
-      //jhLeft: Point.X := Point.X;
-      jhCenter: Point.X := Point.X - Round(W / 2);
-      jhRight: Point.X := Point.X - Round(W);
-    end;
-    H := Height * fFactorH / 1.2;
     case VJustification of
-      //jvBottom:
-      jvCenter: Point.Y := Point.Y - H / 2;
-      jvTop: Point.Y := Point.Y - H;
+      jvBottom: D.Y := fDescent;
+      jvCenter: D.Y := fDescent - 0.5;
+      jvTop: D.Y := fDescent - 1;
+      jvBaseline: D.Y := 0;
     end;
-    Point.Y := Point.Y + H * 0.15;
+    D.X := 0;
+    if Rot <> 0 then D := TransformVector2D(D, Rotate2D(Rot));
+    D := TransformVector2D(D, Scale2D(Height, Height));
+    P := ShiftPoint(P, D);
     St := AnsiReplaceText(Text, '\', '\\');
     St := AnsiReplaceText(St, '(', '\(');
     St := AnsiReplaceText(St, ')', '\)');
-    //WriteStreamPoint(P);
     WriteStream(Format('/%s findfont %d scalefont setfont newpath ',
-      [FontName, Round(H)]));
+      [FontName, Round(Height * fFactorH)]));
     if Obj.LineColor <> clDefault then
       WriteColor(Obj.LineColor)
     else
       WriteColor(clBlack);
-    WriteStreamPoint0(Point.X, Point.Y);
+    WriteStreamPoint(P);
     WriteLnStream('moveto ');
     //"string" stringwidth -> "wx" "wy"
-    {stringwidth returns the length of the string ( ... ) and (usually) the value 0.0
-    ex: the following code will determine the width of a string and center it on some background that is 200 units wide
-    (PostScript) stringwidth pop
-    200 exch sub 2 div
-    0 rmoveto
-    (PostScript) show    }
+    {stringwidth returns the length of the string ( ... ) and (usually) the value 0.0}
     case HJustification of
-      //jhLeft: Point.X := Point.X;
-      jhCenter:
-        WriteLnStream(Format('(%s) stringwidth pop %.1f exch sub 2 div 0 rmoveto',
-          [St, W]));
-      jhRight:
-        WriteLnStream(Format('(%s) stringwidth pop %.1f exch sub 0 rmoveto',
-          [St, W]));
+      jhLeft: D.X := 0;
+      jhCenter: D.X := 0.5;
+      jhRight: D.X := 1;
     end;
+    if D.X <> 0 then
+      if Rot = 0 then
+        WriteStream(Format('(%s) stringwidth pop %.5g mul 0 rmoveto',
+          [St, -D.X * Cos(Rot)]))
+      else
+        WriteStream(Format('(%s) stringwidth pop %.5g mul (%s) stringwidth pop %.5g mul rmoveto',
+          [St, -D.X * Cos(Rot), St, -D.X * Sin(Rot)]));
+    if Rot <> 0 then
+      WriteStream(Format(' %.5g rotate', [RadToDeg(Rot)]));
+    if (D.X <> 0) or (Rot <> 0) then WriteLnStream('');
     WriteLnStream(Format('(%s) show stroke', [St]));
+    if Rot <> 0 then
+      WriteStream('initmatrix ');
   end;
 end;
 
@@ -2654,7 +2999,7 @@ begin
         Obj.Hatching, Obj.HatchColor, fHatchingStep);
       EndUseProfilePoints;
     end;
-  WriteStroke(Obj.LineKind, Obj.LineColor);
+  WriteStroke(Obj.LineStyle, Obj.LineWidth, Obj.LineColor);
 end;
 
 procedure T_PostScript_Export.WriteCircle2D(Obj: TCircle2D);
@@ -2664,13 +3009,14 @@ var
 begin
   with Obj do
   begin
-    if (Obj.LineKind <> liNone) or (Obj.FillColor <> clDefault) then
+    if (Obj.LineStyle <> liNone) or (Obj.FillColor <> clDefault) then
     begin
       CP := Points[0];
       R := PointDistance2D(CP, Points[1]);
       WriteStream('newpath ');
       WriteStreamPoint(CP);
-      WriteLnStream(Format('%.1f 0 360 arc ', [R * fFactorW]));
+      WriteLnStream(Format('%.2f 0 360 arc ', [R * fFactorW]));
+      WriteStream('closepath ');
       WriteFill(Obj);
     end;
     if Hatching <> haNone then
@@ -2680,7 +3026,7 @@ begin
         Obj.Hatching, Obj.HatchColor, fHatchingStep);
       EndUseProfilePoints;
     end;
-    WriteStroke(Obj.LineKind, Obj.LineColor);
+    WriteStroke(Obj.LineStyle, Obj.LineWidth, Obj.LineColor);
   end;
 end;
 
@@ -2698,7 +3044,7 @@ begin
   if EA < SA then EA := EA + 2 * Pi;
   with Obj do
   begin
-    if (Obj.LineKind <> liNone) or (Obj.FillColor <> clDefault) then
+    if (Obj.LineStyle <> liNone) or (Obj.FillColor <> clDefault) then
     begin
       WriteStream('newpath ');
       if Obj is TSector2D then
@@ -2708,7 +3054,7 @@ begin
       end;
       WriteStreamPoint(CP);
       WriteStream(Format('%.1f %.1f %.1f arc ',
-        [R * fFactorW, SA * 180 / Pi, EA * 180 / Pi]));
+        [R * fFactorW, RadToDeg(SA), RadToDeg(EA)]));
       if Obj.IsClosed then WriteStream('closepath ');
       WriteFill(Obj);
     end;
@@ -2719,7 +3065,7 @@ begin
         Obj.Hatching, Obj.HatchColor, fHatchingStep);
       EndUseProfilePoints;
     end;
-    WriteStroke(Obj.LineKind, Obj.LineColor);
+    WriteStroke(Obj.LineStyle, Obj.LineWidth, Obj.LineColor);
   end;
 end;
 
@@ -2744,7 +3090,7 @@ begin
         Obj.Hatching, Obj.HatchColor, fHatchingStep);
       EndUseProfilePoints;
     end;
-  WriteStroke(Obj.LineKind, Obj.LineColor);
+  WriteStroke(Obj.LineStyle, Obj.LineWidth, Obj.LineColor);
 end;
 
 procedure T_PostScript_Export.WriteSmooth2D(Obj:
@@ -2769,7 +3115,32 @@ begin
         Obj.Hatching, Obj.HatchColor, fHatchingStep);
       EndUseProfilePoints;
     end;
-  WriteStroke(Obj.LineKind, Obj.LineColor);
+  WriteStroke(Obj.LineStyle, Obj.LineWidth, Obj.LineColor);
+end;
+
+procedure T_PostScript_Export.WriteBezier2D(Obj:
+  TBezierPath2D0);
+var
+  PP: TPointsSet2D;
+begin
+  if Obj.Points.Count < 2 then Exit;
+  PP := nil;
+  try
+    Obj.BezierPoints(PP, IdentityTransf2D);
+    WriteBezierPath(PP, Obj);
+  finally
+    PP.Free;
+  end;
+  WriteFill(Obj);
+  with Obj do
+    if Hatching <> haNone then
+    begin
+      BeginUseProfilePoints;
+      WriteHatching(ProfilePoints,
+        Obj.Hatching, Obj.HatchColor, fHatchingStep);
+      EndUseProfilePoints;
+    end;
+  WriteStroke(Obj.LineStyle, Obj.LineWidth, Obj.LineColor);
 end;
 
 procedure T_PostScript_Export.WritePoly2D(Obj: TPolyline2D0);
@@ -2782,7 +3153,7 @@ begin
   WriteFill(Obj);
   WriteHatching(PP,
     Obj.Hatching, Obj.HatchColor, fHatchingStep);
-  WriteStroke(Obj.LineKind, Obj.LineColor);
+  WriteStroke(Obj.LineStyle, Obj.LineWidth, Obj.LineColor);
 end;
 
 procedure T_PostScript_Export.WriteToTpX(Stream: TStream;
@@ -2790,9 +3161,14 @@ procedure T_PostScript_Export.WriteToTpX(Stream: TStream;
 var
   H, W, UnitLength: TRealType;
   I: Integer;
+  EpsFileName: string;
 begin
   fStream := nil;
-  StoreToFile(ChangeFileExt(FileName, '.eps'));
+  if (Self is T_EpsToPdf_Export) or
+    (Self is T_EpsToPdf_Light_Export) then
+    EpsFileName := ChangeFileExt(FileName, '.pdf')
+  else EpsFileName := ChangeFileExt(FileName, '.eps');
+  if not StoreToFile(EpsFileName) then Exit;
   fStream := Stream;
   UnitLength := fDrawing2D.PicUnitLength;
   W := fW_MM / UnitLength;
@@ -2810,20 +3186,6 @@ begin
       WriteLnStream('  ' + TextLabels[I]);
     WriteLnStream('  \end{picture}');
   finally
-    fStream := nil;
-  end;
-end;
-
-procedure T_PostScript_Export.StoreToClipboard;
-begin
-  fStream.Free;
-  fStream := TMemoryStream.Create;
-  try
-    WriteAll;
-    fStream.Position := 0;
-    PutStreamToClipboard0(CF_TEXT, fStream, fStream.Size);
-  finally
-    fStream.Free;
     fStream := nil;
   end;
 end;
@@ -2848,6 +3210,68 @@ begin
   fFactorH := TempFH;
 end;
 
+{ --================ T_EpsToPdf_Export ==================-- }
+
+function Run_EpsToPdf(const EpsFileName, PdfFileName: string): Boolean;
+begin
+  if not FileExists(EpsToPdfPath) then
+  begin
+    Application.MessageBox('EpsToPdf path not found',
+      'Error', MB_OK);
+    Exit;
+  end;
+  try
+    TryDeleteFile(PdfFileName);
+    Result := FileExec(Format('"%s" "%s" --outfile="%s"',
+      [EpsToPdfPath, EpsFileName, PdfFileName]), '', '',
+      '', False, True);
+    if not FileExists(PdfFileName) then
+    begin
+      Application.MessageBox('PDF file not created ',
+        'Error', MB_OK);
+      Result := False;
+    end;
+  finally
+  end;
+end;
+
+function T_EpsToPdf_Export.StoreToFile(const FileName: string):
+  Boolean;
+var
+  TempEPS: string;
+begin
+  TempEPS := GetTempDir + '(eps)TpX.eps';
+  TryDeleteFile(TempEPS);
+  Result := False;
+  try
+    Result := inherited StoreToFile(TempEPS);
+    if Result then Result := Run_EpsToPdf(TempEPS, FileName);
+  finally
+    Result := True;
+    if Result then TryDeleteFile(TempEPS);
+  end;
+end;
+
+{ --================ T_EpsToPdf_Light_Export ==================-- }
+
+procedure T_EpsToPdf_Light_Export.WriteFont;
+begin
+
+end;
+
+procedure T_EpsToPdf_Light_Export.WriteText2D(Obj: TText2D);
+var
+  TempFW, TempFH: TRealType;
+begin
+  TempFW := fFactorW;
+  TempFH := fFactorH;
+  fFactorW := fFactorW / fDrawing2D.PicUnitLength / 2.8346;
+  fFactorH := fFactorH / fDrawing2D.PicUnitLength / 2.8346;
+  TextLabels.Add(GetTeXText(Obj, fDrawing2D.PicUnitLength));
+  fFactorW := TempFW;
+  fFactorH := TempFH;
+end;
+
 { --================ T_TeX_Picture_Export ==================-- }
 
 constructor T_TeX_Picture_Export.Create(Drawing: TDrawing2D);
@@ -2860,26 +3284,24 @@ begin
   WriteStreamPoint0Int(Round(X), Round(Y));
 end;
 
-procedure T_TeX_Picture_Export.WriteLineThickness0(LineKind: TLineKind);
+procedure T_TeX_Picture_Export.WriteLineThickness0(
+  const LineWidth: TRealType);
 begin
 //\linethickness{dimension}
-  case LineKind of
-    liThick: WriteStream('\thicklines');
-    liNone, liThin: WriteStream('\thinlines');
-    liDashed: WriteStream('\thinlines');
-    liDotted: WriteStream('\thicklines');
-  end;
+  if LineWidth <= 1.5 then WriteStream('\thinlines')
+  else WriteStream('\thicklines');
 end;
 
 procedure T_TeX_Picture_Export.WriteLineThickness(Obj:
   TPrimitive2D);
 begin
-  if (Obj.LineKind <> liNone) or (Obj.Hatching = haNone) then
-    WriteLineThickness0(Obj.LineKind);
+  if (Obj.LineStyle <> liNone) or (Obj.Hatching = haNone) then
+    WriteLineThickness0(Obj.LineWidth);
 end;
 
 procedure T_TeX_Picture_Export.WriteLine(P0, P1: TPoint2D;
-  Kind: TLineKind);
+  const LineStyle: TLineStyle;
+  const LineWidth: TRealType);
 begin
   if IsSamePoint2D(P0, P1) then
   begin
@@ -2899,8 +3321,8 @@ begin
     WriteStream('{\picsquare}');
     Exit;
   end;
-  case Kind of
-    liNone, liThin, liThick:
+  case LineStyle of
+    liNone, liSolid:
       begin
         WriteStream('\lbezier');
         WriteStreamPoint(P0);
@@ -2952,18 +3374,19 @@ end;
 
 procedure T_TeX_Picture_Export.WritePoly0(PP: TPointsSet2D;
   const LineColor, HatchColor, FillColor: TColor;
-  const LineKind: TLineKind; const Hatching: THatching;
+  const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+  THatching;
   const Closed: Boolean);
 var
   I: Integer;
 begin
   if PP.Count = 0 then Exit;
-  if (LineKind <> liNone) or (Hatching = haNone) then
+  if (LineStyle <> liNone) or (Hatching = haNone) then
   begin
-    WriteLineThickness0(LineKind);
+    WriteLineThickness0(LineWidth);
     for I := 0 to PP.Count - 2 do
     begin
-      WriteLine(PP[I], PP[I + 1], LineKind);
+      WriteLine(PP[I], PP[I + 1], LineStyle, LineWidth);
       if (I mod 100) = 99 then
       begin
         WriteLnStream('');
@@ -2971,7 +3394,7 @@ begin
       end;
     end;
     if Closed then
-      WriteLine(PP[PP.Count - 1], PP[0], LineKind);
+      WriteLine(PP[PP.Count - 1], PP[0], LineStyle, LineWidth);
   end;
   WriteHatching(PP, Hatching, fHatchingStep);
   WriteLnStream('');
@@ -3014,7 +3437,7 @@ var
   begin
     if (DX = 0) and (DY = 0) then Exit;
     CalculateHatching(P, DX, DY,
-      Step / fFactorH * fFactorMM, Lines);
+      Step / fFactorH * fFactorMM, Lines, fr_Winding);
     if (Frac(DX) <> 0) or (Frac(DY) <> 0) then
       for I := 0 to Lines.Count div 2 - 1 do
       begin
@@ -3093,12 +3516,12 @@ begin
     RectangleCalcPoints(P[0], P[2], Points[2], P3, P4, A);
     P[1] := P3;
     P[3] := P4;
-    if (LineKind <> liNone) or (Hatching = haNone) then
+    if (LineStyle <> liNone) or (Hatching = haNone) then
     begin
-      WriteLine(P[0], P[1], Obj.LineKind);
-      WriteLine(P[1], P[2], Obj.LineKind);
-      WriteLine(P[2], P[3], Obj.LineKind);
-      WriteLine(P[3], P[0], Obj.LineKind);
+      WriteLine(P[0], P[1], Obj.LineStyle, Obj.LineWidth);
+      WriteLine(P[1], P[2], Obj.LineStyle, Obj.LineWidth);
+      WriteLine(P[2], P[3], Obj.LineStyle, Obj.LineWidth);
+      WriteLine(P[3], P[0], Obj.LineStyle, Obj.LineWidth);
     end;
   end;
   WriteHatching(P, Obj.Hatching, fHatchingStep);
@@ -3128,16 +3551,10 @@ begin
       if Obj.OwnerCAD is TDrawing2D then
       begin
         StarsSize := (Obj.OwnerCAD as TDrawing2D).StarsSize;
-        case LineKind of
-          liThin, liDashed:
-            StarsSize := StarsSize +
-              0.5 * (Obj.OwnerCAD as TDrawing2D).LineWidth
-              / (Obj.OwnerCAD as TDrawing2D).PicScale;
-          liThick, liDotted:
-            StarsSize := StarsSize +
-              1 * (Obj.OwnerCAD as TDrawing2D).LineWidth
-              / (Obj.OwnerCAD as TDrawing2D).PicScale;
-        end;
+        if LineStyle <> liNone then
+          StarsSize := StarsSize +
+            0.5 * (Obj.OwnerCAD as TDrawing2D).LineWidthBase *
+            Obj.LineWidth / (Obj.OwnerCAD as TDrawing2D).PicScale;
       end
       else StarsSize := 1;
       D := Round(2 * StarsSize * fFactorW);
@@ -3170,7 +3587,7 @@ begin
   WriteLineThickness(Obj);
   with Obj do
   begin
-    if (LineKind <> liNone) or (Hatching = haNone) then
+    if (LineStyle <> liNone) or (Hatching = haNone) then
     begin
       RectangleCalcPoints(Points[0], Points[1], Points[2],
         P3, P4, A);
@@ -3218,7 +3635,7 @@ begin
   WriteLineThickness(Obj);
   with Obj do
   begin
-    if (LineKind <> liNone) or (Hatching = haNone) then
+    if (LineStyle <> liNone) or (Hatching = haNone) then
     begin
       CP := Points[0];
       R := PointDistance2D(CP, Points[1]);
@@ -3283,7 +3700,7 @@ var
   end;
 begin
   WriteLineThickness(Obj);
-  if (Obj.LineKind <> liNone) or (Obj.Hatching = haNone) then
+  if (Obj.LineStyle <> liNone) or (Obj.Hatching = haNone) then
   begin
     Obj.GetArcParams(CX, CY, R, SA, EA);
     ATmp := SA;
@@ -3317,12 +3734,12 @@ begin
         WriteStream(')');
         if Obj is TSector2D then
         begin
-          WriteLine(CP, GetPoint(SA, R), Obj.LineKind);
-          WriteLine(CP, GetPoint(EA, R), Obj.LineKind);
+          WriteLine(CP, GetPoint(SA, R), Obj.LineStyle, Obj.LineWidth);
+          WriteLine(CP, GetPoint(EA, R), Obj.LineStyle, Obj.LineWidth);
         end
         else if Obj is TSegment2D then
           WriteLine(GetPoint(SA, R), GetPoint(EA, R),
-            Obj.LineKind);
+            Obj.LineStyle, Obj.LineWidth);
       end;
     end;
     with Obj do
@@ -3354,7 +3771,7 @@ var
   PP: TPointsSet2D;
 begin
   WriteLineThickness(Obj);
-  if (Obj.LineKind <> liNone) or (Obj.Hatching = haNone) then
+  if (Obj.LineStyle <> liNone) or (Obj.Hatching = haNone) then
   begin
     PP := Obj.Points;
     for I := 1 to PP.Count - 2 do
@@ -3389,7 +3806,7 @@ var
   PP: TPointsSet2D;
 begin
   WriteLineThickness(Obj);
-  if (Obj.LineKind <> liNone) or (Obj.Hatching = haNone) then
+  if (Obj.LineStyle <> liNone) or (Obj.Hatching = haNone) then
   begin
     PP := Obj.Points;
     for I := 0 to PP.Count - 1 do
@@ -3427,7 +3844,7 @@ var
 begin
   WriteLineThickness(Obj);
   if Obj.Points.Count < 2 then Exit;
-  if (Obj.LineKind <> liNone) or (Obj.Hatching = haNone) then
+  if (Obj.LineStyle <> liNone) or (Obj.Hatching = haNone) then
   begin
     PP := nil;
     try
@@ -3465,7 +3882,36 @@ var
 begin
   WriteLineThickness(Obj);
   if Obj.Points.Count < 2 then Exit;
-  if (Obj.LineKind <> liNone) or (Obj.Hatching = haNone) then
+  if (Obj.LineStyle <> liNone) or (Obj.Hatching = haNone) then
+  begin
+    PP := nil;
+    try
+      Obj.BezierPoints(PP, IdentityTransf2D);
+      for I := 0 to (PP.Count - 4) div 3 do
+        WriteCBezier(PP[I * 3], PP[I * 3 + 1], PP[I * 3 + 2], PP[I * 3 + 3]);
+    finally
+      PP.Free;
+    end;
+  end;
+  with Obj do
+    if Hatching <> haNone then
+    begin
+      BeginUseProfilePoints;
+      WriteHatching(ProfilePoints, Obj.Hatching, fHatchingStep);
+      EndUseProfilePoints;
+    end;
+  WriteLnStream('');
+end;
+
+procedure T_TeX_Picture_Export.WriteBezier2D(Obj:
+  TBezierPath2D0);
+var
+  I: Integer;
+  PP: TPointsSet2D;
+begin
+  WriteLineThickness(Obj);
+  if Obj.Points.Count < 2 then Exit;
+  if (Obj.LineStyle <> liNone) or (Obj.Hatching = haNone) then
   begin
     PP := nil;
     try
@@ -3490,21 +3936,7 @@ procedure T_TeX_Picture_Export.WritePoly2D(Obj: TPolyline2D0);
 begin
   WritePoly0(Obj.Points,
     Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-    Obj.LineKind, Obj.Hatching, Obj.IsClosed);
-end;
-
-procedure T_TeX_Picture_Export.StoreToClipboard;
-begin
-  fStream.Free;
-  fStream := TMemoryStream.Create;
-  try
-    WriteAll;
-    fStream.Position := 0;
-    PutStreamToClipboard0(CF_TEXT, fStream, fStream.Size);
-  finally
-    fStream.Free;
-    fStream := nil;
-  end;
+    Obj.LineStyle, Obj.LineWidth, Obj.Hatching, Obj.IsClosed);
 end;
 
 { --================ T_PSTricks_Export ==================-- }
@@ -3544,17 +3976,14 @@ begin
     [Result, RGB.R, RGB.G, RGB.B]));
 end;
 
-function T_PSTricks_Export.LineArg(Kind: TLineKind; Color: string):
-  string;
+function T_PSTricks_Export.LineArg(const LineStyle: TLineStyle;
+  const LineWidth: TRealType;
+  Color: string): string;
 begin
-  case Kind of
-    liThick, liDotted: Result := Format('linewidth=%.2fmm',
-        [fDrawing2D.LineWidth * 2]);
-    liThin, liDashed: Result :=
-      Format('linewidth=%.2fmm', [fDrawing2D.LineWidth]);
-//      fprintf(file, "%f %f %f setrgbcolor\n", r, g, b);
-  end;
-  case Kind of
+  if LineStyle <> liNone then
+    Result := Format('linewidth=%.2fmm',
+      [fDrawing2D.LineWidthBase * LineWidth]);
+  case LineStyle of
     liNone:
       Result := Result + 'linestyle=none';
     liDotted:
@@ -3577,19 +4006,19 @@ var
 begin
   if IsSamePoint2D(P0, P1) then Exit;
   C := WriteNewColor(Obj.LineColor);
-  WriteStream(Format('\psline%s', [LineArg(Obj.LineKind, C)]));
+  WriteStream(Format('\psline%s', [LineArg(Obj.LineStyle, Obj.LineWidth, C)]));
   WriteStreamPoint(P0);
   WriteStreamPoint(P1);
 end;
 
 procedure T_PSTricks_Export.WritePoly(const PP: TPointsSet2D;
-  const Attr: string; Closed: Boolean);
+  const Attr: string; const LineWidth: TRealType; Closed: Boolean);
 var
   I: Integer;
 begin
   if PP.Count < 1 then Exit;
 //  if fDrawing2D.MiterLimit <> 10 then
-//    WriteLnStream(Format('\pscustom{\code{%.2g setmiterlimit}',
+//    WriteLnStream(Format('\pscustom{\code{%.2f setmiterlimit}',
 //      [fDrawing2D.MiterLimit]));
 //\pscustom{%
 //    \code{1 setlinejoin}
@@ -3616,14 +4045,14 @@ var
   begin
     if (DX = 0) and (DY = 0) then Exit;
     CalculateHatching(P, DX, DY,
-      Step / fFactorH / fUnitLength, Lines);
+      Step / fFactorH / fUnitLength, Lines, fr_Winding);
     for I := 0 to Lines.Count div 2 - 1 do
     begin
       if HatchColor = clDefault then C := ''
       else
         C := ',linecolor=' + WriteNewColor(HatchColor);
       WriteStream(Format('\psline[linewidth=%.2fmm,linestyle=solid%s]',
-        [fDrawing2D.LineWidth / 2, C]));
+        [fDrawing2D.LineWidthBase * fDrawing2D.HatchingLineWidth, C]));
       WriteStreamPoint(Lines[I * 2]);
       WriteStreamPoint(Lines[I * 2 + 1]);
     end;
@@ -3644,7 +4073,8 @@ end;
 procedure T_PSTricks_Export.WritePath(const PP, HatchPP: TPointsSet2D;
   PathProc: TPathProcAttr;
   const LineColor, HatchColor, FillColor: TColor;
-  const LineKind: TLineKind; const Hatching: THatching;
+  const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+  THatching;
   const Closed: Boolean);
 var
   Attr: string;
@@ -3653,63 +4083,58 @@ begin
   begin
     Attr := '[linestyle=none,fillstyle=solid,fillcolor=' +
       WriteNewColor(FillColor) + ']';
-    WritePoly(HatchPP, Attr, Closed);
+    PathProc(PP, Attr, LineWidth, Closed);
   end;
   if HatchPP <> nil then
     WriteHatching(HatchPP, Hatching, HatchColor, fHatchingStep);
-  if LineKind <> liNone then
+  if LineStyle <> liNone then
   begin
-    Attr := LineArg(LineKind, WriteNewColor(LineColor));
-    PathProc(PP, Attr, Closed);
+    Attr := LineArg(LineStyle, LineWidth, WriteNewColor(LineColor));
+    PathProc(PP, Attr, LineWidth, Closed);
   end;
   WriteLnStream('');
 end;
 
 procedure T_PSTricks_Export.WritePoly0(PP: TPointsSet2D;
   const LineColor, HatchColor, FillColor: TColor;
-  const LineKind: TLineKind; const Hatching: THatching;
+  const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+  THatching;
   const Closed: Boolean);
 begin
   WritePath(PP, PP, WritePoly, LineColor, HatchColor, FillColor,
-    LineKind, Hatching, Closed);
-end;
-
-procedure T_PSTricks_Export.WriteBezier(const P0, P1, P2, P3: TPoint2D;
-  const Attr: string);
-begin
-  WriteStream(Format('\psbezier%s', [Attr]));
-  WriteStreamPoint(P0);
-  WriteStreamPoint(P1);
-  WriteStreamPoint(P2);
-  WriteStreamPoint(P3);
+    LineStyle, LineWidth, Hatching, Closed);
 end;
 
 procedure T_PSTricks_Export.WriteBezierPath(const PP: TPointsSet2D;
-  const Attr: string; Closed: Boolean);
+  const Attr: string; const LineWidth: TRealType; Closed: Boolean);
 var
   I: Integer;
-  P0: TPoint2D;
 begin
   if PP.Count < 1 then Exit;
-  P0 := PP[0];
+  WriteStream(Format('\pscustom%s{', [Attr]));
   for I := 0 to PP.Count div 3 - 1 do
   begin
-    WriteBezier(PP[3 * I], PP[3 * I + 1], PP[3 * I + 2],
-      PP[3 * I + 3], Attr);
+    WriteStream('\psbezier');
+    WriteStreamPoint(PP[3 * I]);
+    WriteStreamPoint(PP[3 * I + 1]);
+    WriteStreamPoint(PP[3 * I + 2]);
+    WriteStreamPoint(PP[3 * I + 3]);
   end;
+  WriteStream('}');
 end;
 
 procedure T_PSTricks_Export.WriteCircle(const PP: TPointsSet2D;
-  const Attr: string; Closed: Boolean);
+  const Attr: string; const LineWidth: TRealType; Closed: Boolean);
 begin
   WriteStream(Format('\pscircle%s', [Attr]));
   WriteStreamPoint(PP[0]);
   WriteStream(Format('{%.2f}',
-    [PointDistance2D(PP[0], PP[1]) * fFactorW]));
+    [PointDistance2D(PP[0], PP[1]) * fFactorW
+    + fDrawing2D.LineWidthBase * LineWidth / fUnitLength / 2]));
 end;
 
 procedure T_PSTricks_Export.WriteCircular0(const PP: TPointsSet2D;
-  const Attr: string; ObjClass: TClass);
+  const Attr: string; const LineWidth: TRealType; ObjClass: TClass);
 var
   CP, P1, P2: TPoint2D;
   R, SA, EA, Delt: TRealType;
@@ -3727,23 +4152,26 @@ begin
   EA := ArcTan2(P2.Y - CP.Y, P2.X - CP.X);
   if EA < SA then EA := EA + 2 * Pi;
   if ObjClass = TSector2D then
-    WriteStream(Format('\pswedge%s', [Attr]))
+  begin
+    WriteStream(Format('\pswedge%s', [Attr]));
+    R := R + fDrawing2D.LineWidthBase * LineWidth / fUnitLength / 2 / fFactorW;
+  end
   else
     WriteStream(Format('\psarc%s{-}', [Attr]));
   WriteStreamPoint(CP);
   WriteStream(Format('{%.2f}{%.2f}{%.2f}',
-    [R * fFactorW, SA * 180 / Pi, EA * 180 / Pi]));
+    [R * fFactorW, RadToDeg(SA), RadToDeg(EA)]));
   if ObjClass = TSegment2D then
   begin
     PP2 := TPointsSet2D.Create(4);
     try
-      Delt := fDrawing2D.LineWidth / fUnitLength
+      Delt := fDrawing2D.LineWidthBase / fUnitLength
         / (R * fFactorW); // Draw miters
       PP2.Add(GetPoint(SA + Delt, R));
       PP2.Add(GetPoint(SA, R));
       PP2.Add(GetPoint(EA, R));
       PP2.Add(GetPoint(EA - Delt, R));
-      WritePoly(PP2, Attr, False);
+      WritePoly(PP2, Attr, LineWidth, False);
     finally
       PP2.Free;
     end;
@@ -3751,21 +4179,21 @@ begin
 end;
 
 procedure T_PSTricks_Export.WriteArc(const PP: TPointsSet2D;
-  const Attr: string; Closed: Boolean);
+  const Attr: string; const LineWidth: TRealType; Closed: Boolean);
 begin
-  WriteCircular0(PP, Attr, TArc2D);
+  WriteCircular0(PP, Attr, LineWidth, TArc2D);
 end;
 
 procedure T_PSTricks_Export.WriteSector(const PP: TPointsSet2D;
-  const Attr: string; Closed: Boolean);
+  const Attr: string; const LineWidth: TRealType; Closed: Boolean);
 begin
-  WriteCircular0(PP, Attr, TSector2D);
+  WriteCircular0(PP, Attr, LineWidth, TSector2D);
 end;
 
 procedure T_PSTricks_Export.WriteSegment(const PP: TPointsSet2D;
-  const Attr: string; Closed: Boolean);
+  const Attr: string; const LineWidth: TRealType; Closed: Boolean);
 begin
-  WriteCircular0(PP, Attr, TSegment2D);
+  WriteCircular0(PP, Attr, LineWidth, TSegment2D);
 end;
 
 procedure T_PSTricks_Export.WriteHeader;
@@ -3789,7 +4217,7 @@ begin
     WriteLnStream(Format('\psset{dash=%.2fmm %.2fmm}',
       [DashSize * 2, DashSize]));
     WriteLnStream(Format('\psset{linewidth=%.2fmm}',
-      [LineWidth]));
+      [LineWidthBase]));
     //WriteLnStream(Format('\psset{hatchwidth=%.2fmm}',      [LineWidth / 2]));
   end;
   WriteLnStream(Format('\begin {pspicture}(0,0)(%d,%d)',
@@ -3809,7 +4237,7 @@ begin
     BeginUseProfilePoints;
     WritePath(ProfilePoints, ProfilePoints, WritePoly,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, True);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, True);
     EndUseProfilePoints;
   end;
 end;
@@ -3845,7 +4273,7 @@ begin
       Obj.BezierPoints(PP, IdentityTransf2D);
       WritePath(PP, ProfilePoints, WriteBezierPath,
         Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-        Obj.LineKind, Obj.Hatching, True);
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, True);
     finally
       PP.Free;
       EndUseProfilePoints;
@@ -3860,7 +4288,7 @@ begin
     BeginUseProfilePoints;
     WritePath(Points, ProfilePoints, WriteCircle,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, True);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, True);
     EndUseProfilePoints;
   end;
 end;
@@ -3873,15 +4301,15 @@ begin
     if Obj is TSector2D then
       WritePath(Points, ProfilePoints, WriteSector,
         Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-        Obj.LineKind, Obj.Hatching, Obj.IsClosed)
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, Obj.IsClosed)
     else if Obj is TSegment2D then
       WritePath(Points, ProfilePoints, WriteSegment,
         Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-        Obj.LineKind, Obj.Hatching, Obj.IsClosed)
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, Obj.IsClosed)
     else
       WritePath(Points, ProfilePoints, WriteArc,
         Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-        Obj.LineKind, Obj.Hatching, Obj.IsClosed);
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, Obj.IsClosed);
     EndUseProfilePoints;
   end;
 end;
@@ -3899,7 +4327,7 @@ begin
       Obj.BezierPoints(PP, IdentityTransf2D);
       WritePath(PP, ProfilePoints, WriteBezierPath,
         Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-        Obj.LineKind, Obj.Hatching, Obj.IsClosed);
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, Obj.IsClosed);
     finally
       PP.Free;
       EndUseProfilePoints;
@@ -3920,7 +4348,28 @@ begin
       Obj.BezierPoints(PP, IdentityTransf2D);
       WritePath(PP, ProfilePoints, WriteBezierPath,
         Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-        Obj.LineKind, Obj.Hatching, Obj.IsClosed);
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, Obj.IsClosed);
+    finally
+      PP.Free;
+      EndUseProfilePoints;
+    end;
+  end;
+end;
+
+procedure T_PSTricks_Export.WriteBezier2D(Obj: TBezierPath2D0);
+var
+  PP: TPointsSet2D;
+begin
+  if Obj.Points.Count < 2 then Exit;
+  with Obj do
+  begin
+    PP := nil;
+    BeginUseProfilePoints;
+    try
+      Obj.BezierPoints(PP, IdentityTransf2D);
+      WritePath(PP, ProfilePoints, WriteBezierPath,
+        Obj.LineColor, Obj.HatchColor, Obj.FillColor,
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, Obj.IsClosed);
     finally
       PP.Free;
       EndUseProfilePoints;
@@ -3933,21 +4382,478 @@ begin
   with Obj do
     WritePath(Points, Points, WritePoly,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, Obj.IsClosed);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, Obj.IsClosed);
 end;
 
-procedure T_PSTricks_Export.StoreToClipboard;
+{ --================ T_PGF_Export ==================-- }
+
+procedure T_PGF_Export.WriteStreamPoint0(const X, Y: TRealType);
 begin
-  fStream.Free;
-  fStream := TMemoryStream.Create;
-  try
-    WriteAll;
-    fStream.Position := 0;
-    PutStreamToClipboard0(CF_TEXT, fStream, fStream.Size);
-  finally
-    fStream.Free;
-    fStream := nil;
+  WriteStream(Format('{\pgfxy(%.2f,%.2f)}', [X, Y]));
+end;
+
+function T_PGF_Export.GetColor(Color: TColor): string;
+var
+  RGB: T_PS_RGB;
+begin
+  if Color = CurrColor then
+  begin
+    Result := '';
+    Exit;
   end;
+  CurrColor := Color;
+  RGB := PS_RGB(Color);
+  Result := Format('\color[rgb]{%.5g,%.5g,%.5g}',
+    [RGB.R, RGB.G, RGB.B]);
+end;
+
+procedure T_PGF_Export.WriteColor(Color: TColor);
+begin
+  WriteStream(GetColor(Color));
+end;
+
+procedure T_PGF_Export.WriteDash(LineStyle: TLineStyle);
+begin
+  if LineStyle = CurrLineStyle then Exit;
+  CurrLineStyle := LineStyle;
+  case LineStyle of
+    liSolid:
+      WriteStream('\pgfsetdash{}{0mm}');
+    liDotted:
+      WriteStream(Format('\pgfsetdash{{%.2fmm}{%.2fmm}}{0mm}',
+        [fDrawing2D.LineWidthBase * 2,
+        fDrawing2D.DottedSize]));
+    liDashed:
+      WriteStream(Format('\pgfsetdash{{%.2fmm}{%.2fmm}}{0mm}',
+        [fDrawing2D.DashSize * 2,
+        fDrawing2D.DashSize]));
+  end;
+end;
+
+procedure T_PGF_Export.WriteLineWidth(W: TRealType);
+begin
+  if W = CurrLineWidth then Exit;
+  CurrLineWidth := W;
+  WriteStream(Format('\pgfsetlinewidth{%.2fmm}', [W]));
+end;
+
+procedure T_PGF_Export.WriteLineThickness0(const LineStyle: TLineStyle;
+  const LineWidth: TRealType);
+begin
+  WriteDash(LineStyle);
+  if LineStyle <> liNone then
+    WriteLineWidth(fDrawing2D.LineWidthBase * LineWidth);
+end;
+
+procedure T_PGF_Export.WriteLineThickness(Obj: TPrimitive2D);
+begin
+  WriteLineThickness0(Obj.LineStyle, Obj.LineWidth);
+end;
+
+procedure T_PGF_Export.WritePoly(const PP: TPointsSet2D;
+  const PathKind: TPathKind; Closed: Boolean);
+var
+  I: Integer;
+begin
+  if PP.Count < 1 then Exit;
+  WriteStream('\pgfmoveto');
+  WriteStreamPoint(PP[0]);
+  for I := 1 to PP.Count - 1 do
+  begin
+    WriteStream('\pgflineto');
+    WriteStreamPoint(PP[I]);
+    if I mod 100 = 0 then
+    begin
+      WriteLnStream('');
+      WriteStream(' ');
+    end;
+  end;
+  if Closed then
+    WriteStream('\pgfclosepath');
+  WritePathKind(PathKind);
+end;
+
+procedure T_PGF_Export.WriteHatching(const P: TPointsSet2D;
+  const Hatching: THatching;
+  const HatchColor: TColor; Step: TRealType);
+var
+  Lines: TPointsSet2D;
+  DX, DY: TRealType;
+  procedure WriteHatching0;
+  var
+    I: Integer;
+  begin
+    if (DX = 0) and (DY = 0) then Exit;
+    CalculateHatching(P, DX, DY, Step / fFactorH, Lines, fr_Winding);
+    if HatchColor = clDefault then WriteColor(clBlack)
+    else WriteColor(HatchColor);
+    WriteDash(liSolid);
+    WriteLineWidth(fDrawing2D.LineWidthBase * fDrawing2D.HatchingLineWidth);
+    for I := 0 to Lines.Count div 2 - 1 do
+    begin
+      WriteStream('\pgfline');
+      WriteStreamPoint(Lines[I * 2]);
+      WriteStreamPoint(Lines[I * 2 + 1]);
+      if Succ(I) mod 100 = 0 then
+      begin
+        WriteLnStream('');
+        WriteStream(' ');
+      end;
+    end;
+  end;
+begin
+  if Hatching = haNone then Exit;
+  Lines := TPointsSet2D.Create(10);
+  DX := HatchingDirections[Ord(Hatching)][1];
+  DY := HatchingDirections[Ord(Hatching)][2];
+  WriteHatching0;
+  DX := HatchingDirections[Ord(Hatching)][3];
+  DY := HatchingDirections[Ord(Hatching)][4];
+  Lines.Clear;
+  WriteHatching0;
+  Lines.Free;
+end;
+
+procedure T_PGF_Export.WritePathKind(const PathKind: TPathKind);
+begin
+  case PathKind of
+    path_Fill: WriteStream('\pgffill');
+    path_Stroke: WriteStream('\pgfstroke');
+    path_FillStroke: WriteStream('\pgffillstroke');
+  end;
+end;
+
+function T_PGF_Export.GetPathKindString(const PathKind: TPathKind): string;
+begin
+  case PathKind of
+    path_Fill: Result := '[fill]';
+    path_Stroke: Result := '[stroke]';
+    path_FillStroke: Result := '[fillstroke]';
+  end;
+end;
+
+procedure T_PGF_Export.WritePath(const PP, HatchPP: TPointsSet2D;
+  PathProc: TPathProcPathKind;
+  const LineColor, HatchColor, FillColor: TColor;
+  const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+  THatching;
+  const Closed: Boolean);
+begin
+  if (FillColor <> clDefault) and (HatchPP <> nil) then
+  begin
+    WriteColor(FillColor);
+    PathProc(PP, path_Fill, Closed);
+  end;
+  if HatchPP <> nil then
+    WriteHatching(HatchPP, Hatching, HatchColor, fHatchingStep);
+  if LineStyle <> liNone then
+  begin
+    WriteColor(LineColor);
+    WriteLineThickness0(LineStyle, LineWidth);
+    PathProc(PP, path_Stroke, Closed);
+  end;
+  WriteLnStream('');
+end;
+
+procedure T_PGF_Export.WritePoly0(PP: TPointsSet2D;
+  const LineColor, HatchColor, FillColor: TColor;
+  const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+  THatching;
+  const Closed: Boolean);
+begin
+  WritePath(PP, PP, WritePoly, LineColor, HatchColor, FillColor,
+    LineStyle, LineWidth, Hatching, Closed);
+end;
+
+procedure T_PGF_Export.WriteBezierPath(const PP: TPointsSet2D;
+  const PathKind: TPathKind; Closed: Boolean);
+var
+  I: Integer;
+begin
+  if PP.Count < 1 then Exit;
+  WriteStream('\pgfmoveto');
+  WriteStreamPoint(PP[0]);
+  for I := 0 to PP.Count div 3 - 1 do
+  begin
+    WriteStream('\pgfcurveto');
+    WriteStreamPoint(PP[3 * I + 1]);
+    WriteStreamPoint(PP[3 * I + 2]);
+    WriteStreamPoint(PP[3 * I + 3]);
+    if Succ(I) mod 50 = 0 then
+    begin
+      WriteLnStream('');
+      WriteStream(' ');
+    end;
+  end;
+  if Closed then
+    WriteStream('\pgfclosepath');
+  WritePathKind(PathKind);
+end;
+
+procedure T_PGF_Export.WriteCircle(const PP: TPointsSet2D;
+  const PathKind: TPathKind; Closed: Boolean);
+begin
+  WriteStream('\pgfcircle');
+  WriteStream(GetPathKindString(PathKind));
+  WriteStreamPoint(PP[0]);
+  WriteStream(Format('{%.2fmm}',
+    [PointDistance2D(PP[0], PP[1]) * fFactorW]));
+end;
+
+procedure T_PGF_Export.WriteEllipse(const PP: TPointsSet2D;
+  const PathKind: TPathKind; Closed: Boolean);
+var P0, P1, P2, P3, P4: TPoint2D;
+  RX, RY, ARot: TRealType;
+  CP: TPoint2D;
+begin
+  WriteStream('\pgfellipse');
+  WriteStream(GetPathKindString(PathKind));
+  P0 := PP[0];
+  P1 := PP[1];
+  P2 := PP[2];
+  GetEllipseParams0(P0, P1, P2, P3, P4, CP.X, CP.Y, RX, RY, ARot);
+  P0 := ConvertPnt(P0);
+  P1 := ConvertPnt(P1);
+  P3 := ConvertPnt(P3);
+  WriteStreamPoint(CP);
+  WriteStreamPoint0((P0.X - P3.X) / 2, (P0.Y - P3.Y) / 2);
+  WriteStreamPoint0((P1.X - P3.X) / 2, (P1.Y - P3.Y) / 2);
+end;
+
+procedure T_PGF_Export.WriteHeader;
+begin
+  fUnitLength := fDrawing2D.PicUnitLength / 10;
+  fFactorMM := 1;
+  MeasureDrawing;
+//  fW := fW_MM * fFactorMM;
+//  fH := fH_MM * fFactorMM;
+  fHatchingStep := fDrawing2D.HatchingStep;
+  WriteLnStream('\setlength{\unitlength}{1mm}');
+  WriteLnStream(Format('\begin{pgfpicture}{0mm}{0mm}{%.2fmm}{%.2fmm}',
+    [fW_MM, fH_MM]));
+  WriteLnStream('\pgfsetxvec{\pgfpoint{1mm}{0mm}}');
+  WriteLnStream('\pgfsetyvec{\pgfpoint{0mm}{1mm}}');
+  if fDrawing2D.MiterLimit <> 10 then
+    if fDrawing2D.MiterLimit < 1.01 then
+      WriteLnStream('\pgfsetmiterlimit{1.01pt}')
+    else
+      WriteLnStream(Format('\pgfsetmiterlimit{%.2fpt}',
+        [fDrawing2D.MiterLimit]));
+  WriteColor(clBlack);
+  WriteLineWidth(fDrawing2D.LineWidthBase);
+  WriteDash(liSolid);
+  WriteLnStream('');
+end;
+
+procedure T_PGF_Export.WriteFooter;
+begin
+  WriteLnStream('\end{pgfpicture}');
+end;
+
+procedure T_PGF_Export.WriteRectangle2D(Obj: TRectangle2D);
+begin
+  with Obj do
+  begin
+    BeginUseProfilePoints;
+    WritePath(ProfilePoints, ProfilePoints, WritePoly,
+      Obj.LineColor, Obj.HatchColor, Obj.FillColor,
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, True);
+    EndUseProfilePoints;
+  end;
+end;
+
+function GetPgfBox(Obj: TText2D;
+  FactorW, FactorH, UnitLength: TRealType): string;
+var
+  Rect: TRect2D;
+  Width: TRealType;
+  JustStrH, JustStrV, St: string;
+begin
+  with Obj do
+  begin
+    Rect := GetExtension0;
+    Width := (Rect.Right - Rect.Left);
+    Result := GetTeXTextFontSize(Obj, FactorH, UnitLength);
+    Result := Result + GetTeXTextFontColor(Obj);
+    if Obj.LineColor <> clDefault then Result := Result + '{';
+
+    case HJustification of
+      jhLeft: JustStrH := 'left';
+      jhCenter: JustStrH := 'center'; //??
+      jhRight: JustStrH := 'right';
+    end;
+    case VJustification of
+      jvBaseline: JustStrV := 'baseline';
+      jvBottom: JustStrV := 'bottom';
+      jvCenter: JustStrV := 'center'; //??
+      jvTop: JustStrV := 'top';
+    end;
+    if TeXText <> '' then St := TeXText
+    else St := TeX_Replace_Special(Text);
+    Result := Result + Format('{\pgfbox[%s,%s]{%s\strut}}',
+      [JustStrH, JustStrV, St]);
+
+    //Result := Result +
+    //  Format('\makebox(%.1f, %.1f)[', [Width * FactorW, Height * FactorH]);
+    //Result := Result + ']{' + St + {} '\strut}';
+    if Obj.LineColor <> clDefault then Result := Result + '}';
+    //???::
+    if Rot = 0 then
+    else
+    begin
+      Result :=
+        Format('\rotatebox{%.2f}{%s}', //\frame{} \fbox{}
+        [RadToDeg(Rot), Result]);
+    end;
+  end;
+//  '\pgfputat{\pgfxy(1,1)}{\pgfbox[center,center]{Hi!}}'
+end;
+
+procedure T_PGF_Export.WriteText2D(Obj: TText2D);
+var
+  P: TPoint2D;
+begin
+  with Obj do
+  begin
+    if Obj.LineColor = clDefault then
+      WriteStream(GetColor(clBlack));
+    WriteStream('\pgfputat');
+    P := ConvertPnt(Points[0]);
+    GetTeXTextPoint(P, Obj, fFactorW, fFactorH);
+    WriteStreamPoint0(P.X, P.Y);
+    WriteLnStream(Format('{\pgfbox[bottom,left]{%s}}',
+      [GetTeXTextMakebox(Obj, fFactorW, fFactorH, 1)]));
+//    WriteLnStream('{' + GetPgfBox(Obj, fFactorW, fFactorH, 1) + '}');
+  end;
+end;
+
+procedure T_PGF_Export.WriteStar2D(Obj: TStar2D);
+//var  P: TPoint2D;
+begin
+  {with Obj do
+  begin
+    P := Points[0];
+    WriteStream('\psdots*[]');
+    WriteStreamPoint(P);
+  end;
+  WriteLnStream('');}
+  inherited WriteStar2D(Obj);
+end;
+
+procedure T_PGF_Export.WriteEllipse2D(Obj: TEllipse2D);
+begin
+  with Obj do
+  begin
+    BeginUseProfilePoints;
+    WritePath(Points, ProfilePoints, WriteEllipse,
+      Obj.LineColor, Obj.HatchColor, Obj.FillColor,
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, True);
+    EndUseProfilePoints;
+  end;
+end;
+
+procedure T_PGF_Export.WriteCircle2D(Obj: TCircle2D);
+begin
+  with Obj do
+  begin
+    BeginUseProfilePoints;
+    WritePath(Points, ProfilePoints, WriteCircle,
+      Obj.LineColor, Obj.HatchColor, Obj.FillColor,
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, True);
+    EndUseProfilePoints;
+  end;
+end;
+
+procedure T_PGF_Export.WriteCircular2D(Obj: TCircular2D);
+var
+  PP: TPointsSet2D;
+begin
+  if Obj.Points.Count < 2 then Exit;
+  with Obj do
+  begin
+    PP := nil;
+    BeginUseProfilePoints;
+    try
+      Obj.BezierPoints(PP, IdentityTransf2D);
+      WritePath(PP, ProfilePoints, WriteBezierPath,
+        Obj.LineColor, Obj.HatchColor, Obj.FillColor,
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, Obj.IsClosed);
+    finally
+      PP.Free;
+      EndUseProfilePoints;
+    end;
+  end;
+end;
+
+procedure T_PGF_Export.WriteSpline2D(Obj: TSpline2D0);
+var
+  PP: TPointsSet2D;
+begin
+  if Obj.Points.Count < 2 then Exit;
+  with Obj do
+  begin
+    PP := nil;
+    BeginUseProfilePoints;
+    try
+      Obj.BezierPoints(PP, IdentityTransf2D);
+      WritePath(PP, ProfilePoints, WriteBezierPath,
+        Obj.LineColor, Obj.HatchColor, Obj.FillColor,
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, Obj.IsClosed);
+    finally
+      PP.Free;
+      EndUseProfilePoints;
+    end;
+  end;
+end;
+
+procedure T_PGF_Export.WriteSmooth2D(Obj: TSmoothPath2D0);
+var
+  PP: TPointsSet2D;
+begin
+  if Obj.Points.Count < 2 then Exit;
+  with Obj do
+  begin
+    PP := nil;
+    BeginUseProfilePoints;
+    try
+      Obj.BezierPoints(PP, IdentityTransf2D);
+      WritePath(PP, ProfilePoints, WriteBezierPath,
+        Obj.LineColor, Obj.HatchColor, Obj.FillColor,
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, Obj.IsClosed);
+    finally
+      PP.Free;
+      EndUseProfilePoints;
+    end;
+  end;
+end;
+
+procedure T_PGF_Export.WriteBezier2D(Obj: TBezierPath2D0);
+var
+  PP: TPointsSet2D;
+begin
+  if Obj.Points.Count < 2 then Exit;
+  with Obj do
+  begin
+    PP := nil;
+    BeginUseProfilePoints;
+    try
+      Obj.BezierPoints(PP, IdentityTransf2D);
+      WritePath(PP, ProfilePoints, WriteBezierPath,
+        Obj.LineColor, Obj.HatchColor, Obj.FillColor,
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, Obj.IsClosed);
+    finally
+      PP.Free;
+      EndUseProfilePoints;
+    end;
+  end;
+end;
+
+procedure T_PGF_Export.WritePoly2D(Obj: TPolyline2D0);
+begin
+  with Obj do
+    WritePath(Points, Points, WritePoly,
+      Obj.LineColor, Obj.HatchColor, Obj.FillColor,
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, Obj.IsClosed);
 end;
 
 { --================ T_MetaPost_Export ==================-- }
@@ -4074,27 +4980,17 @@ begin
     [RGB.R, RGB.G, RGB.B]));
 end;
 
-procedure T_MetaPost_Export.WriteLineAttr(const LineKind: TLineKind;
+procedure T_MetaPost_Export.WriteLineAttr(const LineStyle: TLineStyle; const
+  LineWidth: TRealType;
   const LineColor: TColor);
 begin
-  case LineKind of
-    liThick:
-      WriteStream(Format(' withpen pencircle scaled %.2fmm',
-        [fDrawing2D.LineWidth * 2]));
-    liDotted:
-      WriteStream(Format(' withpen pencircle scaled %.2fmm',
-        [fDrawing2D.LineWidth * 2]));
-    liThin:
-      WriteStream(Format(' withpen pencircle scaled %.2fmm',
-        [fDrawing2D.LineWidth])); //pensquare
-    liDashed:
-      WriteStream(Format(' withpen pencircle scaled %.2fmm',
-        [fDrawing2D.LineWidth]));
-  end;
-  case LineKind of
+  if LineStyle <> liNone then
+    WriteStream(Format(' withpen pencircle scaled %.2fmm',
+      [fDrawing2D.LineWidthBase * LineWidth]));
+  case LineStyle of
     liDotted:
       WriteStream(Format(' dashed dashpattern(on %.2fmm off %.2fmm)',
-        [fDrawing2D.LineWidth * 2, fDrawing2D.DottedSize
+        [fDrawing2D.LineWidthBase * 2, fDrawing2D.DottedSize
         ]));
     liDashed:
       WriteStream(Format(' dashed dashpattern(on %.2fmm off %.2fmm)',
@@ -4160,7 +5056,7 @@ var
     I: Integer;
   begin
     if (DX = 0) and (DY = 0) then Exit;
-    CalculateHatching(P, DX, DY, Step, Lines);
+    CalculateHatching(P, DX, DY, Step, Lines, fr_Winding);
     for I := 0 to Lines.Count div 2 - 1 do
     begin
       WriteStream('draw ');
@@ -4168,7 +5064,7 @@ var
       WriteStream('--');
       WriteStreamPoint(Lines[I * 2 + 1]);
       WriteStream(Format(' withpen pencircle scaled %.2fmm',
-        [fDrawing2D.LineWidth / 2]));
+        [fDrawing2D.LineWidthBase * fDrawing2D.HatchingLineWidth]));
       if HatchColor <> clDefault then
       begin
         RGB := PS_RGB(HatchColor);
@@ -4195,7 +5091,8 @@ end;
 procedure T_MetaPost_Export.WritePath(const PP, HatchPP: TPointsSet2D;
   PathProc: TPathProc;
   const LineColor, HatchColor, FillColor: TColor;
-  const LineKind: TLineKind; const Hatching: THatching;
+  const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+  THatching;
   const Closed: Boolean);
 begin
   if (PP = nil) or (PP.Count < 1) then Exit;
@@ -4210,22 +5107,23 @@ begin
   end;
   if HatchPP <> nil then
     WriteHatching(HatchPP, Hatching, HatchColor, fHatchingStep);
-  if LineKind = liNone then Exit;
+  if LineStyle = liNone then Exit;
   if FillColor = clDefault then PathProc(PP, Closed);
   WriteStream('draw pp');
   if Closed then WriteStream('--cycle');
-  WriteLineAttr(LineKind, LineColor);
+  WriteLineAttr(LineStyle, LineWidth, LineColor);
   WriteLnStream(';');
 end;
 
 procedure T_MetaPost_Export.WritePoly0(PP: TPointsSet2D;
   const LineColor, HatchColor, FillColor: TColor;
-  const LineKind: TLineKind; const Hatching: THatching;
+  const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+  THatching;
   const Closed: Boolean);
 begin
   WritePath(PP, PP, WritePoly,
     LineColor, HatchColor, FillColor,
-    LineKind, Hatching, Closed);
+    LineStyle, LineWidth, Hatching, Closed);
 end;
 
 procedure T_MetaPost_Export.WriteHeader;
@@ -4275,6 +5173,9 @@ begin
   if fDrawing2D.MiterLimit <> 10 then
     WriteLnStream(Format('miterlimit:=%.2g;', [fDrawing2D.MiterLimit]));
   WriteLnStream('path pp;');
+  WriteStream('picture pic;');
+  //WriteStream('bboxmargin := 0;');
+  WriteStream('labeloffset := 0;');
 end;
 
 procedure T_MetaPost_Export.WriteFooter;
@@ -4291,15 +5192,16 @@ begin
     BeginUseProfilePoints;
     WritePath(ProfilePoints, ProfilePoints, WritePoly,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, True);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, True);
     EndUseProfilePoints;
   end;
 end;
 
 procedure T_MetaPost_Export.WriteText2D(Obj: TText2D);
 var
-  St: string;
-  H, Alt, MaxDepth, MaxFontDepth, MaxHeight: TRealType;
+  St, StRot: string;
+  H, MaxDepth, MaxFontDepth, MaxHeight: TRealType;
+  D: TVector2D;
   I: Integer;
 begin
   MaxFontDepth := 0;
@@ -4311,7 +5213,7 @@ begin
     //WriteLnStream('defaultfont:="Times-Roman";');
     //WriteLnStream('defaultfont:="cmr10";');
     WriteLnStream(Format('defaultscale:=%.1fu/fontsize defaultfont;',
-      [Obj.Height * fFactorH / 1.2])); //%.1fmm, Obj.Height * fFactorH
+      [Obj.Height * fFactorH {/ 1.2}])); //%.1fmm, Obj.Height * fFactorH
     if TeXText <> '' then St := TeXText else St := TeX_Replace_Special(Text);
     if not fDrawing2D.MetaPostTeXText then
     begin
@@ -4319,68 +5221,80 @@ begin
       MaxHeight := 0;
       for I := 1 to Length(St) do
       begin
-        Alt := CMR_DP[Ord(St[I])];
-        if Alt > MaxDepth then MaxDepth := Alt;
-        Alt := CMR_HT[Ord(St[I])];
-        if Alt > MaxHeight then MaxHeight := Alt;
+        D.Y := CMR_DP[Ord(St[I])];
+        if D.Y > MaxDepth then MaxDepth := D.Y;
+        D.Y := CMR_HT[Ord(St[I])];
+        if D.Y > MaxHeight then MaxHeight := D.Y;
       end;
       case VJustification of
-        jvBottom: Alt := MaxFontDepth - MaxDepth;
-        jvCenter: Alt := {-(1 - MaxFontDepth) / 2 - MaxDepth}
+        jvBottom: D.Y := MaxFontDepth - MaxDepth;
+        jvCenter: D.Y := {-(1 - MaxFontDepth) / 2 - MaxDepth}
           (MaxFontDepth - MaxDepth - 1 + MaxHeight) / 2;
-        jvTop: Alt := -1 + MaxHeight {-1 - MaxDepth};
+        jvTop: D.Y := -1 + MaxHeight {-1 - MaxDepth};
+        jvBaseline: D.Y := 0;
       end;
     end
-    else Alt := 0;
-    WriteStream(Format('textX:=%.2fu', [ConvertX(Points[0].X)]));
-    case HJustification of
-      jhLeft: WriteLnStream('-bboxmargin;');
-      jhCenter: WriteStream(';');
-      jhRight: WriteLnStream('+bboxmargin;');
-    end;
-    {WriteLnStream(Format(
-      'textY:=%.2fu+defaultscale*(fontsize defaultfont)*(%.2f);',
-      [ConvertY(Points[0].Y), Alt]));}
-    WriteStream(Format('textY:=%.2fu',
-      [ConvertY(Points[0].Y + Obj.Height * Alt / 1.2)]));
-    case VJustification of
-      jvBottom {, jvCenter}: WriteLnStream('-bboxmargin;');
-      jvCenter: WriteStream(';');
-      jvTop: WriteLnStream('+bboxmargin;');
-    end;
+    else
+      case VJustification of
+        jvBaseline: D.Y := 0;
+        jvBottom: D.Y := -0.1 - 0.05;
+        jvCenter: D.Y := 0 - 0.05;
+        jvTop: D.Y := 0.1 - 0.05;
+      end;
+    D.X := 0;
+    if Rot <> 0 then D := TransformVector2D(D, Rotate2D(Rot));
+    D := TransformVector2D(D, Scale2D(Height, Height));
+    WriteStream(Format('textX:=%.2fu;',
+      [ConvertX(Points[0].X + D.X)]));
+    WriteStream(Format('textY:=%.2fu;',
+      [ConvertY(Points[0].Y + D.Y)]));
+    WriteStream('pic := thelabel');
     case HJustification of
       jhLeft:
         case VJustification of
-          jvBottom {, jvCenter}: WriteStream('label.urt');
-          jvCenter: WriteStream('label.rt');
-          jvTop: WriteStream('label.lrt');
+          jvBaseline: WriteStream('.urt');
+          jvBottom {, jvCenter}: WriteStream('.urt');
+          jvCenter: WriteStream('.rt');
+          jvTop: WriteStream('.lrt');
         end;
       jhCenter:
         case VJustification of
-          jvBottom {, jvCenter}: WriteStream('label.top');
-          jvCenter: WriteStream('label');
-          jvTop: WriteStream('label.bot');
+          jvBaseline: WriteStream('.top');
+          jvBottom {, jvCenter}: WriteStream('.top');
+          jvCenter: ;
+          jvTop: WriteStream('.bot');
         end;
       jhRight:
         case VJustification of
-          jvBottom {, jvCenter}: WriteStream('label.ulft');
-          jvCenter: WriteStream('label.lft');
-          jvTop: WriteStream('label.llft');
+          jvBaseline: WriteStream('.ulft');
+          jvBottom {, jvCenter}: WriteStream('.ulft');
+          jvCenter: WriteStream('.lft');
+          jvTop: WriteStream('.llft');
         end;
     end;
     if fDrawing2D.MetaPostTeXText then
     begin
-      H := Obj.Height / 1.2 * fFactorH *
+      H := Obj.Height * fFactorH *
         fDrawing2D.PicUnitLength * 2.845; //in pt // mm=2.845pt
-      WriteStream(Format('(btex %s\strut etex scaled %.2f,', [St, H / 10]))
+      if VJustification = jvBaseline then
+        WriteStream(Format('(btex \raisebox{0pt}[0pt][0pt]{\fontsize{10}{12}\selectfont %s\strut} etex scaled %.2f,(0, 0));',
+          [St, H / 10]))
+      else
+        WriteStream(Format('(btex \fontsize{10}{12}\selectfont %s\strut etex scaled %.2f,(0, 0));', //\frame{}
+          [St, H / 10]))
+          // \setlength{\baselineskip}{?pt}           \fontsize{12}{12}
     end
-    else WriteStream(Format('("%s",', [Text]));
-    //WriteStreamPoint(Points[0]);
-    WriteStream('(textX, textY)');
-    WriteStream(')');
+    else WriteStream(Format('("%s",(0, 0));', [Text]));
+    if Rot <> 0 then
+      StRot := Format(' rotatedaround((textX, textY),%.2f)', [RadToDeg(Rot)])
+    else StRot := '';
+    WriteLnStream(Format('draw pic shifted (textX, textY)%s', [StRot]));
     if Obj.LineColor <> clDefault
       then WriteColor(Obj.LineColor, clBlack);
     WriteLnStream(';');
+    //WriteLnStream('pic := bbox pic;');
+    //WriteLnStream(Format('draw bbox pic shifted (textX, textY)%s withcolor 0.6white;', [StRot]));
+    //WriteLnStream('draw fullcircle scaled 1 shifted (textX, textY);');
   end;
 end;
 
@@ -4411,7 +5325,7 @@ begin
     BeginUseProfilePoints;
     WritePath(PP, ProfilePoints, WriteBezierPath,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, IsClosed);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
     EndUseProfilePoints;
   finally
     PP.Free;
@@ -4425,7 +5339,7 @@ begin
     BeginUseProfilePoints;
     WritePath(Points, ProfilePoints, WriteCircle,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, False);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, False);
     EndUseProfilePoints;
   end;
 end;
@@ -4441,7 +5355,7 @@ begin
     BeginUseProfilePoints;
     WritePath(PP, ProfilePoints, WriteBezierPath,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, IsClosed);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
     EndUseProfilePoints;
   finally
     PP.Free;
@@ -4459,7 +5373,7 @@ begin
     BeginUseProfilePoints;
     WritePath(PP, ProfilePoints, WriteBezierPath,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, IsClosed);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
     EndUseProfilePoints;
   finally
     PP.Free;
@@ -4477,7 +5391,25 @@ begin
     BeginUseProfilePoints;
     WritePath(PP, ProfilePoints, WriteBezierPath,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, IsClosed);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
+    EndUseProfilePoints;
+  finally
+    PP.Free;
+  end;
+end;
+
+procedure T_MetaPost_Export.WriteBezier2D(Obj: TBezierPath2D0);
+var
+  PP: TPointsSet2D;
+begin
+  PP := nil;
+  with Obj do
+  try
+    BezierPoints(PP, IdentityTransf2D);
+    BeginUseProfilePoints;
+    WritePath(PP, ProfilePoints, WriteBezierPath,
+      Obj.LineColor, Obj.HatchColor, Obj.FillColor,
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
     EndUseProfilePoints;
   finally
     PP.Free;
@@ -4489,34 +5421,21 @@ begin
   with Obj do
     WritePath(Points, Points, WritePoly,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, IsClosed);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
 end;
 
 procedure T_MetaPost_Export.WriteToTpX(Stream: TStream;
   const FileName: string);
 begin
   fStream := nil;
-  StoreToFile_MPS(fDrawing2D, ChangeFileExt(FileName, '.mps'));
+  if not StoreToFile_MPS(fDrawing2D, ChangeFileExt(FileName, '.mps'))
+    then Exit;
   fStream := Stream;
   try
     WriteLnStream(Format('  \includegraphics{%s%s.mps}',
       [fDrawing2D.IncludePath,
       ChangeFileExt(ExtractFileName(FileName), '')]));
   finally
-    fStream := nil;
-  end;
-end;
-
-procedure T_MetaPost_Export.StoreToClipboard;
-begin
-  fStream.Free;
-  fStream := TMemoryStream.Create;
-  try
-    WriteAll;
-    fStream.Position := 0;
-    PutStreamToClipboard0(CF_TEXT, fStream, fStream.Size);
-  finally
-    fStream.Free;
     fStream := nil;
   end;
 end;
@@ -4528,6 +5447,8 @@ var
   ProcessInfo: TPROCESSINFORMATION;
   aInput, aOutput: Integer;
   PDirectory: PChar;
+  exitCode: DWORD;
+  ExitCodeProcess: Longword;
 begin
   FillChar(StartupInfo, SizeOf(TSTARTUPINFO), 0);
   try
@@ -4570,7 +5491,20 @@ begin
       //if Result then
     begin
       WaitForInputIdle(ProcessInfo.hProcess, INFINITE);
+      //WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
+      repeat
+        exitCode := WaitForSingleObject(ProcessInfo.hProcess, 100);
+        Application.ProcessMessages;
+        sleep(50);
+      until exitCode <> WAIT_TIMEOUT;
       WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
+      GetExitCodeProcess(ProcessInfo.hProcess, ExitCodeProcess);
+      if ExitCodeProcess <> 0 then
+      begin
+        {Application.MessageBox(PChar('Exit code: ' + IntToStr(ExitCodeProcess)),
+          'Error', MB_OK);}
+        Result := False;
+      end;
     end;
     CloseHandle(ProcessInfo.hProcess);
     CloseHandle(ProcessInfo.hThread);
@@ -4578,6 +5512,22 @@ begin
     if OutFile <> '' then FileClose(aOutput);
     if InFile <> '' then FileClose(aInput);
   end;
+{  if Result then
+    Application.MessageBox('App successful',
+      'Error', MB_OK);}
+end;
+
+procedure OpenOrExec(const ViewerPath, FileName: string);
+begin
+  if ViewerPath = '' then
+    ShellExecute(Application.Handle,
+      PChar('open'), PChar(FileName),
+      nil {PChar(Parameters)}, nil {PChar(Directory)}, SW_SHOW)
+  else
+    FileExec(Format('"%s" "%s"',
+      [ViewerPath, FileName]), '', '',
+      {IncludeTrailingPathDelimiter(ExtractFilePath(FileName))}'',
+      False, False);
 end;
 
 function TryDeleteFile(const FileName: string): Boolean;
@@ -4596,12 +5546,12 @@ begin
   //IncludeTrailingPathDelimiter(??
 end;
 
-procedure StoreToFile_MPS(const Drawing: TDrawing2D;
-  const FileName: string);
+function StoreToFile_MPS(const Drawing: TDrawing2D;
+  const FileName: string): Boolean;
 var
   TempDir, TempMP, TempMPS, TempMPLog: string;
-  Res: Boolean;
 begin
+  Result := False;
   if not FileExists(MetaPostPath) then
   begin
     Application.MessageBox('MetaPost path not found',
@@ -4609,22 +5559,29 @@ begin
     Exit;
   end;
   TempDir := GetTempDir;
-  TempMP := TempDir + '(tmp)TpX.mp';
+  TempMP := TempDir + '(pic)TpX.mp';
   TempMPS := ChangeFileExt(TempMP, '.0');
   TempMPLog := ChangeFileExt(TempMP, '.log');
+  TryDeleteFile(TempMP);
+  TryDeleteFile(TempMPS);
+  TryDeleteFile(TempMPLog);
   StoreToFile_Saver(Drawing, TempMP, T_MetaPost_Export);
   try
     //if FileExists(FileName) then DeleteFile(PChar(FileName));
     //WinExec(PChar(MetaPostPath + ' "' + TempMP + '"'), 0);
     //Res := FileExec(MetaPostPath + ' "' + TempMP + '"',      '', '', '', False, True);
-    Res := FileExec(MetaPostPath + ' "(tmp)TpX.mp"', '', '',
+    Result := FileExec(MetaPostPath + ' -tex=latex "(pic)TpX.mp"', '', '',
       TempDir, False, True);
     if FileExists(TempMPS) then
     begin
       TryDeleteFile(FileName);
+      TryDeleteFile(TempMPLog);
       if not RenameFile(TempMPS, FileName) then
+      begin
         Application.MessageBox('Can not rename. MPS file not created',
-          'Error', MB_OK)
+          'Error', MB_OK);
+        Result := False;
+      end;
     end
     else
     begin
@@ -4634,16 +5591,13 @@ begin
       else if Application.MessageBox(
         'MPS file not created. Do you want to see log file?',
         'Error', MB_OKCANCEL) = idOK then
-      begin
-        FileExec('notepad ' + TempMPLog, '', '', '', True,
-          False);
-        Res := False;
-      end;
+        OpenOrExec(TextViewerPath, TempMPLog);
+      Result := False;
     end;
   finally
-    if Res then TryDeleteFile(TempMP);
+    if Result then TryDeleteFile(TempMP);
     TryDeleteFile(TempMPS);
-    if Res then TryDeleteFile(TempMPLog);
+    if Result then TryDeleteFile(TempMPLog);
   end;
 end;
 
@@ -4677,7 +5631,8 @@ begin
   _WriteString(S, PDF.Contents.Stream);
 end;
 
-procedure T_PDF_Export.WriteLineAttr(const LineKind: TLineKind;
+procedure T_PDF_Export.WriteLineAttr(const LineStyle: TLineStyle; const
+  LineWidth: TRealType;
   const LineColor: TColor);
 var
   A: TRealType;
@@ -4686,20 +5641,17 @@ begin
   with fDrawing2D do
     with fPDF.Canvas do
     begin
-      case LineKind of
-        liNone, liThin, liThick: SetDash([0], 0);
+      case LineStyle of
+        liNone, liSolid: SetDash([0], 0);
         liDashed: SetPDF_Dash(fPDF.Canvas,
             [DashSize * 2 * A, DashSize * A], 0);
         //SetDash([DashSize * 2 * A,            DashSize * A], 0);
         liDotted: SetPDF_Dash(fPDF.Canvas,
-            [LineWidth * 2 * A, DottedSize * A], 0);
+            [LineWidthBase * 2 * A, DottedSize * A], 0);
         //SetDash([LineWidth * 2 * A,            DottedSize * A], 0);
       end;
-      case LineKind of
-        liNone: SetLineWidth(0);
-        liThin, liDashed: SetLineWidth(LineWidth * A);
-        liThick, liDotted: SetLineWidth(LineWidth * 2 * A);
-      end;
+      if LineStyle = liNone then SetLineWidth(0)
+      else SetLineWidth(LineWidthBase * LineWidth * A);
       if LineColor <> clDefault
         then SetRGBStrokeColor(LineColor)
       else SetRGBStrokeColor(0);
@@ -4762,14 +5714,14 @@ var
     I: Integer;
   begin
     if (DX = 0) and (DY = 0) then Exit;
-    CalculateHatching(P, DX, DY, Step, Lines);
+    CalculateHatching(P, DX, DY, Step, Lines, fr_Winding);
     with fPDF.Canvas do
     begin
       if HatchColor <> clDefault
         then SetRGBStrokeColor(HatchColor)
       else SetRGBStrokeColor(0);
       SetDash([0], 0);
-      SetLineWidth(fDrawing2D.LineWidth / 2 * A);
+      SetLineWidth(fDrawing2D.LineWidthBase * fDrawing2D.HatchingLineWidth * A);
       for I := 0 to Lines.Count div 2 - 1 do
       begin
         P0 := ConvertPnt(Lines[I * 2]);
@@ -4797,7 +5749,8 @@ end;
 procedure T_PDF_Export.WritePath(const PP, HatchPP: TPointsSet2D;
   PathProc: TPathProc;
   const LineColor, HatchColor, FillColor: TColor;
-  const LineKind: TLineKind; const Hatching: THatching;
+  const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+  THatching;
   const Closed: Boolean);
 begin
   if PP.Count < 1 then Exit;
@@ -4807,13 +5760,14 @@ begin
     begin
       SetRGBFillColor(FillColor);
       PathProc(PP, Closed);
-      Eofill;
+      //Eofill; // even-odd aka alternate fill rule
+      Fill; // nonzero winding fill rule
     end;
     if HatchPP <> nil then
       WriteHatching(HatchPP, Hatching, HatchColor, fHatchingStep);
-    if LineKind <> liNone then
+    if LineStyle <> liNone then
     begin
-      WriteLineAttr(LineKind, LineColor);
+      WriteLineAttr(LineStyle, LineWidth, LineColor);
       PathProc(PP, Closed);
       Stroke;
     end;
@@ -4822,11 +5776,12 @@ end;
 
 procedure T_PDF_Export.WritePoly0(PP: TPointsSet2D;
   const LineColor, HatchColor, FillColor: TColor;
-  const LineKind: TLineKind; const Hatching: THatching;
+  const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+  THatching;
   const Closed: Boolean);
 begin
-  WritePath(PP, PP, WritePoly,
-    LineColor, HatchColor, FillColor, LineKind, Hatching, Closed);
+  WritePath(PP, PP, WritePoly, LineColor, HatchColor, FillColor,
+    LineStyle, LineWidth, Hatching, Closed);
 end;
 
 procedure T_PDF_Export.WriteHeader;
@@ -4839,6 +5794,8 @@ begin
   fFactorMM := 2.8346;
   MeasureDrawing;
   fHatchingStep := fDrawing2D.HatchingStep / fDrawing2D.PicScale;
+  // compress PDF:
+  fPDF.CompressionMethod := cmFlateDecode;
   with fPDF do
   begin
     NewDoc;
@@ -4866,7 +5823,7 @@ begin
     try
       WritePath(ProfilePoints, ProfilePoints, WritePoly,
         Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-        Obj.LineKind, Obj.Hatching, True);
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, True);
     finally
       EndUseProfilePoints;
     end;
@@ -4885,7 +5842,7 @@ begin
       BezierPoints(PP, IdentityTransf2D);
       WritePath(PP, ProfilePoints, WriteBezierPath,
         Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-        Obj.LineKind, Obj.Hatching, IsClosed);
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
     finally
       PP.Free;
       EndUseProfilePoints;
@@ -4905,7 +5862,7 @@ begin
       BezierPoints(PP, IdentityTransf2D);
       WritePath(PP, ProfilePoints, WriteBezierPath,
         Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-        Obj.LineKind, Obj.Hatching, IsClosed);
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
     finally
       PP.Free;
       EndUseProfilePoints;
@@ -4925,7 +5882,7 @@ begin
       BezierPoints(PP, IdentityTransf2D);
       WritePath(PP, ProfilePoints, WriteBezierPath,
         Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-        Obj.LineKind, Obj.Hatching, IsClosed);
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
     finally
       PP.Free;
       EndUseProfilePoints;
@@ -4945,7 +5902,7 @@ begin
       BezierPoints(PP, IdentityTransf2D);
       WritePath(PP, ProfilePoints, WriteBezierPath,
         Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-        Obj.LineKind, Obj.Hatching, IsClosed);
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
     finally
       PP.Free;
       EndUseProfilePoints;
@@ -4965,7 +5922,27 @@ begin
       BezierPoints(PP, IdentityTransf2D);
       WritePath(PP, ProfilePoints, WriteBezierPath,
         Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-        Obj.LineKind, Obj.Hatching, IsClosed);
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
+    finally
+      PP.Free;
+      EndUseProfilePoints;
+    end;
+  end;
+end;
+
+procedure T_PDF_Export.WriteBezier2D(Obj: TBezierPath2D0);
+var
+  PP: TPointsSet2D;
+begin
+  with Obj do
+  begin
+    PP := nil;
+    BeginUseProfilePoints;
+    try
+      BezierPoints(PP, IdentityTransf2D);
+      WritePath(PP, ProfilePoints, WriteBezierPath,
+        Obj.LineColor, Obj.HatchColor, Obj.FillColor,
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
     finally
       PP.Free;
       EndUseProfilePoints;
@@ -4978,35 +5955,69 @@ begin
   with Obj do
     WritePath(Points, Points, WritePoly,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, IsClosed);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
+end;
+
+procedure SetPDF_TextMatrix(PDF: TPdfCanvas;
+  const T: TTransf2D);
+var
+  S: string;
+begin
+  S := _FloatToStrR(T[1, 1]) + ' ' +
+    _FloatToStrR(T[1, 2]) + ' ' +
+    _FloatToStrR(T[2, 1]) + ' ' +
+    _FloatToStrR(T[2, 2]) + ' ' +
+    _FloatToStrR(T[3, 1]) + ' ' +
+    _FloatToStrR(T[3, 2]) + ' Tm'#10;
+  _WriteString(S, PDF.Contents.Stream);
 end;
 
 procedure T_PDF_Export.WriteText2D(Obj: TText2D);
 var
-  FontH, HShift, VShift: TRealType;
+  HText: TRealType;
+  D: TVector2D;
   P: TPoint2D;
+  T: TTransf2D;
+  fDescent: TRealType;
 begin
   with Obj, fPDF.Canvas do
   begin
     P := Points[0];
-    FontH := Height * fFactorH / 1.2;
-    SetFont('Times-Roman', FontH);
+    HText := Height * fFactorH;
+    SetFont('Times-Roman', HText);
+    //SetFont('Arial', HText);
     case HJustification of
-      jhLeft: HShift := 0;
-      jhCenter: HShift := TextWidth(Text) / 2;
-      jhRight: HShift := TextWidth(Text);
+      jhLeft: D.X := 0;
+      jhCenter: D.X := -TextWidth(Text) / 2;
+      jhRight: D.X := -TextWidth(Text);
     end;
+    fDescent := 0.216; // - for Times-Roman 0.195??
+    //fDescent := 0.212; // - for Arial
+    //See PdfFonts: TIMES_DISC_INT_TABLE (KEY: 'Descent'; VAL: -216),
     case VJustification of
-      jvBottom: VShift := -0.2 * FontH;
-      jvCenter: VShift := 0.3 * FontH;
-      jvTop: VShift := 0.8 * FontH;
+      jvBottom: D.Y := 0 + fDescent;
+      jvCenter: D.Y := -0.5 + fDescent;
+      jvTop: D.Y := -1 + fDescent;
+      jvBaseline: D.Y := 0;
     end;
+    D.Y := D.Y * HText;
     if Obj.LineColor <> clDefault then
       SetRGBFillColor(Obj.LineColor)
     else SetRGBFillColor(clBlack);
-    TextOut(ConvertX(P.X) - HShift,
-      ConvertY(P.Y) - VShift, Text);
-      //TextRect(ARect: TPdfRect; Text: string;                            Alignment: TPdfAlignment; Clipping: boolean);
+    if Rot <> 0 then
+    begin
+      T := Rotate2D(Rot);
+      D := TransformVector2D(D, T);
+    end;
+    P := ShiftPoint(ConvertPnt(P), D);
+    BeginText;
+    if Rot = 0 then
+      MoveTextPoint(P.X, P.Y)
+    else
+      SetPDF_TextMatrix(fPDF.Canvas,
+        MultiplyTransform2D(T, Translate2D(P.X, P.Y)));
+    ShowText(Text);
+    EndText;
   end;
 end;
 
@@ -5021,7 +6032,7 @@ begin
     if Obj.LineColor <> clDefault then
       SetRGBFillColor(Obj.LineColor)
     else SetRGBFillColor(0);
-    Eofill;
+    Eo fill;
   end;}
   inherited WriteStar2D(Obj);
 end;
@@ -5054,7 +6065,11 @@ var
   I: Integer;
 begin
   fStream := nil;
-  StoreToFile(ChangeFileExt(FileName, '.pdf'));
+  if not StoreToFile(ChangeFileExt(FileName, '.pdf')) then
+  begin
+    fStream := Stream;
+    Exit;
+  end;
   fStream := Stream;
   UnitLength := fDrawing2D.PicUnitLength;
   W := fW_MM / UnitLength;
@@ -5241,7 +6256,7 @@ var
     I: Integer;
   begin
     if (DX = 0) and (DY = 0) then Exit;
-    CalculateHatching(P, DX, DY, Step, Lines);
+    CalculateHatching(P, DX, DY, Step, Lines, fr_Winding);
     with fDrawing2D do
     begin
       for I := 0 to Lines.Count div 2 - 1 do
@@ -5249,7 +6264,7 @@ var
         if HatchColor = clDefault then Color := clBlack
         else Color := HatchColor;
         WriteLine(Lines[I * 2], Lines[I * 2 + 1],
-          LineWidth / 2 * fFactorMM, Color);
+          LineWidthBase * HatchingLineWidth * fFactorMM, Color);
         //P0 := ConvertPnt(Lines[I * 2]);
         //P1 := ConvertPnt(Lines[I * 2 + 1]);
         //fBitmap.LineFS(P0.X, P0.Y, P1.X, P1.Y, clBlack32);
@@ -5271,41 +6286,38 @@ end;
 
 procedure T_Bitmap0_Export.WritePoly0(PP: TPointsSet2D;
   const LineColor, HatchColor, FillColor: TColor;
-  const LineKind: TLineKind; const Hatching: THatching;
+  const LineStyle: TLineStyle; const LineWidth: TRealType; const Hatching:
+  THatching;
   const Closed: Boolean);
 var
   W: TRealType;
   TmpPoly: TPolygon32;
 begin
   if PP.Count < 1 then Exit;
-  {if (Obj.LineKind <> liNone) or (Obj.FillColor <> clDefault)
+  {if (Obj.LineStyle <> liNone) or (Obj.FillColor <> clDefault)
     then FillPolygon(PP, Closed);}
   if FillColor <> clDefault then
   begin
     FillPolygon(PP, Closed);
+    fPolygon.FillMode := pfWinding; //pfAlternate
     WriteBitmapPolygon(fPolygon, FillColor);
   end;
   if Hatching <> haNone then
     WriteHatching(PP, Hatching, HatchColor, fHatchingStep);
-  if LineKind = liNone then Exit;
+  if LineStyle = liNone then Exit;
   FillPolygon(PP, Closed);
   with fDrawing2D, fBitmap do
   begin
-    case LineKind of
-      liThin, liThick: TmpPoly := fPolygon.Outline;
+    case LineStyle of
+      liSolid: TmpPoly := fPolygon.Outline;
       liDashed:
         TmpPoly := DashedOutline(DashSize * 2 * fFactorMM,
           DashSize * fFactorMM, fPolygon);
       liDotted:
-        TmpPoly := DashedOutline(LineWidth * 2 * fFactorMM,
+        TmpPoly := DashedOutline(LineWidthBase * 2 * fFactorMM,
           DottedSize * fFactorMM, fPolygon)
     end;
-    case LineKind of
-      liThin, liDashed:
-        W := LineWidth * fFactorMM;
-      liThick, liDotted:
-        W := LineWidth * 2 * fFactorMM;
-    end;
+    W := LineWidthBase * LineWidth * fFactorMM;
   end;
   try
     fOutline.Free;
@@ -5348,7 +6360,7 @@ begin
     try
       WritePoly0(ProfilePoints,
         Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-        Obj.LineKind, Obj.Hatching, True);
+        Obj.LineStyle, Obj.LineWidth, Obj.Hatching, True);
     finally
       EndUseProfilePoints;
     end;
@@ -5362,7 +6374,7 @@ begin
     BeginUseProfilePoints;
     WritePoly0(ProfilePoints,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, IsClosed);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
     EndUseProfilePoints;
   end;
 end;
@@ -5374,7 +6386,7 @@ begin
     BeginUseProfilePoints;
     WritePoly0(ProfilePoints,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, IsClosed);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
     EndUseProfilePoints;
   end;
 end;
@@ -5386,7 +6398,7 @@ begin
     BeginUseProfilePoints;
     WritePoly0(ProfilePoints,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, IsClosed);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
     EndUseProfilePoints;
   end;
 end;
@@ -5398,7 +6410,7 @@ begin
     BeginUseProfilePoints;
     WritePoly0(ProfilePoints,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, IsClosed);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
     EndUseProfilePoints;
   end;
 end;
@@ -5410,7 +6422,19 @@ begin
     BeginUseProfilePoints;
     WritePoly0(ProfilePoints,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, IsClosed);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
+    EndUseProfilePoints;
+  end;
+end;
+
+procedure T_Bitmap0_Export.WriteBezier2D(Obj: TBezierPath2D0);
+begin
+  with Obj do
+  begin
+    BeginUseProfilePoints;
+    WritePoly0(ProfilePoints,
+      Obj.LineColor, Obj.HatchColor, Obj.FillColor,
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, IsClosed);
     EndUseProfilePoints;
   end;
 end;
@@ -5420,13 +6444,223 @@ begin
   with Obj do
     WritePoly0(Obj.Points,
       Obj.LineColor, Obj.HatchColor, Obj.FillColor,
-      Obj.LineKind, Obj.Hatching, Obj.IsClosed);
+      Obj.LineStyle, Obj.LineWidth, Obj.Hatching, Obj.IsClosed);
+end;
+
+procedure RenderTextW_Rot(const B0: TBitmap32;
+  X, Y: Integer; const Text: Widestring; AALevel: Integer; Color: TColor32;
+  const FontName: string; const FontSize: Double;
+  const HJustification: THJustification;
+  const VJustification: TVJustification;
+  const Rot: Double);
+var
+  LogFont2: TLOGFONT;
+  B, B2: TBitmap32;
+  StockBitmap: TBitmap;
+  SZ: TSize;
+  Rect, BoundRect: TRect2D;
+  D, V: TVector2D;
+  P: TPoint2D;
+  T: TTransf2D;
+  Alpha: TColor32;
+  StockCanvas: TCanvas;
+  PaddedText: Widestring;
+  ExtendedFont: TExtendedFont;
+  Text_Metric: tagTEXTMETRIC;
+  procedure TextBlueToAlpha(const B: TBitmap32; const Color:
+    TColor32);
+  var
+    I: Integer;
+    P: PColor32;
+    C: TColor32;
+  begin
+  // convert blue channel to alpha and fill the color
+    P := @B.Bits[0];
+    for I := 0 to B.Width * B.Height - 1 do
+    begin
+      C := P^;
+      if C <> 0 then
+      begin
+        C := P^ shl 24; // transfer blue channel to alpha
+        C := C + Color;
+        P^ := C;
+      end;
+      Inc(P);
+    end;
+  end;
+  procedure TextScaleDown(const B, B2: TBitmap32; const N: Integer;
+    const Color: TColor32); // use only the blue channel
+  var
+    I, J, X, Y, P, Q, SZ, S: Integer;
+    Src: PColor32;
+    Dst: PColor32;
+  begin
+    SZ := 1 shl N - 1;
+    Dst := B.PixelPtr[0, 0];
+    for J := 0 to B.Height - 1 do
+    begin
+      Y := J shl N;
+      for I := 0 to B.Width - 1 do
+      begin
+        X := I shl N;
+        S := 0;
+        for Q := Y to Y + SZ do
+        begin
+          Src := B2.PixelPtr[X, Q];
+          for P := X to X + SZ do
+          begin
+            S := S + Integer(Src^ and $000000FF);
+            Inc(Src);
+          end;
+        end;
+        S := S shr N shr N;
+        Dst^ := TColor32(S shl 24) + Color;
+        Inc(Dst);
+      end;
+    end;
+  end;
+begin
+  if B0.Empty then Exit;
+  Alpha := Color shr 24;
+  Color := Color and $00FFFFFF;
+  //AALevel := Constrain(AALevel, 0, 4);
+  PaddedText := Text { + ' '};
+  ExtendedFont := TExtendedFont.Create;
+  ExtendedFont.Free;
+  ExtendedFont := TExtendedFont.Create;
+
+  B := TBitmap32.Create;
+  try
+    if AALevel = 0 then
+    begin
+{$IFDEF CLX}
+      B.Font := Font;
+      SZ := B.TextExtentW(PaddedText);
+      B.SetSize(SZ.CX, SZ.CY);
+{$ELSE}
+      SZ := B0.TextExtentW(PaddedText);
+      B.SetSize(SZ.CX, SZ.CY);
+      B.Font := B0.Font;
+{$ENDIF}
+      B.Clear(0);
+      B.Font.Color := clWhite;
+      B.TextOut(0, 0, Text);
+      TextBlueToAlpha(B, Color);
+    end
+    else
+    begin
+      StockBitmap := TBitmap.Create;
+      StockBitmap.Width := 8;
+      StockBitmap.Height := 8;
+      StockCanvas := StockBitmap.Canvas;
+      StockCanvas.Lock;
+      try
+        //StockCanvas.Font := B0.Font;
+        //StockCanvas.Font.Size := B0.Font.Size shl AALevel;
+        //StockCanvas.Font.Name := 'Times New Roman';
+        //StockCanvas.Font.Height :=
+        //  -Round(FontSize * (1 shl AALevel));
+        ExtendedFont.Canvas := StockCanvas;
+        ExtendedFont.FaceName := FontName;
+        ExtendedFont.Height :=
+          -Round(FontSize * (1 shl AALevel));
+{$IFDEF CLX}
+        SZ := StockCanvas.TextExtent(PaddedText);
+{$ELSE}
+        {Windows.GetTextExtentPoint32W(StockCanvas.Handle, PWideChar(PaddedText),
+          Length(PaddedText), SZ);}
+        SZ := StockCanvas.TextExtent(PaddedText);
+{$ENDIF}
+        GetTextMetrics(StockCanvas.Handle, Text_Metric);
+        //SZ.CX := (SZ.CX shr AALevel + 1) shl AALevel;
+        //SZ.CY := (SZ.CY shr AALevel + 1) shl AALevel;
+        Rect := Rect2D(-Text_Metric.tmAveCharWidth, 0,
+          SZ.CX + Text_Metric.tmAveCharWidth, -SZ.CY);
+        case HJustification of
+          jhLeft: V.X := 0;
+          jhCenter: V.X := SZ.CX / 2;
+          jhRight: V.X := SZ.CX;
+        end;
+        case VJustification of
+          jvTop: V.Y := 0 - Text_Metric.tmInternalLeading;
+          jvCenter: V.Y := -(SZ.CY + Text_Metric.tmInternalLeading) / 2 + 0.25;
+          jvBottom: V.Y := -SZ.CY;
+          jvBaseline: V.Y := -SZ.CY + Text_Metric.tmDescent + 0.5;
+        end;
+        //T := RotateCenter2D(Rot, Points[0]);
+        T := Rotate2D(DegToRad(Rot / 10));
+        BoundRect := TransformBoundingBox2D(Rect, T);
+        BoundRect.Left := BoundRect.Left - Text_Metric.tmAveCharWidth;
+        BoundRect.Right := BoundRect.Right + Text_Metric.tmAveCharWidth;
+        V := TransformVector2D(V, T);
+        SZ.CX := Round(BoundRect.Right - BoundRect.Left);
+        SZ.CY := Round(BoundRect.Top - BoundRect.Bottom);
+        D.X := Max(-BoundRect.Left, 0);
+        D.Y := Max(BoundRect.Top, 0);
+        B2 := TBitmap32.Create;
+        try
+          //StockCanvas.Font.Size := B0.Font.Size shl AALevel;
+          B2.SetSize(SZ.CX, SZ.CY);
+          B2.Clear(0);
+          B2.Font := StockCanvas.Font;
+          B2.Font.Size := B0.Font.Size shl AALevel;
+          B2.Font.Color := clWhite;
+          {GetObject(GetStockObject(DEFAULT_GUI_FONT), SizeOf(LogFont2),
+            @LogFont2);
+          LogFont2.lfFaceName := 'Times New Roman';}
+          LogFont2 := ExtendedFont.LogFont;
+          LogFont2.lfEscapement := Round(Rot);
+          LogFont2.lfOrientation := LogFont2.lfEscapement;
+          //LogFont2.lfHeight := -Round(FontSize * (1 shl AALevel));
+          //Windows.SetTextAlign(B2.Canvas.Handle, TA_LEFT + TA_BOTTOM);
+          B2.Font.Handle := CreateFontIndirect(LogFont2);
+          //B2.TextoutW(0, 0, Text);
+          {B2.Canvas.Pen.Color := clWhite;
+          B2.Canvas.Pen.Width := 5;
+          B2.Canvas.MoveTo(1, 1);
+          B2.Canvas.LineTo(B2.Width - 2, 1);
+          B2.Canvas.LineTo(B2.Width - 2, B2.Height - 2);
+          B2.Canvas.LineTo(1, B2.Height - 2);
+          B2.Canvas.LineTo(1, 1);}
+          B2.TextoutW(Round(D.X), Round(D.Y), Text);
+          //B2.SaveToFile('C:\WRK\-.bmp');
+          B2.StretchFilter := sfLinear;
+          B.SetSize(SZ.CX shr AALevel, SZ.CY shr AALevel);
+          TextScaleDown(B, B2, AALevel, Color);
+        finally
+          B2.Free;
+        end;
+      finally
+        StockCanvas.Unlock;
+        StockBitmap.Free;
+      end;
+    end;
+
+    B.DrawMode := dmBlend;
+    B.MasterAlpha := Alpha;
+
+    B.DrawTo(B0, X - (Round(D.X + V.X { + Text_Metric.tmAveCharWidth}) shr
+      AALevel + 1),
+      Y - (Round(D.Y - V.Y) shr AALevel + 1));
+    {B0.Canvas.Pen.Width := 3;
+    B0.Canvas.Pen.Color := clBlue;
+    B0.Canvas.MoveTo(X - 3, Y - 3);
+    B0.Canvas.LineTo(X - 3, Y + 3);
+    B0.Canvas.LineTo(X + 3, Y + 3);
+    B0.Canvas.LineTo(X + 3, Y - 3);
+    B0.Canvas.LineTo(X - 3, Y - 3);}
+  finally
+    B.Free;
+    //ExtendedFont.Canvas := nil;
+    //ExtendedFont.Free;
+  end;
 end;
 
 procedure T_Bitmap0_Export.WriteText2D(Obj: TText2D);
 var
-  FontH, HShift, VShift: TRealType;
+  FontH: TRealType;
   P: TPoint2D;
+  FontName: string;
 begin
   with Obj do
   begin
@@ -5435,25 +6669,18 @@ begin
       fBitmap.Font.Color := Obj.LineColor
     else
       fBitmap.Font.Color := clBlack;
-    fBitmap.Font.Name := LogFont.FaceName;
+    if fDrawing2D.FontName <> '' then FontName := fDrawing2D.FontName
+    else if FontName_Default <> '' then FontName := FontName_Default
+    else FontName := 'Times New Roman';
     FontH := Height * fFactorH;
     fBitmap.Font.Height := Round(FontH);
     P := Points[0];
-    case HJustification of
-      jhLeft: HShift := 0;
-      jhCenter: HShift := fBitmap.TextWidth(Text) / 2;
-      jhRight: HShift := fBitmap.TextWidth(Text);
-    end;
-    case VJustification of
-      jvBottom: VShift := FontH;
-      jvCenter: VShift := FontH / 2;
-      jvTop: VShift := 0;
-    end;
-    fBitmap.RenderTextW(Round(ConvertX(P.X) - HShift),
-      Round(ConvertY(P.Y) - VShift), Text, 4 {0-4},
-      Color32(fBitmap.Font.Color));
-    {fBitmap.TextoutW(Round(ConvertX(P.X) - HShift),
-      Round(ConvertY(P.Y) - VShift), Text);}
+    RenderTextW_Rot(fBitmap,
+      Round(ConvertX(P.X)),
+      Round(ConvertY(P.Y)), Text, 2 {0-4},
+      Color32(fBitmap.Font.Color), FontName, Round(FontH),
+      Obj.HJustification, Obj.VJustification,
+      Round(RadToDeg(Rot) * 10));
   end;
 end;
 
@@ -5464,18 +6691,21 @@ begin
   fBitmap.SaveToStream(fStream);
 end;
 
-procedure T_Bitmap0_Export.StoreToFile(const FileName: string);
+function T_Bitmap0_Export.StoreToFile(const FileName: string):
+  Boolean;
 var
   aBitmap: TBitmap;
 begin
   WriteAll;
   aBitmap := TBitmap.Create;
+  Result := False;
   try
     aBitmap.Assign(fBitmap);
     aBitmap.PixelFormat := pf24bit;
     aBitmap.SaveToFile(FileName);
   finally
     aBitmap.Free;
+    Result := FileExists(FileName);
   end;
   //fBitmap.SaveToFile(FileName);
 end;
@@ -5488,13 +6718,19 @@ var
   BBList: TStringList;
 begin
   fStream := nil;
-  StoreToFile(ChangeFileExt(FileName, '.bmp'));
+  if not StoreToFile(ChangeFileExt(FileName, '.bmp')) then
+  begin
+    fStream := Stream;
+    Exit;
+  end;
   fStream := Stream;
   try
     WriteLnStream(Format(
       '  \includegraphics[width=%.3fcm,height=%.3fcm]{%s%s.bmp}',
       [fW_MM / 10, fH_MM / 10, fDrawing2D.IncludePath,
       ChangeFileExt(ExtractFileName(FileName), '')]));
+//\item[natwidth,natheight] Again an alternative to |bb|.
+// |natheight=h,natwidth=w| is equivalent to |bb = 0 0 h w|.
   finally
     fStream := nil;
   end;
@@ -5519,7 +6755,11 @@ var
   BBList: TStringList;
 begin
   fStream := nil;
-  StoreToFile(ChangeFileExt(FileName, '.png'));
+  if not StoreToFile(ChangeFileExt(FileName, '.png')) then
+  begin
+    fStream := Stream;
+    Exit;
+  end;
   fStream := Stream;
   try
     WriteLnStream(Format(
@@ -5545,7 +6785,8 @@ begin
   end;
 end;
 
-procedure T_PNG_Export.StoreToFile(const FileName: string);
+function T_PNG_Export.StoreToFile(const FileName: string):
+  Boolean;
 var
   aPNG: TPNGObject;
   aBitmap: TBitmap;
@@ -5553,6 +6794,7 @@ begin
   WriteAll;
   aPNG := TPNGObject.Create;
   aBitmap := TBitmap.Create;
+  Result := False;
   try
     //aBitmap.PixelFormat := pf32bit;
     aBitmap.Assign(fBitmap);
@@ -5561,6 +6803,7 @@ begin
   finally
     aPNG.Free;
     aBitmap.Free;
+    Result := FileExists(FileName);
   end;
 end;
 
@@ -5599,88 +6842,43 @@ begin
   end;
 end;
 
-procedure T_EMF_Export.StoreToFile(const FileName: string);
+function T_EMF_Export.StoreToFile(const FileName: string):
+  Boolean;
 begin
-  fDrawing2D.SaveToFile_EMF(FileName);
+  Result := fDrawing2D.SaveToFile_EMF(FileName);
 end;
 
-
-{ --================ T_EpsToPdf_Export ==================-- }
-
-procedure StoreToFile_EpsToPdf(const Drawing: TDrawing2D;
-  const FileName: string; Light: Boolean);
-var
-  TempDir, TempEPS, TempPDF: string;
-  Res: Boolean;
-begin
-  if not FileExists(EpsToPdfPath) then
-  begin
-    Application.MessageBox('EpsToPdf path not found',
-      'Error', MB_OK);
-    Exit;
-  end;
-  TempDir := GetTempDir;
-  TempEPS := TempDir + '(tmp)TpX.eps';
-  TempPDF := ChangeFileExt(TempEPS, '.pdf');
-  if not Light then
-    StoreToFile_Saver(Drawing, TempEPS, T_PostScript_Export)
-  else StoreToFile_Saver(Drawing, TempEPS, T_PostScript_Light_Export);
-  try
-  //EpsToPdfPath: string = 'epstopdf.exe';
-    Res := FileExec(Format('"%s" "%s"',
-      [EpsToPdfPath, TempEPS]), '', '',
-      TempDir, False, True);
-    if FileExists(TempPDF) then
-    begin
-      if TempPDF <> FileName then
-      begin
-        TryDeleteFile(FileName);
-        if not RenameFile(TempPDF, FileName) then
-          Application.MessageBox('Can not rename. PDF file not created',
-            'Error', MB_OK);
-      end;
-    end
-    else
-      Application.MessageBox('PDF file not created',
-        'Error', MB_OK);
-  finally
-    if Res then
-      if not TryDeleteFile(TempEPS) then ;
-      //Application.MessageBox('qqq',        'Error', MB_OK);
-    TryDeleteFile(TempPDF);
-  end;
-end;
-
-procedure T_EpsToPdf_Export.WriteToTpX(Stream: TStream;
-  const FileName: string);
-begin
-  fStream := nil;
-  StoreToFile_EpsToPdf(fDrawing2D,
-    ChangeFileExt(FileName, '.pdf'), Self is T_EpsToPdf_Light_Export);
-  fStream := Stream;
-  try
-    WriteLnStream(Format('  \includegraphics{%s%s}',
-      [fDrawing2D.IncludePath,
-      ChangeFileExt(ExtractFileName(FileName), '.pdf')]));
-  finally
-    fStream := nil;
-  end;
-end;
-
-procedure T_EpsToPdf_Export.StoreToFile(const FileName: string);
-begin
-  StoreToFile_EpsToPdf(fDrawing2D,
-    ChangeFileExt(FileName, '.pdf'), Self is T_EpsToPdf_Light_Export);
-end;
 
 { --================ T_TpX_Loader ==================-- }
 
 procedure T_TpX_Loader.ReadPrimitiveAttr(Obj: TPrimitive2D;
   XMLNode: TXMLDElement);
+var
+  St: string;
 begin
+  if Obj = nil then Exit;
+  //Obj.LineStyle := liSolid;
+  //Obj.LineWidth := 1;
   if XMLNode.AttributeNode['li'] <> nil then
-    Obj.LineKind := XMLNode.AttributeValue['li']
-  else Obj.LineKind := liThick;
+  begin
+    St := XMLNode.AttributeValue['li'];
+    if St = 'none' then Obj.LineStyle := liNone
+    else if St = 'dot' then Obj.LineStyle := liDotted
+    else if St = 'dash' then Obj.LineStyle := liDashed
+    else if St = '0' then Obj.LineStyle := liNone
+    else if St = '3' then
+    begin
+      Obj.LineStyle := liDotted;
+      Obj.LineWidth := 2;
+    end
+    else if St = '4' then
+    begin
+      Obj.LineStyle := liDashed;
+      //Obj.LineWidth := 1;
+    end;
+  end;
+  if XMLNode.AttributeNode['lw'] <> nil then
+    Obj.LineWidth := XMLNode.AttributeValue['lw'];
   if XMLNode.AttributeNode['ha'] <> nil then
     Obj.Hatching := XMLNode.AttributeValue['ha']
   else Obj.Hatching := haNone;
@@ -5698,7 +6896,7 @@ end;
 function T_TpX_Loader.ReadLine(XMLNode: TXMLDElement):
   TPrimitive2D;
 begin
-  Result := TLine2D.Create(0,
+  Result := TLine2D.CreateSpec(0,
     Point2D(XMLNode.AttributeValue['x1'],
     XMLNode.AttributeValue['y1']),
     Point2D(XMLNode.AttributeValue['x2'],
@@ -5722,7 +6920,12 @@ begin
     XMLNode.AttributeValue['y1']);
   P1 := Point2D(XMLNode.AttributeValue['x2'],
     XMLNode.AttributeValue['y2']);
-  if XMLNode.AttributeNode['rot'] <> nil then
+  if XMLNode.AttributeNode['rotdeg'] <> nil then
+  begin
+    A := DegToRad(XMLNode.AttributeValue['rotdeg']);
+    P2 := Point2D(P0.X + Sin(A), P0.Y + Cos(A));
+  end
+  else if XMLNode.AttributeNode['rot'] <> nil then
   begin
     A := XMLNode.AttributeValue['rot'];
     P2 := Point2D(P0.X + Sin(A), P0.Y + Cos(A));
@@ -5745,9 +6948,10 @@ var
   Ch: Char;
 begin
   H := XMLNode.AttributeValue['h'];
+  if fVersion <= 1 then H := H / 1.2;
   X := XMLNode.AttributeValue['x'];
   Y := XMLNode.AttributeValue['y'];
-  Result := TText2D.Create(0,
+  Result := TText2D.CreateSpec(0,
     Point2D(X, Y), H, XMLNode.AttributeValueSt['t']);
   (Result as TText2D).AutoSize := True;
   with Result as TText2D do
@@ -5763,10 +6967,16 @@ begin
       't': VJustification := jvTop;
       'b': VJustification := jvBottom;
       'c': VJustification := jvCenter;
+      '0': VJustification := jvBaseline;
     end;
     if XMLNode.AttributeNode['tex'] <> nil then
       TeXText := XMLNode.AttributeValueSt['tex']
     else TeXText := '';
+    if XMLNode.AttributeNode['rotdeg'] <> nil then
+      Rot := DegToRad(XMLNode.AttributeValue['rotdeg'])
+    else if XMLNode.AttributeNode['rot'] <> nil then
+      Rot := XMLNode.AttributeValue['rot']
+    else Rot := 0;
   end;
   ReadPrimitiveAttr(Result, XMLNode);
 end;
@@ -5785,7 +6995,9 @@ begin
   Result := TEllipse2D.Create(0);
   with Result as TEllipse2D do
   begin
-    if XMLNode.AttributeNode['rot'] <> nil then
+    if XMLNode.AttributeNode['rotdeg'] <> nil then
+      ARot := DegToRad(XMLNode.AttributeValue['rotdeg'])
+    else if XMLNode.AttributeNode['rot'] <> nil then
       ARot := XMLNode.AttributeValue['rot']
     else ARot := 0;
     Points[0] := TransformPoint2D(Point2D(CP.X + DX / 2,
@@ -5826,7 +7038,7 @@ begin
   D := XMLNode.AttributeValue['dx'];
   SA := XMLNode.AttributeValue['a1'];
   EA := XMLNode.AttributeValue['a2'];
-  Result := TArc2D.Create(0, Point2D(X, Y), D / 2, SA, EA);
+  Result := TArc2D.CreateSpec(0, Point2D(X, Y), D / 2, SA, EA);
   (Result as TArc2D).StartAngle := SA;
   (Result as TArc2D).EndAngle := EA;
   ReadPrimitiveAttr(Result, XMLNode);
@@ -5843,15 +7055,16 @@ begin
   SA := XMLNode.AttributeValue['a1'];
   EA := XMLNode.AttributeValue['a2'];
   if TheClass = TArc2D then Result :=
-    TArc2D.Create(0, Point2D(X, Y), D / 2, SA, EA)
+    TArc2D.CreateSpec(0, Point2D(X, Y), D / 2, SA, EA)
   else if TheClass = TSector2D then Result :=
-    TSector2D.Create(0, Point2D(X, Y), D / 2, SA, EA)
+    TSector2D.CreateSpec(0, Point2D(X, Y), D / 2, SA, EA)
   else if TheClass = TSegment2D then Result :=
-    TSegment2D.Create(0, Point2D(X, Y), D / 2, SA, EA);
+    TSegment2D.CreateSpec(0, Point2D(X, Y), D / 2, SA, EA);
   ReadPrimitiveAttr(Result, XMLNode);
 end;
 
-procedure AddPoints(Text: string; Pnts: TPointsSet2D);
+procedure AddPoints(var Primitive: TPrimitive2D; Text: string; Pnts:
+  TPointsSet2D);
 var
   Lines: TStringList;
   I, Len: Integer;
@@ -5871,6 +7084,7 @@ begin
       Point2D(StrToRealType(Trim(Lines[I * 2])),
       StrToRealType(Trim(Lines[I * 2 + 1])));
   Pnts.AddPoints(Pnts0);
+  if Pnts.Count = 0 then FreeAndNil(Primitive);
 end;
 
 function T_TpX_Loader.ReadSpline(XMLNode: TXMLDElement):
@@ -5887,13 +7101,13 @@ begin
   else Order := 3;
   if Order = 3 then
     if IsClosed then
-      Result := TClosedBSpline2D.Create(0, [Point2D(0, 0)])
-    else Result := TBSpline2D.Create(0, [Point2D(0, 0)])
+      Result := TClosedBSpline2D.CreateSpec(0, [Point2D(0, 0)])
+    else Result := TBSpline2D.CreateSpec(0, [Point2D(0, 0)])
   else
     if IsClosed then
-      Result := TClosedCubicBSpline2D.Create(0, [Point2D(0, 0)])
-    else Result := TCubicBSpline2D.Create(0, [Point2D(0, 0)]);
-  AddPoints(XMLNode.Text, (Result as TSpline2D0).Points);
+      Result := TClosedCubicBSpline2D.CreateSpec(0, [Point2D(0, 0)])
+    else Result := TCubicBSpline2D.CreateSpec(0, [Point2D(0, 0)]);
+  AddPoints(Result, XMLNode.Text, (Result as TSpline2D0).Points);
   ReadPrimitiveAttr(Result, XMLNode);
 end;
 
@@ -5906,25 +7120,40 @@ begin
     then IsClosed := XMLNode.AttributeValue['closed'] <> 0
   else IsClosed := False;
   if IsClosed then
-    Result := TClosedSmoothPath2D.Create(0, [Point2D(0, 0)])
-  else Result := TSmoothPath2D.Create(0, [Point2D(0, 0)]);
-  AddPoints(XMLNode.Text, (Result as TSmoothPath2D0).Points);
+    Result := TClosedSmoothPath2D.CreateSpec(0, [Point2D(0, 0)])
+  else Result := TSmoothPath2D.CreateSpec(0, [Point2D(0, 0)]);
+  AddPoints(Result, XMLNode.Text, (Result as TSmoothPath2D0).Points);
+  ReadPrimitiveAttr(Result, XMLNode);
+end;
+
+function T_TpX_Loader.ReadBezier(XMLNode: TXMLDElement):
+  TPrimitive2D;
+var
+  IsClosed: Boolean;
+begin
+  if XMLNode.AttributeNode['closed'] <> nil
+    then IsClosed := XMLNode.AttributeValue['closed'] <> 0
+  else IsClosed := False;
+  if IsClosed then
+    Result := TClosedBezierPath2D.CreateSpec(0, [Point2D(0, 0)])
+  else Result := TBezierPath2D.CreateSpec(0, [Point2D(0, 0)]);
+  AddPoints(Result, XMLNode.Text, (Result as TBezierPath2D0).Points);
   ReadPrimitiveAttr(Result, XMLNode);
 end;
 
 function T_TpX_Loader.ReadPolygon(XMLNode: TXMLDElement):
   TPrimitive2D;
 begin
-  Result := TPolygon2D.Create(0, [Point2D(0, 0)]);
-  AddPoints(XMLNode.Text, (Result as TPolygon2D).Points);
+  Result := TPolygon2D.CreateSpec(0, [Point2D(0, 0)]);
+  AddPoints(Result, XMLNode.Text, (Result as TPolygon2D).Points);
   ReadPrimitiveAttr(Result, XMLNode);
 end;
 
 function T_TpX_Loader.ReadPolyline(XMLNode: TXMLDElement):
   TPrimitive2D;
 begin
-  Result := TPolyline2D.Create(0, [Point2D(0, 0)]);
-  AddPoints(XMLNode.Text, (Result as TPolyline2D).Points);
+  Result := TPolyline2D.CreateSpec(0, [Point2D(0, 0)]);
+  AddPoints(Result, XMLNode.Text, (Result as TPolyline2D).Points);
   ReadPrimitiveAttr(Result, XMLNode);
 end;
 
@@ -5937,7 +7166,7 @@ var
 begin
   CP := Point2D(XMLNode.AttributeValue['x'],
     XMLNode.AttributeValue['y']);
-  Result := TStar2D.Create(0, CP);
+  Result := TStar2D.CreateSpec(0, CP);
   (Result as TStar2D).StarKind := starCircle;
   if XMLNode.AttributeNode['s'] <> nil then
   begin
@@ -5974,6 +7203,7 @@ begin
     or (ID = 'contour') then Result := ReadSpline(XMLNode)
   else if (ID = 'smooth') or (ID = 'curve')
     then Result := ReadSmooth(XMLNode)
+  else if (ID = 'bezier') then Result := ReadBezier(XMLNode)
   else if ID = 'polygon' then Result := ReadPolygon(XMLNode)
   else if (ID = 'path') or (ID = 'polyline')
     then Result := ReadPolyline(XMLNode)
@@ -6038,6 +7268,11 @@ begin
   with fXML.DocumentElement do
   begin
     fVersion := AttributeValue['v'];
+    if fVersion > 2 then
+      Application.MessageBox(
+        PChar(Format('TpX file version is newer then TpX program can handle. Please, update the program',
+        [Font_pfb_Path])),
+        'Error', MB_OK);
     with Rect do
     begin
       Left := AttributeValue['l'];
@@ -6061,6 +7296,8 @@ begin
       if AttributeNode['DefaultFontHeight'] <> nil then
         fDrawing2D.DefaultFontHeight :=
           AttributeValue['DefaultFontHeight'];
+      if AttributeNode['FontName'] <> nil then
+        fDrawing2D.FontName := AttributeValue['FontName'];
       if AttributeNode['PicWidth'] <> nil then
         PicWidth := AttributeValue['PicWidth']
       else PicWidth := 0;
@@ -6069,7 +7306,7 @@ begin
       else PicHeight := 0;
       if AttributeNode['PicScale'] <> nil then
         fDrawing2D.PicScale := AttributeValue['PicScale']
-      else fDrawing2D.PicScale := 0;
+      else fDrawing2D.PicScale := 1;
       if AttributeNode['Border'] <> nil then
         fDrawing2D.Border := AttributeValue['Border']
       else fDrawing2D.Border := Border_Default;
@@ -6079,6 +7316,11 @@ begin
       if AttributeNode['HatchingStep'] <> nil then
         fDrawing2D.HatchingStep :=
           AttributeValue['HatchingStep'];
+      if AttributeNode['HatchingLineWidth'] <> nil then
+        fDrawing2D.HatchingLineWidth :=
+          AttributeValue['HatchingLineWidth']
+      else fDrawing2D.HatchingLineWidth :=
+        HatchingLineWidth_Default;
       if AttributeNode['DottedSize'] <> nil then
         fDrawing2D.DottedSize := AttributeValue['DottedSize'];
       if AttributeNode['DashSize'] <> nil then
@@ -6086,7 +7328,7 @@ begin
       if AttributeNode['TeXMinLine'] <> nil then
         fDrawing2D.TeXMinLine := AttributeValue['TeXMinLine'];
       if AttributeNode['LineWidth'] <> nil then
-        fDrawing2D.LineWidth := AttributeValue['LineWidth'];
+        fDrawing2D.LineWidthBase := AttributeValue['LineWidth'];
       if AttributeNode['MiterLimit'] <> nil then
         fDrawing2D.MiterLimit := AttributeValue['MiterLimit']
       else fDrawing2D.MiterLimit := 10;
@@ -6120,9 +7362,10 @@ begin
   Child := fXML.DocumentElement.SelectSingleNode('caption');
   if Child <> nil then
   begin
-    fDrawing2D.Caption := Child.Text;
+    fDrawing2D.Caption := XmlUnReplaceChars(Trim(Child.Text));
     fDrawing2D.FigLabel
-      := (Child as TXMLDElement).AttributeValueSt['label'];
+      := XmlUnReplaceChars(Trim(
+      (Child as TXMLDElement).AttributeValueSt['label']));
   end
   else
   begin
@@ -6130,7 +7373,8 @@ begin
     fDrawing2D.FigLabel := '';
   end;
   Child := fXML.DocumentElement.SelectSingleNode('comment');
-  if Child <> nil then fDrawing2D.Comment := Child.Text
+  if Child <> nil
+    then fDrawing2D.Comment := XmlUnReplaceChars(Trim(Child.Text))
   else fDrawing2D.Comment := '';
 end;
 
@@ -6295,8 +7539,8 @@ begin
       XMLNodeText(ChildNodes[I], Level + 1) + EOL;
 end;
 
-procedure Import_Metafile(Drawing: TDrawing2D;
-  const FileName: string;
+procedure Import_Metafile(const Drawing: TDrawing2D;
+  const MF_FileName: string;
   Lines: TStrings);
 var
   EMF_Loader: T_EMF_Loader;
@@ -6307,7 +7551,7 @@ begin
   try
     EMF_Loader := T_EMF_Loader.Create;
     try
-      EMF_Loader.LoadFromFile(FileName);
+      EMF_Loader.LoadFromFile(MF_FileName);
       EMF_Loader.FillXML(TpX_Loader.XMLDoc);
       TpX_Loader.ReadAll;
     finally
@@ -6320,8 +7564,8 @@ begin
       DefaultFontHeight := DefaultFontHeight_Default;
       Caption := '';
       FigLabel := '';
-      Comment := Format('Imported from %s',
-        [ExtractFileName(FileName)]);
+      Comment := Format('Imported from %s %s',
+        [ExtractFileName(MF_FileName), DateTimeToStr(Now)]);
       PicUnitLength := PicUnitLength_Default;
       HatchingStep := HatchingStep_Default;
       DottedSize := DottedSize_Default;
@@ -6347,10 +7591,74 @@ begin
   end;
 end;
 
-procedure Import_Eps(Drawing: TDrawing2D; const EpsFileName: string);
+procedure Import_MetafileFromStream(const Drawing: TDrawing2D;
+  const Stream: TStream; const IsOld: Boolean);
+var
+  EMF_Loader: T_EMF_Loader;
+  TpX_Loader: T_TpX_Loader;
+begin
+  Drawing.Clear;
+  TpX_Loader := T_TpX_Loader.Create(Drawing);
+  try
+    EMF_Loader := T_EMF_Loader.Create;
+    try
+      EMF_Loader.LoadFromStream(Stream, IsOld);
+      EMF_Loader.FillXML(TpX_Loader.XMLDoc);
+      TpX_Loader.ReadAll;
+    finally
+      EMF_Loader.Free;
+    end;
+  finally
+    TpX_Loader.Free;
+  end;
+end;
+
+procedure Import_MetafileFromClipboard(const Drawing: TDrawing2D);
+var
+  EMF_Loader: T_EMF_Loader;
+  MF: TMetaFile;
+  TpX_Loader: T_TpX_Loader;
+begin
+  if not Clipboard.HasFormat(CF_METAFILEPICT) then Exit;
+  MF := TMetaFile.Create;
+  EMF_Loader := T_EMF_Loader.Create;
+  TpX_Loader := T_TpX_Loader.Create(Drawing);
+  try
+    MF.Assign(Clipboard);
+    EMF_Loader.LoadFromMF(MF);
+    EMF_Loader.FillXML(TpX_Loader.XMLDoc);
+    TpX_Loader.XMLDoc.Save('--.TpX');
+    TpX_Loader.ReadAll;
+  finally
+    MF.Free;
+    EMF_Loader.Free;
+    TpX_Loader.Free;
+  end;
+end;
+
+procedure PasteMetafileFromClipboard(const Drawing: TDrawing2D);
+var
+  TmpDrawing: TDrawing2D;
+  Stream: TMemoryStream;
+begin
+  TmpDrawing := TDrawing2D.Create(nil);
+  Stream := TMemoryStream.Create;
+  try
+    Import_MetafileFromClipboard(TmpDrawing);
+    TmpDrawing.SaveObjectsToStream(Stream);
+    Stream.Position := 0;
+    Drawing.LoadObjectsFromStream(Stream, Drawing.Version);
+  finally
+    TmpDrawing.Free;
+    Stream.Free;
+  end;
+end;
+
+procedure Import_Eps(const Drawing: TDrawing2D; const EpsFileName: string);
 var
   TempDir, TempEMF: string;
   Res: Boolean;
+  //emf wemf wemfc wemfnss
 begin
   if not FileExists(PsToEditPath) then
   begin
@@ -6359,10 +7667,11 @@ begin
     Exit;
   end;
   TempDir := GetTempDir;
-  TempEMF := TempDir + '(tmp)TpX.emf';
+  TempEMF := TempDir + '(pic)TpX.emf';
+  TryDeleteFile(TempEMF);
   try
-    Res := FileExec(Format('"%s" "%s" "%s" -f emf',
-      [PsToEditPath, EpsFileName, TempEMF]), '', '',
+    Res := FileExec(Format('"%s" "%s" "%s" -f %s',
+      [PsToEditPath, EpsFileName, TempEMF, PsToEditFormat]), '', '',
       TempDir, False, True);
     if not FileExists(TempEMF) then
       Application.MessageBox('EMF file not created',

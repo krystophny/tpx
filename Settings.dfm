@@ -21,7 +21,7 @@ object SettingsForm: TSettingsForm
     Left = 0
     Top = 0
     Width = 461
-    Height = 364
+    Height = 370
     Align = alClient
     TabOrder = 0
     OnEditButtonClick = VLEEditButtonClick
@@ -33,7 +33,7 @@ object SettingsForm: TSettingsForm
   end
   object Panel1: TPanel
     Left = 0
-    Top = 416
+    Top = 422
     Width = 461
     Height = 40
     Align = alBottom
@@ -62,7 +62,7 @@ object SettingsForm: TSettingsForm
   end
   object Memo1: TMemo
     Left = 0
-    Top = 364
+    Top = 370
     Width = 461
     Height = 52
     Align = alBottom
@@ -80,5 +80,17 @@ object SettingsForm: TSettingsForm
   object OpenDialog1: TOpenDialog
     Left = 248
     Top = 4
+  end
+  object FontDialog1: TFontDialog
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Font.Style = []
+    MinFontSize = 0
+    MaxFontSize = 0
+    Options = [fdTrueTypeOnly, fdNoSizeSel, fdNoStyleSel]
+    Left = 284
+    Top = 8
   end
 end

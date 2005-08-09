@@ -21,6 +21,7 @@ var
   //Ps2PdfPath: string = 'dvips.exe';
   DviViewerPath: string = '';
   PdfViewerPath: string = '';
+  TextViewerPath: string = '';
   PSViewerPath: string = '';
 
 implementation
@@ -40,15 +41,23 @@ begin
     begin
       List.Add('\documentclass[a4paper,10pt]{article}');
       List.Add('\usepackage{color}');
+      List.Add('%\pdfoutput=0 % uncomment this to run PDFTeX in TeX mode');
+      List.Add('\usepackage{ifpdf}');
       List.Add('\ifx\pdftexversion\undefined %if using TeX');
       List.Add('  \usepackage{graphicx}');
-      List.Add('  \usepackage{pstricks}%variant: \usepackage{pst-all}');
+      List.Add('\else %if using PDFTeX');
+      List.Add('  \usepackage[pdftex]{graphicx}');
+      List.Add('\fi');
+      List.Add('\ifpdf %if using PDFTeX in PDF mode');
+      List.Add('  \DeclareGraphicsExtensions{.pdf,.png,.mps}');
+      List.Add('  \usepackage{pgf}');
+      List.Add('\else %if using TeX or PDFTeX in TeX mode');
+      List.Add('  \usepackage{graphicx}');
       List.Add('  \DeclareGraphicsExtensions{.eps,.bmp}');
       List.Add('  \DeclareGraphicsRule{.emf}{bmp}{}{}% declare EMF filename extension');
       List.Add('  \DeclareGraphicsRule{.png}{bmp}{}{}% declare PNG filename extension');
-      List.Add('\else %if using PDFTeX');
-      List.Add('  \usepackage[pdftex]{graphicx}');
-      List.Add('  \DeclareGraphicsExtensions{.pdf,.png,.mps}');
+      List.Add('  \usepackage{pgf}');
+      List.Add('  \usepackage{pstricks}%variant: \usepackage{pst-all}');
       List.Add('\fi');
       List.Add('\usepackage{epic,bez123}');
       List.Add('\usepackage{floatflt}% package for floatingfigure environment');
@@ -56,7 +65,13 @@ begin
       List.SaveToFile(IncludeFile);
     end;
     List.Add('\begin{document}');
+    //List.Add('\hrule height 1ex');
+    List.Add('\thispagestyle{empty}');
+    List.Add('\ ');
+    List.Add('');
     List.Add('\input{' + TpXName + '}');
+    List.Add('');
+    List.Add('\ ');
     List.Add('\end{document}');
     List.SaveToFile(FileName);
   finally
@@ -67,20 +82,24 @@ end;
 procedure Preview_LaTeX(const Drawing: TDrawing2D; PreviewKind:
   TLaTeXPreviewKind);
 var
-  TempDir, TempIncludePath, TempTpX, TempTeX, TempDvi: string;
+  TempDir, TempIncludePath, TempTpX, TempTeX, TempDvi, TempTeXLog: string;
   Res: Boolean;
   LatexCompPath, ViewerPath: string;
 const
-  TempTpX0 = '(tmp)TpX.TpX';
+  TempTpX0 = '(tpx)TpX.TpX';
 begin
   TempDir := GetTempDir;
   TempTpX := TempDir + TempTpX0;
-  TempTeX := TempDir + '(tmp)TpX-.tex';
+  TempTeX := TempDir + '(doc)TpX.tex';
+  TempTeXLog := ChangeFileExt(TempTeX, '.log');
+  TryDeleteFile(TempTpX);
+  TryDeleteFile(TempTeX);
   //StringReplace(TpXName, '\', '/', [rfReplaceAll])
   case PreviewKind of
-    ltxview_Dvi, ltxview_PS: TempDvi := TempDir + '(tmp)TpX-.dvi';
-    ltxview_PDF: TempDvi := TempDir + '(tmp)TpX-.pdf';
+    ltxview_Dvi, ltxview_PS: TempDvi := TempDir + '(doc)TpX.dvi';
+    ltxview_PDF: TempDvi := TempDir + '(doc)TpX.pdf';
   end;
+  TryDeleteFile(TempDvi);
   // Set IncludePath to empty string for preview
   TempIncludePath := Drawing.IncludePath;
   Drawing.IncludePath := '';
@@ -117,32 +136,54 @@ begin
     Exit;
   end;}
   try
+    TryDeleteFile(TempTeXLog);
     Res := FileExec(Format('"%s" "%s"',
       [LatexCompPath, TempTeX]), '', '',
       {IncludeTrailingPathDelimiter(ExtractFilePath(FileName))} TempDir,
       False, True);
-    if FileExists(TempDvi) then
+    if not FileExists(TempDvi) then
     begin
-      case PreviewKind of
-        ltxview_Dvi: ViewerPath := DviViewerPath;
-        ltxview_PS: ViewerPath := PSViewerPath;
-        ltxview_PDF: ViewerPath := PdfViewerPath;
+      if not FileExists(TempTeXLog) then
+        Application.MessageBox('DVI (PDF) file not created',
+          'Error', MB_OK)
+      else if Application.MessageBox(
+        'DVI (PDF) file not created. Do you want to see log file?',
+        'Error', MB_OKCANCEL) = idOK then
+      begin
+        OpenOrExec(TextViewerPath, TempTeXLog);
+        Res := False;
       end;
-      if ViewerPath = '' then
-        //WinExec(PChar(TempDvi), 0)
-{   H := } ShellExecute(Application.Handle,
-          PChar('open'),
-          PChar(TempDvi),
-          nil {PChar(Parameters)}, nil {PChar(Directory)}, SW_SHOW)
-      else
-        Res := FileExec(Format('"%s" "%s"',
-          [ViewerPath, TempDvi]), '', '',
-      {IncludeTrailingPathDelimiter(ExtractFilePath(FileName))}'',
-          False, False);
-    end
-    else
-      Application.MessageBox('DVI (PDF) file not created',
-        'Error', MB_OK);
+      Exit;
+    end;
+    if PreviewKind = ltxview_PS then
+    begin
+      TryDeleteFile(ChangeFileExt(TempDvi, '.ps'));
+      Res := FileExec(Format('"%s" "%s"', // -E
+        [DviPsPath, ExtractFileName(TempDvi)]), '', '',
+      {IncludeTrailingPathDelimiter(ExtractFilePath(FileName))} TempDir,
+        False, True);
+      TempDvi := ChangeFileExt(TempDvi, '.ps');
+      if not FileExists(TempDvi) then
+      begin
+        //if not FileExists(TempTeXLog) then
+        Application.MessageBox('PS file not created',
+          'Error', MB_OK);
+        {else if Application.MessageBox(
+          'PS file not created. Do you want to see log file?',
+          'Error', MB_OKCANCEL) = idOK then
+        begin
+          OpenOrExec(TextViewerPath, TempTeXLog);
+          Res := False;
+        end;}
+        Exit;
+      end;
+    end;
+    case PreviewKind of
+      ltxview_Dvi: ViewerPath := DviViewerPath;
+      ltxview_PS: ViewerPath := PSViewerPath;
+      ltxview_PDF: ViewerPath := PdfViewerPath;
+    end;
+    OpenOrExec(ViewerPath, TempDvi);
   finally
     TryDeleteFile(TempTpX);
     TryDeleteFile(TempTeX);
@@ -155,7 +196,7 @@ procedure Preview_Picture(const Drawing: TDrawing2D;
 var
   TmpFileName, Ext: string;
 begin
-  TmpFileName := GetTempDir + '(tmp)TpX-';
+  TmpFileName := GetTempDir + '(img)TpX';
   case PreviewKind of
     pview_SVG: Ext := 'svg';
     pview_EMF: Ext := 'emf';
@@ -168,6 +209,7 @@ begin
     Exit;
   end;
   TmpFileName := TmpFileName + '.' + Ext;
+  TryDeleteFile(TmpFileName);
   case PreviewKind of
     pview_SVG:
       StoreToFile_Saver(Drawing,
@@ -203,10 +245,9 @@ begin
       'Error', MB_OK);
     Exit;
   end;
-  ShellExecute(Application.Handle,
-    PChar('open'),
-    PChar(TmpFileName),
-    nil {PChar(Parameters)}, nil {PChar(Directory)}, SW_SHOW)
+  if PreviewKind in [pview_EPS]
+    then OpenOrExec(PSViewerPath, TmpFileName)
+  else OpenOrExec('', TmpFileName);
 end;
 
 end.

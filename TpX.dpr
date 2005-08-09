@@ -19,7 +19,13 @@ uses
   ColorEtc in 'ColorEtc.pas',
   PreView in 'Preview.pas',
   PdfFonts in 'Lib\PowerPdf\PdfFonts.pas',
-  Stars in 'Stars.pas' {StarsFrame: TFrame};
+  Stars in 'Stars.pas' {StarsFrame: TFrame},
+  Table in 'Table.pas' {TableForm},
+  EMF_Unit in 'EMF_Unit.pas' {EMF_Form},
+  Geometry in 'Geometry.pas',
+  PrintEpsOpt in 'PrintEpsOpt.pas' {PrintEpsOptForm},
+  ScaleStandardUnit in 'ScaleStandardUnit.pas' {ScaleStandardForm},
+  Draw in 'Draw.pas';
 
 {$R *.RES}
 
@@ -32,6 +38,10 @@ begin
   Application.CreateForm(TOptionsForm, OptionsForm);
   Application.CreateForm(TAboutForm, AboutForm);
   Application.CreateForm(TTransfForm, TransfForm);
+  Application.CreateForm(TTableForm, TableForm);
+  Application.CreateForm(TEMF_Form, EMF_Form);
+  Application.CreateForm(TPrintEpsOptForm, PrintEpsOptForm);
+  Application.CreateForm(TScaleStandardForm, ScaleStandardForm);
   Application.Run;
 end.
 
