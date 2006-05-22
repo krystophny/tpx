@@ -10303,7 +10303,7 @@ object AboutForm: TAboutForm
       Top = 4
       Width = 180
       Height = 16
-      Caption = '(c) Alexander Tsyplakov, 2005'
+      Caption = '(c) Alexander Tsyplakov, 2006'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clGreen
       Font.Height = -13
@@ -10314,9 +10314,9 @@ object AboutForm: TAboutForm
     object Label2: TLabel
       Left = 20
       Top = 244
-      Width = 66
+      Width = 106
       Height = 16
-      Caption = 'Version 1.2'
+      Caption = 'Version 1.3 beta 2'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clGreen
       Font.Height = -13
@@ -10358,7 +10358,16 @@ object AboutForm: TAboutForm
         'HTML Help Kit for Delphi, '
         ' Copyright (c) 1999 The Helpware Group'
         ' support@helpware.net'
-        ' http://www.helpware.net')
+        ' http://www.helpware.net'
+        ''
+        'MD5 Message-Digest for Delphi'
+        ' Copyright (c) 1997-1999 Medienagentur Fichtner & Meyer'
+        ' Written by Matthias Fichtner'
+        ' http://www.fichtner.net/delphi/md5.delphi.phtml'
+        ''
+        'StitchSAX 1.1 - Trivial SAX parser for Delphi'
+        ' Copyright (C) 2002, Roman Poterin '
+        ' poterin@mail.ru')
       ReadOnly = True
       ScrollBars = ssVertical
       TabOrder = 0

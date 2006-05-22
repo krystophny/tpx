@@ -1,3 +1,8 @@
+{$A+,B-,C+,D+,E-,F-,G+,H+,I+,J+,K-,L+,M-,N+,O+,P+,Q-,R-,S-,T-,U-,V+,W-,X+,Y-,Z1}
+{$MINSTACKSIZE $00004000}
+{$MAXSTACKSIZE $00100000}
+{$IMAGEBASE $00400000}
+{$APPTYPE GUI}
 unit MainUnit;
 
 interface
@@ -6,7 +11,7 @@ uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls,
   Forms, Dialogs,
   Menus, ComCtrls, ToolWin, Printers, Clipbrd,
-  CADSys4, CS4BaseTypes, CS4Tasks, CS4Shapes,
+  CADSys4, CS4Tasks, CS4Shapes,
   ExtCtrls, ImgList, XUtils, XXmlDom,
   StdCtrls, ExtDlgs, ActnList, CustomizeDlg, ActnMan,
   ActnCtrls, ActnMenus, Grids, ValEdit, HH, hh_funcs, AppEvnts,
@@ -36,12 +41,10 @@ type
     Useareatoselectobjects1: TMenuItem;
     OpenDoc1: TMenuItem;
     Save1: TMenuItem;
-    CADOpenDlg: TOpenDialog;
     CADSaveDlg: TSaveDialog;
     New1: TMenuItem;
     N3: TMenuItem;
     Exit1: TMenuItem;
-    N4: TMenuItem;
     Print1: TMenuItem;
     Actualview1: TMenuItem;
     Fit1: TMenuItem;
@@ -52,7 +55,6 @@ type
     Test1: TMenuItem;
     OpenDialog1: TOpenDialog;
     RichEdit1: TRichEdit;
-    ImportEMF1: TMenuItem;
     EMFOpenDialog: TOpenPictureDialog;
     ActionList1: TActionList;
     DeleteSelected: TAction;
@@ -260,10 +262,6 @@ type
     PreviewPNG1: TMenuItem;
     PreviewBMP1: TMenuItem;
     PreviewBMP2: TMenuItem;
-    EPSOpenDialog: TOpenDialog;
-    ImportMetafile: TAction;
-    ImportEPS: TAction;
-    ImportEPS1: TMenuItem;
     ConvertToGrayScale: TAction;
     N19: TMenuItem;
     Converttograyscale1: TMenuItem;
@@ -312,22 +310,12 @@ type
     InsertTextBtn: TToolButton;
     InsertStarBtn: TToolButton;
     ControlBar3: TControlBar;
-    ToolBar3: TToolBar;
-    ComboBox1: TComboBox;
-    ComboBox3: TComboBox;
-    ComboBox2: TComboBox;
-    ComboBox4: TComboBox;
-    ComboBox5: TComboBox;
-    ComboBox6: TComboBox;
     ScalePhysical: TAction;
     Scalephysicalunits1: TMenuItem;
     InsertBezierPath: TAction;
     InsertBezierPathBtn: TToolButton;
     InsertClosedBezierPath: TAction;
     InsertClosedBezierPathBtn: TToolButton;
-    Panel4: TPanel;
-    Panel5: TPanel;
-    Panel6: TPanel;
     ImageTool: TAction;
     ImagetoEPStool1: TMenuItem;
     PreviewLaTeX_PS: TAction;
@@ -357,6 +345,42 @@ type
     MenuItem8: TMenuItem;
     NewWindow: TAction;
     Newwindow1: TMenuItem;
+    none1: TMenuItem;
+    none2: TMenuItem;
+    InsertSymbol: TAction;
+    InsertSymbolButton: TToolButton;
+    Insertsymbol1: TMenuItem;
+    ToolBar3: TToolBar;
+    Panel4: TPanel;
+    ComboBox1: TComboBox;
+    ComboBox3: TComboBox;
+    ComboBox6: TComboBox;
+    Panel5: TPanel;
+    ComboBox2: TComboBox;
+    ComboBox4: TComboBox;
+    Panel6: TPanel;
+    ComboBox5: TComboBox;
+    SimplifyPoly: TAction;
+    RotateTextAction: TAction;
+    RotateSymbolsAction: TAction;
+    N4: TMenuItem;
+    Rotatetext1: TMenuItem;
+    Rotatesymbols1: TMenuItem;
+    DrawingSource: TAction;
+    preview_tex_inc: TAction;
+    metapost_tex_inc: TAction;
+    Viewsource1: TMenuItem;
+    Drawingsource1: TMenuItem;
+    previewtexinc1: TMenuItem;
+    metaposttexinc1: TMenuItem;
+    ScaleLineWidthAction: TAction;
+    Scalelinewidth1: TMenuItem;
+    PictureProperties: TAction;
+    ObjectProperties: TAction;
+    Objectproperties1: TMenuItem;
+    CopyPictureToClipboard: TAction;
+    ScaleStandard: TAction;
+    PictureInfo: TAction;
     procedure InsertLineBtnClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure InsertArcBtnClick(Sender: TObject);
@@ -392,10 +416,8 @@ type
     procedure InsertRectangleBtnClick(Sender: TObject);
     procedure InsertEllipseBtnClick(Sender: TObject);
     procedure InsertPolygonBtnClick(Sender: TObject);
-    procedure InsertSplineBtnClick(Sender: TObject);
     procedure OpenDoc1Click(Sender: TObject);
     procedure Save1Click(Sender: TObject);
-    procedure Merge1Click(Sender: TObject);
     procedure New1Click(Sender: TObject);
     procedure InsertTextBtnClick(Sender: TObject);
     procedure LocalViewDblClick(Sender: TObject);
@@ -417,7 +439,6 @@ type
     procedure LocalViewMouseDown2D(Sender: TObject; Button:
       TMouseButton;
       Shift: TShiftState; WX, WY: Single; X, Y: Integer);
-    procedure ImportMetafileExecute(Sender: TObject);
     procedure ToolButton4Click(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
@@ -425,14 +446,13 @@ type
     procedure InsertCircleExecute(Sender: TObject);
     procedure InsertStarExecute(Sender: TObject);
     procedure BasicModeBtnClick(Sender: TObject);
-    procedure Scalestandard1Click(Sender: TObject);
+    procedure ScalestandardExecute(Sender: TObject);
     procedure SaveAsExecute(Sender: TObject);
     procedure InsertSectorExecute(Sender: TObject);
     procedure InsertSegmentExecute(Sender: TObject);
-    procedure InsertClosedSplineExecute(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose:
       Boolean);
-    procedure Options1Click(Sender: TObject);
+    procedure PicturePropertiesExecute(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure Help1Click(Sender: TObject);
     function FormHelp(Command: Word; Data: Integer;
@@ -441,9 +461,7 @@ type
     procedure AreaSelectInsideExecute(Sender: TObject);
     procedure CaptureEMFExecute(Sender: TObject);
     procedure Tools1Click(Sender: TObject);
-    procedure Copytoclipboard2Click(Sender: TObject);
-    procedure InsertCubicSplineExecute(Sender: TObject);
-    procedure InsertClosedCubicSplineExecute(Sender: TObject);
+    procedure CopyPictureToClipboardExecute(Sender: TObject);
     procedure ImageToolExecute(Sender: TObject);
     procedure BitBtn1Click(Sender: TObject);
     procedure pXsettings1Click(Sender: TObject);
@@ -473,7 +491,6 @@ type
     procedure File1Click(Sender: TObject);
     procedure OpenRecentExecute(Sender: TObject);
     procedure PicturePreviewExecute(Sender: TObject);
-    procedure ImportEPSExecute(Sender: TObject);
     procedure ColorBox_DrawItem(Control: TWinControl; Index: Integer;
       Rect: TRect; State: TOwnerDrawState);
     procedure ComboBox3Select(Sender: TObject);
@@ -486,7 +503,7 @@ type
     procedure InsertBezierPathExecute(Sender: TObject);
     procedure InsertClosedBezierPathExecute(Sender: TObject);
     procedure PreviewLaTeX_PSExecute(Sender: TObject);
-    procedure Pictureinfo1Click(Sender: TObject);
+    procedure PictureInfoExecute(Sender: TObject);
     procedure ToolButton22Click(Sender: TObject);
     procedure SmoothBezierNodesActionExecute(Sender: TObject);
     procedure PopupMenuDVIPopup(Sender: TObject);
@@ -494,10 +511,19 @@ type
     procedure PopupMenuPdfPopup(Sender: TObject);
     procedure Pdf_Format_Click(Sender: TObject);
     procedure NewWindowExecute(Sender: TObject);
+    procedure InsertSymbolExecute(Sender: TObject);
+    procedure SimplifyPolyExecute(Sender: TObject);
+    procedure RotateTextActionExecute(Sender: TObject);
+    procedure RotateSymbolsActionExecute(Sender: TObject);
+    procedure DrawingSourceExecute(Sender: TObject);
+    procedure preview_tex_incExecute(Sender: TObject);
+    procedure metapost_tex_incExecute(Sender: TObject);
+    procedure ScaleLineWidthActionExecute(Sender: TObject);
   private
     { Private declarations }
     fCurrentOpBtn: TToolButton;
     ScrollPos0: Integer;
+    OpenDialog_FilterIndex: Integer;
 
     procedure OnSelectedObj(Sender: TCAD2DSelectObjectsParam;
       Obj: TObject2D; CtrlPt: Integer; Added: Boolean);
@@ -507,10 +533,10 @@ type
     RecentFiles: THistoryList;
     function TrySaveDrawing(const FileName: string): Word;
     procedure DoSaveDrawing(FileName: string);
-    function DlgSaveDrawing(const FileName: string): Word;
+    function DlgSaveDrawing(FileName: string): Word;
     function AskSaveCurrentDrawing: Word;
     procedure NewDrawing(const FileName: string);
-    procedure OpenDrawing(const FileName: string);
+    procedure DoOpenDrawing(const FileName: string);
   end;
 
 var
@@ -531,11 +557,19 @@ type
 
 var TpXExtAssoc: TTpXExtAssocOption;
 
+type
+
+  TOpenAnyPictureDialog = class(TOpenPictureDialog)
+  protected
+    procedure DoSelectionChange; override;
+    procedure PreviewClick(Sender: TObject); override;
+  end;
+
 implementation
 
-uses InOut, StrUtils, Options, EMF_Add, Settings,
+uses Output, Input, StrUtils, Options, EMF_Add, Settings,
   AboutUnit, TransForm, PreView, ColorEtc, EMF_Unit, Geometry,
-  ScaleStandardUnit;
+  ScaleStandardUnit, ClpbrdOp, SysBasic;
 
 {$R *.DFM}
 
@@ -589,11 +623,12 @@ end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
 var
-  FileName, IncludePath: string;
+  FileName, IncludePath, OutputFormats: string;
 begin
 //FileExists(ExtractFilePath(Application.ExeName)+'\sdddd.sd'
   //LocalView.OnMouseWheel :=
   RecentFiles := THistoryList.Create;
+  OpenDialog_FilterIndex := 2;
   //TpXExtAssoc := TTpXExtAssoc.Create;
   mHHelp := THookHelpSystem.Create('TpX.chm', '', htHHAPI);
   Screen.Cursors[crHand] := LoadCursor(HInstance, 'HAND');
@@ -617,6 +652,7 @@ begin
     DefaultState := TCAD2D_BasicMode;
   end;
   SmoothBezierNodes := SmoothBezierNodesAction.Checked;
+  ScaleLineWidthAction.Checked := ScaleLineWidth;
   DeleteSelected.Tag := CADPRG_DeleteSelected;
   SelectAll.Tag := CADPRG_SelectAll;
   MoveUp.Tag := CADPRG_MoveUp;
@@ -653,6 +689,7 @@ begin
   ConvertToPolyline.Tag := CADPRG_ConvertSelected;
   CustomTransform.Tag := CADPRG_CustomTransform;
   ConvertToGrayScale.Tag := CADPRG_ConvertToGrayScale;
+  ObjectProperties.Tag := CADPRG_SelectedProperties;
   TheDrawing.OnPasteMetafileFromClipboard :=
     OnPasteMetafileFromClipboard;
 
@@ -662,12 +699,12 @@ begin
   ComboBox1.ItemIndex := 0;
   ComboBox2.ItemIndex := 0;
 
-  PreviewSVG.Tag := Ord(pview_SVG);
-  PreviewEPS.Tag := Ord(pview_EPS);
-  PreviewPDF.Tag := Ord(pview_PDF);
-  PreviewPNG.Tag := Ord(pview_PNG);
-  PreviewBMP.Tag := Ord(pview_BMP);
-  PreviewEMF.Tag := Ord(pview_EMF);
+  PreviewSVG.Tag := Ord(export_SVG);
+  PreviewEPS.Tag := Ord(export_EPS);
+  PreviewPDF.Tag := Ord(export_PDF);
+  PreviewPNG.Tag := Ord(export_PNG);
+  PreviewBMP.Tag := Ord(export_BMP);
+  PreviewEMF.Tag := Ord(export_EMF);
 
   with TheDrawing do
   begin
@@ -675,16 +712,18 @@ begin
     History.Save;
     Undo.Enabled := History.CanUndo;
     Redo.Enabled := History.CanRedo;
+    //SaveDoc.Enabled := History.IsChanged;
   end;
-  ParseParamStr(FileName, IncludePath);
+  ParseParameters(FileName, IncludePath, OutputFormats);
   if FileName <> '' then
   begin
     //ShowMessage(FileName);
     if FileExists(FileName) then
-      OpenDrawing(FileName)
+      DoOpenDrawing(FileName)
     else
       NewDrawing(FileName);
-    TheDrawing.IncludePath := IncludePath;
+    if IncludePath <> '' then TheDrawing.IncludePath := IncludePath;
+    SetOutputFormats(OutputFormats, TheDrawing);
   end;
 end;
 
@@ -761,22 +800,6 @@ begin
     StartOperation(TCAD2DDrawUnsizedPrimitive,
       TCAD2DDrawUnsizedPrimitiveParam.Create(nil,
       TPolygon2D.CreateSpec(-1, [Point2D(0, 0)]), 0, True));
-  end;
-end;
-
-procedure TMainForm.InsertSplineBtnClick(Sender: TObject);
-var
-  TmpSpline: TBSpline2D;
-begin
-  with LocalPrg do
-  begin
-    StopOperation;
-    //fCurrentOpBtn := InsertClosedCurveBtn;
-    TmpSpline := TBSpline2D.CreateSpec(-1, [Point2D(0, 0)]);
-    TmpSpline.SavingType := stSpace;
-    StartOperation(TCAD2DDrawUnsizedPrimitive,
-      TCAD2DDrawUnsizedPrimitiveParam.Create(nil,
-      TmpSpline, 0, True));
   end;
 end;
 
@@ -929,35 +952,60 @@ begin
     Useareatoselectobjects1.Checked;
 end;
 
-procedure TMainForm.OpenDrawing(const FileName: string);
+procedure TMainForm.DoOpenDrawing(const FileName: string);
 var
   Loader: T_TpX_Loader;
+  Ext: string;
 begin
+  Ext := LowerCase(ExtractFileExt(FileName));
+  if Ext <> '.tpx' then
+  begin
+    TheDrawing.Clear;
+    LocalPrg.Reset;
+    LocalView.BeginUpdate;
+    LocalPrg.IgnoreEvents := True;
+    MainForm.Enabled := False;
+    try
+      if (Ext = '.emf') or (Ext = '.wmf') then
+      begin
+        if RichEdit1.Visible then
+          Import_Metafile(TheDrawing, FileName, RichEdit1.Lines)
+        else Import_Metafile(TheDrawing, FileName, nil);
+      end
+      else if (Ext = '.eps') or (Ext = '.ps') or (Ext = '.pdf') then
+      begin
+        Import_Eps(TheDrawing, FileName);
+      end
+      else if (Ext = '.svg') {or (Ext = '.svgz')} then
+      begin
+        Import_Svg(TheDrawing, FileName);
+      end;
+      LocalView.ZoomToExtension;
+    finally
+      MainForm.Enabled := True;
+      LocalPrg.IgnoreEvents := False;
+      LocalView.EndUpdate;
+    end;
+    Caption := TheDrawing.FileName;
+    LocalView.Repaint;
+    TheDrawing.History.SaveCheckSum;
+    //SaveDoc.Enabled := TheDrawing.History.IsChanged;
+    Exit;
+  end;
   LocalPrg.Reset;
   TheDrawing.Clear;
   Loader := T_TpX_Loader.Create(TheDrawing);
   try
     Loader.LoadFromFile(FileName);
-    LocalView.ZoomToExtension;
-    LocalView.Repaint;
   finally
     Loader.Free;
   end;
+  LocalView.ZoomToExtension;
+  LocalView.Repaint;
   Caption := ExtractFileName(TheDrawing.FileName);
   RecentFiles.Update(TheDrawing.FileName);
-end;
-
-procedure TMainForm.OpenDoc1Click(Sender: TObject);
-begin
-  if not CADOpenDlg.Execute then Exit;
-  if CADOpenDlg.FilterIndex = 2 then
-  begin
-    TheDrawing.LoadFromFile(CADOpenDlg.FileName);
-    TheDrawing.FileName := Drawing_NewFileName;
-    Exit;
-  end;
-  if AskSaveCurrentDrawing = mrCancel then Exit;
-  OpenDrawing(CADOpenDlg.FileName);
+  TheDrawing.History.SaveCheckSum;
+  //SaveDoc.Enabled := TheDrawing.History.IsChanged;
 end;
 
 procedure TMainForm.Save1Click(Sender: TObject);
@@ -965,59 +1013,44 @@ begin
   TrySaveDrawing(TheDrawing.FileName);
 end;
 
-procedure TMainForm.Merge1Click(Sender: TObject);
-begin
-  if CADOpenDlg.Execute then
-    TheDrawing.MergeFromFile(CADOpenDlg.FileName);
-end;
-
-function TMainForm.DlgSaveDrawing(const FileName: string): Word;
+function TMainForm.DlgSaveDrawing(FileName: string): Word;
 var
   Path: string;
+  Filter: string;
+  ExecuteResult: Boolean;
+  Device, Ext, Ext2: string;
+  //LaTeX custom (latex-dvips-gs) |LaTeX custom (latex-dvips-gs)|*.*
 begin
+  if FileName = Drawing_NewFileName then
+    FileName := TheDrawing.FileName;
+  if FileName = Drawing_NewFileName then FileName := '';
   CADSaveDlg.FileName := ChangeFileExt(FileName, '');
-  if CADSaveDlg.FileName = Drawing_NewFileName then
-    CADSaveDlg.FileName := '';
   Path := ExtractFilePath(CADSaveDlg.FileName);
   if Path = '' then Path := ExtractFilePath(TheDrawing.FileName);
   if Path <> '' then CADSaveDlg.InitialDir := Path;
-  if not CADSaveDlg.Execute then
+  Filter := CADSaveDlg.Filter;
+  LaTeX_Custom_Parse(Device, Ext, Ext2);
+  if Ext <> '' then
+  begin
+    CADSaveDlg.Filter
+      := AnsiReplaceStr(CADSaveDlg.Filter, '-gs', '-gs-' + Device);
+    if Ext2 <> '' then Ext := Ext + ';*.' + Ext2;
+    CADSaveDlg.Filter
+      := AnsiReplaceStr(CADSaveDlg.Filter, '*.*', '*.' + Ext);
+  end;
+  ExecuteResult := CADSaveDlg.Execute;
+  CADSaveDlg.Filter := Filter;
+  if not ExecuteResult then
   begin
     Result := mrCancel;
     Exit;
   end;
-  case CADSaveDlg.FilterIndex of
-    2:
-      StoreToFile_Saver(TheDrawing,
-        CADSaveDlg.FileName, T_SVG_Export);
-    3:
-      TheDrawing.SaveToFile_EMF(CADSaveDlg.FileName);
-    4:
-      StoreToFile_Saver(TheDrawing,
-        CADSaveDlg.FileName, T_PostScript_Export);
-    5:
-    //TheDrawing.SaveToFile_PNG(CADSaveDlg.FileName)
-      StoreToFile_Saver(TheDrawing,
-        CADSaveDlg.FileName, T_PNG_Export);
-    6:
-    //TheDrawing.SaveToFile_Bitmap(CADSaveDlg.FileName)
-      StoreToFile_Saver(TheDrawing,
-        CADSaveDlg.FileName, T_Bitmap_Export);
-    7:
-      StoreToFile_Saver(TheDrawing,
-        CADSaveDlg.FileName, T_PDF_Export);
-    8:
-      StoreToFile_Saver(TheDrawing,
-        CADSaveDlg.FileName, T_MetaPost_Export);
-    9:
-      StoreToFile_MPS(TheDrawing, CADSaveDlg.FileName);
-    10:
-      //StoreToFile_EpsToPdf(TheDrawing, CADSaveDlg.FileName, False);
-      StoreToFile_Saver(TheDrawing,
-        CADSaveDlg.FileName, T_EpsToPdf_Export);
+  if (CADSaveDlg.FilterIndex > 1) and
+    (CADSaveDlg.FilterIndex - 2 <= Ord(High(ExportFormatKind))) then
+    ExportToFile(TheDrawing,
+      CADSaveDlg.FileName, ExportFormatKind(CADSaveDlg.FilterIndex - 2))
   else
     DoSaveDrawing(CADSaveDlg.FileName);
-  end;
   Result := mrOK;
 end;
 
@@ -1026,14 +1059,16 @@ var
   List: TStringList;
 begin
   List := TStringList.Create;
-  ExtractStrings(['|'], [' ', '*', '.'], PChar(CADSaveDlg.Filter), List);
+  ExtractStrings(['|'], [' ', '*', '.'],
+    PChar(AnsiReplaceStr(CADSaveDlg.Filter, '.*', '.qqq')), List);
   CADSaveDlg.DefaultExt := List[CADSaveDlg.FilterIndex * 2 - 1];
+  if CADSaveDlg.DefaultExt = 'qqq' then CADSaveDlg.DefaultExt := '';
   List.Free;
 end;
 
 function TMainForm.AskSaveCurrentDrawing: Word;
 begin
-  if TheDrawing.ObjectsCount = 0 then
+  if (TheDrawing.ObjectsCount = 0) or not TheDrawing.History.IsChanged then
   begin
     Result := mrOK;
     Exit;
@@ -1061,10 +1096,12 @@ procedure TMainForm.DoSaveDrawing(FileName: string);
 begin
   if not SameText(ExtractFileExt(FileName), '.TpX') then
     FileName := ChangeFileExt(FileName, '.TpX');
-  StoreToFile_TpX(TheDrawing, FileName);
+  StoreToFile_TpX(TheDrawing, FileName, False);
   TheDrawing.FileName := FileName;
   Caption := ExtractFileName(TheDrawing.FileName);
   RecentFiles.Update(TheDrawing.FileName);
+  TheDrawing.History.SaveCheckSum;
+  //SaveDoc.Enabled := TheDrawing.History.IsChanged;
 end;
 
 procedure TMainForm.NewDrawing(const FileName: string);
@@ -1075,6 +1112,8 @@ begin
   Caption := FileName;
   if FileName <> Drawing_NewFileName then
     RecentFiles.Update(FileName);
+  TheDrawing.History.SaveCheckSum;
+  //SaveDoc.Enabled := TheDrawing.History.IsChanged;
 end;
 
 procedure TMainForm.New1Click(Sender: TObject);
@@ -1266,7 +1305,7 @@ begin
   if TheDrawing.SourceBlocksCount = 0 then
     Exit;
   TmpStr :=
-    TFileStream.Create(ExtractFilePath(Application.ExeName) +
+    TFileStream.Create(ExtractFilePath(ParamStr(0)) +
     '\Library.blk', fmOpenWrite or fmCreate);
   try
     TheDrawing.SaveLibrary(TmpStr);
@@ -1386,19 +1425,6 @@ begin
   RO_Free(XMLDoc);
 end;
 
-procedure TMainForm.ImportMetafileExecute(Sender: TObject);
-begin
-  if not EMFOpenDialog.Execute then Exit;
-  if AskSaveCurrentDrawing = mrCancel then Exit;
-  LocalPrg.Reset;
-  if RichEdit1.Visible then
-    Import_Metafile(TheDrawing, EMFOpenDialog.FileName, RichEdit1.Lines)
-  else Import_Metafile(TheDrawing, EMFOpenDialog.FileName, nil);
-  Caption := TheDrawing.FileName;
-  LocalView.ZoomToExtension;
-  LocalView.Repaint;
-end;
-
 procedure TMainForm.ToolButton4Click(Sender: TObject);
 begin
   RichEdit1.Visible := not RichEdit1.Visible;
@@ -1451,7 +1477,7 @@ begin
     StopOperation;
 end;
 
-procedure TMainForm.Scalestandard1Click(Sender: TObject);
+procedure TMainForm.ScalestandardExecute(Sender: TObject);
 var
   T: TTransf2D;
 begin
@@ -1497,32 +1523,17 @@ begin
   end;
 end;
 
-procedure TMainForm.InsertClosedSplineExecute(Sender: TObject);
-var
-  TmpPath: TClosedBSpline2D;
-begin
-  with LocalPrg do
-  begin
-    if IsBusy then
-      StopOperation;
-    //fCurrentOpBtn := InsertClosedSplineBtn;
-    TmpPath := TClosedBSpline2D.CreateSpec(-1, [Point2D(0, 0)]);
-    TmpPath.SavingType := stSpace;
-    StartOperation(TCAD2DDrawUnsizedPrimitive,
-      TCAD2DDrawUnsizedPrimitiveParam.Create(nil,
-      TmpPath, 0, True));
-  end;
-end;
-
 procedure TMainForm.FormCloseQuery(Sender: TObject; var
   CanClose: Boolean);
 begin
   CanClose := AskSaveCurrentDrawing <> mrCancel;
 end;
 
-procedure TMainForm.Options1Click(Sender: TObject);
+procedure TMainForm.PicturePropertiesExecute(Sender: TObject);
 begin
-  if OptionsForm.ShowModal = mrOK then LocalView.Repaint;
+  if OptionsForm.ShowModal = mrOK then
+    LocalView.Repaint;
+  LocalView.SetFocus;
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
@@ -1537,16 +1548,16 @@ end;
 procedure TMainForm.Help1Click(Sender: TObject);
 begin
   HH.HtmlHelp(GetDesktopWindow,
-    'TpX.chm::/tpx_tpxabout_tpx_drawing_tool.htm',
+    PChar(ExtractFilePath(Application.ExeName)
+    + 'TpX.chm::/tpx_tpxabout_tpx_drawing_tool.htm'),
     HH_DISPLAY_TOPIC, 0);
 end;
 
 function TMainForm.FormHelp(Command: Word; Data: Integer;
   var CallHelp: Boolean): Boolean;
 begin
-  HH.HtmlHelp(GetDesktopWindow,
-    'TpX.chm::/tpx_tpxabout_tpx_drawing_tool.htm',
-    HH_DISPLAY_TOPIC, 0);
+  Help1Click(Self);
+  //HH.HtmlHelp(GetDesktopWindow,    'TpX.chm::/tpx_tpxabout_tpx_drawing_tool.htm',    HH_DISPLAY_TOPIC, 0);
 end;
 
 procedure TMainForm.AreaSelectExecute(Sender: TObject);
@@ -1595,44 +1606,9 @@ begin
   CaptureEMF.Enabled := Clipboard.HasFormat(CF_METAFILEPICT);
 end;
 
-procedure TMainForm.Copytoclipboard2Click(Sender: TObject);
+procedure TMainForm.CopyPictureToClipboardExecute(Sender: TObject);
 begin
-  LocalView.CopyToClipboard(Clipboard);
-end;
-
-procedure TMainForm.InsertCubicSplineExecute(Sender: TObject);
-var
-  TmpSpline: TCubicBSpline2D;
-begin
-  with LocalPrg do
-  begin
-    StopOperation;
-    //fCurrentOpBtn := InsertCubicSplineBtn;
-    TmpSpline := TCubicBSpline2D.CreateSpec(-1, [Point2D(0, 0)]);
-    TmpSpline.SavingType := stSpace;
-    StartOperation(TCAD2DDrawUnsizedPrimitive,
-      TCAD2DDrawUnsizedPrimitiveParam.Create(nil,
-      TmpSpline, 0, True));
-  end;
-end;
-
-procedure TMainForm.InsertClosedCubicSplineExecute(Sender:
-  TObject);
-var
-  TmpPath: TClosedCubicBSpline2D;
-begin
-  with LocalPrg do
-  begin
-    if IsBusy then
-      StopOperation;
-    //fCurrentOpBtn := InsertClosedCubicSplineBtn;
-    TmpPath := TClosedCubicBSpline2D.CreateSpec(-1, [Point2D(0,
-        0)]);
-    TmpPath.SavingType := stSpace;
-    StartOperation(TCAD2DDrawUnsizedPrimitive,
-      TCAD2DDrawUnsizedPrimitiveParam.Create(nil,
-      TmpPath, 0, True));
-  end;
+  LocalView.CopyToClipboard;
 end;
 
 procedure TMainForm.BitBtn1Click(Sender: TObject);
@@ -1653,6 +1629,7 @@ begin
       History.Save;
       Undo.Enabled := History.CanUndo;
       Redo.Enabled := History.CanRedo;
+      //SaveDoc.Enabled := History.IsChanged;
     end;
 {  if ProgressBar1.Position = ProgressBar1.Max
     then ProgressBar1.Position := ProgressBar1.Min
@@ -1667,6 +1644,7 @@ begin
     RepaintViewports;
     Undo.Enabled := History.CanUndo;
     Redo.Enabled := History.CanRedo;
+    //SaveDoc.Enabled := History.IsChanged;
   end;
 end;
 
@@ -1678,6 +1656,7 @@ begin
     RepaintViewports;
     Undo.Enabled := History.CanUndo;
     Redo.Enabled := History.CanRedo;
+    //SaveDoc.Enabled := History.IsChanged;
   end;
 end;
 
@@ -1771,23 +1750,52 @@ begin
   end;
 end;
 
+procedure TMainForm.InsertSymbolExecute(Sender: TObject);
+begin
+  with LocalPrg do
+  begin
+    StopOperation;
+    fCurrentOpBtn := InsertSymbolButton;
+    StartOperation(TCAD2DDrawSizedPrimitive,
+      TCAD2DDrawSizedPrimitiveParam.Create(nil,
+      TSymbol2D.CreateSpec(-1, Point2D(1, 1),
+      TheDrawing.DefaultSymbolSize),
+      0, -1, True));
+  end;
+end;
+
 procedure TMainForm.ToolButton15Click(Sender: TObject);
 var
   Dlg: TOpenDialog;
-  Descent: TRealType;
+  FileName: string;
+  MemStream: TMemoryStream;
+  fXML: TXMLDDocument;
+  St: string;
 begin
   Dlg := TOpenDialog.Create(Self);
   try
-    Dlg.Filter := 'Font files (*.pfb)|*.pfb';
+    //Dlg.Filter := 'Font files (*.pfb)|*.pfb';
+    Dlg.Filter := 'SVG files (*.svg)|*.svg';
     if not Dlg.Execute then
     begin
       Dlg.Free;
       Exit;
     end;
-    pfb2pfa(Dlg.FileName, ChangeFileExt(Dlg.FileName, '.pfa'), Descent);
+    //pfb2pfa(Dlg.FileName, ChangeFileExt(Dlg.FileName, '.pfa'), Descent);
+    FileName := Dlg.FileName;
   finally
     Dlg.Free;
   end;
+  RO_Init(fXML, TXMLDDocument.Create);
+  fXML.Load(FileName);
+  {MemStream := TMemoryStream.Create;
+  fXML.WriteToStream(MemStream);
+  SetLength(St, MemStream.Size);
+  MemStream.Read(St[1],MemStream.Size);
+  Application.MessageBox(PChar(St), nil);}
+  fXML.Save(FileName + '.txt');
+  RO_Free(fXML);
+
 end;
 
 procedure TMainForm.LocalViewMouseWheel(Sender: TObject;
@@ -1932,7 +1940,6 @@ begin
     Item.OnClick := OpenRecentExecute;
     Recentfiles1.Add(Item);
   end;
-  ImportEPS.Visible := PsToEditPath <> '';
 end;
 
 procedure TMainForm.OpenRecentExecute(Sender: TObject);
@@ -1950,24 +1957,13 @@ begin
     Exit;
   end;
   if AskSaveCurrentDrawing = mrCancel then Exit;
-  OpenDrawing(FileName);
+  DoOpenDrawing(FileName);
 end;
 
 procedure TMainForm.PicturePreviewExecute(Sender: TObject);
 begin
   Preview_Picture(TheDrawing,
-    TPicturePreviewKind((Sender as TAction).Tag));
-end;
-
-procedure TMainForm.ImportEPSExecute(Sender: TObject);
-begin
-  if not EPSOpenDialog.Execute then Exit;
-  if AskSaveCurrentDrawing = mrCancel then Exit;
-  LocalPrg.Reset;
-  Import_Eps(TheDrawing, EPSOpenDialog.FileName);
-  Caption := TheDrawing.FileName;
-  LocalView.ZoomToExtension;
-  LocalView.Repaint;
+    ExportFormatKind((Sender as TAction).Tag));
 end;
 
 procedure AssociateShellExt(const Ext, ExtLabel,
@@ -2119,16 +2115,7 @@ begin
 end;
 
 procedure TMainForm.ImageToolExecute(Sender: TObject);
-//var  EMF_Struct: T_EMF_Structure;
 begin
-{  if not EMFOpenDialog.Execute then Exit;
-  EMF_Struct := T_EMF_Structure.Create;  TCanvas
-  EMF_Struct.pLogStrings := RichEdit1.Lines;
-  try
-    EMF_Struct.LoadFromFile(EMFOpenDialog.FileName);
-  finally
-    EMF_Struct.Free;
-  end;}
   EMF_Form.ShowModal;
 end;
 
@@ -2177,7 +2164,7 @@ begin
   end;
 end;
 
-procedure TMainForm.Pictureinfo1Click(Sender: TObject);
+procedure TMainForm.PictureInfoExecute(Sender: TObject);
 var
   List: TStringList;
   R: TRect2D;
@@ -2241,6 +2228,8 @@ procedure TMainForm.DVI_Format_Click(Sender: TObject);
 begin
   if not (Sender is TMenuItem) then Exit;
   TheDrawing.TeXFormat := TeXFormatKind((Sender as TMenuItem).MenuIndex);
+  TheDrawing.History.SetPropertiesChanged;
+  //SaveDoc.Enabled := TheDrawing.History.IsChanged;
 end;
 
 procedure TMainForm.PopupMenuPdfPopup(Sender: TObject);
@@ -2252,6 +2241,8 @@ procedure TMainForm.Pdf_Format_Click(Sender: TObject);
 begin
   if not (Sender is TMenuItem) then Exit;
   TheDrawing.PdfTeXFormat := PdfTeXFormatKind((Sender as TMenuItem).MenuIndex);
+  TheDrawing.History.SetPropertiesChanged;
+  //SaveDoc.Enabled := TheDrawing.History.IsChanged;
 end;
 
 procedure TMainForm.NewWindowExecute(Sender: TObject);
@@ -2259,10 +2250,161 @@ begin
   OpenOrExec('', Application.ExeName);
 end;
 
+procedure TMainForm.SimplifyPolyExecute(Sender: TObject);
+begin
+  with LocalPrg do
+  begin
+    SendUserEvent(CADPRG_SimplifyPoly);
+  end;
+end;
+
+{ --================ TOpenAnyPictureDialog ==================-- }
+
+procedure TMainForm.OpenDoc1Click(Sender: TObject);
+var
+  OpenDialog: TOpenAnyPictureDialog;
+  FileName: string;
+begin
+  OpenDialog := TOpenAnyPictureDialog.Create(Self);
+  try
+    OpenDialog.FilterIndex := OpenDialog_FilterIndex;
+    if PsToEditPath <> '' then
+      OpenDialog.Filter :=
+        'All supported formats|*.TpX;*.emf;*.wmf;*.svg;*.eps;*.ps;*.pdf'
+    else
+      OpenDialog.Filter :=
+        'All supported formats|*.TpX;*.emf;*.wmf;*.svg';
+    OpenDialog.Filter := OpenDialog.Filter +
+      '|TpX drawing|*.TpX' +
+      '|Windows (Enhanced) Metafiles (*.emf,*.wmf)|*.emf;*.wmf' +
+      '|Scalable Vector Graphics (*.svg)|*.svg';
+    if PsToEditPath <> '' then
+      OpenDialog.Filter := OpenDialog.Filter +
+        '|Encapsulated Postscript (*.eps)|*.eps' +
+        '|All Postscripts (*.eps, *.ps)|*.eps;*.ps' +
+        '|Portable document format (*.pdf)|*.pdf|*.*|*.*';
+    if not OpenDialog.Execute then Exit;
+    if AskSaveCurrentDrawing = mrCancel then Exit;
+    FileName := OpenDialog.FileName;
+    OpenDialog_FilterIndex := OpenDialog.FilterIndex;
+  finally
+    OpenDialog.Free;
+  end;
+  DoOpenDrawing(FileName);
+  //DoImportMetafile(EMFOpenDialog.FileName);
+end;
+
+procedure TOpenAnyPictureDialog.DoSelectionChange;
+var
+  Ext: string;
+  ValidPicture: Boolean;
+  BMP: TBitmap;
+
+  function ValidFile(const FileName: string): Boolean;
+  begin
+    Result := GetFileAttributes(PChar(FileName)) <> $FFFFFFFF;
+  end;
+
+begin
+  Ext := LowerCase(ExtractFileExt(FileName));
+  Delete(Ext, 1, 1);
+  ValidPicture := FileExists(FileName) and ValidFile(FileName)
+    and ((Ext = 'emf') or (Ext = 'wmf')
+    or (Ext = 'eps') or (Ext = 'ps') or (Ext = 'pdf'));
+  if ValidPicture then
+  try
+    if (Ext = 'emf') or (Ext = 'wmf') then
+    begin
+      ImageCtrl.Picture.LoadFromFile(FileName);
+      ImageCtrl.Stretch := True;
+      PictureLabel.Caption := Format({SPictureDesc}'%d x %d',
+        [ImageCtrl.Picture.Width, ImageCtrl.Picture.Height]);
+    end
+    else if (Ext = 'eps') or (Ext = 'ps') or (Ext = 'pdf') then
+    begin
+      BMP := GetPostScriptPreview(FileName);
+      if BMP <> nil then
+      begin
+        ImageCtrl.Picture.Assign(BMP);
+        ImageCtrl.Stretch := False;
+        PictureLabel.Caption := Format({SPictureDesc}'%d x %d',
+          [ImageCtrl.Picture.Width, ImageCtrl.Picture.Height]);
+      end
+      else
+      begin
+        PictureLabel.Caption := '*no preview*';
+        ImageCtrl.Picture := nil;
+      end;
+    end;
+    //FPreviewButton.Enabled := True;
+    //FPaintPanel.Caption := '';
+  except
+    ValidPicture := False;
+  end;
+  if not ValidPicture then
+  begin
+    PictureLabel.Caption := {SPictureLabel} '*no preview*';
+    //FPreviewButton.Enabled := False;
+    ImageCtrl.Picture := nil;
+    //FPaintPanel.Caption := srNone;
+  end;
+  if Assigned(OnSelectionChange) then OnSelectionChange(Self);
+  //inherited DoSelectionChange;
+end;
+
+procedure TOpenAnyPictureDialog.PreviewClick(Sender: TObject);
+var
+  Ext: string;
+begin
+  Ext := LowerCase(ExtractFileExt(FileName));
+  Delete(Ext, 1, 1);
+  if ((Ext = 'emf') or (Ext = 'wmf')) then
+    inherited PreviewClick(Sender)
+  else if ((Ext = 'eps') or (Ext = 'ps')) then
+    OpenOrExec(PSViewerPath, FileName)
+  else OpenOrExec('', FileName);
+end;
+
+procedure TMainForm.RotateTextActionExecute(Sender: TObject);
+begin
+  RotateTextAction.Checked := not RotateTextAction.Checked;
+  RotateText := RotateTextAction.Checked;
+end;
+
+procedure TMainForm.RotateSymbolsActionExecute(Sender: TObject);
+begin
+  RotateSymbolsAction.Checked := not RotateSymbolsAction.Checked;
+  RotateSymbols := RotateSymbolsAction.Checked;
+end;
+
+procedure TMainForm.DrawingSourceExecute(Sender: TObject);
+begin
+  View_Source(TheDrawing);
+end;
+
+procedure TMainForm.preview_tex_incExecute(Sender: TObject);
+begin
+  OpenOrExec(TextViewerPath, ExtractFilePath(ParamStr(0)) +
+    'preview.tex.inc');
+end;
+
+procedure TMainForm.metapost_tex_incExecute(Sender: TObject);
+begin
+  OpenOrExec(TextViewerPath, ExtractFilePath(ParamStr(0)) +
+    'metapost.tex.inc');
+end;
+
+procedure TMainForm.ScaleLineWidthActionExecute(Sender: TObject);
+begin
+  ScaleLineWidthAction.Checked := not ScaleLineWidthAction.Checked;
+  ScaleLineWidth := ScaleLineWidthAction.Checked;
+end;
+
 initialization
   DecimalSeparator := '.';
-  //ShowMessage(GetTempDir);
+  //ShowMessage(GetTempDir);    ++
   {CADSysRegisterFontFromFile(0,
     ExtractFilePath(Application.ExeName) + '\RomanC.fnt');}
+  //ShowMessage(ShortCutToText(ShortCut(Word('x'), [ssCtrl])))
 end.
 

@@ -24,7 +24,7 @@ unit GR32_DrawingEx;
  * Contributor(s):
  *
  * ***** END LICENSE BLOCK ***** *)
-// $Id: GR32_DrawingEx.pas,v 1.3 2004/11/21 13:26:04 tpxproject Exp $
+// $Id: GR32_DrawingEx.pas,v 1.1 2004/07/05 15:32:04 abeckedorf Exp $
 
 interface
 

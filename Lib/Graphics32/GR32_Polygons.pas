@@ -26,7 +26,7 @@ unit GR32_Polygons;
  *   Mattias Andersson <mattias@centaurix.com>
  *
  * ***** END LICENSE BLOCK ***** *)
-// $Id: GR32_Polygons.pas,v 1.3 2004/11/21 13:26:04 tpxproject Exp $
+// $Id: GR32_Polygons.pas,v 1.1 2004/07/05 15:32:04 abeckedorf Exp $
 
 interface
 

@@ -2,7 +2,7 @@ unit Draw;
 
 interface
 
-uses Types, Classes, CS4BaseTypes, Windows, Graphics, Geometry;
+uses Types, Classes, Windows, Graphics, Geometry;
 
 type
 {: This class defines a decorative pen, that is a special Window pen that

@@ -72,7 +72,7 @@ type
 
 implementation
 
-uses MainUnit, InOut, CADSys4, CS4BaseTypes, CS4Shapes, ColorEtc, Geometry;
+uses Input, CADSys4, CS4Shapes, ColorEtc, Geometry, SysBasic;
 
 
 constructor T_EMF_Loader.Create;
@@ -270,7 +270,7 @@ begin
         (Self[LastBeginPath]
           as TEMF_BeginPath).UseBezier := UseBezier;
       end
-      else if (ARecord is TEMF_PolyBezierTo)
+      else if (ARecord is TEMF_PolyBezierTo32)
         or (ARecord is TEMF_PolyBezierTo16)
         or (ARecord is TEMF_ArcTo) then
       begin
@@ -303,7 +303,7 @@ begin
   for RecIndex := 1 to Count - 1 do
   //for RecIndex := 1 to Header.NumOfRecords - 2 do
   begin
-    MainForm.StatusBar1.Panels[0].Text := IntToStr(RecIndex) + ' ';
+    //MainForm.StatusBar1.Panels[0].Text := IntToStr(RecIndex) + ' ';
     ARecord := Self[RecIndex] as TEMF_Record;
     if ARecord is TEMF_BeginPath then
     begin
@@ -317,8 +317,8 @@ begin
     begin
       if ARecord is TEMF_EndPath then
         (Self[LastBeginPath] as TEMF_BeginPath).N := N
-      else if ARecord is TEMF_PolylineTo then
-        Inc(N, (ARecord as TEMF_PolylineTo).EMR_Info.cptl * NPointsMult)
+      else if ARecord is TEMF_PolylineTo32 then
+        Inc(N, (ARecord as TEMF_PolylineTo32).EMR_Info.cptl * NPointsMult)
       else if ARecord is TEMF_PolylineTo16 then
         Inc(N, (ARecord as TEMF_PolylineTo16).EMR_Info.cpts * NPointsMult)
       else if ARecord is TEMF_LineTo then
@@ -327,8 +327,8 @@ begin
         Inc(N, 2 * NPointsMult)
       else if ARecord is TEMF_CloseFigure then
         Inc(N, NPointsMult)
-      else if ARecord is TEMF_PolyBezierTo then
-        Inc(N, (ARecord as TEMF_PolyBezierTo).EMR_Info.cptl * 3)
+      else if ARecord is TEMF_PolyBezierTo32 then
+        Inc(N, (ARecord as TEMF_PolyBezierTo32).EMR_Info.cptl * 3)
       else if ARecord is TEMF_PolyBezierTo16 then
         Inc(N, (ARecord as TEMF_PolyBezierTo16).EMR_Info.cpts * 3)
       else if ARecord is TEMF_ArcTo then
@@ -1077,11 +1077,7 @@ Window origin	(0,0).}
   for RecIndex := 0 to EMF_Struct.Count - 1 do
   begin
     if RecIndex mod 100 = 0 then
-    begin
-      MainForm.ProgressBar1.Position :=
-        Round(RecIndex / EMF_Struct.Count * 100);
-      Application.ProcessMessages;
-    end;
+      ShowProgress(RecIndex / EMF_Struct.Count);
     ARecord := EMF_Struct[RecIndex] as TEMF_Record;
     if (ARecord is TEMF_SetExtEx) then
     begin
@@ -1155,7 +1151,7 @@ Window origin	(0,0).}
     end
     else if (ARecord is TEMF_EndPath) then
       HasPath := False
-    else if (ARecord is TEMF_RoundRect) then //!! сделать через Bezier
+    else if (ARecord is TEMF_RoundRect) then
     begin
       with (ARecord as TEMF_RoundRect).EMR_Info do
       begin
@@ -1260,26 +1256,28 @@ Window origin	(0,0).}
           haNone, clNone, CurrBrushColor, True, XMLNode);
       end;
     end
-    else if HasPath and (ARecord is TEMF_PolyBezierTo16) then
+    else if HasPath and ((ARecord is TEMF_PolyBezierTo16)
+      or (ARecord is TEMF_PolyBezierTo32)) then
     begin
-      with ARecord as TEMF_PolyBezierTo16 do
-        for I := 0 to High(PointsArray16) do
-          AddPathPoint0(GetXY(PointsArray16[I].X,
-            PointsArray16[I].Y));
+      with ARecord as TEMF_PolyGen do
+        for I := 0 to High(PointsArray) do
+          AddPathPoint0(GetXY(PointsArray[I].X,
+            PointsArray[I].Y));
     end
-    else if (ARecord is TEMF_PolyBezier160) then
+    else if (ARecord is TEMF_PolyBezier160)
+      or (ARecord is TEMF_PolyBezier320) then
     begin
       XMLNode := AddItem('bezier');
   //Bez0,Bez1,Bez2,Bez3:TPoint2D;
   //BezMod:Byte;
-      with ARecord as TEMF_PolyBezier160 do
+      with ARecord as TEMF_PolyGen do
       begin
         BezMod := 0;
         St := '';
-        for I := 0 to High(PointsArray16) do
+        for I := 0 to High(PointsArray) do
         begin
-          BezArr[BezMod] := GetXY(PointsArray16[I].X,
-            PointsArray16[I].Y);
+          BezArr[BezMod] := GetXY(PointsArray[I].X,
+            PointsArray[I].Y);
           if BezMod = 3 then
           begin
             if I < 5 then AddPoint2D(BezArr[0]);
@@ -1299,53 +1297,60 @@ Window origin	(0,0).}
             end;
           end;
           //St := St + FloatToStr() + ',' + FloatToStr();
-          if I < High(PointsArray16) then St := St + ' '
+          if I < High(PointsArray) then St := St + ' '
           else
-            if ARecord is TEMF_PolyBezierTo16 then
+            if (ARecord is TEMF_PolyBezierTo16)
+              or (ARecord is TEMF_PolyBezierTo32) then
             begin
-              CurrXY := Point2D(PointsArray16[I].X,
-                PointsArray16[I].Y);
+              CurrXY := Point2D(PointsArray[I].X,
+                PointsArray[I].Y);
             end;
           BezMod := Succ(BezMod mod 3);
         end;
       end;
       WritePrimitiveAttr(CurrLineStyle, CurrPenWidth, CurrPenColor,
-        haNone, clNone, clNone,
+        CurrHatching, CurrHatchColor, CurrBrushColor,
         CurrBrush.lbStyle = BS_PATTERN, XMLNode);
+{        WritePrimitiveAttr(CurrLineStyle, CurrPenWidth, CurrPenColor,
+          haNone, clNone, clNone,
+          CurrBrush.lbStyle = BS_PATTERN, XMLNode);}
       XMLNode.Text := XMLNode.Text + St;
     end
     else if HasPath and (ARecord is TEMF_PolylineTo16) then
     begin
       with ARecord as TEMF_PolylineTo16 do
-        for I := 0 to High(PointsArray16) do
-          AddPathPoint(GetXY(PointsArray16[I].X,
-            PointsArray16[I].Y));
+        for I := 0 to High(PointsArray) do
+          AddPathPoint(GetXY(PointsArray[I].X,
+            PointsArray[I].Y));
     end
-    else if (ARecord is TEMF_Poly16) then
+    else if (ARecord is TEMF_PolyGen) then
     begin
       {if (CurrLineKind <> liNone)
         or (CurrHatching <> haNone) then}
       begin
-        if ARecord is TEMF_Polygon16 then
+        if (ARecord is TEMF_Polygon16)
+          or (ARecord is TEMF_Polygon32) then
           XMLNode := AddItem('polygon')
-        else if ARecord is TEMF_Polyline16 then
+        else if (ARecord is TEMF_Polyline16)
+          or (ARecord is TEMF_Polyline32) then
           XMLNode := AddItem('polyline')
-        else if ARecord is TEMF_PolylineTo16 then
+        else if (ARecord is TEMF_PolylineTo16)
+          or (ARecord is TEMF_PolylineTo32) then
           XMLNode := AddItem('polyline');
-        with ARecord as TEMF_Poly16 do
+        with ARecord as TEMF_PolyGen do
         begin
           St := '';
-          for I := 0 to High(PointsArray16) do
+          for I := 0 to High(PointsArray) do
           begin
             AddPoint2D(
-              GetXY(PointsArray16[I].X, PointsArray16[I].Y));
-            if I < High(PointsArray16) then St := St + ' '
+              GetXY(PointsArray[I].X, PointsArray[I].Y));
+            if I < High(PointsArray) then St := St + ' '
             else
               if ARecord is TEMF_PolylineTo16 then
-                CurrXY := Point2D(PointsArray16[I].X, PointsArray16[I].Y);
+                CurrXY := Point2D(PointsArray[I].X, PointsArray[I].Y);
           end;
         end;
-        if ARecord is TEMF_Polygon16 then
+        if (ARecord is TEMF_Polygon16) or (ARecord is TEMF_Polygon32) then
           WritePrimitiveAttr(CurrLineStyle, CurrPenWidth, CurrPenColor,
             CurrHatching, CurrHatchColor, CurrBrushColor,
             CurrBrush.lbStyle = BS_PATTERN, XMLNode)
@@ -1395,26 +1400,26 @@ Window origin	(0,0).}
         begin
           case abTypes[I] and 6 of
             PT_LINETO: AddPathPoint(GetXY(
-                PointsArray16[I].X, PointsArray16[I].Y));
+                PointsArray[I].X, PointsArray[I].Y));
             PT_BEZIERTO:
               AddPathPoint0(GetXY(
-                PointsArray16[I].X, PointsArray16[I].Y));
+                PointsArray[I].X, PointsArray[I].Y));
             PT_MOVETO:
               begin
                 AddPathPoint0(Point2D(-1234, -1234));
                 AddPathPoint0(GetXY(
-                  PointsArray16[I].X, PointsArray16[I].Y));
+                  PointsArray[I].X, PointsArray[I].Y));
                 MoveToXY := Point2D(
-                  PointsArray16[I].X, PointsArray16[I].Y);
+                  PointsArray[I].X, PointsArray[I].Y);
               end;
           else
             {AddPathPoint(GetXY(
-              PointsArray16[I].X, PointsArray16[I].Y));}
+              PointsArray[I].X, PointsArray[I].Y));}
           end;
           //if (ARecord as TEMF_PolyDraw16).abTypes[I] and 1 > 0 then ;
         end;
         CurrXY := Point2D(
-          PointsArray16[I].X, PointsArray16[I].Y)
+          PointsArray[I].X, PointsArray[I].Y)
       end;
     end
     else if HasPath and (ARecord is TEMF_MoveToEx) then
@@ -1870,6 +1875,33 @@ Window origin	(0,0).}
   DWORD  fOptions; // Value specifying how to use the application-defined rectangle. This member can be a combination of the ETO_CLIPPED and ETO_OPAQUE values.
   RECTL  rcl; // Optional clipping and/or opaquing rectangle, in logical units.
   DWORD  offDx; // Offset to intercharacter spacing array.  };
+        with XMLNode.AddElement('font') do
+        begin
+          St := '';
+          for I := 0 to LF_FACESIZE do
+          begin
+            if CurrFont.lfFaceName[I] = #0 then Break;
+            St := St + CurrFont.lfFaceName[I];
+          end;
+          AttributeValue['face'] := Trim(St);
+          if CurrFont.lfWeight >= FW_BOLD then AttributeValue['bf'] := 1;
+          if CurrFont.lfItalic = 1 then AttributeValue['it'] := 1;
+          AttributeValue['charset'] := CurrFont.lfCharSet;
+        end;
+    {lfHeight: Longint;
+    lfWidth: Longint;
+    lfEscapement: Longint;
+    lfOrientation: Longint;
+    lfWeight: Longint;
+    lfItalic: Byte;
+    lfUnderline: Byte;
+    lfStrikeOut: Byte;
+    lfCharSet: Byte;
+    lfOutPrecision: Byte;
+    lfClipPrecision: Byte;
+    lfQuality: Byte;
+    lfPitchAndFamily: Byte;
+    lfFaceName: array[0..LF_FACESIZE - 1] of WideChar;}
       end
     end
     else if (ARecord is TEMF_SetWorldTransform) then
@@ -1879,16 +1911,15 @@ Window origin	(0,0).}
     end
     else if (ARecord is TEMF_ModifyWorldTransform) then
     begin
+      TempTr := XFormToTransf2D((ARecord
+        as TEMF_ModifyWorldTransform).EMR_Info.XFORM);
       case (ARecord as
         TEMF_ModifyWorldTransform).EMR_Info.iMode of
         MWT_IDENTITY: CurrWorldTr := IdentityTransf2D;
         MWT_LEFTMULTIPLY:
-          CurrWorldTr := MultiplyTransform2D(XFormToTransf2D((ARecord
-            as TEMF_ModifyWorldTransform).EMR_Info.XFORM), CurrWorldTr);
+          CurrWorldTr := MultiplyTransform2D(TempTr, CurrWorldTr);
         MWT_RIGHTMULTIPLY:
-          CurrWorldTr := MultiplyTransform2D(CurrWorldTr,
-            XFormToTransf2D((ARecord
-            as TEMF_ModifyWorldTransform).EMR_Info.XFORM));
+          CurrWorldTr := MultiplyTransform2D(CurrWorldTr, TempTr);
       end;
     end
     else if (ARecord is TEMF_PathBounds) then

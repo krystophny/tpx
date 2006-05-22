@@ -28,7 +28,7 @@ unit GR32;
  *   J. Tulach <tulach@position.cz>
  *
  * ***** END LICENSE BLOCK ***** *)
-// $Id: GR32.pas,v 1.3 2004/11/21 13:26:04 tpxproject Exp $
+// $Id: GR32.pas,v 1.2 2004/07/07 11:39:58 abeckedorf Exp $
 
 interface
 

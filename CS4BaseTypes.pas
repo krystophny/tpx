@@ -9,7 +9,7 @@ unit CS4BaseTypes;
 
 interface
 
-uses Classes, Windows, Clipbrd;
+uses Classes, Windows, Graphics, Clipbrd;
 
 //TSY:
 procedure PutStreamToClipboard0(Format: Word; Stream: TStream;
@@ -133,6 +133,113 @@ type
   TVectPoints2D = array[0..0] of TPoint2D;
   {: Pointer to vector of 2D points. }
   PVectPoints2D = ^TVectPoints2D;
+
+{: This class defines a decorative pen, that is a special Window pen that
+   can have any pattern. The pattern is defined by a string of bits like
+   '1110001100', in which a one rapresent a colored pixel and a zero
+   rapresent a transparent pixel. By using this pen the redrawing of the
+   image will be slower, so use it only where necessary. Because a decorative
+   pen is associated to a layer you can manage it better.
+
+   <B=Note>: The decorative pen use LineDDA functions to draw the lines and
+   can only be used for lines and polylines (so no ellipses are drawed using
+   the pattern).
+}
+  TDecorativePen = class(TObject)
+  private
+    fPStyle: TBits;
+    fCnv: TCanvas;
+    fCurBit: Word;
+    fStartPt, fEndPt, fLastPt: TPoint;
+
+    procedure SetBit(const IDX: Word; const B: Boolean);
+    function GetBit(const IDX: Word): Boolean;
+    function GetMaxBit: Word;
+    procedure CallLineDDA;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    {: This method is used to make deep copy of the object by obtaining state
+       informations from another.
+
+       <I=Obj> is the object from which copy the needed informations.
+    }
+    procedure Assign(Source: TObject);
+    {: Move the pen for the canvas <I=Cnv> to the position <I=X,Y>.
+    }
+    procedure MoveTo(Cnv: TCanvas; X, Y: Integer);
+    {: Move the pen for the canvas <I=Cnv> to the position <I=X,Y>.
+       This will not reset the current pattern bit. It is useful
+       when you are drawing a shapes made by segment.
+    }
+    procedure MoveToNotReset(Cnv: TCanvas; X, Y: Integer);
+    {: Draw a line using the current pattern and color to the position <I=X,Y>.
+    }
+    procedure LineTo(Cnv: TCanvas; X, Y: Integer);
+    {: Draw a polyline using the current pattern and color.
+       <I=Pts> are the points of the polyline and <I=NPts> is the number of points.
+    }
+    procedure Polyline(Cnv: TCanvas; Pts: Pointer; NPts:
+      Integer);
+    {: Specify the pattern for lines.
+       The pattern is defined by a string of bits like
+       '1110001100', in which a one rapresent a colored pixel and a zero
+       rapresent a transparent pixel. By using this pen the redrawing of the
+       image will be slower, so use it only where necessary. Because a decorative
+       pen is associated to a layer you can manage it better.
+    }
+    procedure SetPenStyle(const SString: string);
+    {: Contains the patter for lines.
+       The pattern is defined by a string of bits like
+       '1110001100', in which a one rapresent a colored pixel and a zero
+       rapresent a transparent pixel. By using this pen the redrawing of the
+       image will be slower, so use it only where necessary. Because a decorative
+       pen is associated to a layer you can manage it better.
+    }
+    property PenStyle[const IDX: Word]: Boolean read GetBit write
+    SetBit;
+    {: Contains the pattern length.
+    }
+    property PatternLenght: Word read GetMaxBit;
+  end;
+
+{: Defines an object that contains a DecorativePen and a Canvas.
+   By using the decorative pen methods you can draw patterned lines,
+   and by using the Canvas property you can draw using the
+   canvas.
+
+   See also <See Class=TDecorativePen> for details.
+}
+  TDecorativeCanvas = class(TObject)
+  private
+    fDecorativePen: TDecorativePen;
+    fCanvas: TCanvas;
+  public
+    constructor Create(ACanvas: TCanvas);
+    destructor Destroy; override;
+
+    {: This method is a shortcut to the MoveTo method of the
+       owned decorative pen. I suggest to use it in all of your
+       shapes to draw lines.
+    }
+    procedure MoveTo(X, Y: Integer);
+    {: This method is a shortcut to the LineTo method of the
+       owned decorative pen. I suggest to use it in all of your
+       shapes to draw lines.
+    }
+    procedure LineTo(X, Y: Integer);
+    {: This method is a shortcut to the Polyline method of the
+       owned decorative pen. I suggest to use it in all of your
+       shapes to draw polylines.
+    }
+    procedure Polyline(Points: Pointer; NPts: Integer);
+    {: Contains the decorative pen.
+    }
+    property DecorativePen: TDecorativePen read fDecorativePen;
+    {: Contains the underling convas used to draw.
+    }
+    property Canvas: TCanvas read fCanvas write fCanvas;
+  end;
 
 const
   TWOPI = 2 * Pi;
@@ -269,4 +376,217 @@ begin
   end;
 end;
 
+{ TDecorativeCanvas }
+
+constructor TDecorativeCanvas.Create(ACanvas: TCanvas);
+begin
+  inherited Create;
+  fCanvas := ACanvas;
+  fDecorativePen := TDecorativePen.Create;
+end;
+
+destructor TDecorativeCanvas.Destroy;
+begin
+  fDecorativePen.Free;
+  inherited Destroy;
+end;
+
+procedure TDecorativeCanvas.MoveTo(X, Y: Integer);
+begin
+  fDecorativePen.MoveTo(fCanvas, X, Y);
+end;
+
+procedure TDecorativeCanvas.LineTo(X, Y: Integer);
+begin
+  fDecorativePen.LineTo(fCanvas, X, Y);
+end;
+
+procedure TDecorativeCanvas.Polyline(Points: Pointer; NPts:
+  Integer);
+begin
+  fDecorativePen.Polyline(fCanvas, Points, NPts);
+end;
+
+{ TDecorativePen }
+
+procedure LineDDAMethod1(X, Y: Integer; lpData: Pointer);
+  stdcall;
+var
+  NextBit: Integer;
+begin
+  with TDecorativePen(lpData) do
+  begin
+    NextBit := (fCurBit + Abs(X - fLastPt.X)) mod GetMaxBit;
+    fLastPt := Point(X, Y);
+    if (fCurBit < GetMaxBit) and
+      (fPStyle[fCurBit] and
+      not fPStyle[NextBit]) then
+      fCnv.Polyline([Point(fStartPt.X, fStartPt.Y), Point(X, Y)])
+    else if not fPStyle[fCurBit] then
+      fStartPt := Point(X, Y);
+    if (X = fEndPt.X - 1) or (X = fEndPt.X + 1) then
+      fCnv.Polyline([Point(fStartPt.X, fStartPt.Y), Point(X,
+          Y)]);
+    fCurBit := NextBit;
+  end;
+end;
+
+procedure LineDDAMethod2(X, Y: Integer; lpData: Pointer);
+  stdcall;
+var
+  NextBit: Integer;
+begin
+  with TDecorativePen(lpData) do
+  begin
+    NextBit := (fCurBit + Abs(Y - fLastPt.Y)) mod GetMaxBit;
+    fLastPt := Point(X, Y);
+    if (fCurBit < GetMaxBit) and
+      (fPStyle[fCurBit] and not fPStyle[NextBit]) then
+      fCnv.Polyline([Point(fStartPt.X, fStartPt.Y), Point(X, Y)])
+    else if not fPStyle[fCurBit] then
+      fStartPt := Point(X, Y);
+    if (Y = fEndPt.Y - 1) or (Y = fEndPt.Y + 1) then
+      fCnv.Polyline([Point(fStartPt.X, fStartPt.Y), Point(X,
+          Y)]);
+    fCurBit := NextBit;
+  end
+end;
+
+procedure TDecorativePen.SetBit(const IDX: Word; const B:
+  Boolean);
+begin
+  fPStyle[IDX] := B;
+end;
+
+function TDecorativePen.GetBit(const IDX: Word): Boolean;
+begin
+  Result := fPStyle[IDX];
+end;
+
+function TDecorativePen.GetMaxBit: Word;
+begin
+  Result := fPStyle.Size;
+end;
+
+procedure TDecorativePen.CallLineDDA;
+begin
+  if (Abs(fEndPt.X - fStartPt.X) > Abs(fEndPt.Y - fStartPt.Y))
+    then
+    LineDDA(fStartPt.X, fStartPt.Y, fEndPt.X, fEndPt.Y,
+      @LineDDAMethod1, Integer(Self))
+  else
+    LineDDA(fStartPt.X, fStartPt.Y, fEndPt.X, fEndPt.Y,
+      @LineDDAMethod2, Integer(Self));
+end;
+
+constructor TDecorativePen.Create;
+begin
+  inherited;
+
+  fPStyle := TBits.Create;
+end;
+
+destructor TDecorativePen.Destroy;
+begin
+  fPStyle.Free;
+  inherited;
+end;
+
+procedure TDecorativePen.Assign(Source: TObject);
+var
+  Cont: Integer;
+begin
+  if (Source = Self) then
+    Exit;
+  if Source is TDecorativePen then
+  begin
+    fPStyle.Size := 0;
+    for Cont := 0 to TDecorativePen(Source).fPStyle.Size - 1 do
+      fPStyle[Cont] := TDecorativePen(Source).fPStyle[Cont];
+  end;
+end;
+
+procedure TDecorativePen.MoveTo(Cnv: TCanvas; X, Y: Integer);
+begin
+  if (fPStyle.Size > 0) then
+  begin
+    fStartPt := Point(X, Y);
+    fEndPt := Point(X, Y);
+    fLastPt := fStartPt;
+    fCurBit := 0;
+  end
+  else
+    Cnv.MoveTo(X, Y);
+end;
+
+procedure TDecorativePen.MoveToNotReset(Cnv: TCanvas; X, Y:
+  Integer);
+begin
+  if (fPStyle.Size > 0) then
+  begin
+    fStartPt := Point(X, Y);
+    fEndPt := Point(X, Y);
+    fLastPt := fStartPt;
+  end
+  else
+    Cnv.MoveTo(X, Y);
+end;
+
+procedure TDecorativePen.LineTo(Cnv: TCanvas; X, Y: Integer);
+begin
+  if (fPStyle.Size > 0) then
+  begin
+    fEndPt := Point(X, Y);
+    fCnv := Cnv;
+    CallLineDDA;
+    fStartPt := Point(X, Y);
+    fLastPt := fStartPt;
+  end
+  else
+    Cnv.LineTo(X, Y);
+end;
+
+procedure TDecorativePen.Polyline(Cnv: TCanvas; Pts: Pointer;
+  NPts: Integer);
+type
+  TPoints = array[0..0] of TPoint;
+var
+  Cont: Integer;
+  TmpPts: ^TPoints;
+begin
+  if NPts <= 1 then
+    Exit;
+  TmpPts := Pts;
+  if (fPStyle.Size > 0) then
+  begin
+    fCnv := Cnv;
+    fCurBit := 0;
+    fLastPt := TmpPts^[0];
+    for Cont := 0 to NPts - 2 do
+    begin
+      if Cont > 0 then
+        fStartPt := fLastPt
+      else
+        fStartPt := TmpPts^[Cont];
+      fEndPt := TmpPts^[Cont + 1];
+      CallLineDDA;
+    end;
+  end
+  else
+    Windows.Polyline(Cnv.Handle, TmpPts^, NPts);
+end;
+
+procedure TDecorativePen.SetPenStyle(const SString: string);
+var
+  Cont: Integer;
+begin
+  fPStyle.Size := Length(SString);
+  for Cont := 1 to fPStyle.Size do
+    if SString[Cont] = '1' then
+      SetBit(Cont - 1, True)
+    else
+      SetBit(Cont - 1, False);
+end;
+
 end.
+

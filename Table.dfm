@@ -95,7 +95,7 @@ object TableForm: TTableForm
     Left = 0
     Top = 0
     Width = 333
-    Height = 467
+    Height = 473
     Align = alLeft
     Caption = 'Panel2'
     TabOrder = 4
@@ -103,7 +103,7 @@ object TableForm: TTableForm
       Left = 1
       Top = 25
       Width = 331
-      Height = 441
+      Height = 447
       Align = alClient
       ColCount = 3
       DefaultColWidth = 100

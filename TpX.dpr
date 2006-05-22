@@ -3,13 +3,12 @@ program TpX;
 uses
   Forms,
   MainUnit in 'MainUnit.pas' {MainForm},
-  InOut in 'InOut.pas',
+  Output in 'Output.pas',
   EMF in 'EMF.pas',
   EMF_Add in 'EMF_Add.pas',
   Propert in 'Propert.pas' {PropertiesForm},
   Settings in 'Settings.pas' {SettingsForm},
   Options0 in 'Options0.pas',
-  CS4BaseTypes in 'CS4BaseTypes.pas',
   CS4Shapes in 'CS4Shapes.pas',
   CS4Tasks in 'CS4Tasks.pas',
   CADSys4 in 'CADSys4.pas',
@@ -25,11 +24,20 @@ uses
   Geometry in 'Geometry.pas',
   PrintEpsOpt in 'PrintEpsOpt.pas' {PrintEpsOptForm},
   ScaleStandardUnit in 'ScaleStandardUnit.pas' {ScaleStandardForm},
-  Draw in 'Draw.pas';
+  Draw in 'Draw.pas',
+  Arrows in 'Arrows.pas' {ArrowsFrame: TFrame},
+  Input in 'Input.pas',
+  ClpbrdOp in 'ClpbrdOp.pas',
+  WinBasic in 'WinBasic.pas',
+  SysBasic in 'SysBasic.pas',
+  Gr32Add in 'Gr32Add.pas',
+  MiscUtils in 'MiscUtils.pas',
+  PrimSAX in 'PrimSAX.pas';
 
 {$R *.RES}
 
 begin
+  if not CheckCommandLine then Exit;
   Application.Initialize;
   Application.Title := 'TpX';
   Application.CreateForm(TMainForm, MainForm);

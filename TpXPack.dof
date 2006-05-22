@@ -45,7 +45,7 @@ OutputDir=
 UnitOutputDir=
 PackageDLLOutputDir=
 PackageDCPOutputDir=
-SearchPath=Lib/PNG/
+SearchPath=Lib/PNG/;Lib\Graphics32;Lib\md5;Lib\XML;Lib\PowerPdf
 Packages=vcl;rtl;vclx;dbrtl;xNails;bdertl;vcldb;mxExport_D6;mxNativeExcel_d6;PieLib;VclSmp;SynEdit_D6;dsnap;dbexpress;dsnapcrba;dsnapcon;vclie;xmlrtl;inetdbbde;inet;inetdbxpress;webdsnap;websnap;ibxpress;vclshlctrls;dclaxserver;nmfast;qrpt;bdecds;cds;adortl;visualclx;visualdbclx;dbxcds;vcldbx;dss;teeui;teedb;tee;teeqr;FlexCelXLS70;FlexCel70;CADSys4Lite;inetdb
 Conditionals=
 DebugSourceDirs=
@@ -56,10 +56,6 @@ HostApplication=
 Launcher=
 UseLauncher=0
 DebugCWD=
-[Language]
-ActiveLang=
-ProjectLang=
-RootDir=C:\Program Files\Borland\Delphi6\Bin\
 [Version Info]
 IncludeVerInfo=1
 AutoIncBuild=0
@@ -85,3 +81,26 @@ OriginalFilename=
 ProductName=
 ProductVersion=1.0.0.0
 Comments=
+[Excluded Packages]
+c:\program files\borland\delphi6\Bin\DCLIB60.bpl=InterBase Data Access Components
+c:\program files\borland\delphi6\Bin\dclcds60.bpl=Borland Base Cached ClientDataset Component
+c:\program files\borland\delphi6\Bin\dclbdecds60.bpl=Borland Local BDE ClientDataset Components
+c:\program files\borland\delphi6\Bin\dcltee60.bpl=TeeChart Components
+c:\program files\borland\delphi6\Bin\dcldss60.bpl=Borland Decision Cube Components
+c:\program files\borland\delphi6\Bin\dcltqr60.bpl=TeeChart for QuickReport Components
+c:\program files\borland\delphi6\Bin\dclclxdb60.bpl=Borland CLX Database Components
+c:\program files\borland\delphi6\Bin\dclclxstd60.bpl=Borland CLX Standard Components
+c:\program files\borland\delphi6\Bin\dclsmp60.bpl=Borland Sample Components
+c:\program files\borland\delphi6\Bin\DBWEBXPRT.BPL=Borland Web Wizard Package
+c:\program files\borland\delphi6\Bin\dclwbm60.bpl=Borland InternetExpress Components
+c:\program files\borland\delphi6\Bin\dclwebsnap60.bpl=Borland WebSnap Components
+c:\program files\borland\delphi6\Bin\dclite60.bpl=Borland Integrated Translation Environment
+c:\program files\borland\delphi6\Bin\dcldbxcds60.bpl=Borland Local DBX ClientDataset Components
+[HistoryLists\hlUnitAliases]
+Count=1
+Item0=WinTypes=Windows;WinProcs=Windows;DbiTypes=BDE;DbiProcs=BDE;DbiErrs=BDE;
+[HistoryLists\hlSearchPath]
+Count=3
+Item0=Lib/PNG/;Lib\Graphics32;Lib\md5;Lib\XML;Lib\PowerPdf
+Item1=Lib/PNG/;Lib\Graphics32;Lib\md5;Lib\XML;Lib\PowerPdf\
+Item2=Lib/PNG/;Lib\Graphics32;Lib\md5;Lib\XML

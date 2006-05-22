@@ -68,7 +68,7 @@ var
 
 implementation
 
-uses CS4BaseTypes, CADSys4, Geometry;
+uses CADSys4, Geometry;
 
 {$R *.dfm}
 

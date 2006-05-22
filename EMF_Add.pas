@@ -55,24 +55,31 @@ type
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
-  TEMF_Poly = class(TEMF_Record)
+  TEMF_PolyGen = class(TEMF_Record)
+    PointsArray: array of TPoint;
+  end;
+
+  TEMF_Poly32 = class(TEMF_PolyGen)
     EMR_Info: TEMRPolyline;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
-  TEMF_PolyBezier = class(TEMF_Poly)
+  TEMF_PolyBezier320 = class(TEMF_Poly32)
   end;
 
-  TEMF_Polygon = class(TEMF_Poly)
+  TEMF_PolyBezier32 = class(TEMF_PolyBezier320)
   end;
 
-  TEMF_Polyline = class(TEMF_Poly)
+  TEMF_Polygon32 = class(TEMF_Poly32)
   end;
 
-  TEMF_PolyBezierTo = class(TEMF_Poly)
+  TEMF_Polyline32 = class(TEMF_Poly32)
   end;
 
-  TEMF_PolylineTo = class(TEMF_Poly)
+  TEMF_PolyBezierTo32 = class(TEMF_PolyBezier320)
+  end;
+
+  TEMF_PolylineTo32 = class(TEMF_Poly32)
   end;
 
   TEMF_PolyPolyline0 = class(TEMF_Record)
@@ -436,7 +443,7 @@ type
 
   TEMF_ExtTextOut = class(TEMF_Record)
     EMR_Info: TEMRExtTextOut;
-    Str: Widestring;
+    Str: string;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -446,9 +453,9 @@ type
   TEMF_ExtTextOutW = class(TEMF_ExtTextOut)
   end;
 
-  TEMF_Poly16 = class(TEMF_Record)
+  TEMF_Poly16 = class(TEMF_PolyGen)
     EMR_Info: TEMRPolyline16;
-    PointsArray16: array of TSmallPoint;
+//    PointsArray16: array of TSmallPoint;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -470,8 +477,8 @@ type
   TEMF_PolylineTo16 = class(TEMF_Poly16)
   end;
 
-  T_PointsArray16 = class
-    PointsArray16: array of TSmallPoint;
+  T_PointsArray = class
+    PointsArray: array of TPoint;
   end;
 
   TEMF_PolyPoly16 = class(TEMF_Record)
@@ -481,7 +488,7 @@ type
     destructor Destroy; override;
     procedure ReadFromStream(AStream: TStream); override;
     function GetLen(iPoly: Integer): Integer;
-    function GetPnt(iPoly: Integer; I: Integer): TSmallPoint;
+    function GetPnt(iPoly: Integer; I: Integer): TPoint;
   end;
 
   TEMF_PolyPolyline16 = class(TEMF_PolyPoly16)
@@ -492,7 +499,7 @@ type
 
   TEMF_PolyDraw16 = class(TEMF_Record)
     EMR_Info: TEMRPolyDraw16;
-    PointsArray16: array of TSmallPoint;
+    PointsArray: array of TPoint;
     abTypes: array of Byte;
     procedure ReadFromStream(AStream: TStream); override;
   end;
@@ -639,8 +646,8 @@ members for the PolyPolyline and PolyPolygon enhanced metafile records.
 const
   EMF_RecordsClasses: array[1..97] of TEMF_RecordClass =
 
-  (nil, TEMF_PolyBezier, TEMF_Polygon, TEMF_Polyline,
-    TEMF_PolyBezierTo, TEMF_PolylineTo, TEMF_PolyPolyline,
+  (nil, TEMF_PolyBezier32, TEMF_Polygon32, TEMF_Polyline32,
+    TEMF_PolyBezierTo32, TEMF_PolylineTo32, TEMF_PolyPolyline,
     TEMF_PolyPolygon, TEMF_SetWindowExtEx,
     TEMF_SetWindowOrgEx,
     TEMF_SetViewportExtEx, TEMF_SetViewportOrgEx,
@@ -806,11 +813,15 @@ begin
     soFromCurrent);
 end;
 
-procedure TEMF_Poly.ReadFromStream(AStream: TStream);
+procedure TEMF_Poly32.ReadFromStream(AStream: TStream);
+var
+  I: Longword;
 begin
-
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.aptl), soFromCurrent);
+  SetLength(PointsArray, EMR_Info.cptl);
+  for I := 0 to EMR_Info.cptl - 1 do
+    AStream.ReadBuffer(PointsArray[I], SizeOf(TPoint));
 end;
 
 procedure TEMF_PolyPolyline0.ReadFromStream(AStream: TStream);
@@ -1148,25 +1159,52 @@ end;
 
 procedure TEMF_ExtTextOut.ReadFromStream(AStream:
   TStream);
+var
+  WStr: Widestring;
+  Ch: Char;
+  WCh: Widechar;
+  I: Integer;
 begin
-
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Position :=
     AStream.Position - SizeOf(EMR_Info)
     + EMR_Info.emrtext.offString;
-  SetLength(Str, EMR_Info.emrtext.NChars);
-  AStream.ReadBuffer(Str[1], EMR_Info.emrtext.NChars * 2);
+  if Self is TEMF_ExtTextOutW then
+  begin
+    SetLength(WStr, EMR_Info.emrtext.NChars);
+    AStream.ReadBuffer(WStr[1], EMR_Info.emrtext.NChars * 2);
+    //Str := WStr;
+    Str := '';
+    for I := 1 to Length(WStr) do
+    begin
+      Ch := string(WStr[I])[1];
+      WCh := Widestring(Ch)[1];
+      if WCh <> WStr[I]
+        then Str := Str + Format('&#x%x;', [Ord(WStr[I])])
+      else Str := Str + Ch;
+    end;
+  end
+  else
+  begin
+    SetLength(Str, EMR_Info.emrtext.NChars);
+    AStream.ReadBuffer(Str[1], EMR_Info.emrtext.NChars);
+  end;
 end;
 
 procedure TEMF_Poly16.ReadFromStream(AStream: TStream);
 var
   I: Longword;
+  P: TSmallPoint;
 begin
   AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.apts), soFromCurrent);
-  SetLength(PointsArray16, EMR_Info.cpts);
+  SetLength(PointsArray, EMR_Info.cpts);
   for I := 0 to EMR_Info.cpts - 1 do
-    AStream.ReadBuffer(PointsArray16[I], SizeOf(TSmallPoint));
+  begin
+    AStream.ReadBuffer(P, SizeOf(TSmallPoint));
+    PointsArray[I].X := P.X;
+    PointsArray[I].Y := P.Y;
+  end;
 end;
 
 constructor TEMF_PolyPoly16.Create;
@@ -1186,7 +1224,8 @@ procedure TEMF_PolyPoly16.ReadFromStream(AStream: TStream);
 var
   iPoly, I: Longword;
   Len: DWORD;
-  Poly: T_PointsArray16;
+  Poly: T_PointsArray;
+  P: TSmallPoint;
 begin
 
   if PolyList = nil then
@@ -1198,30 +1237,34 @@ begin
   for iPoly := 0 to EMR_Info.nPolys - 1 do
   begin
     AStream.ReadBuffer(Len, SizeOf(Len));
-    Poly := T_PointsArray16.Create;
+    Poly := T_PointsArray.Create;
     PolyList.Add(Poly);
-    SetLength(Poly.PointsArray16, Len);
+    SetLength(Poly.PointsArray, Len);
   end;
   for iPoly := 0 to EMR_Info.nPolys - 1 do
   begin
-    Poly := PolyList[iPoly] as T_PointsArray16;
-    for I := 0 to High(Poly.PointsArray16) do
-      AStream.ReadBuffer(Poly.PointsArray16[I],
+    Poly := PolyList[iPoly] as T_PointsArray;
+    for I := 0 to High(Poly.PointsArray) do
+    begin
+      AStream.ReadBuffer(P,
         SizeOf(TSmallPoint));
+      Poly.PointsArray[I].X := P.X;
+      Poly.PointsArray[I].Y := P.Y;
+    end;
   end;
 end;
 
 function TEMF_PolyPoly16.GetLen(iPoly: Integer): Integer;
 begin
   Result := High((PolyList[iPoly] as
-    T_PointsArray16).PointsArray16) + 1;
+    T_PointsArray).PointsArray) + 1;
 end;
 
 function TEMF_PolyPoly16.GetPnt(iPoly: Integer; I: Integer):
-  TSmallPoint;
+  TPoint;
 begin
   Result := (PolyList[iPoly] as
-    T_PointsArray16).PointsArray16[I];
+    T_PointsArray).PointsArray[I];
 end;
 
 {  TEMF_PolyPoly16 = class(TEMF_Record)
@@ -1234,6 +1277,7 @@ var
   I: Longword;
   S: TMemoryStream;
   St: string;
+  P: TSmallPoint;
 begin
   AStream.ReadBuffer(EMR_Info.emr, SizeOf(EMR_Info.emr));
   AStream.ReadBuffer(EMR_Info.rclBounds, SizeOf(EMR_Info.rclBounds));
@@ -1241,10 +1285,14 @@ begin
   {AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.apts)
     - SizeOf(EMR_Info.abTypes), soFromCurrent);}
-  SetLength(PointsArray16, EMR_Info.cpts);
+  SetLength(PointsArray, EMR_Info.cpts);
   SetLength(abTypes, EMR_Info.cpts);
   for I := 0 to EMR_Info.cpts - 1 do
-    AStream.ReadBuffer(PointsArray16[I], SizeOf(TSmallPoint));
+  begin
+    AStream.ReadBuffer(P, SizeOf(TSmallPoint));
+    PointsArray[I].X := P.X;
+    PointsArray[I].Y := P.Y;
+  end;
   for I := 0 to EMR_Info.cpts - 1 do
     AStream.ReadBuffer(abTypes[I], SizeOf(Byte));
   {S := TMemoryStream.Create;

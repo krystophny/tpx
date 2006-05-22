@@ -1,4 +1,3 @@
-/GR32.inc///
 /GR32.pas///
 /GR32_Blend.pas///
 /GR32_ByteMaps.pas///
@@ -8,3 +7,4 @@
 /GR32_Polygons.pas///
 /GR32_System.pas///
 /GR32_Transforms.pas///
+/GR32.inc///

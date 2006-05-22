@@ -3,28 +3,29 @@ unit CADSys4;
 
 interface
 
-uses SysUtils, Classes, Messages, Windows, Graphics, Controls,
-  Contnrs, Clipbrd, ComCtrls, CS4BaseTypes, Draw;
+uses Types, SysUtils, Classes, Messages, Windows, Graphics, Controls,
+  Contnrs, ComCtrls, Draw, md5, Options0, Geometry, WinBasic;
 
 const
   Drawing_NewFileName = ': Unnamed drawing :';
 
 type
   TeXFormatKind = (tex_tex, tex_pgf, tex_pstricks, tex_eps, tex_png,
-    tex_bmp, tex_metapost, tex_emf);
+    tex_bmp, tex_metapost, tex_emf, tex_none);
   PdfTeXFormatKind = (pdftex_tex, pdftex_pgf, pdftex_pdf, pdftex_png,
-    pdftex_metapost, pdftex_epstopdf);
-  TeXFigureEnvKind = (fig_none, fig_figure, fig_floating,
-    fig_wrap);
-
+    pdftex_metapost, pdftex_epstopdf, pdftex_none);
+  ExportFormatKind = (export_SVG, export_EMF, export_EPS, export_PNG,
+    export_BMP, export_PDF, export_metapost, export_mps, export_epstopdf,
+    export_latexeps, export_latexpdf, export_latexcustom);
+  TeXFigureEnvKind = (fig_none, fig_figure, fig_floating, fig_wrap);
 
 const
-  TeXFormat_Choice = 'tex;pgf;pstricks;eps;png;bmp;metapost;emf';
-  PdfTeXFormat_Choice = 'tex;pgf;pdf;png;metapost;epstopdf';
+  TeXFormat_Choice = 'tex;pgf;pstricks;eps;png;bmp;metapost;emf;none';
+  PdfTeXFormat_Choice = 'tex;pgf;pdf;png;metapost;epstopdf;none';
+  ExportFormat_Choice =
+    'svg;emf;eps;png;bmp;pdf;metapost;mps;epstopdf;latexeps;latexpdf;latexcustom';
+  ExportDefaultExt = 'svg;emf;eps;png;bmp;pdf;mp;mps;pdf;eps;pdf;*';
   TeXFigure_Choice = 'none;figure;floatingfigure;wrapfigure';
-
-var
-  TpXClipboardFormat: Cardinal;
 
 var
   TeXFormat_Default: TeXFormatKind = tex_eps;
@@ -41,7 +42,7 @@ var
   DottedSize_Default: TRealType = 0.5;
   DashSize_Default: TRealType = 1;
   FontName_Default: string = 'Times New Roman';
-  TeXMinLine_Default: TRealType = 2;
+  TeXMinLine_Default: TRealType = 0.1;
   TeXCenterFigure_Default: Boolean = True;
   TeXFigure_Default: TeXFigureEnvKind = fig_figure;
   LineWidthBase_Default: TRealType = 0.3;
@@ -49,13 +50,16 @@ var
   PicMagnif_Default: TRealType = 1;
   MetaPostTeXText_Default: Boolean = True;
   IncludePath_Default: string = '';
+  DefaultSymbolSize_Default: TRealType = 30;
+
   // in=72.27pt  in=25.4mm  mm=2.845pt
   // in=72pt  in=25.4mm  mm=2.8346pt
 
-  SmoothBezierNodes: Boolean;
-
-const
-  TpXClipboardFormatString = 'TpX Clipboard Format';
+  BezierPrecision: Integer = 150;
+  SmoothBezierNodes: Boolean = True;
+  RotateText: Boolean = True;
+  RotateSymbols: Boolean = True;
+  ScaleLineWidth: Boolean = False;
 
 type
 {: This type is used by the library for versioning control.
@@ -324,7 +328,7 @@ type
 }
   TGraphicObject = class(TInterfacedObject)
   private
-    fID, fTag: Longint;
+    fID, fTag: Integer;
     fLayer: Byte;
     fVisible, fEnabled, fToBeSaved: Boolean;
     fOnChange: TNotifyEvent;
@@ -360,7 +364,7 @@ type
    <LI=<See Property=TGraphicObject@Enabled> to <B=True> >
    <LI=<See Property=TGraphicObject@ToBeSaved> to <B=True> >
 }
-    constructor Create(ID: Longint); virtual;
+    constructor Create(ID: Integer); virtual;
 {: This constructor is used to create an instance of the class and initialize
    its state with the one saved to a stream with a previous call to
    <See Method=TGraphicObject@SaveToStream>.
@@ -468,11 +472,11 @@ type
 {: This property defines the ID of the object.
 
    Any graphic object is identified through th library by means of a
-   <I=LongInt> number that must univocally identify it. The library by
+   <I=Integer> number that must univocally identify it. The library by
    itself doesn't check for uniqueness of these IDs so you have to ensure
    it by yourself.
 }
-    property ID: Longint read fID write fID;
+    property ID: Integer read fID write fID;
 {: This property contains the layer on which the object lies.
 
    Any graphic object is associated with a layer from which they get
@@ -571,7 +575,7 @@ type
 
    This is only a simple and not optimized way to handle these problems.
 }
-    property Tag: Longint read fTag write fTag;
+    property Tag: Integer read fTag write fTag;
 {: This is property can store an event-handler for the event <I=OnChange>
    that occour whenever an object is modified (actually the event is
    fired only when the user or the library call <See Method=TGraphicObject@UpdateExtension>
@@ -584,29 +588,6 @@ type
       fOnChange;
   end;
 
-
-{ Syncronization object to prevent linking of Delphi's packages. }
-{: For Internal use of CADSys library.
-}
-  TCADSysSynchroObject = class(TObject)
-  public
-    procedure Acquire; virtual;
-    procedure Release; virtual;
-  end;
-
-{: For Internal use of CADSys library.
-}
-  TCADSysCriticalSection = class(TCADSysSynchroObject)
-  private
-    FSection: TRTLCriticalSection;
-  public
-    constructor Create;
-    destructor Destroy; override;
-    procedure Acquire; override;
-    procedure Release; override;
-    procedure Enter;
-    procedure Leave;
-  end;
 
   { Lists of graphical objects. }
 {: This class defines an iterator for a list of graphical objects
@@ -651,7 +632,7 @@ type
     fSourceList: TGraphicObjList;
 
     function GetCurrentObject: TGraphicObject;
-    function SearchBlock(ID: Longint): Pointer;
+    function SearchBlock(ID: Integer): Pointer;
     function GetCount: Integer;
     constructor Create(const Lst: TGraphicObjList); virtual;
   public
@@ -672,7 +653,7 @@ type
    to it, if no it will not be moved.
    No exception is raised if no object is found.
 }
-    function Search(const ID: Longint): TGraphicObject;
+    function Search(const ID: Integer): TGraphicObject;
 {: Move the current position (<See Property=TGraphicObjIterator@Current>
    to the next object in the list, and return it.
 
@@ -707,7 +688,7 @@ type
    <See Property=TGraphicObjIterator@Items> to iterate the list
    in an array-like mode.
 }
-    property Count: Longint read GetCount;
+    property Count: Integer read GetCount;
 {: This property contains the current object onto which the iterator
    is positioned. If the position is invalid it will be <B=nil>.
 }
@@ -724,7 +705,7 @@ type
    <I=ID> is zero based so the bounds of the array are from <I=0> to
    <See Property=TGraphicObjIterator@Count>.
 }
-    property Items[const ID: Longint]: TGraphicObject read
+    property Items[const ID: Integer]: TGraphicObject read
     Search; default;
   end;
 
@@ -815,7 +796,7 @@ type
     fHead, fTail: Pointer;
     fHasExclusive, fFreeOnClear: Boolean;
     fIterators: Integer; { Usato come semaforo. }
-    fCount: Longint;
+    fCount: Integer;
     fListGuard: TCADSysCriticalSection;
 
     procedure DeleteBlock(ObjToDel: Pointer);
@@ -863,7 +844,7 @@ type
    If the list has some iterators active on it a
    <See Class=ECADListBlocked> exception will be raised.
 }
-    procedure Insert(const IDInsertPoint: Longint; const Obj:
+    procedure Insert(const IDInsertPoint: Integer; const Obj:
       TGraphicObject);
 {: This method moves an object into the list.
 
@@ -879,7 +860,7 @@ type
    drawing order in the list of object of a <See Class=TDrawing>
    control.
 }
-    procedure Move(const IDToMove, IDInsertPoint: Longint);
+    procedure Move(const IDToMove, IDInsertPoint: Integer);
 {: This method deletes an object from the list.
 
    The object with ID equal to <I=ID> will be deleted.
@@ -896,7 +877,7 @@ type
    <B=Note>: If you want to delete more that one object from the
    list use an exclusive iterator for better performances.
 }
-    function Delete(const ID: Longint): Boolean;
+    function Delete(const ID: Integer): Boolean;
 {: This method removes an object from the list.
 
    The object with ID equal to <I=ID> will be removed.
@@ -912,7 +893,7 @@ type
    <B=Note>: If you want to remove more that one object from the
    list use an exclusive iterator for better performances.
 }
-    function Remove(const ID: Longint): Boolean;
+    function Remove(const ID: Integer): Boolean;
 {: This method returns the object with the gived Id.
 
    The object with ID equal to <I=ID> will be returned if found, or <B=nil>
@@ -924,7 +905,7 @@ type
    <B=Note>: If you have an iterator on the list don't use this method.
    Use it only if you want to find a single object.
 }
-    function Find(const ID: Longint): TGraphicObject;
+    function Find(const ID: Integer): TGraphicObject;
 {: This method remove all the object from the list.
 
    The objects will be deleted if the property <See Property=TGraphicObjList@FreeOnClear>
@@ -983,13 +964,17 @@ type
 }
     procedure RemoveAllIterators;
     procedure TransForm(const T: TTransf2D);
+//TSY: reproduced from viewport method with the same name
+    function PickObject(const PT: TPoint2D;
+      Drawing: TDrawing2D; const Aperture: TRealType;
+      const VisualRect: TRect2D; const DrawMode: Integer;
+      const FirstFound: Boolean; var NPoint: Integer): TObject2D;
 {: This property returns the number of objects present in the list.
 
    It is useful when you want to iterate through the object in the
    list with an iterators.
 }
-
-    property Count: Longint read fCount;
+    property Count: Integer read fCount;
 {: This property returns <B=True> if the list has some iterator active on
    it.
 
@@ -1088,7 +1073,7 @@ type
     fModified: Boolean;
     fStreamable: Boolean;
     fIdx: Byte;
-    fTag: Longint;
+    fTag: Integer;
 
     procedure SetName(NM: TLayerName);
     procedure SetPen(Pn: TPen);
@@ -1194,7 +1179,7 @@ type
 {: This property is not used by the library and so can be used to store
    user defined values like object references.
 }
-    property Tag: Longint read fTag write fTag;
+    property Tag: Integer read fTag write fTag;
   end;
 
 {: This class defines a set of 256 layers (from 0 to 255).
@@ -1300,7 +1285,7 @@ type
       { The version info is used in file I/O. }
     fListOfObjects, fListOfBlocks: TGraphicObjList;
       { There are two list. The one of the objects and the one of the blocks. }
-    fNextID, fNextBlockID: Longint;
+    fNextID, fNextBlockID: Integer;
       { Contain the next ID to assign. }
     fListOfViewport: TList;
       { Contains all the Viewports linked. }
@@ -1441,7 +1426,7 @@ type
        See also <See Class=TSourceBlock2D>, <See Class=TSourceBlock3D>,
        <See Class=TBlock2D> and <See Class=TBlock3D>.
     }
-    function AddSourceBlock(ID: Longint; const Obj:
+    function AddSourceBlock(ID: Integer; const Obj:
       TGraphicObject): TGraphicObject;
     {: This method returns the source block with the given name or
        <B=nil> if no such object is found.
@@ -1461,7 +1446,7 @@ type
 
        See also <See Method=TDrawing@FindSourceBlock>.
     }
-    function GetSourceBlock(ID: Longint): TGraphicObject;
+    function GetSourceBlock(ID: Integer): TGraphicObject;
     {: This method adds a new object.
 
        <I=ID> is the identifier number of the object to add and Obj is the
@@ -1477,7 +1462,7 @@ type
 
        The method returns the added object.
     }
-    function AddObject(ID: Longint; const Obj: TGraphicObject):
+    function AddObject(ID: Integer; const Obj: TGraphicObject):
       TGraphicObject;
     {: This method insert a new object in a given position.
 
@@ -1494,7 +1479,7 @@ type
 
        The method returns the added object.
     }
-    function InsertObject(ID, IDInsertPoint: Longint; const Obj:
+    function InsertObject(ID, IDInsertPoint: Integer; const Obj:
       TGraphicObject): TGraphicObject;
     {: This method returns the object with the given ID or
        <B=nil> if no such object is found.
@@ -1502,7 +1487,7 @@ type
        The returned reference is of type <See Class=TGraphicObject>, you must
        up-cast it to the appropriate class before use.
     }
-    function GetObject(ID: Longint): TGraphicObject;
+    function GetObject(ID: Integer): TGraphicObject;
     {: This method draw the given object on all the linked viewports.
 
        <I=Obj> is the object to be drawed. This object will be drawed with
@@ -1686,7 +1671,7 @@ type
       operation aborted. In this case you must delete the objects that
       reference the source block before retry.
     }
-    procedure DeleteSourceBlockByID(const ID: Longint);
+    procedure DeleteSourceBlockByID(const ID: Integer);
     {: This method deletes all the source block currently defined.
 
       If some of the source blocks is in use (that is it is referenced
@@ -1737,7 +1722,7 @@ type
       If the object is not found a <See Class=ECADListObjNotFound> exception
       will be raised.
     }
-    procedure ChangeObjectLayer(const ID: Longint; const
+    procedure ChangeObjectLayer(const ID: Integer; const
       NewLayer: Byte);
     {: This method moves an object in the display list.
 
@@ -1753,7 +1738,7 @@ type
       will be raised.
     }
     procedure MoveObject(const IDOrigin, IDDestination:
-      Longint);
+      Integer);
     {: This method deletes an object of the display list.
 
        <I=ID> is the identification number of the object to be deleted.
@@ -1761,7 +1746,7 @@ type
       If the object is not found a <See Class=ECADListObjNotFound> exception
       will be raised.
     }
-    procedure DeleteObject(const ID: Longint);
+    procedure DeleteObject(const ID: Integer);
     {: This method removes an object of the display list but doesn't free
        its reference.
 
@@ -1770,7 +1755,7 @@ type
       If the object is not found a <See Class=ECADListObjNotFound> exception
       will be raised.
     }
-    procedure RemoveObject(const ID: Longint);
+    procedure RemoveObject(const ID: Integer);
     {: This method removes all the objects of the display list.
     }
     procedure DeleteAllObjects;
@@ -2473,7 +2458,7 @@ type
     //TSY:
     function AsMetafile: TMetaFile;
     function AsBitmap: TBitmap;
-    procedure CopyToClipboard(const Clp: TClipboard);
+    procedure CopyToClipboard;
     {: This method start a group of updates so that only one repainting
        of the viewport take place at the end of the group.
 
@@ -3249,7 +3234,7 @@ type
     }
     property WritableBox: TRect2D read fBox write fBox;
   public
-    constructor Create(ID: Longint); override;
+    constructor Create(ID: Integer); override;
     destructor Destroy; override;
     constructor CreateFromStream(const Stream: TStream; const
       Version: TCADVersion); override;
@@ -3443,8 +3428,8 @@ type
        itself and will be freed when the container is deleted. So it
        isn't possible to share objects between containers.
     }
-    constructor Create(ID: Longint); override;
-    constructor CreateSpec(ID: Longint; const Objs: array of
+    constructor Create(ID: Integer); override;
+    constructor CreateSpec(ID: Integer; const Objs: array of
       TObject2D);
     destructor Destroy; override;
     constructor CreateFromStream(const Stream: TStream; const
@@ -3525,8 +3510,8 @@ type
        it is possible to share these objects using the <See Class=TBlock2D>
        class.
     }
-    constructor Create(ID: Longint); override;
-    constructor CreateSpec(ID: Longint; const Name:
+    constructor Create(ID: Integer); override;
+    constructor CreateSpec(ID: Integer; const Name:
       TSourceBlockName; const Objs: array of TObject2D);
     constructor CreateFromStream(const Stream: TStream; const
       Version: TCADVersion); override;
@@ -3598,8 +3583,8 @@ type
        <I=Source> is the source block that is used to define
        the instance.
     }
-    constructor Create(ID: Longint); override;
-    constructor CreateSpec(ID: Longint; const Source:
+    constructor Create(ID: Integer); override;
+    constructor CreateSpec(ID: Integer; const Source:
       TSourceBlock2D);
     destructor Destroy; override;
     constructor CreateFromStream(const Stream: TStream; const
@@ -3655,12 +3640,18 @@ type
   end;
 
   //TSY:
+  TCheckSum = MD5Digest;
+
+  //TSY:
   TDrawHistory = class(TObjectList)
   private
     fDrawing: TDrawing2D;
     fPosition: Integer;
+    fCheckSum, fSavedCheckSum: TCheckSum;
+    fOptCheckSum, fSavedOptCheckSum: TCheckSum;
     function GetCanUndo: Boolean;
     function GetCanRedo: Boolean;
+    function GetIsChanged: Boolean;
   public
     constructor Create(ADrawing: TDrawing2D);
     procedure Truncate(Index: Integer);
@@ -3668,8 +3659,11 @@ type
     procedure Undo;
     procedure Redo;
     procedure Clear; override;
+    procedure SaveCheckSum;
+    procedure SetPropertiesChanged;
     property CanUndo: Boolean read GetCanUndo;
     property CanRedo: Boolean read GetCanRedo;
+    property IsChanged: Boolean read GetIsChanged;
   end;
 
   TOnPasteMetafileFromClipboard = procedure(Drawing: TDrawing2D) of object;
@@ -3718,7 +3712,9 @@ type
     PicMagnif: TRealType;
     MetaPostTeXText: Boolean;
     IncludePath: string;
+    DefaultSymbolSize: TRealType;
     History: TDrawHistory;
+    OptionsList: TOptionsList;
     OnPasteMetafileFromClipboard: TOnPasteMetafileFromClipboard;
     procedure LoadObjectsFromStream(const Stream: TStream; const
       Version: TCADVersion); override;
@@ -3730,6 +3726,7 @@ type
     procedure SaveSelectionToStream(const Stream: TStream);
     procedure CopySelectionToClipboard;
     procedure PasteFromClipboard;
+    procedure FillOptionsList;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure SetDefaults; virtual;
@@ -3812,7 +3809,7 @@ type
     }
     procedure DeleteSourceBlock(const SrcName:
       TSourceBlockName);
-    function GetSourceBlock(const ID: Longint): TSourceBlock2D;
+    function GetSourceBlock(const ID: Integer): TSourceBlock2D;
     function FindSourceBlock(const SrcName: TSourceBlockName):
       TSourceBlock2D;
     {: This method creates a source block (and add it to the CAD) by
@@ -3827,9 +3824,9 @@ type
       Objs: TGraphicObjIterator): TSourceBlock2D;
     procedure DeleteLibrarySourceBlocks; override;
     procedure DeleteSavedSourceBlocks; override;
-    function AddObject(const ID: Longint; const Obj: TObject2D):
+    function AddObject(const ID: Integer; const Obj: TObject2D):
       TObject2D;
-    function InsertObject(const ID, IDInsertPoint: Longint; const
+    function InsertObject(const ID, IDInsertPoint: Integer; const
       Obj: TObject2D): TObject2D;
     {: This method adds a new block (instance of a source block) into
        the CAD.
@@ -3841,9 +3838,9 @@ type
        If the source block isn't in the CAD an exception will be
        raised. The method returns the reference of the added block.
     }
-    function AddBlock(const ID: Longint; const SrcName:
+    function AddBlock(const ID: Integer; const SrcName:
       TSourceBlockName): TObject2D;
-    function GetObject(const ID: Longint): TObject2D;
+    function GetObject(const ID: Integer): TObject2D;
     {: This method transforms a set of object or all the objects
        present in the CAD.
 
@@ -3862,13 +3859,19 @@ type
        and the operation stopped.
     }
     procedure TransformObjects(const ListOfObj: array of
-      Longint; const T: TTransf2D);
+      Integer; const T: TTransf2D);
     procedure ScaleAll(const P: TPoint2D; ScaleX, ScaleY:
       TRealType);
     function ScaleStandard(ScaleStandardMaxWidth,
       ScaleStandardMaxHeight: TRealType): TTransf2D;
     procedure ScalePhysical(const S: TRealType);
     procedure RedrawObject(const Obj: TObject2D);
+//TSY:
+    function PickObject(const PT: TPoint2D;
+      const Aperture: TRealType;
+      const VisualRect: TRect2D; const DrawMode: Integer;
+      const FirstFound: Boolean; var NPoint: Integer): TObject2D;
+    procedure MakeGrayscale;
     {: This property contains the extension of the drawing.
 
        The drawing extension is the smallest axis aligned
@@ -4047,6 +4050,10 @@ type
     }
     function PickListOfObjects(const PickedObjects: TList; PT:
       TPoint2D; Aperture: Word): Integer;
+      //TSY: similar to PickObject, but takes into account selection
+    function PickObjectWithSelection(const PT: TPoint2D;
+      const Aperture: Word;
+      const FirstFound: Boolean; var NPoint: Integer): TObject2D;
     {: This method returns the point <I=WPt> in world coordinate system
        transformed by the inverse of the object model trasform of <I=Obj>.
 
@@ -5148,7 +5155,37 @@ procedure BitmapToPNG(const aBitmap: TBitmap;
 
 implementation
 
-uses Math, Dialogs, Forms, CS4Shapes, pngimage, MainUnit, Geometry;
+uses Math, Dialogs, Forms, CS4Shapes, pngimage, SysBasic,
+  ClpbrdOp, ColorEtc;
+
+
+function MD5Stream(const AStream: TStream): TCheckSum;
+var
+  Context: MD5Context;
+  Buffer: array[0..4095] of Byte;
+  Len: Integer;
+begin
+  MD5Init(Context);
+  AStream.Seek(0, soFromBeginning);
+  repeat
+    Len := AStream.Read(Buffer, 4096);
+    if Len > 0 then MD5Update(Context, @Buffer, Len);
+  until Len = 0;
+  MD5Final(Context, Result);
+end;
+
+procedure MD5Stream_try(const St: string);
+var
+  AStream: TStringStream;
+  CheckSum: TCheckSum;
+begin
+  Application.MessageBox(PChar(MD5Print(MD5String(St))), nil);
+  //Exit;
+  AStream := TStringStream.Create(St);
+  CheckSum := MD5Stream(AStream);
+  AStream.Free;
+  Application.MessageBox(PChar(MD5Print(CheckSum)), nil);
+end;
 
 type
   TPaintingThread = class(TThread)
@@ -5188,7 +5225,7 @@ end;
 // TGraphicObject
 // =====================================================================
 
-constructor TGraphicObject.Create(ID: Longint);
+constructor TGraphicObject.Create(ID: Integer);
 begin
   inherited Create;
 
@@ -5432,6 +5469,55 @@ begin
   end;
 end;
 
+function TGraphicObjList.PickObject(const PT: TPoint2D;
+  Drawing: TDrawing2D; const Aperture: TRealType;
+  const VisualRect: TRect2D; const DrawMode: Integer;
+  const FirstFound: Boolean; var NPoint: Integer): TObject2D;
+var
+  TmpNPoint: Integer;
+  Tmp: TObject2D;
+  MinDist, Distance: TRealType;
+  TmpIter: TExclusiveGraphicObjIterator;
+  //TSY:
+  function NPointLevel(const NPoint: Integer): TRealType;
+  begin
+    Result := NPoint;
+    if NPoint > -2 then Result := -2;
+  end;
+begin
+  Result := nil;
+  if Drawing = nil then Exit;
+  TmpIter := GetExclusiveIterator;
+  try
+    MinDist := Aperture;
+    NPoint := PICK_NOOBJECT;
+    Tmp := TmpIter.Current as TObject2D;
+    while Tmp <> nil do
+      with (Drawing.Layers[Tmp.Layer]) do
+      begin
+        if Active and Visible {and (Tmp is fPickFilter)} and
+          Tmp.IsVisible(VisualRect, DrawMode) then
+        begin
+          TmpNPoint := Tmp.OnMe(PT, Aperture, Distance);
+          //TSY:
+          //if TmpNPoint = -2 then Distance := 0;
+          if (NPointLevel(TmpNPoint) >= NPointLevel(NPoint))
+            and (Distance <= MinDist) then
+          begin
+            Result := Tmp;
+            NPoint := TmpNPoint;
+            MinDist := Distance;
+            if FirstFound then
+              Break;
+          end;
+        end;
+        Tmp := TmpIter.Next as TObject2D;
+      end;
+  finally
+    TmpIter.Free;
+  end;
+end;
+
 procedure TGraphicObjList.Add(const Obj: TGraphicObject);
 var
   NewBlock: PObjBlock;
@@ -5478,12 +5564,7 @@ begin
       repeat
         Add(TmpIter.Current);
         Inc(I);
-        if I mod 100 = 0 then
-        begin
-          MainForm.ProgressBar1.Position :=
-            Round(I / Lst.Count * 100);
-          Application.ProcessMessages;
-        end;
+        if I mod 100 = 0 then ShowProgress(I / Lst.Count);
       until TmpIter.Next = nil;
     finally
       TmpIter.Free;
@@ -5493,7 +5574,7 @@ begin
   end;
 end;
 
-procedure TGraphicObjList.Insert(const IDInsertPoint: Longint;
+procedure TGraphicObjList.Insert(const IDInsertPoint: Integer;
   const Obj: TGraphicObject);
 var
   NewBlock: PObjBlock;
@@ -5532,7 +5613,7 @@ begin
 end;
 
 procedure TGraphicObjList.Move(const IDToMove, IDInsertPoint:
-  Longint);
+  Integer);
 var
   InsertPoint, ToMove: PObjBlock;
   TmpIter: TExclusiveGraphicObjIterator;
@@ -5608,7 +5689,7 @@ begin
   end;
 end;
 
-function TGraphicObjList.Delete(const ID: Longint): Boolean;
+function TGraphicObjList.Delete(const ID: Integer): Boolean;
 var
   ObjToDel: PObjBlock;
   TmpIter: TExclusiveGraphicObjIterator;
@@ -5631,7 +5712,7 @@ begin
   end;
 end;
 
-function TGraphicObjList.Find(const ID: Longint):
+function TGraphicObjList.Find(const ID: Integer):
   TGraphicObject;
 var
   FoundObj: PObjBlock;
@@ -5674,7 +5755,7 @@ begin
   end;
 end;
 
-function TGraphicObjList.Remove(const ID: Longint): Boolean;
+function TGraphicObjList.Remove(const ID: Integer): Boolean;
 var
   ObjToDel: PObjBlock;
   TmpIter: TExclusiveGraphicObjIterator;
@@ -5731,7 +5812,7 @@ end;
 
 { Search the block corresponding to ID. }
 
-function TGraphicObjIterator.SearchBlock(ID: Longint): Pointer;
+function TGraphicObjIterator.SearchBlock(ID: Integer): Pointer;
 begin
   Result := fSourceList.fHead;
   while (Result <> nil) and (TObjBlock(Result^).Obj.ID <> ID) do
@@ -5796,7 +5877,7 @@ begin
     Result := fSourceList.Count;
 end;
 
-function TGraphicObjIterator.Search(const ID: Longint):
+function TGraphicObjIterator.Search(const ID: Integer):
   TGraphicObject;
 var
   TmpBlock: PObjBlock;
@@ -6278,10 +6359,7 @@ begin
     Canvas.Pen.Assign(Pen);
     Canvas.Brush.Assign(Brush);
     Canvas.Font.Color := Pen.Color;
-    if not fOpaque then
-      Windows.SetBkMode(Canvas.Handle, Windows.TRANSPARENT)
-    else
-      Windows.SetBkMode(Canvas.Handle, Windows.OPAQUE);
+    SetBkMode(Canvas, fOpaque);
   end;
   Cnv.DecorativePen.Assign(fDecorativePen);
 end;
@@ -6771,7 +6849,7 @@ begin
   end;
 end;
 
-function TDrawing.AddSourceBlock(ID: Longint; const Obj:
+function TDrawing.AddSourceBlock(ID: Integer; const Obj:
   TGraphicObject): TGraphicObject;
 begin
   Result := Obj;
@@ -6789,7 +6867,7 @@ begin
   fListOfBlocks.Add(Obj);
 end;
 
-function TDrawing.GetSourceBlock(ID: Longint): TGraphicObject;
+function TDrawing.GetSourceBlock(ID: Integer): TGraphicObject;
 var
   TmpIter: TGraphicObjIterator;
 begin
@@ -6807,7 +6885,7 @@ begin
   Result := nil;
 end;
 
-procedure TDrawing.DeleteSourceBlockByID(const ID: Longint);
+procedure TDrawing.DeleteSourceBlockByID(const ID: Integer);
 var
   TmpObj: TGraphicObject;
 begin
@@ -6821,7 +6899,7 @@ begin
   end;
 end;
 
-function TDrawing.AddObject(ID: Longint; const Obj:
+function TDrawing.AddObject(ID: Integer; const Obj:
   TGraphicObject): TGraphicObject;
 begin
   Result := Obj;
@@ -6846,7 +6924,7 @@ end;
 
 procedure TDrawing.AddList(const Lst: TGraphicObjList);
 var
-  ID: Longint;
+//  ID: Integer;
   Obj: TGraphicObject;
   Iter: TGraphicObjIterator;
   OnChangeDrawing0: TOnChangeDrawing;
@@ -6872,12 +6950,7 @@ begin
         if Assigned(fOnAddObject) then
           fOnAddObject(Self, Obj);
         Inc(I);
-        if I mod 100 = 0 then
-        begin
-          MainForm.ProgressBar1.Position :=
-            Round(I / Lst.Count * 100);
-          Application.ProcessMessages;
-        end;
+        if I mod 100 = 0 then ShowProgress(I / Lst.Count);
         Obj := Iter.Next;
       end;
     finally
@@ -6889,7 +6962,7 @@ begin
   NotifyChanged;
 end;
 
-function TDrawing.InsertObject(ID, IDInsertPoint: Longint; const
+function TDrawing.InsertObject(ID, IDInsertPoint: Integer; const
   Obj: TGraphicObject): TGraphicObject;
 begin
   Result := Obj;
@@ -6913,13 +6986,13 @@ begin
 end;
 
 procedure TDrawing.MoveObject(const IDOrigin, IDDestination:
-  Longint);
+  Integer);
 begin
   fListOfObjects.Move(IDOrigin, IDDestination);
   NotifyChanged;
 end;
 
-procedure TDrawing.RemoveObject(const ID: Longint);
+procedure TDrawing.RemoveObject(const ID: Integer);
 var
   TmpObj: TGraphicObject;
 begin
@@ -6932,7 +7005,7 @@ begin
   NotifyChanged;
 end;
 
-procedure TDrawing.DeleteObject(const ID: Longint);
+procedure TDrawing.DeleteObject(const ID: Integer);
 var
   TmpObj: TGraphicObject;
 begin
@@ -6944,7 +7017,7 @@ begin
   NotifyChanged;
 end;
 
-procedure TDrawing.ChangeObjectLayer(const ID: Longint; const
+procedure TDrawing.ChangeObjectLayer(const ID: Integer; const
   NewLayer: Byte);
 var
   TmpObj: TGraphicObject;
@@ -6956,7 +7029,7 @@ begin
   TmpObj.Layer := NewLayer;
 end;
 
-function TDrawing.GetObject(ID: Longint): TGraphicObject;
+function TDrawing.GetObject(ID: Integer): TGraphicObject;
 var
   TmpIter: TGraphicObjIterator;
 begin
@@ -7265,6 +7338,7 @@ begin
     while Assigned(Obj) do
     begin
       ChangeProc(Obj, PData);
+      Obj.UpdateExtension(Self);
       Obj := Iter.Next;
     end;
   finally
@@ -7340,12 +7414,12 @@ begin
   inherited CreateParams(Params);
   with Params.WindowClass do
   begin
-    Style := Style and not (CS_HREDRAW or CS_VREDRAW);
+    Style := Style and not ({CS_HREDRAW} DWORD(2) or {CS_VREDRAW}  DWORD(1));
     if fTransparent and not (csDesigning in ComponentState) then
     begin
-      Style := Style and not WS_CLIPCHILDREN;
-      Style := Style and not WS_CLIPSIBLINGS;
-      Params.ExStyle := Params.ExStyle or WS_EX_TRANSPARENT;
+      Style := Style and not {WS_CLIPCHILDREN}  $2000000;
+      Style := Style and not {WS_CLIPSIBLINGS}  $4000000;
+      Params.ExStyle := Params.ExStyle or {WS_EX_TRANSPARENT}  $20;
     end;
   end;
 end;
@@ -7793,7 +7867,7 @@ procedure TCADViewport.DrawGrid(const ARect: TRect2D; const Cnv:
 var
   CurrX, CurrY, Mult, D, DeltaX, DeltaY: TRealType;
   Pnt1, Pnt2: TPoint2D;
-  I, N: Integer;
+  N: Integer;
   procedure DrawGridLines(const DecCnv: TDecorativeCanvas; const
     DX, DY: TRealType);
   begin
@@ -7843,7 +7917,7 @@ begin
   DeltaY := fGridDeltaY * Mult;
   with Cnv do
   try
-    SetBkMode(Handle, TRANSPARENT);
+    SetBkMode(Canvas, False);
     Pen.Color := fGridColor;
     Pen.Width := 1;
     Pen.Mode := pmCopy;
@@ -8028,16 +8102,13 @@ procedure TCADViewport.CalibrateCnv(const Cnv: TCanvas; XScale,
   YScale: TRealType);
 var
   TmpWin: TRect2D;
-  TmpAspect, LogWidth, LogHeight: TRealType;
+  TmpAspect, LogWidth, LogHeight: Double;
 begin
   StopRepaint;
   if (XScale = 0) or (YScale = 0) then Exit;
   TmpWin := fVisualWindow;
   // Questa è la dimensione di un pixel in mm.
-  LogHeight := GetDeviceCaps(Cnv.Handle, VERTSIZE) /
-    GetDeviceCaps(Cnv.Handle, VERTRES);
-  LogWidth := GetDeviceCaps(Cnv.Handle, HORZSIZE) /
-    GetDeviceCaps(Cnv.Handle, HORZRES);
+  GetCanvasResolution(Cnv, LogHeight, LogWidth);
   try
     TmpAspect := LogHeight / LogWidth;
     TmpWin.Right := fVisualWindow.Left + LogWidth * Width *
@@ -8151,8 +8222,6 @@ var
   H, W, H_MM, W_MM, AAA: TRealType;
   Rect2D: TRect2D;
   B_MM, B: TRealType;
-  DC: HDC;
-  EMFHeader: TEnhMetaHeader;
 begin
   Rect2D := (fDrawing as TDrawing2D).DrawingExtension;
   B_MM := (fDrawing as TDrawing2D).Border;
@@ -8162,22 +8231,16 @@ begin
     H_MM := (Top - Bottom) * (fDrawing as TDrawing2D).PicScale + B_MM * 2;
   end;
 
-  //How to get device PPI?
+  //How to get device PPI?//  DC: HDC;
   {DC := GetDC(0);
   PPI_X := GetDeviceCaps(DC, LOGPIXELSX);
   PPI_Y := GetDeviceCaps(DC, LOGPIXELSY);
   ReleaseDC(0,DC);}
 
-  //PPI_X := 120;
-  //PPI_Y := 120;
-  //PPI_X := 81;
-  //PPI_Y := 81;
   Result := TMetaFile.Create;
   Cnv := TMetaFileCanvas.Create(Result, Result.Handle);
   Cnv.Free;
-  GetEnhMetaFileHeader(Result.Handle, SizeOf(EMFHeader), @EMFHeader);
-  PPI_X := Round(25.4 * EMFHeader.szlDevice.CX / EMFHeader.szlMillimeters.CX);
-  PPI_Y := Round(25.4 * EMFHeader.szlDevice.CY / EMFHeader.szlMillimeters.CY);
+  GetMetaFileResolution(Result, PPI_X, PPI_Y);
   Result.Free;
 
   Result := TMetaFile.Create;
@@ -8215,9 +8278,7 @@ begin
   {GetEnhMetaFileHeader(Cnv.Handle, SizeOf(EMFHeader), @EMFHeader);
   PPI_X := Round(2540. * EMFHeader.szlDevice.CX / EMFHeader.szlMillimeters.CX);
   PPI_Y := Round(2540. * EMFHeader.szlDevice.CY / EMFHeader.szlMillimeters.CY);}
-  SetMapMode(Cnv.Handle, MM_ISOTROPIC);
-  SetWindowExtEx(Cnv.Handle, Inch, Inch, nil);
-  SetViewportExtEx(Cnv.Handle, PPI_X, PPI_Y, nil);
+  ChangeCanvasResolution(Cnv, Inch, PPI_X, PPI_Y);
   //PPI_X:=Round(Result.Height*2540/Result.MMHeight);
   //PPI_Y:=Round(Result.Width*2540/Result.MMWidth);
   //(fDrawing as TDrawing2D).FactorMM :=
@@ -8234,74 +8295,10 @@ begin
   finally
     Cnv.Free;
   end;
-  GetEnhMetaFileHeader(Result.Handle, SizeOf(EMFHeader), @EMFHeader);
-  PPI_X := Round(25.4 * EMFHeader.szlDevice.CX / EMFHeader.szlMillimeters.CX);
-  PPI_Y := Round(25.4 * EMFHeader.szlDevice.CY / EMFHeader.szlMillimeters.CY);
+  GetMetaFileResolution(Result, PPI_X, PPI_Y);
+
   Result.MMHeight := Round((H_MM + 2 * B_MM) * 100 + PPI_X * 0 + PPI_Y * 0);
   Result.MMWidth := Round((W_MM + 2 * B_MM) * 100);
-end;
-
-const
-  MaxPixelCount = 32768;
-
-type
-  pRGBArray = ^TRGBArray;
-  TRGBArray = array[0..MaxPixelCount - 1] of TRGBTriple;
-
-procedure FastAntiAliasPicture(big_bmp, out_bmp: TBitmap);
-var
-  X, Y, CX, CY: Integer;
-  totr, totg, totb: Integer;
-  Row1, Row2, Row3, DestRow: pRGBArray;
-  I: Integer;
-begin
-  // For each row
-  for Y := 0 to out_bmp.Height - 1 do
-  begin
-    // We compute samples of 3 x 3 pixels
-    CY := Y * 3;
-    // Get pointers to actual, previous and next rows in supersampled bitmap
-    Row1 := big_bmp.ScanLine[CY];
-    Row2 := big_bmp.ScanLine[CY + 1];
-    Row3 := big_bmp.ScanLine[CY + 2];
-
-    // Get a pointer to destination row in output bitmap
-    DestRow := out_bmp.ScanLine[Y];
-
-    // For each column...
-    for X := 0 to out_bmp.Width - 1 do
-    begin
-      // We compute samples of 3 x 3 pixels
-      CX := 3 * X;
-
-      // Initialize result color
-      totr := 0;
-      totg := 0;
-      totb := 0;
-
-      // For each pixel in sample
-      for I := 0 to 2 do
-      begin
-        // New red value
-        totr := totr + Row1[CX + I].rgbtRed
-          + Row2[CX + I].rgbtRed
-          + Row3[CX + I].rgbtRed;
-        // New green value
-        totg := totg + Row1[CX + I].rgbtGreen
-          + Row2[CX + I].rgbtGreen
-          + Row3[CX + I].rgbtGreen;
-        // New blue value
-        totb := totb + Row1[CX + I].rgbtBlue
-          + Row2[CX + I].rgbtBlue
-          + Row3[CX + I].rgbtBlue;
-      end;
-
-      // Set output pixel colors
-      DestRow[X].rgbtRed := totr div 9;
-      DestRow[X].rgbtGreen := totg div 9;
-      DestRow[X].rgbtBlue := totb div 9;
-    end;
-  end;
 end;
 
 function TCADViewport.AsBitmap: TBitmap;
@@ -8344,46 +8341,14 @@ begin
   MF.Free;
 end;
 
-procedure TCADViewport.CopyToClipboard(const Clp: TClipboard);
+procedure TCADViewport.CopyToClipboard;
 var
-  MemStream: TMemoryStream;
   MetaFile: TMetaFile;
 begin
   StopRepaint;
   MetaFile := AsMetafile;
-  Clp.Assign(MetaFile);
+  PutMetafileToClipboard(MetaFile);
   MetaFile.Free;
-  Exit;
-  //Clipboard.Open;
-  //Clipboard.Clear;
-{CF_TEXT	Text with a CR-LF combination at the end of each line. A null character identifies the end of the text.
-CF_BITMAP	A Windows bitmap graphic.
-CF_METAFILEPICT	A Windows metafile graphic.
-CF_ENHMETAFILE}
-  try
-    MemStream := TMemoryStream.Create;
-    try
-      MemStream.Clear;
-      fOffScreenBitmap.SaveToStream(MemStream);
-      MemStream.Position := 0;
-      PutStreamToClipboard(CF_BITMAP,
-        MemStream, MemStream.Size);
-    //PutStreamToClipboard0(CF_BITMAP,      MemStream, MemStream.Size);
-    {MemStream.Clear;
-    StoreMatrixToStreamPlain(MemStream, M, Vars, Comments);
-    MemStream.Position := 0;
-    PutStreamToClipboard0(CF_TEXT, MemStream, MemStream.Size);}
-    finally
-      MemStream.Free;
-    end;
-  finally
-    //Clipboard.Close;
-  end;
-
-  {StopRepaint;
-  Clipboard.Assign(fOffScreenBitmap);}
-  {StopRepaint;
-  Clp.Assign(fOffScreenBitmap);}
 end;
 
 procedure TCADViewport.CopyToCanvasBasic(const Cnv: TCanvas;
@@ -8589,7 +8554,7 @@ begin
     Rectangle(ClientRect);
     //FillRect(ClientRect);
     //FrameRect(ClientRect);
-    SetBkMode(Handle, TRANSPARENT);
+    SetBkMode(Canvas, False);
     XShift := fOwnerView.Left - Left;
     YShift := fOwnerView.Top - Top;
     case fOrientation of
@@ -8774,7 +8739,7 @@ end;
 // TObject2D
 // =====================================================================
 
-constructor TObject2D.Create(ID: Longint);
+constructor TObject2D.Create(ID: Integer);
 begin
   inherited Create(ID);
   fBox := Rect2D(0, 0, 0, 0);
@@ -8918,7 +8883,7 @@ begin
   end;
 end;
 
-constructor TContainer2D.Create(ID: Longint);
+constructor TContainer2D.Create(ID: Integer);
 begin
   inherited Create(ID);
 
@@ -8926,7 +8891,7 @@ begin
   fObjects.FreeOnClear := True;
 end;
 
-constructor TContainer2D.CreateSpec(ID: Longint; const Objs: array
+constructor TContainer2D.CreateSpec(ID: Integer; const Objs: array
   of TObject2D);
 var
   Cont: Word;
@@ -8969,7 +8934,7 @@ end;
 procedure TContainer2D.SaveToStream(const Stream: TStream);
 var
   TmpObj: TObject2D;
-  TmpLong: Longint;
+  TmpLong: Integer;
   TmpWord: Word;
   TmpIter: TGraphicObjIterator;
 begin
@@ -9002,7 +8967,7 @@ constructor TContainer2D.CreateFromStream(const Stream: TStream;
 var
   TmpClass: TGraphicObjectClass;
   TmpObj: TGraphicObject;
-  TmpLong: Longint;
+  TmpLong: Integer;
   TmpWord: Word;
 begin
   inherited;
@@ -9171,7 +9136,7 @@ end;
 // TSourceBlock2D
 // =====================================================================
 
-constructor TSourceBlock2D.Create(ID: Longint);
+constructor TSourceBlock2D.Create(ID: Integer);
 begin
   inherited Create(ID);
 
@@ -9180,7 +9145,7 @@ begin
   fNReference := 0;
 end;
 
-constructor TSourceBlock2D.CreateSpec(ID: Longint; const Name:
+constructor TSourceBlock2D.CreateSpec(ID: Integer; const Name:
   TSourceBlockName; const Objs: array of TObject2D);
 begin
   inherited CreateSpec(ID, Objs);
@@ -9252,7 +9217,7 @@ begin
   UpdateExtension(Self);
 end;
 
-constructor TBlock2D.Create(ID: Longint);
+constructor TBlock2D.Create(ID: Integer);
 begin
   inherited Create(ID);
 
@@ -9262,7 +9227,7 @@ begin
   fSourceName := '';
 end;
 
-constructor TBlock2D.CreateSpec(ID: Longint; const Source:
+constructor TBlock2D.CreateSpec(ID: Integer; const Source:
   TSourceBlock2D);
 begin
   inherited Create(ID);
@@ -9413,12 +9378,22 @@ begin
   Result := fPosition < Count - 1;
 end;
 
+function TDrawHistory.GetIsChanged: Boolean;
+begin
+  Result := not MD5Match(fCheckSum, fSavedCheckSum) or
+    not MD5Match(fOptCheckSum, fSavedOptCheckSum);
+end;
+
 constructor TDrawHistory.Create(ADrawing: TDrawing2D);
 begin
   inherited Create;
   fDrawing := ADrawing;
   OwnsObjects := True;
   fPosition := 0;
+  fCheckSum := MD5String('');
+  fSavedCheckSum := fCheckSum;
+  fOptCheckSum := fCheckSum;
+  fSavedOptCheckSum := fCheckSum;
 end;
 
 procedure TDrawHistory.Truncate(Index: Integer);
@@ -9443,6 +9418,7 @@ begin
   Add(AStream);
   fPosition := Count - 1;
   fDrawing.SaveObjectsToStream(AStream);
+  fCheckSum := MD5Stream(AStream);
 end;
 
 procedure TDrawHistory.Undo;
@@ -9461,6 +9437,7 @@ begin
     AStream.Position := 0;
     fDrawing.LoadObjectsFromStream(AStream,
       fDrawing.Version);
+    fCheckSum := MD5Stream(AStream);
     fDrawing.SelectionClear;
   finally
     fDrawing.OnChangeDrawing := OnChangeDrawing0;
@@ -9483,6 +9460,7 @@ begin
     AStream.Position := 0;
     fDrawing.LoadObjectsFromStream(AStream,
       fDrawing.Version);
+    fCheckSum := MD5Stream(AStream);
     fDrawing.SelectionClear;
   finally
     fDrawing.OnChangeDrawing := OnChangeDrawing0;
@@ -9493,6 +9471,20 @@ procedure TDrawHistory.Clear;
 begin
   inherited Clear;
   fPosition := 0;
+  fCheckSum := MD5String('');
+  fSavedCheckSum := fCheckSum;
+end;
+
+procedure TDrawHistory.SaveCheckSum;
+begin
+  fSavedCheckSum := fCheckSum;
+  fOptCheckSum := fDrawing.OptionsList.GetCheckSum;
+  fSavedOptCheckSum := fOptCheckSum;
+end;
+
+procedure TDrawHistory.SetPropertiesChanged;
+begin
+  fOptCheckSum := fDrawing.OptionsList.GetCheckSum;
 end;
 
 // =====================================================================
@@ -9505,11 +9497,118 @@ begin
   SetDefaults;
   History := nil;
   OnPasteMetafileFromClipboard := nil;
+  OptionsList := TOptionsList.Create;
+  FillOptionsList;
+end;
+
+procedure TDrawing2D.FillOptionsList;
+const
+  EOL = #13#10;
+begin
+  OptionsList.AddString('Caption', @(Caption), 'Caption');
+  OptionsList.AddString('Comment', @(Comment), 'Comment');
+  OptionsList.AddString('Label', @(FigLabel), 'Label');
+  OptionsList.AddRealType('PicScale', @PicScale,
+    'Picture scale (mm per unit)');
+  OptionsList.AddRealType('Border', @Border,
+    'Picture border (mm)');
+  OptionsList.AddChoice('TeXFormat',
+    @TeXFormat, TeXFormat_Choice,
+    'Format for including picture in TeX');
+  OptionsList.AddChoice('PdfTeXFormat',
+    @PdfTeXFormat, PdfTeXFormat_Choice,
+    'Format for including picture in PdfTeX');
+  OptionsList.AddRealType('PicUnitLength',
+    @PicUnitLength, 'Picture unit length (mm)');
+  OptionsList.AddRealType('PicMagnif',
+    @PicMagnif,
+    'Picture phisical size magnification factor. Use PicScale to represent picture space coordinates in mm. Use PicMagnif to change the meaning of mm for quick rescaling of the picture');
+  OptionsList.AddString('IncludePath',
+    @(IncludePath),
+    'Path to add before \includegraphics file name (like mypictures/)');
+
+  OptionsList.AddRealType('LineWidth', @LineWidthBase,
+    'Thin line width (mm)');
+  OptionsList.AddRealType('ArrowsSize',
+    @(ArrowsSize), 'Arrows size');
+  OptionsList.AddRealType('StarsSize',
+    @(StarsSize), 'Stars size');
+  OptionsList.AddRealType('HatchingStep',
+    @HatchingStep, 'Hatching step (mm)');
+  OptionsList.AddRealType('HatchingLineWidth',
+    @HatchingLineWidth, 'Hatching line width (fraction of LineWidth)');
+  OptionsList.AddRealType('DottedSize', @DottedSize,
+    'Dotted line size (mm)');
+  OptionsList.AddRealType('DashSize', @DashSize,
+    'Dashed line size (mm)');
+  OptionsList.AddRealType('DefaultFontHeight',
+    @(DefaultFontHeight), 'Default font height');
+  OptionsList.AddFontName('FontName', @(FontName), 'Font');
+  OptionsList.AddRealType('DefaultSymbolSize',
+    @DefaultSymbolSize, 'Default symbol size factor ("diameter")');
+  OptionsList.AddRealType('MiterLimit',
+    @(MiterLimit), 'Miter limit. Used to cut off too long spike miter join'
+    + ' could have when the angle between two lines is sharp. If the ratio of miter length'
+    + ' (distance between the outer corner and the inner corner of the miter) to'
+    + ' line width is greater than miter limit, then bevel join'
+    + ' is used instead of miter join. Default value of miter limit is 10.'
+    + ' This option is not applicable to TeX-picture and PsTricks formats.');
+
+  OptionsList.AddRealType('TeXMinLine',
+    @TeXMinLine, 'TeX minimum line length');
+  OptionsList.AddBoolean('TeXCenterFigure',
+    @TeXCenterFigure, 'Center TeX figure');
+  OptionsList.AddChoice('TeXFigure',
+    @TeXFigure, TeXFigure_Choice,
+    'TeX figure environment:' + EOL +
+    'none - no figure' + EOL +
+    'figure - standard {figure} environment' + EOL +
+    'floatingfigure - {floatingfigure} from floatflt package'
+    + EOL +
+    'wrapfigure - {wrapfigure} from wrapfig package');
+  OptionsList.AddString('TeXFigurePlacement',
+    @(TeXFigurePlacement),
+    'The optional argument [placement] determines where LaTeX will try to place your figure. There are four places where LaTeX can possibly put a float:' + EOL
+    + 'h (Here) - at the position in the text where the figure environment appears'
+    + EOL
+    + 't (Top) - at the top of a text page' + EOL
+    + 'b (Bottom) - at the bottom of a text page' + EOL +
+    'p (Page of floats) - on a separate float page, which is a page containing no text, only floats'
+    + EOL +
+    'Putting ! as the first argument in the square brackets will encourage LATEX to do what you say, even if the result''s sub-optimal.'
+    + EOL +
+    ' Example: htbp' + EOL + EOL +
+    'For wrapfigure placement is one of  r, l, i, o, R, L, I, O,  for right, left,  inside, outside, (here / FLOAT)'
+    + EOL + EOL +
+    'The floatingfigure placement option may be either one of the following: r, l, p, or v. The options all overrule any present package option which may be in effect.  The options have the following functions:'
+    + EOL +
+    'r  Forces the current floating figure to be typset to the right in a paragraph'
+    + EOL +
+    'l Forces the current floating figure to be typset to the left in a paragraph'
+    + EOL +
+    'p Forces the current floating figure to be typset to the right in a paragraph if the pagenumber is odd, and to the left if even'
+    + EOL +
+    'v Applies the package option to the current figure, and if no package option is specified, it forces the current floating figure to be typset to the right in a paragraph if the pagenumber is odd, and to the left if even'
+    );
+  OptionsList.AddString('TeXFigurePrologue',
+    @(TeXFigurePrologue), 'Text to put before float');
+  OptionsList.AddString('TeXFigureEpilogue',
+    @(TeXFigureEpilogue), 'Text to put after float');
+  OptionsList.AddString('TeXPicPrologue',
+    @(TeXPicPrologue),
+    'Text to put before picture/includegraphics');
+  OptionsList.AddString('TeXPicEpilogue',
+    @(TeXPicEpilogue),
+    'Text to put after picture/includegraphics');
+
+  OptionsList.AddBoolean('MetaPostTeXText',
+    @(MetaPostTeXText), 'Use TeX text in MetaPost files');
 end;
 
 destructor TDrawing2D.Destroy;
 begin
   History.Free;
+  OptionsList.Free;
   inherited Destroy;
 end;
 
@@ -9548,6 +9647,7 @@ begin
   PicMagnif := PicMagnif_Default;
   MetaPostTeXText := MetaPostTeXText_Default;
   IncludePath := IncludePath_Default;
+  DefaultSymbolSize := DefaultSymbolSize_Default;
 end;
 
 procedure TDrawing2D.Clear;
@@ -9565,7 +9665,7 @@ procedure TDrawing2D.SaveObjectsToStream0(const Stream:
 var
   TmpObj: TObject2D;
   TmpWord: Word;
-  TmpLong, TmpObjPerc: Longint;
+  TmpLong, TmpObjPerc: Integer;
 begin
   with Stream do
   begin
@@ -9628,101 +9728,19 @@ begin
   end;
 end;
 
-procedure PutStreamToClipboard0(Format: Word; Stream:
-  TStream;
-  Size: Longint);
-var
-  Len: Longint;
-  Buffer: Pointer;
-  Data: THandle;
-begin
-  Clipboard.Open;
-  try
-    Len := Stream.Size - Stream.Position;
-    if Len > Size then Len := Size;
-    Data := GlobalAlloc(gmem_Moveable or GMEM_DDESHARE
-      {HeapAllocFlags}, Len);
-    try
-      if Data <> 0 then
-      begin
-        Buffer := GlobalLock(Data);
-        try
-          Stream.Read(Buffer^, Len);
-          SetClipboardData(Format, Data);
-        finally
-          GlobalUnlock(Data);
-        end;
-      end;
-    except
-      GlobalFree(Data);
-      raise;
-    end;
-  finally
-    Clipboard.Close;
-  end;
-end;
-
-procedure PutStreamToClipboard(Format: Word; Stream:
-  TStream;
-  Size: Longint);
-begin
-  Clipboard.Open;
-  try
-    PutStreamToClipboard0(Format, Stream, Size);
-  finally
-    Clipboard.Close;
-  end;
-end;
-
 procedure TDrawing2D.CopySelectionToClipboard;
 var
   MemStream: TMemoryStream;
 begin
   if Self.fSelectedObjs.Count = 0 then Exit;
-  Clipboard.Open;
-  Clipboard.Clear;
+  MemStream := TMemoryStream.Create;
   try
-    MemStream := TMemoryStream.Create;
-    try
-      SaveSelectionToStream(MemStream);
-      MemStream.Position := 0;
-      PutStreamToClipboard0(TpXClipboardFormat,
-        MemStream, MemStream.Size);
-      {MemStream.Clear;
-      StoreMatrixToStreamPlain(MemStream, M, Vars, Comments);
-      MemStream.Position := 0;
-      PutStreamToClipboard0(CF_TEXT, MemStream, MemStream.Size);
-      MemStream.Clear;
-      StoreMatrixToStreamRTF(MemStream, M, Vars, Comments);
-      MemStream.Position := 0;
-      PutStreamToClipboard0(RTFClipboardFormat, MemStream,
-        MemStream.Size);}
-    finally
-      MemStream.Free;
-    end;
+    SaveSelectionToStream(MemStream);
+    MemStream.Position := 0;
+    PutStreamToClipboard(TpXClipboardFormat, True,
+      MemStream, MemStream.Size);
   finally
-    Clipboard.Close;
-  end;
-end;
-
-procedure GetStreamFromClipboard(Format: Word; Stream:
-  TStream);
-var
-  Buffer: Pointer;
-  Data: THandle;
-begin
-  Clipboard.Open;
-  try
-    Data := GetClipboardData(Format);
-    if Data = 0 then Exit;
-    Buffer := GlobalLock(Data);
-    try
-      Stream.Write(Buffer^, GlobalSize(Data));
-    finally
-      GlobalUnlock(Data);
-    end;
-  finally
-    Clipboard.Close;
+    MemStream.Free;
   end;
 end;
 
@@ -9730,14 +9748,13 @@ procedure TDrawing2D.PasteFromClipboard;
 var
   Stream: TMemoryStream;
 begin
-  if Clipboard.HasFormat(CF_METAFILEPICT {CF_ENHMETAFILE}) then
+  if ClipboardHasMetafile then
   begin
     if Assigned(OnPasteMetafileFromClipboard) then
       OnPasteMetafileFromClipboard(Self);
     Exit;
   end;
-  if not Clipboard.HasFormat(TpXClipboardFormat) then
-    Exit;
+  if not ClipboardHasTpX then Exit;
   Stream := TMemoryStream.Create;
   try
     GetStreamFromClipboard(TpXClipboardFormat, Stream);
@@ -9756,7 +9773,7 @@ procedure TDrawing2D.LoadObjectsFromStream(const Stream:
 var
   TmpClass: TGraphicObjectClass;
   TmpObj: TGraphicObject;
-  TmpLong, TmpObjPerc: Longint;
+  TmpLong, TmpObjPerc: Integer;
   TmpWord: Word;
   TmpBlocksIter: TExclusiveGraphicObjIterator;
   OnChangeDrawing0: TOnChangeDrawing;
@@ -9843,7 +9860,7 @@ procedure TDrawing2D.SaveBlocksToStream(const Stream:
 var
   TmpObj: TSourceBlock2D;
   TmpWord: Word;
-  TmpPos, TmpLong: Longint;
+  TmpPos, TmpLong: Integer;
   TmpIter: TGraphicObjIterator;
 begin
   TmpIter := BlockList.GetPrivilegedIterator;
@@ -9883,7 +9900,7 @@ procedure TDrawing2D.LoadBlocksFromStream(const Stream:
 var
   TmpClass: TGraphicObjectClass;
   TmpObj: TGraphicObject;
-  TmpLong: Longint;
+  TmpLong: Integer;
   TmpWord: Word;
   TmpBlocksIter: TGraphicObjIterator;
 begin
@@ -9946,7 +9963,7 @@ begin
   DeleteSourceBlockByID(TmpSource.ID);
 end;
 
-function TDrawing2D.GetSourceBlock(const ID: Longint):
+function TDrawing2D.GetSourceBlock(const ID: Integer):
   TSourceBlock2D;
 begin
   Result := inherited GetSourceBlock(ID) as TSourceBlock2D;
@@ -10041,7 +10058,7 @@ begin
   end;
 end;
 
-function TDrawing2D.AddObject(const ID: Longint; const Obj:
+function TDrawing2D.AddObject(const ID: Integer; const Obj:
   TObject2D): TObject2D;
 begin
   Result := Obj;
@@ -10049,14 +10066,14 @@ begin
 end;
 
 function TDrawing2D.InsertObject(const ID, IDInsertPoint:
-  Longint; const Obj: TObject2D): TObject2D;
+  Integer; const Obj: TObject2D): TObject2D;
 begin
   Result := Obj;
   inherited InsertObject(ID, IDInsertPoint,
     TGraphicObject(Obj));
 end;
 
-function TDrawing2D.AddBlock(const ID: Longint; const
+function TDrawing2D.AddBlock(const ID: Integer; const
   SrcName:
   TSourceBlockName): TObject2D;
 var
@@ -10074,16 +10091,15 @@ begin
   end;
 end;
 
-function TDrawing2D.GetObject(const ID: Longint): TObject2D;
+function TDrawing2D.GetObject(const ID: Integer): TObject2D;
 begin
   Result := inherited GetObject(ID) as TObject2D;
 end;
 
-procedure TDrawing2D.TransformObjects(const ListOfObj: array
-  of
-  Longint; const T: TTransf2D);
+procedure TDrawing2D.TransformObjects(
+  const ListOfObj: array of Integer; const T: TTransf2D);
 var
-  Cont: Longint;
+  Cont: Integer;
   Tmp: TObject2D;
   TmpIter: TExclusiveGraphicObjIterator;
 begin
@@ -10156,15 +10172,65 @@ procedure TDrawing2D.ScalePhysical(const S: TRealType);
 begin
 //  fDrawing2D.PicScale := fDrawing2D.PicScale * Magnif;
   Border := Border * S;
-  LineWidthBase := LineWidthBase * S;
+  if not ScaleLineWidth then
+    LineWidthBase := LineWidthBase * S;
   HatchingStep := HatchingStep * S;
   DottedSize := DottedSize * S;
   DashSize := DashSize * S;
+  History.SetPropertiesChanged;
 end;
 
 procedure TDrawing2D.RedrawObject(const Obj: TObject2D);
 begin
   inherited RedrawObject(Obj);
+end;
+
+procedure TDrawing2D.MakeGrayscale;
+var
+  Obj: TGraphicObject;
+  Iter: TGraphicObjIterator;
+begin
+  Iter := ObjectsIterator;
+  try
+    Obj := Iter.First;
+    while Assigned(Obj) do
+    begin
+      if Obj is TPrimitive2D then
+        with Obj as TPrimitive2D do
+        begin
+          if LineColor <> clDefault then LineColor := GrayScale(LineColor);
+          if HatchColor <> clDefault then HatchColor := GrayScale(HatchColor);
+          if FillColor <> clDefault then FillColor := GrayScale(FillColor);
+        end;
+      Obj := Iter.Next;
+    end;
+  finally
+    Iter.Free;
+  end;
+  NotifyChanged;
+end;
+//TSY:
+
+function TDrawing2D.PickObject(const PT: TPoint2D;
+  const Aperture: TRealType;
+  const VisualRect: TRect2D; const DrawMode: Integer;
+  const FirstFound: Boolean; var NPoint: Integer): TObject2D;
+var
+  TmpObj: TObject2D;
+  TmpNPoint: Integer;
+begin
+  Result := Self.fSelectedObjs.PickObject(PT, Self, Aperture, VisualRect,
+    DrawMode, FirstFound, NPoint);
+  if NPoint >= 0 then Exit;
+  TmpObj := Self.fListOfObjects.PickObject(PT, Self, Aperture, VisualRect,
+    DrawMode, FirstFound, TmpNPoint);
+  if TmpObj = nil then Exit;
+  if (Result = nil) or (NPoint < TmpNPoint)
+    or ((NPoint = TmpNPoint) and (Result.ID < TmpObj.ID)) then
+  begin
+    Result := TmpObj;
+    NPoint := TmpNPoint;
+  end;
 end;
 
 //TSY:
@@ -10670,6 +10736,16 @@ begin
   end;
 end;
 
+function TCADViewport2D.PickObjectWithSelection(const PT: TPoint2D;
+  const Aperture: Word;
+  const FirstFound: Boolean; var NPoint: Integer): TObject2D;
+begin
+  Result := nil;
+  if not Assigned(fDrawing2D) then Exit;
+  Result := fDrawing2D.PickObject(PT, GetPixelAperture.X * Aperture,
+    VisualRect, DrawMode, FirstFound, NPoint);
+end;
+
 function TCADViewport2D.WorldToObject(const Obj: TObject2D;
   WPt:
   TPoint2D): TPoint2D;
@@ -10862,8 +10938,8 @@ begin
   begin
     if not (csDestroying in fLinkedViewport.ComponentState)
       then
-      SetWindowLong(fLinkedViewport.Handle, gwl_wndProc,
-        Longint(fOldWndProc));
+      SetWindowLong(fLinkedViewport.Handle,
+        Integer(fOldWndProc));
     Classes.FreeObjectInstance(fNewWndProc);
     fNewWndProc := nil;
   end;
@@ -10880,8 +10956,7 @@ begin
     V.FreeNotification(Self);
     fNewWndProc := Classes.MakeObjectInstance(SubclassedWinProc);
     fOldWndProc := Pointer(SetWindowLong(V.Handle,
-      gwl_wndProc,
-      Longint(fNewWndProc)));
+      Integer(fNewWndProc)));
      // Assign the new OnPaint because it is called not only by window msgs.
     fOldOnPaint := V.OnPaint;
     V.OnPaint := ViewOnPaint;
@@ -11631,55 +11706,8 @@ begin
   end;
 end;
 
-// =====================================================================
-// TCADSysSynchroObject
-// =====================================================================
-
-procedure TCADSysSynchroObject.Acquire;
-begin
-end;
-
-procedure TCADSysSynchroObject.Release;
-begin
-end;
-
-// =====================================================================
-// TCADSysCriticalSection
-// =====================================================================
-
-constructor TCADSysCriticalSection.Create;
-begin
-  inherited Create;
-  InitializeCriticalSection(FSection);
-end;
-
-destructor TCADSysCriticalSection.Destroy;
-begin
-  DeleteCriticalSection(FSection);
-  inherited Destroy;
-end;
-
-procedure TCADSysCriticalSection.Acquire;
-begin
-  EnterCriticalSection(FSection);
-end;
-
-procedure TCADSysCriticalSection.Release;
-begin
-  LeaveCriticalSection(FSection);
-end;
-
-procedure TCADSysCriticalSection.Enter;
-begin
-  Acquire;
-end;
-
-procedure TCADSysCriticalSection.Leave;
-begin
-  Release;
-end;
-
 initialization
+  //MD5Stream_try('qq');
   CADSysInitClassRegister;
 
   CADSysRegisterClass(0, TContainer2D);
@@ -11694,22 +11722,16 @@ initialization
   CADSysRegisterClass(8, TEllipse2D);
   CADSysRegisterClass(9, TText2D);
   CADSysRegisterClass(10, TBitmap2D);
-  CADSysRegisterClass(11, TBSpline2D);
   CADSysRegisterClass(12, TJustifiedVectText2D);
   CADSysRegisterClass(13, TCircle2D);
   CADSysRegisterClass(14, TStar2D);
   CADSysRegisterClass(15, TSector2D);
   CADSysRegisterClass(16, TSegment2D);
-  CADSysRegisterClass(17, TClosedBSpline2D);
-  CADSysRegisterClass(18, TCubicBSpline2D);
-  CADSysRegisterClass(19, TClosedCubicBSpline2D);
   CADSysRegisterClass(20, TSmoothPath2D);
   CADSysRegisterClass(21, TClosedSmoothPath2D);
   CADSysRegisterClass(22, TBezierPath2D);
   CADSysRegisterClass(23, TClosedBezierPath2D);
-
-  TpXClipboardFormat :=
-    RegisterClipboardFormat(TpXClipboardFormatString);
+  CADSysRegisterClass(24, TSymbol2D);
 finalization
 end.
 

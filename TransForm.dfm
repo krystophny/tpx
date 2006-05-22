@@ -3,8 +3,8 @@ object TransfForm: TTransfForm
   Top = 125
   BorderStyle = bsSingle
   Caption = 'Custom transform'
-  ClientHeight = 345
-  ClientWidth = 440
+  ClientHeight = 347
+  ClientWidth = 457
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -18,8 +18,15 @@ object TransfForm: TTransfForm
   OnShow = FormShow
   PixelsPerInch = 120
   TextHeight = 16
+  object Label1: TLabel
+    Left = 16
+    Top = 272
+    Width = 33
+    Height = 16
+    Caption = 'Skew'
+  end
   object Button1: TButton
-    Left = 268
+    Left = 264
     Top = 312
     Width = 75
     Height = 25
@@ -29,7 +36,7 @@ object TransfForm: TTransfForm
     TabOrder = 0
   end
   object Button2: TButton
-    Left = 356
+    Left = 352
     Top = 312
     Width = 75
     Height = 25
@@ -99,7 +106,7 @@ object TransfForm: TTransfForm
     TabOrder = 6
   end
   object RadioGroup1: TRadioGroup
-    Left = 284
+    Left = 312
     Top = 104
     Width = 133
     Height = 53
@@ -113,7 +120,7 @@ object TransfForm: TTransfForm
   object RadioGroup2: TRadioGroup
     Left = 16
     Top = 164
-    Width = 321
+    Width = 297
     Height = 85
     Caption = 'Reference point'
     Columns = 2
@@ -129,8 +136,8 @@ object TransfForm: TTransfForm
     OnClick = RadioGroup2Click
   end
   object LabeledEdit6: TLabeledEdit
-    Left = 12
-    Top = 276
+    Left = 324
+    Top = 180
     Width = 121
     Height = 24
     EditLabel.Width = 67
@@ -141,8 +148,8 @@ object TransfForm: TTransfForm
     TabOrder = 9
   end
   object LabeledEdit7: TLabeledEdit
-    Left = 148
-    Top = 276
+    Left = 324
+    Top = 224
     Width = 121
     Height = 24
     EditLabel.Width = 68
@@ -151,5 +158,29 @@ object TransfForm: TTransfForm
     LabelPosition = lpAbove
     LabelSpacing = 3
     TabOrder = 10
+  end
+  object LabeledEdit8: TLabeledEdit
+    Left = 68
+    Top = 276
+    Width = 121
+    Height = 24
+    EditLabel.Width = 96
+    EditLabel.Height = 16
+    EditLabel.Caption = 'Horiz. (degrees)'
+    LabelPosition = lpAbove
+    LabelSpacing = 3
+    TabOrder = 11
+  end
+  object LabeledEdit9: TLabeledEdit
+    Left = 204
+    Top = 276
+    Width = 121
+    Height = 24
+    EditLabel.Width = 89
+    EditLabel.Height = 16
+    EditLabel.Caption = 'Vert. (degrees)'
+    LabelPosition = lpAbove
+    LabelSpacing = 3
+    TabOrder = 12
   end
 end

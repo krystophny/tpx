@@ -3,7 +3,7 @@ unit ColorEtc;
 
 interface
 
-uses Types, Classes, SysUtils, Graphics, StdCtrls, Dialogs, Windows;
+uses Types, Classes, SysUtils, Graphics, StdCtrls, Dialogs, Windows, StrUtils;
 
 function SwapColor(Color: TColor): TColor;
 function GrayScale(Color: TColor): TColor;

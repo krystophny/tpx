@@ -33,16 +33,19 @@ type
     { Private declarations }
   public
     { Public declarations }
-    SettingsList: TOptionsList;
-    procedure FillSettings;
   end;
 
 var
   SettingsForm: TSettingsForm;
+  SettingsList: TOptionsList;
+
+procedure LoadSettings;
+procedure FillSettings(Strings: TStrings);
+procedure SaveSettings;
 
 implementation
 
-uses InOut, MainUnit, CADSys4, PreView, EMF_Unit;
+uses Output, Input, MainUnit, CADSys4, PreView, EMF_Unit;
 
 {$R *.dfm}
 
@@ -52,9 +55,56 @@ const
 var
   IniFileName: string = IniFileName0;
 
-procedure TSettingsForm.FormCreate(Sender: TObject);
+procedure LoadSettings;
 var
-  I, Row: Integer;
+  I: Integer;
+  Strings: TStringList;
+  St: string;
+begin
+  if not FileExists(IniFileName) then Exit;
+  Strings := TStringList.Create;
+  try
+    Strings.LoadFromFile(IniFileName);
+    for I := 0 to SettingsList.Count - 1 do
+    begin
+      St := Strings.Values[(SettingsList[I] as TOptionData).Key];
+      if St <> '' then
+        (SettingsList[I] as TOptionData).AsString := St;
+    end;
+  finally
+    Strings.Free;
+  end;
+end;
+
+procedure SaveSettings;
+var
+  Strings: TStringList;
+begin
+  Strings := TStringList.Create;
+  try
+    FillSettings(Strings);
+    Strings.SaveToFile(IniFileName);
+  finally
+    Strings.Free;
+  end;
+end;
+
+procedure FillSettings(Strings: TStrings);
+var
+  Data: TOptionData;
+  I: Integer;
+begin
+  Strings.Clear;
+  for I := 0 to SettingsList.Count - 1 do
+  begin
+    Data := SettingsList.Items[I] as TOptionData;
+    Strings.Add(Data.Key + '=' + Data.AsString);
+    //Strings.Values[Data.Key] := Data.AsString;
+    //Application.MessageBox(PChar(IntToStr(Strings.Count) + ' >>' + Data.AsString + '<<'), nil);
+  end;
+end;
+
+procedure Initialize;
 begin
   IniFileName := IncludeTrailingPathDelimiter(
     ExtractFilePath(ParamStr(0))) + IniFileName0;
@@ -100,9 +150,13 @@ begin
   {SettingsList.AddBoolean('ScalePhysicalUnits',
     @(MainForm.ScalePhysical.Checked),
     'Scale physical units when transforming the whole picture');}
+  SettingsList.AddRealType('DefaultSymbolSize_Default',
+    @DefaultSymbolSize_Default, 'Default symbol size factor ("diameter")');
+  SettingsList.AddInteger('BezierPrecision', @BezierPrecision, 2, 10000,
+    'Number of lines used to approximate a single Bezier curve or arc by polyline');
 
-  SettingsList.AddRealType('TeXMinLine_Default',
-    @TeXMinLine_Default, 'TeX minimum line length');
+  {SettingsList.AddRealType('TeXMinLine_Default',
+    @TeXMinLine_Default, 'TeX minimum line length (mm)');}
   SettingsList.AddBoolean('TeXCenterFigure_Default',
     @TeXCenterFigure_Default, 'Center TeX figure');
   SettingsList.AddChoice('TeXFigure_Default',
@@ -141,7 +195,6 @@ begin
     @(PostscriptPrinterUseOffset),
     'Use offset when creating EPS files');
 
-
   SettingsList.AddFilePath('MetaPostPath', @(MetaPostPath),
     '*.exe|*.exe',
     'Path to MetaPost program (mpost.exe or mp.exe). Needed for exporting to MetaPost EPS (.mps)');
@@ -153,12 +206,34 @@ begin
     'Path to Type 1 font (.pfb). Needed for embedding font into EPS');
   SettingsList.AddFilePath('PsToEditPath', @(PsToEditPath),
     '*.exe|*.exe',
-    'Path to PsToEdit program (pstoedit.exe). Needed for convering EPS to EMF (used for EPS import)');
+    'Path to PsToEdit program (pstoedit.exe). Needed for convering EPS to EMF or SVG (used for EPS import)');
   SettingsList.AddString('PsToEditFormat', @(PsToEditFormat),
-    'Format for PsToEdit program for convering EPS to EMF (used for EPS import).' +
+    'Format for PsToEdit program for convering EPS to EMF or SVG (used for EPS import).' +
     ' Format can be emf or one of the better implementations (wemf, wemfc, wemfnss)' +
-    ' which are available in registered version of PsToEdit');
+    ' which are available in registered version of PsToEdit.' +
+    ' For SVG set plot-svg (free version) or svg (registered version)');
+  SettingsList.AddFilePath('GhostscriptPath', @(GhostscriptPath),
+    '*.exe|*.exe',
+    'Path to Ghostscript program (gswin32c.exe). Needed for previewing PS and PDF files in Open dialog and for custom export (latexcustom)');
+  SettingsList.AddString('GhostscriptCustomKeys', @(GhostscriptCustomKeys),
+    'Ghostscript ñommand line options used for custom export (latexcustom).' +
+    ' Example: -r300 -sDEVICE=png256.' +
+    ' List of possible devices taken literally from Ghostscript follows:' + EOL +
+    ' bbox bit bitcmyk bitrgb bj10e bj200 bjc600 bjc800 bmp16 bmp16m bmp256' +
+    ' bmp32b bmpgray bmpmono bmpsep1 bmpsep8 cdeskjet cdj550 cdjcolor cdjmono' +
+    ' declj250 deskjet devicen display djet500 djet500c eps9high eps9mid epson' +
+    ' epsonc epswrite ibmpro ijs jetp3852 jpeg jpeggray laserjet lbp8 lj250' +
+    ' ljet2p ljet3 ljet3d ljet4 ljet4d ljetplus m8510 mswindll mswinpr2 necp6' +
+    ' nullpage pbm pbmraw pcx16 pcx24b pcx256 pcxcmyk pcxgray pcxmono pdfwrite' +
+    ' pgm pgmraw pgnm pgnmraw pj pjxl pjxl300 pkmraw png16 png16m png256' +
+    ' pngalpha pnggray pngmono pnm pnmraw ppm ppmraw psdcmyk psdrgb psmono' +
+    ' pswrite pxlcolor pxlmono r4081 spotcmyk st800 stcolor t4693d2 t4693d4' +
+    ' t4693d8 tek4696 tiff12nc tiff24nc tiff32nc tiffcrle tiffg3 tiffg32d' +
+    ' tiffg4 tiffgray tifflzw tiffpack tiffsep uniprint');
+end;
 
+procedure TSettingsForm.FormCreate(Sender: TObject);
+begin
   SettingsList.AddStringList('RecentFiles', MainForm.RecentFiles, '');
   SettingsList.Add(
     TTpXExtAssocOption.Create('ExtAssoc', nil,
@@ -179,42 +254,29 @@ begin
   SettingsList.AddInteger('Mainform.Height',
     @(MainForm.Height), 1, 2000, '');
 
-  if not FileExists(IniFileName) then Exit;
-  VLE.Strings.LoadFromFile(IniFileName);
-  for I := 0 to SettingsList.Count - 1 do
-    if VLE.FindRow((SettingsList[I] as TOptionData).Key, Row)
-      then
-      (SettingsList[I] as TOptionData).AsString
-        := VLE.Cells[1, Row]
-
+  LoadSettings;
 end;
 
 procedure TSettingsForm.FormDestroy(Sender: TObject);
 begin
-  FillSettings;
-  VLE.Strings.SaveToFile(IniFileName);
-  SettingsList.Free;
-end;
-
-procedure TSettingsForm.FillSettings;
-var
-  Data: TOptionData;
-  I: Integer;
-begin
-  VLE.Strings.Clear;
-  for I := 0 to SettingsList.Count - 1 do
-  begin
-    Data := SettingsList.Items[I] as TOptionData;
-    VLE.InsertRow(Data.Key, Data.AsString, True);
-  end;
+  SaveSettings;
 end;
 
 procedure TSettingsForm.FormShow(Sender: TObject);
 var
   Data: TOptionData;
   I: Integer;
+  Strings: TStringList;
 begin
-  FillSettings;
+  Strings := TStringList.Create;
+  try
+    FillSettings(Strings);
+    VLE.Strings.Assign(Strings);
+    Strings.SaveToFile(IniFileName);
+  finally
+    Strings.Free;
+  end;
+  //FillSettings(VLE.Strings);
   for I := 0 to SettingsList.Count - 1 do
   begin
     Data := SettingsList.Items[I] as TOptionData;
@@ -268,6 +330,8 @@ begin
       OpenDialog1.FileName := VLE.Cells[1, VLE.Row];
       OpenDialog1.Filter := Filter;
       if not OpenDialog1.Execute then Exit;
+      if Pos(' ', OpenDialog1.FileName) > 0 then
+        OpenDialog1.FileName := AnsiQuotedStr(OpenDialog1.FileName, '"');
       VLE.Cells[1, VLE.Row] := OpenDialog1.FileName;
     end
   else if SettingsList[VLE.Row - 1] is TFontNameOption then
@@ -290,5 +354,9 @@ begin
   end;
 end;
 
+initialization
+  Initialize;
+finalization
+  SettingsList.Free;
 end.
 

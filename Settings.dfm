@@ -21,7 +21,7 @@ object SettingsForm: TSettingsForm
     Left = 0
     Top = 0
     Width = 461
-    Height = 370
+    Height = 371
     Align = alClient
     TabOrder = 0
     OnEditButtonClick = VLEEditButtonClick
@@ -33,7 +33,7 @@ object SettingsForm: TSettingsForm
   end
   object Panel1: TPanel
     Left = 0
-    Top = 422
+    Top = 423
     Width = 461
     Height = 40
     Align = alBottom
@@ -62,7 +62,7 @@ object SettingsForm: TSettingsForm
   end
   object Memo1: TMemo
     Left = 0
-    Top = 370
+    Top = 371
     Width = 461
     Height = 52
     Align = alBottom

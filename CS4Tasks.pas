@@ -42,7 +42,7 @@ unit CS4Tasks;
 interface
 
 uses SysUtils, Classes, Windows, Graphics, Dialogs, Controls,
-  CADSys4, CS4BaseTypes, CS4Shapes;
+  CADSys4, Geometry, CS4Shapes;
 
 const
 
@@ -82,7 +82,8 @@ const
   CADPRG_CustomTransform = CADPRG_ClipboardCut + 1;
   CADPRG_ConvertSelected = CADPRG_CustomTransform + 1;
   CADPRG_ConvertToGrayScale = CADPRG_ConvertSelected + 50;
-
+  CADPRG_SimplifyPoly = CADPRG_ConvertToGrayScale + 1;
+  CADPRG_SelectedProperties = CADPRG_SimplifyPoly + 1;
 type
   { ******************* Zooming states *********************** }
 
@@ -1342,8 +1343,10 @@ type
     procedure BackwardForward(Key: Integer);
     procedure DuplicateSelected;
     procedure ConvertSelected(DestClass: TPrimitive2DClass);
+    procedure SimplifyPoly;
     procedure ConvertToGrayScale;
     procedure ChangePrimitiveProperties(Obj: TPrimitive2D);
+    procedure ChangeSelectedProperties;
     function OnEvent(Event: TCADPrgEvent; MouseButton:
       TCS4MouseButton; Shift: TShiftState; Key: Word;
       var NextState: TCADStateClass): Boolean; override;
@@ -1364,7 +1367,7 @@ type
 
 implementation
 
-uses Math, Propert, TransForm, ColorEtc, Geometry, Draw;
+uses Math, Propert, TransForm, ColorEtc, Draw;
 
 type
 // -----===== Starting Cs4CADPrgTasks.pas =====-----
@@ -2481,7 +2484,7 @@ begin
         end;
       ceMouseUp: if MouseButton = cmbLeft then
         begin
-          TmpObj := Viewport2D.PickObject(CurrentViewportPoint,
+          TmpObj := Viewport2D.PickObjectWithSelection(CurrentViewportPoint,
             fApertureSize, False, fLastSelectedCtrlPoint);
           if (fLastSelectedCtrlPoint > PICK_INBBOX) and
             Assigned(TmpObj) and (TmpObj is SelectionFilter)
@@ -2580,7 +2583,7 @@ begin
       ceMouseUp: if MouseButton = cmbLeft then
         begin
           DrawOSD(Viewport2D, fLastPt);
-          TmpObj := Viewport2D.PickObject(CurrentViewportPoint,
+          TmpObj := Viewport2D.PickObjectWithSelection(CurrentViewportPoint,
             fApertureSize, False, fLastSelectedCtrlPoint);
           if (fLastSelectedCtrlPoint > PICK_INBBOX) and
             Assigned(TmpObj) and (TmpObj is SelectionFilter)
@@ -2708,7 +2711,7 @@ begin
       ceMouseUp: if MouseButton = cmbLeft then
         begin
           DrawOSD(Viewport2D, fLastPt);
-          TmpObj := Viewport2D.PickObject(CurrentViewportPoint,
+          TmpObj := Viewport2D.PickObjectWithSelection(CurrentViewportPoint,
             fApertureSize, False, fLastSelectedCtrlPoint);
           if (fLastSelectedCtrlPoint > PICK_INBBOX) and
             Assigned(TmpObj) and (TmpObj is SelectionFilter)
@@ -3696,7 +3699,7 @@ end;
 
 procedure TCAD2D_BasicMode.TransformSelected(Transf: TTransf2D);
 var
-  ListOfObj: array of Longint;
+  ListOfObj: array of Integer;
   Iter: TGraphicObjIterator;
   Current: TGraphicObject;
   I: Integer;
@@ -3798,7 +3801,7 @@ var
   TmpIter: TGraphicObjIterator;
   TmpIter2: TGraphicObjIterator;
   Position: TGraphicObject;
-  PositionID: Longint;
+  PositionID: Integer;
   Current: TGraphicObject;
   MoveMore: Boolean;
 begin
@@ -3912,43 +3915,6 @@ var
   Current, NewObj: TGraphicObject;
   NewObjs: TGraphicObjList;
 begin
-(*  with CADPrg as TCADPrg2D do
-  begin
-    NewObjs := TGraphicObjList.Create;
-    NewObjs.FreeOnClear := False;
-    try
-      ExIter :=
-        SelectedObjs.GetExclusiveIterator;
-      try
-        Current := ExIter.First;
-        while Current <> nil do
-        begin
-          {NewObj :=
-            CADSysFindClassByName(DestClass.ClassName).CreateDupe(Current);}
-          NewObj := DestClass.Create(Current.ID);
-          NewObj.Assign(Current);
-          NewObjs.Add(NewObj);
-          //NewObj.ID := Current.ID;
-          Current := ExIter.Next;
-        end;
-      finally
-        ExIter.Free;
-      end;
-      ExIter := NewObjs.GetExclusiveIterator;
-      try
-        Current := ExIter.First;
-      finally
-        ExIter.Free;
-      end;
-      Viewport.Drawing.DeleteSelected;
-      Viewport.Drawing.AddList(NewObjs);
-      //Viewport.Drawing.SelectionClear;
-      Viewport.Drawing.SelectionAddList(NewObjs);
-    finally
-      NewObjs.Free;
-      //Viewport2D.Repaint;
-    end;
-  end;*)
   with CADPrg as TCADPrg2D do
   begin
     NewObjs := TGraphicObjList.Create;
@@ -3985,43 +3951,93 @@ begin
   end;
 end;
 
-procedure MakeGrayscale(Drawing2D: TDrawing2D);
+procedure TCAD2D_BasicMode.SimplifyPoly;
 var
-  Obj: TGraphicObject; //TPrimitive2D;
-  Iter: TGraphicObjIterator;
+  ExIter, ExIter2: TExclusiveGraphicObjIterator;
+  Current, NewObj: TGraphicObject;
+  NewObjs: TGraphicObjList;
 begin
-  Iter := Drawing2D.ObjectsIterator;
-  try
-    Obj := Iter.First;
-    while Assigned(Obj) do
-    begin
-      if Obj is TPrimitive2D then
-        with Obj as TPrimitive2D do
+  with CADPrg as TCADPrg2D do
+  begin
+    NewObjs := TGraphicObjList.Create;
+    NewObjs.FreeOnClear := False;
+    try
+      ExIter :=
+        SelectedObjs.GetExclusiveIterator;
+      ExIter2 :=
+        Viewport2D.Drawing2D.ObjectsExclusiveIterator;
+      try
+        Current := ExIter.First;
+        while Current <> nil do
         begin
-          if LineColor <> clDefault then LineColor := GrayScale(LineColor);
-          if HatchColor <> clDefault then HatchColor := GrayScale(HatchColor);
-          if FillColor <> clDefault then FillColor := GrayScale(FillColor);
+          if Current is TPolyline2D0 then
+          begin
+            if Current is TPolyline2D then
+              NewObj := TPolyline2D.Create(Current.ID)
+            else
+              NewObj := TPolygon2D.Create(Current.ID);
+            NewObj.Assign(Current);
+            Geometry.SimplifyPoly((Current as TPrimitive2D).Points,
+              (NewObj as TPrimitive2D).Points,
+              Viewport.GetPixelAperture.Y, Current is TPolygon2D);
+            ExIter.ReplaceDeleteCurrent(NewObj);
+            ExIter2.Search(Current.ID);
+            ExIter2.ReplaceDeleteCurrent(NewObj);
+            NewObjs.Add(NewObj);
+          end;
+          //NewObj.ID := Current.ID;
+          Current := ExIter.Next;
         end;
-      Obj := Iter.Next;
+      finally
+        ExIter.Free;
+        ExIter2.Free;
+      end;
+    finally
+      Viewport.Drawing.SelectionClear;
+      Viewport.Drawing.SelectionAddList(NewObjs);
+      NewObjs.Free;
+      CADPrg.Viewport.Drawing.NotifyChanged;
+      Viewport2D.Repaint;
     end;
-  finally
-    Iter.Free;
   end;
-  Drawing2D.NotifyChanged;
 end;
 
 procedure TCAD2D_BasicMode.ConvertToGrayScale;
 begin
-  MakeGrayscale((CADPrg as TCADPrg2D).Viewport2D.Drawing2D);
+  (CADPrg as TCADPrg2D).Viewport2D.Drawing2D.MakeGrayscale;
   (CADPrg as TCADPrg2D).Viewport2D.Repaint;
 end;
 
-procedure TCAD2D_BasicMode.ChangePrimitiveProperties(Obj:
-  TPrimitive2D);
+procedure TCAD2D_BasicMode.ChangePrimitiveProperties(
+  Obj: TPrimitive2D);
 begin
   PropertiesForm.PPrimitive := Obj;
   if PropertiesForm.ShowModal = mrOK then
+  begin
     CADPrg.Viewport.Drawing.NotifyChanged;
+    Obj.UpdateExtension(Self);
+    (CADPrg as TCADPrg2D).Viewport2D.Repaint;
+  end;
+  (CADPrg as TCADPrg2D).Viewport2D.Parent.SetFocus;
+  (CADPrg as TCADPrg2D).Viewport2D.SetFocus;
+end;
+
+procedure TCAD2D_BasicMode.ChangeSelectedProperties;
+var
+  Obj: TPrimitive2D;
+  ExIter: TExclusiveGraphicObjIterator;
+begin
+  with CADPrg as TCADPrg2D do
+  begin
+    ExIter :=
+      SelectedObjs.GetExclusiveIterator;
+    try
+      Obj := ExIter.First as TPrimitive2D;
+    finally
+      ExIter.Free;
+    end;
+  end;
+  if Assigned(Obj) then ChangePrimitiveProperties(Obj);
 end;
 
 function TCAD2D_BasicMode.OnEvent(Event:
@@ -4093,6 +4109,10 @@ begin
           ConvertSelected(TPrimitive2DClass(GraphicObjectClasses[
             Key - CADPRG_ConvertSelected + 1]));
           Viewport.Repaint;
+        end
+        else if Key = CADPRG_SimplifyPoly then
+        begin
+          SimplifyPoly;
         end
         else if Key = CADPRG_CustomTransform then
         begin
@@ -4191,12 +4211,14 @@ begin
         end
         else if Key = CADPRG_DuplicateSelected then
           DuplicateSelected
-            ;
+        else if Key = CADPRG_SelectedProperties then
+          ChangeSelectedProperties
+      ;
       ceMouseDown: if MouseButton = cmbLeft then
         begin
           CurrPoint2D := CurrentViewportPoint;
           fLastPt := CurrPoint2D;
-          TmpObj := Viewport2D.PickObject(CurrPoint2D,
+          TmpObj := Viewport2D.PickObjectWithSelection(CurrPoint2D,
             fApertureSize, False, fLastSelectedCtrlPoint);
           if fLastSelectedCtrlPoint < PICK_INOBJECT
             then TmpObj := nil;
@@ -4208,12 +4230,12 @@ begin
               (fLastSelectedCtrlPoint = PICK_INOBJECT)}then
             begin
               if SelectedObjs.Find(TmpObj.ID) = nil then Exit;
-              if not (TmpObj is TOutline2D) then Exit;
+              if not (TmpObj is TPrimitive2D) then Exit;
               fLastSelectedCtrlPoint :=
-                (TmpObj as TOutline2D).OnProfile(CurrPoint2D,
+                (TmpObj as TPrimitive2D).OnProfile(CurrPoint2D,
                 Viewport.GetAperture(fApertureSize));
               if fLastSelectedCtrlPoint < 0 then Exit;
-              (TmpObj as TOutline2D).InsertControlPoint(
+              (TmpObj as TPrimitive2D).InsertControlPoint(
                 fLastSelectedCtrlPoint + 1, CurrPoint2D);
               Viewport2D.Repaint;
               Exit;
@@ -4282,7 +4304,7 @@ begin
               Exit;
             end;
             CurrPoint2D := fLastPt;
-            TmpObj := Viewport2D.PickObject(CurrPoint2D,
+            TmpObj := Viewport2D.PickObjectWithSelection(CurrPoint2D,
               fApertureSize, False, fLastSelectedCtrlPoint);
             if fLastSelectedCtrlPoint < PICK_INOBJECT
               then TmpObj := nil;
@@ -4321,7 +4343,7 @@ begin
         end;
       ceMouseDblClick:
         begin
-          TmpObj := Viewport2D.PickObject(CurrentViewportPoint,
+          TmpObj := Viewport2D.PickObjectWithSelection(CurrentViewportPoint,
             fApertureSize, False, fLastSelectedCtrlPoint);
           if fLastSelectedCtrlPoint < PICK_INOBJECT
             then TmpObj := nil;

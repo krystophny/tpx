@@ -1,7 +1,7 @@
 unit Options0;
 
 interface
-uses SysUtils, CS4BaseTypes, Contnrs, Classes, StrUtils, Dialogs;
+uses SysUtils, Contnrs, Classes, StrUtils, Dialogs, md5;
 
 type
 
@@ -77,6 +77,8 @@ type
     function GetAsString: string; override;
   end;
 
+  TCheckSum = MD5Digest;
+
   TOptionsList = class(TObjectList)
     constructor Create; overload;
     procedure AddInteger(Key0: string;
@@ -96,9 +98,12 @@ type
       List: TStrings; Hint0: string);
     procedure AddChoice(Key0: string;
       PData0: Pointer; const Choices0: string; Hint0: string);
+    function GetCheckSum: TCheckSum;
   end;
 
 implementation
+
+uses Geometry;
 
 { --================ THistoryList ==================-- }
 
@@ -313,4 +318,20 @@ begin
   Add(TChoiceOption.Create(Key0, PData0, Choices0, Hint0));
 end;
 
+function TOptionsList.GetCheckSum: TCheckSum;
+var
+  I: Integer;
+  Context: MD5Context;
+  St: string;
+begin
+  MD5Init(Context);
+  for I := 0 to Count - 1 do
+  begin
+    St := (Items[I] as TOptionData).GetAsString;
+    MD5Update(Context, @St[1], Length(St));
+  end;
+  MD5Final(Context, Result);
+end;
+
 end.
+

@@ -5,8 +5,7 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics,
   Controls, Forms,
-  Dialogs, StdCtrls, ExtCtrls,
-  CADSys4, CS4BaseTypes;
+  Dialogs, StdCtrls, ExtCtrls, Geometry,  CADSys4;
 
 
 type
@@ -22,6 +21,9 @@ type
     RadioGroup2: TRadioGroup;
     LabeledEdit6: TLabeledEdit;
     LabeledEdit7: TLabeledEdit;
+    LabeledEdit8: TLabeledEdit;
+    LabeledEdit9: TLabeledEdit;
+    Label1: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose:
       Boolean);
@@ -31,7 +33,7 @@ type
     procedure RadioGroup2Click(Sender: TObject);
   private
     { Private declarations }
-    Edits: array[1..7] of TLabeledEdit;
+    Edits: array[1..9] of TLabeledEdit;
     function CheckEdits: Boolean;
   public
     { Public declarations }
@@ -45,8 +47,6 @@ var
 
 implementation
 
-uses Geometry;
-
 {$R *.dfm}
 
 procedure TTransfForm.FormCreate(Sender: TObject);
@@ -58,6 +58,8 @@ begin
   Edits[5] := LabeledEdit5;
   Edits[6] := LabeledEdit6;
   Edits[7] := LabeledEdit7;
+  Edits[8] := LabeledEdit8;
+  Edits[9] := LabeledEdit9;
 end;
 
 function TTransfForm.CheckEdits: Boolean;
@@ -65,7 +67,7 @@ var
   I, J: Integer;
   A: TRealType;
 begin
-  for I := 1 to 7 do if Edits[I].Enabled then
+  for I := 1 to 9 do if Edits[I].Enabled then
     begin
       Val(Edits[I].Text, A, J);
       if J > 0 then
@@ -96,21 +98,25 @@ begin
   LabeledEdit6.Enabled := RadioGroup2.ItemIndex = 5;
   LabeledEdit7.Text := FloatToStr(CP.Y);
   LabeledEdit7.Enabled := RadioGroup2.ItemIndex = 5;
+  LabeledEdit8.Text := '0';
+  LabeledEdit9.Text := '0';
   RadioGroup1.ItemIndex := 0;
 end;
 
 procedure TTransfForm.FormClose(Sender: TObject; var Action:
   TCloseAction);
 var
-  A, ShX, ShY, ScX, ScY: TRealType;
+  A, ShX, ShY, ScX, ScY, AH, AV: TRealType;
   RefP: TPoint2D;
 begin
   if ModalResult <> mrOK then Exit;
-  A := StrToFloat(LabeledEdit1.Text) / 180 * Pi;
+  A := DegToRad(StrToFloat(LabeledEdit1.Text));
   ShX := StrToFloat(LabeledEdit2.Text);
   ShY := StrToFloat(LabeledEdit3.Text);
   ScX := StrToFloat(LabeledEdit4.Text);
   ScY := StrToFloat(LabeledEdit5.Text);
+  AH := DegToRad(StrToFloat(LabeledEdit8.Text));
+  AV := DegToRad(StrToFloat(LabeledEdit9.Text));
   if RadioGroup1.ItemIndex = 1 then
   begin
     ScX := 1 / ScX;
@@ -130,6 +136,8 @@ begin
   else T := IdentityTransf2D;
   T := MultiplyTransform2D(T, ScaleCenter2D(ScX, ScY, RefP));
   T := MultiplyTransform2D(T, Translate2D(ShX, ShY));
+  if (AH <> 0) or (AV <> 0)
+    then T := MultiplyTransform2D(T, Skew2D(AH, AV, RefP));
 end;
 
 procedure TTransfForm.RadioGroup2Click(Sender: TObject);
@@ -139,3 +147,4 @@ begin
 end;
 
 end.
+

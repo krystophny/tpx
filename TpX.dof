@@ -17,7 +17,7 @@ M=0
 N=1
 O=1
 P=1
-Q=1
+Q=0
 R=0
 S=0
 T=0
@@ -41,12 +41,12 @@ MaxStackSize=1048576
 ImageBase=4194304
 ExeDescription=
 [Directories]
-OutputDir=C:\WRK\Delphi\TpX
+OutputDir=
 UnitOutputDir=
 PackageDLLOutputDir=
 PackageDCPOutputDir=
-SearchPath=$(DELPHI)\Lib;$(DELPHI)\Lib\Debug;Lib\Graphics32\;Lib\HtmlHelp;Lib\PNG;Lib\PowerPdf;Lib\XML
-Packages=vclx30;VCL30;vcldb30;vcldbx30;VclSmp30;Qrpt30;teeui30;teedb30;tee30;IBEVNT30;CADSys;vcl;VclSmp
+SearchPath=$(DELPHI)\Lib\Debug;$(DELPHI)\Lib;Lib\Graphics32\;Lib\HtmlHelp;Lib\PNG;Lib\PowerPdf;Lib\XML;Lib\md5;Lib\StitchSAX
+Packages=vclx30;VCL30;vcldb30;vcldbx30;VclSmp30;Qrpt30;teeui30;teedb30;tee30;IBEVNT30;CADSys;vcl;VclSmp;TpXPack
 Conditionals=
 DebugSourceDirs=
 UsePackages=0
@@ -82,22 +82,25 @@ ProductName=
 ProductVersion=1.0.0.0
 Comments=
 [Excluded Packages]
-C:\Program Files\Borland\Delphi6\Bin\dclwbm60.bpl=Borland InternetExpress Components
-C:\Program Files\Borland\Delphi6\Bin\delphihtm60.bpl=Borland Delphi Core HTML Package
 c:\program files\borland\delphi6\Bin\DCLIB60.bpl=InterBase Data Access Components
-C:\Program Files\Borland\Delphi6\Bin\dclwebsnap60.bpl=Borland WebSnap Components
+c:\program files\borland\delphi6\Bin\dclcds60.bpl=Borland Base Cached ClientDataset Component
 c:\program files\borland\delphi6\Bin\dclbdecds60.bpl=Borland Local BDE ClientDataset Components
-C:\Program Files\Borland\Delphi6\Bin\dclcds60.bpl=Borland Base Cached ClientDataset Component
-C:\Program Files\Borland\Delphi6\Bin\dcldbxcds60.bpl=Borland Local DBX ClientDataset Components
-c:\program files\borland\delphi6\Projects\Bpl\dclusr60.bpl=Borland User Components
+c:\program files\borland\delphi6\Bin\dcltee60.bpl=TeeChart Components
+c:\program files\borland\delphi6\Bin\dcldss60.bpl=Borland Decision Cube Components
+c:\program files\borland\delphi6\Bin\dcltqr60.bpl=TeeChart for QuickReport Components
+c:\program files\borland\delphi6\Bin\dclclxdb60.bpl=Borland CLX Database Components
+c:\program files\borland\delphi6\Bin\dclclxstd60.bpl=Borland CLX Standard Components
+c:\program files\borland\delphi6\Bin\dclsmp60.bpl=Borland Sample Components
+c:\program files\borland\delphi6\Bin\DBWEBXPRT.BPL=Borland Web Wizard Package
+c:\program files\borland\delphi6\Bin\dclwbm60.bpl=Borland InternetExpress Components
+c:\program files\borland\delphi6\Bin\dclwebsnap60.bpl=Borland WebSnap Components
+c:\program files\borland\delphi6\Bin\dclite60.bpl=Borland Integrated Translation Environment
+c:\program files\borland\delphi6\Bin\dcldbxcds60.bpl=Borland Local DBX ClientDataset Components
 [HistoryLists\hlUnitAliases]
 Count=1
 Item0=WinTypes=Windows;WinProcs=Windows;DbiTypes=BDE;DbiProcs=BDE;DbiErrs=BDE;
 [HistoryLists\hlSearchPath]
 Count=3
-Item0=$(DELPHI)\Lib;$(DELPHI)\Lib\Debug;Lib\Graphics32\;Lib\HtmlHelp;Lib\PNG;Lib\PowerPdf;Lib\XML
-Item1=$(DELPHI)\Lib\Debug;Lib\Graphics32\;Lib\HtmlHelp;Lib\PNG;Lib\PowerPdf;Lib\XML
-Item2=Lib/PNG/
-[HistoryLists\hlOutputDirectorry]
-Count=1
-Item0=C:\WRK\Delphi\TpX
+Item0=Lib/PNG/;Lib\Graphics32;Lib\md5;Lib\XML;Lib\PowerPdf
+Item1=Lib/PNG/;Lib\Graphics32;Lib\md5;Lib\XML;Lib\PowerPdf\
+Item2=Lib/PNG/;Lib\Graphics32;Lib\md5;Lib\XML

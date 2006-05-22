@@ -12,8 +12,6 @@ object OptionsForm: TOptionsForm
   Font.Style = []
   OldCreateOrder = False
   OnCloseQuery = FormCloseQuery
-  OnCreate = FormCreate
-  OnDestroy = FormDestroy
   OnShow = FormShow
   PixelsPerInch = 120
   TextHeight = 16
