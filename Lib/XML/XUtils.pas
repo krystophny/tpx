@@ -2,6 +2,7 @@
 =========================================
  Авторские права (c) 2002 Михаил Власов.
 =========================================
+ Modified by Alexander Tsyplakov, 2007 (TSY)
 }
 
 unit XUtils;
@@ -88,7 +89,13 @@ procedure RO_Free(var aDst{ : TRefObject});
 implementation
 
 uses
-	Math, SysUtils, Windows;
+	Math,
+{$IFDEF VER140}
+  Windows,
+{$ELSE}
+  LCLIntf,
+{$ENDIF}
+ SysUtils;
 	
 function EncodeHtmlString(const s: String): String;
 begin
@@ -194,7 +201,7 @@ end;
 
 function TXList.Delete(anIndex: Integer): TObject;
 begin
-	Result := Items[anIndex];
+	Result := TObject(Items[anIndex]);
 	inherited Delete(anIndex);
 	if Assigned(Result) then
 		ItemRemoved(Result);
@@ -207,7 +214,7 @@ var
 begin
 	i := Count - 1;
 	while i >= 0 do begin
-		anItem := Items[i];
+		anItem := TObject(Items[i]);
 		inherited Delete(i);
 		if Assigned(anItem) then begin
 			ItemRemoved(anItem);
@@ -237,7 +244,7 @@ end;
 
 { TRefObject }
 
-procedure TRefObject.Free;
+procedure TRefObject.Free(YourMustNotToCallThisMethodDirectly: Integer);
 begin
 	raise Exception.CreateFmt(
 		'Внутренняя ошибка: прямое уничтожение ссылочного объекта [%s]', [ClassName]);
@@ -285,7 +292,7 @@ var
 	anItem: TRefObject;
 begin
 	for i := 0 to Count - 1 do begin
-		anItem := inherited Items[i];
+		anItem := TRefObject(inherited Items[i]);
 		if Assigned(anItem) then begin
 			inherited Items[i] := nil;
 			RO_Free(anItem);
@@ -356,8 +363,10 @@ begin
 		Result[Length(Result)] := aChar;
     GotoNextChar;
 	end;
+{$IFDEF VER140}
 	if ConvertOemToChar and (Result <> '') then
 		OemToCharBuff(PChar(Result), PChar(Result), Length(Result));
+{$ENDIF}
 end;
 
 procedure TTextReader.ReadLineToBuf(aBuf: PChar; aBufSize: Integer);
@@ -380,8 +389,10 @@ begin
     GotoNextChar;
   end;
 	aBuf^ := #0;
+{$IFDEF VER140}
 	if ConvertOemToChar then
 		OemToCharBuff(aSaveBuf, aSaveBuf, aBuf - aSaveBuf);
+{$ENDIF}
 end;
 
 function TTextReader.ReadChar: Char;
@@ -389,8 +400,10 @@ begin
 	if not Eof then begin
 		Result := BufPos^;
 		GotoNextChar;
+{$IFDEF VER140}
 		if ConvertOemToChar then
 			OemToCharBuff(@Result, @Result, 1);
+{$ENDIF}
 	end
 	else
 		Result := #0;

@@ -39,7 +39,9 @@ uses
   , Windows
 {$ENDIF}
 {$IFNDEF NOZLIB}
-  ,Zlib;
+//changed for TpX for compatibility with Paszlib:
+,dzlib;
+//  ,Zlib;
 {$ELSE}
   ;
 {$ENDIF}

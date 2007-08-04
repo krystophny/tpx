@@ -14,10 +14,7 @@ type
      Windows as defined by <Code=TLOGFONT> structure.
 
      This font is used by the library for the <See Class=TText2D>
-     shape class. The use of it is somewhat difficult in the
-     context of a 2D or 3D drawing so it is better to use
-     the vectorial text shape <See Class=TJustifiedVectText2D> and
-     <See Class=TJustifiedVectText3D>.
+     shape class.
   }
   TExtendedFont = class(TObject)
   private
@@ -29,8 +26,8 @@ type
     function GetHeight: Integer;
     procedure SetWidth(Value: Word);
     function GetWidth: Word;
-    procedure SetEscapement(Value: Word);
-    function GetEscapement: Word;
+    procedure SetAngle(Value: Word);
+    function GetAngle: Word;
     procedure SetWeight(Value: Word);
     function GetWeight: Word;
     procedure SetItalic(Value: Byte);
@@ -52,7 +49,11 @@ type
     procedure SetFaceName(Value: TFaceName);
     function GetFaceName: TFaceName;
   public
+{$IFNDEF VER140}
     LogFont: TLOGFONT;
+{$ELSE}
+    LogFont: tagLOGFONTA;
+{$ENDIF}
     {: This is the constructor that creates an instance of a
        font.
 
@@ -109,8 +110,8 @@ type
     {: This property specifies the <I=lfEscapement> field of
        <Code=TLOGFONT>.
     }
-    property Escapement: Word read GetEscapement write
-      SetEscapement;
+    property Angle: Word read GetAngle write
+      SetAngle;
     {: This property specifies the <I=lfWeight> field of
        <Code=TLOGFONT>.
     }
@@ -160,17 +161,17 @@ type
   end;
 
 { Syncronization object to prevent linking of Delphi's packages. }
-{: For Internal use of CADSys library.
+{: For Internal use of TpX library.
 }
-  TCADSysSynchroObject = class(TObject)
+  TTpXSynchroObject = class(TObject)
   public
     procedure Acquire; virtual;
     procedure Release; virtual;
   end;
 
-{: For Internal use of CADSys library.
+{: For Internal use of TpX library.
 }
-  TCADSysCriticalSection = class(TCADSysSynchroObject)
+  TTpXCriticalSection = class(TTpXSynchroObject)
   private
     FSection: TRTLCriticalSection;
   public
@@ -184,13 +185,57 @@ type
 
   TEnhMetaHeader = Windows.TEnhMetaHeader;
 
+function HasFontFamily(const FontName: string): Boolean;
 procedure SetBkMode(Canvas: TCanvas; const OPAQUE: Boolean);
-procedure GetCanvasResolution(Canvas: TCanvas; var LogHeight, LogWidth: Double);
-procedure ChangeCanvasResolution(Canvas: TCanvas; var Inch, PPI_X, PPI_Y: Integer);
-procedure GetMetaFileResolution(Metafile: TMetaFile; var PPI_X, PPI_Y: Integer);
-function SetWindowLong(HWnd: LongWord; dwNewLong: Longint):  Longint;
+procedure GetCanvasResolution(Canvas: TCanvas; var LogHeight,
+  LogWidth: Double);
+procedure ChangeCanvasResolution(Canvas: TCanvas; const WX, WY, VX,
+  VY: Integer);
+// Resolution in points per mm
+procedure GetMetaFileResolution(Metafile: TMetaFile; var PpMM_X,
+  PpMM_Y: Double);
+function SetWindowLong(HWnd: LongWord; dwNewLong: Longint):
+  Longint;
 
 implementation
+
+procedure Set_FaceName(
+  var LogFont: TLOGFONT; const Value: TFaceName);
+var
+  I: Byte;
+begin
+  for I := 1 to Length(Value) do
+    LogFont.lfFaceName[I - 1] := Value[I];
+  LogFont.lfFaceName[Length(Value)] := #0;
+end;
+
+function EnumFontsProc(var LogFont: TLOGFONT;
+  var TextMetric: TTextMetric;
+  FontType: Integer; Data: Pointer): Integer; stdcall;
+begin
+  //LogFont.lfFaceName;
+  Boolean(Data^) := True;
+  Result := 0;
+end;
+
+function HasFontFamily(const FontName: string): Boolean;
+var
+  DC: HDC;
+  LFont: TLOGFONT;
+begin
+  Result := False;
+  if FontName = '' then Exit;
+  FillChar(LFont, sizeof(LFont), 0);
+  LFont.lfCharset := DEFAULT_CHARSET;
+  Set_FaceName(LFont, FontName);
+  try
+    DC := GetDC(0);
+    EnumFontFamiliesEx(DC, LFont, @EnumFontsProc,
+      Longint(@Result), 0);
+  finally
+    ReleaseDC(0, DC);
+  end;
+end;
 
 // =====================================================================
 // TExtendedFont
@@ -218,13 +263,14 @@ begin
   Result := LogFont.lfWidth;
 end;
 
-procedure TExtendedFont.SetEscapement(Value: Word);
+procedure TExtendedFont.SetAngle(Value: Word);
 begin
   LogFont.lfEscapement := Value;
+  LogFont.lfOrientation := Value;
   SetNewValue;
 end;
 
-function TExtendedFont.GetEscapement: Word;
+function TExtendedFont.GetAngle: Word;
 begin
   Result := LogFont.lfEscapement;
 end;
@@ -275,13 +321,13 @@ end;
 
 procedure TExtendedFont.SetCharSet(Value: Byte);
 begin
-  LogFont.lfCharSet := Value;
+  LogFont.lfCharset := Value;
   SetNewValue;
 end;
 
 function TExtendedFont.GetCharSet: Byte;
 begin
-  Result := LogFont.lfCharSet;
+  Result := LogFont.lfCharset;
 end;
 
 procedure TExtendedFont.SetOutPrecision(Value: Byte);
@@ -366,7 +412,7 @@ end;
 constructor TExtendedFont.Create;
 begin
   inherited Create;
-  GetObject(GetStockObject(DEFAULT_GUI_FONT), SizeOf(LogFont),
+  GetObject(GetStockObject(DEFAULT_GUI_FONT), sizeof(LogFont),
     @LogFont);
   LogFont.lfFaceName := 'Small Font';
   FHandle := CreateFontIndirect(LogFont);
@@ -391,62 +437,62 @@ end;
 procedure TExtendedFont.SaveToStream(Strm: TStream);
 begin
   with Strm do
-    Write(LogFont, SizeOf(LogFont));
+    Write(LogFont, sizeof(LogFont));
 end;
 
 procedure TExtendedFont.LoadFromStream(Strm: TStream);
 begin
   with Strm do
   begin
-    Read(LogFont, SizeOf(LogFont));
+    Read(LogFont, sizeof(LogFont));
     SetNewValue;
   end;
 end;
 
 // =====================================================================
-// TCADSysSynchroObject
+// TTpXSynchroObject
 // =====================================================================
 
-procedure TCADSysSynchroObject.Acquire;
+procedure TTpXSynchroObject.Acquire;
 begin
 end;
 
-procedure TCADSysSynchroObject.Release;
+procedure TTpXSynchroObject.Release;
 begin
 end;
 
 // =====================================================================
-// TCADSysCriticalSection
+// TTpXCriticalSection
 // =====================================================================
 
-constructor TCADSysCriticalSection.Create;
+constructor TTpXCriticalSection.Create;
 begin
   inherited Create;
   InitializeCriticalSection(FSection);
 end;
 
-destructor TCADSysCriticalSection.Destroy;
+destructor TTpXCriticalSection.Destroy;
 begin
   DeleteCriticalSection(FSection);
   inherited Destroy;
 end;
 
-procedure TCADSysCriticalSection.Acquire;
+procedure TTpXCriticalSection.Acquire;
 begin
   EnterCriticalSection(FSection);
 end;
 
-procedure TCADSysCriticalSection.Release;
+procedure TTpXCriticalSection.Release;
 begin
   LeaveCriticalSection(FSection);
 end;
 
-procedure TCADSysCriticalSection.Enter;
+procedure TTpXCriticalSection.Enter;
 begin
   Acquire;
 end;
 
-procedure TCADSysCriticalSection.Leave;
+procedure TTpXCriticalSection.Leave;
 begin
   Release;
 end;
@@ -461,7 +507,8 @@ end;
 
   // Questa è la dimensione di un pixel in mm.
 
-procedure GetCanvasResolution(Canvas: TCanvas; var LogHeight, LogWidth: Double);
+procedure GetCanvasResolution(Canvas: TCanvas; var LogHeight,
+  LogWidth: Double);
 begin
   LogHeight := GetDeviceCaps(Canvas.Handle, VERTSIZE) /
     GetDeviceCaps(Canvas.Handle, VERTRES);
@@ -469,22 +516,26 @@ begin
     GetDeviceCaps(Canvas.Handle, HORZRES);
 end;
 
-procedure ChangeCanvasResolution(Canvas: TCanvas; var Inch, PPI_X, PPI_Y: Integer);
+procedure ChangeCanvasResolution(Canvas: TCanvas; const WX, WY, VX,
+  VY: Integer);
 begin
   SetMapMode(Canvas.Handle, MM_ISOTROPIC);
-  SetWindowExtEx(Canvas.Handle, Inch, Inch, nil);
-  SetViewportExtEx(Canvas.Handle, PPI_X, PPI_Y, nil);
+  SetWindowExtEx(Canvas.Handle, WX, WY, nil);
+  SetViewportExtEx(Canvas.Handle, VX, VY, nil);
 end;
 
-procedure GetMetaFileResolution(Metafile: TMetaFile; var PPI_X, PPI_Y: Integer);
+procedure GetMetaFileResolution(Metafile: TMetaFile; var PpMM_X,
+  PpMM_Y: Double);
 var EMFHeader: TEnhMetaHeader;
 begin
-  GetEnhMetaFileHeader(Metafile.Handle, SizeOf(EMFHeader), @EMFHeader);
-  PPI_X := Round(25.4 * EMFHeader.szlDevice.CX / EMFHeader.szlMillimeters.CX);
-  PPI_Y := Round(25.4 * EMFHeader.szlDevice.CY / EMFHeader.szlMillimeters.CY);
+  GetEnhMetaFileHeader(Metafile.Handle, sizeof(EMFHeader),
+    @EMFHeader);
+  PpMM_X := EMFHeader.szlDevice.CX / EMFHeader.szlMillimeters.CX;
+  PpMM_Y := EMFHeader.szlDevice.CY / EMFHeader.szlMillimeters.CY;
 end;
 
-function SetWindowLong(HWnd: LongWord; dwNewLong: Longint): Longint;
+function SetWindowLong(HWnd: LongWord; dwNewLong: Longint):
+  Longint;
 begin
   Result := Windows.SetWindowLong(HWnd, gwl_wndProc, dwNewLong);
 end;

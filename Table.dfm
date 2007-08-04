@@ -1,9 +1,10 @@
 object TableForm: TTableForm
-  Left = 259
-  Top = 125
-  Width = 461
-  Height = 501
+  Left = 335
+  Top = 130
+  BorderStyle = bsDialog
   Caption = 'Edit coordinates'
+  ClientHeight = 473
+  ClientWidth = 453
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -11,6 +12,7 @@ object TableForm: TTableForm
   Font.Name = 'MS Sans Serif'
   Font.Style = []
   OldCreateOrder = False
+  Position = poMainFormCenter
   OnClose = FormClose
   OnCreate = FormCreate
   OnShow = FormShow
@@ -38,32 +40,22 @@ object TableForm: TTableForm
   object Panel1: TPanel
     Left = 335
     Top = 92
-    Width = 86
-    Height = 101
+    Width = 106
+    Height = 117
     BevelOuter = bvNone
     Caption = ' '
     TabOrder = 2
     object Button3: TButton
       Left = 5
-      Top = 0
+      Top = 8
       Width = 75
       Height = 25
       Action = AddPoints
       TabOrder = 0
     end
-    object SpinEdit1: TSpinEdit
-      Left = 5
-      Top = 28
-      Width = 73
-      Height = 26
-      MaxValue = 10000
-      MinValue = 1
-      TabOrder = 1
-      Value = 1
-    end
     object RadioButton1: TRadioButton
       Left = 5
-      Top = 60
+      Top = 71
       Width = 73
       Height = 17
       Caption = 'above'
@@ -73,11 +65,31 @@ object TableForm: TTableForm
     end
     object RadioButton2: TRadioButton
       Left = 5
-      Top = 80
+      Top = 91
       Width = 73
       Height = 17
       Caption = 'below'
+      TabOrder = 1
+    end
+    object Edit2: TEdit
+      Left = 7
+      Top = 43
+      Width = 66
+      Height = 24
       TabOrder = 3
+      Text = '1'
+    end
+    object UpDown1: TUpDown
+      Left = 73
+      Top = 43
+      Width = 19
+      Height = 24
+      Associate = Edit2
+      Min = 1
+      Max = 32000
+      Position = 1
+      TabOrder = 4
+      Wrap = False
     end
   end
   object CheckBox1: TCheckBox
@@ -138,6 +150,15 @@ object TableForm: TTableForm
         OnEnter = Edit1Enter
       end
     end
+  end
+  object Button4: TButton
+    Left = 340
+    Top = 264
+    Width = 75
+    Height = 25
+    Caption = 'Reverse'
+    TabOrder = 5
+    OnClick = Button4Click
   end
   object ActionList1: TActionList
     Left = 120

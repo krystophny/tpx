@@ -1,15 +1,19 @@
 unit PreView;
 
+{$IFNDEF VER140}
+{$MODE Delphi}
+{$ENDIF}
+
 interface
 uses
-  SysUtils, Forms, Classes, CADSys4, Graphics;
+  SysUtils, StrUtils, Forms, Classes, Drawings, Graphics;
 
 type
   TLaTeXPreviewKind = (ltxview_Dvi, ltxview_Pdf, ltxview_PS);
 
 procedure Run_LaTeX_Temp(const Drawing: TDrawing2D; PreviewKind:
   TLaTeXPreviewKind; var TempDvi: string; const Hide: Boolean;
-  const FixEpsBB: Boolean);
+  const DvipsFixBB: Boolean);
 procedure Preview_LaTeX(const Drawing: TDrawing2D;
   PreviewKind: TLaTeXPreviewKind);
 procedure Preview_Picture(const Drawing: TDrawing2D;
@@ -27,53 +31,73 @@ var
   DviViewerPath: string = '';
   PdfViewerPath: string = '';
   TextViewerPath: string = '';
+  HtmlViewerPath: string = '';
   PSViewerPath: string = '';
-  GhostscriptPath: string = 'gswin32c.exe'; // or mgs.exe from MikTeX
+  SvgViewerPath: string = '';
+  PngViewerPath: string = '';
+  BmpViewerPath: string = '';
+  GhostscriptPath: string = 'gswin32c.exe';
+    // or mgs.exe from MikTeX
 
 implementation
 
-uses Output, ShellAPI, SysBasic, MiscUtils;
+uses Output,
+{$IFDEF VER140}
+  ShellAPI,
+{$ELSE}
+{$ENDIF}
+  SysBasic, MiscUtils;
 
-procedure WriteTempTeXFile(const FileName, TpXName: string);
+procedure WritePreamble(const List: TStringList);
+begin
+  List.Add('\documentclass[a4paper,10pt]{article}');
+  List.Add('% comment unused packages below');
+  List.Add('\usepackage{color}');
+  List.Add('%\pdfoutput=0 % uncomment this to run pdfLaTeX in DVI mode');
+  List.Add('\usepackage{ifpdf}');
+  List.Add('\ifpdf %if using pdfLaTeX in PDF mode');
+  List.Add('  \usepackage[pdftex]{graphicx}');
+  List.Add('  \DeclareGraphicsExtensions{.pdf,.png,.mps}');
+  List.Add('  \usepackage{pgf}');
+  List.Add('  \usepackage{tikz}');
+  List.Add('\else %if using LaTeX or pdfLaTeX in DVI mode');
+  List.Add('  \usepackage{graphicx}');
+  List.Add('  \DeclareGraphicsExtensions{.eps,.bmp}');
+  List.Add('  \DeclareGraphicsRule{.emf}{bmp}{}{}% declare EMF filename extension');
+  List.Add('  \DeclareGraphicsRule{.png}{bmp}{}{}% declare PNG filename extension');
+  List.Add('  \usepackage{pgf}');
+  List.Add('  \usepackage{tikz}');
+  List.Add('  \usepackage{pstricks}%variant: \usepackage{pst-all}');
+  List.Add('\fi');
+  List.Add('\usepackage{epic,bez123}');
+  List.Add('\usepackage{floatflt}% package for floatingfigure environment');
+  List.Add('\usepackage{wrapfig}% package for wrapfigure environment');
+end;
+
+procedure WriteTempTeXFile(const FileName, TpXName: string;
+  const PreviewKind: TLaTeXPreviewKind);
 var
   IncludeFile: string;
   List: TStringList;
 begin
-  IncludeFile := ExtractFilePath(Application.ExeName) + 'preview.tex.inc';
+  IncludeFile := ExtractFilePath(Application.ExeName) +
+    'preview.tex.inc';
   List := TStringList.Create;
   try
     if FileExists(IncludeFile) then List.LoadFromFile(IncludeFile)
     else
     begin
-      List.Add('\documentclass[a4paper,10pt]{article}');
-      List.Add('\usepackage{color}');
-      List.Add('%\pdfoutput=0 % uncomment this to run PDFTeX in TeX mode');
-      List.Add('\usepackage{ifpdf}');
-      List.Add('\ifx\pdftexversion\undefined %if using TeX');
-      List.Add('  \usepackage{graphicx}');
-      List.Add('\else %if using PDFTeX');
-      List.Add('  \usepackage[pdftex]{graphicx}');
-      List.Add('\fi');
-      List.Add('\ifpdf %if using PDFTeX in PDF mode');
-      List.Add('  \DeclareGraphicsExtensions{.pdf,.png,.mps}');
-      List.Add('  \usepackage{pgf}');
-      List.Add('\else %if using TeX or PDFTeX in TeX mode');
-      List.Add('  \usepackage{graphicx}');
-      List.Add('  \DeclareGraphicsExtensions{.eps,.bmp}');
-      List.Add('  \DeclareGraphicsRule{.emf}{bmp}{}{}% declare EMF filename extension');
-      List.Add('  \DeclareGraphicsRule{.png}{bmp}{}{}% declare PNG filename extension');
-      List.Add('  \usepackage{pgf}');
-      List.Add('  \usepackage{pstricks}%variant: \usepackage{pst-all}');
-      List.Add('\fi');
-      List.Add('\usepackage{epic,bez123}');
-      List.Add('\usepackage{floatflt}% package for floatingfigure environment');
-      List.Add('\usepackage{wrapfig}% package for wrapfigure environment');
+      WritePreamble(List);
       List.SaveToFile(IncludeFile);
     end;
+    if PreviewKind = ltxview_Pdf then
+    List.Text := AnsiReplaceStr(
+        List.Text, '\pdfoutput=0', '\pdfoutput=1');
     List.Add('\begin{document}');
     //List.Add('\hrule height 1ex');
     List.Add('\thispagestyle{empty}');
-    List.Add('\ '); //Without this preview does not work for pgf inside figure
+    List.Add('\ ');
+      //Without this preview does not work for pgf inside figure
     List.Add('');
     List.Add('\input{' + TpXName + '}%');
     List.Add('');
@@ -87,7 +111,7 @@ end;
 
 procedure Run_LaTeX_Temp(const Drawing: TDrawing2D; PreviewKind:
   TLaTeXPreviewKind; var TempDvi: string; const Hide: Boolean;
-  const FixEpsBB: Boolean);
+  const DvipsFixBB: Boolean);
 var
   TempDir, TempIncludePath, TempTpX, TempTeX, TempTeXLog: string;
   Res: Boolean;
@@ -119,7 +143,7 @@ begin
     ltxview_Pdf: Drawing.TeXFormat := tex_none;
   end;
   try
-    StoreToFile_TpX(Drawing, TempTpX, FixEpsBB);
+    StoreToFile_TpX(Drawing, TempTpX, DvipsFixBB);
   except
     Drawing.IncludePath := TempIncludePath;
     Drawing.TeXFormat := TeXFormat0;
@@ -134,7 +158,7 @@ begin
     MessageBoxError('Temporary TpX file not created');
     Exit;
   end;
-  WriteTempTeXFile(TempTeX, TempTpX0);
+  WriteTempTeXFile(TempTeX, TempTpX0, PreviewKind);
   if not FileExists(TempTeX) then
   begin
     MessageBoxError('Temporary TeX file not created');
@@ -228,16 +252,18 @@ begin
       StoreToFile_Saver(Drawing,
         TmpFileName, T_SVG_Export);
     export_EMF:
-      Drawing.SaveToFile_EMF(TmpFileName);
+      StoreToFile_EMF(Drawing, TmpFileName);
     export_EPS:
       StoreToFile_Saver(Drawing,
         TmpFileName, T_PostScript_Export);
+{$IFDEF VER140}
     export_PNG:
       StoreToFile_Saver(Drawing,
         TmpFileName, T_PNG_Export);
     export_BMP:
       StoreToFile_Saver(Drawing,
         TmpFileName, T_BMP_Export);
+{$ENDIF}
     export_PDF:
       StoreToFile_Saver(Drawing,
         TmpFileName, T_PDF_Export);
@@ -258,6 +284,14 @@ begin
   end;
   if PreviewKind in [export_EPS]
     then OpenOrExec(PSViewerPath, TmpFileName)
+  else if PreviewKind in [export_PDF]
+    then OpenOrExec(PdfViewerPath, TmpFileName)
+  else if PreviewKind in [export_SVG]
+    then OpenOrExec(SvgViewerPath, TmpFileName)
+  else if PreviewKind in [export_PNG]
+    then OpenOrExec(PngViewerPath, TmpFileName)
+  else if PreviewKind in [export_BMP]
+    then OpenOrExec(BmpViewerPath, TmpFileName)
   else OpenOrExec('', TmpFileName);
 end;
 
@@ -317,5 +351,23 @@ begin
   end;
 end;
 
+procedure WritePreambleForHelp;
+var
+  List: TStringList;
+begin
+  List := TStringList.Create;
+  try
+    WritePreamble(List);
+    if OutHelp then // Save preamble for inclusion into help
+      List.SaveToFile(ExtractFilePath(ParamStr(0))
+        + '\Help\preamble.inc');
+  finally
+    List.Free;
+  end;
+end;
+
+
+initialization
+  WritePreambleForHelp;
 end.
 

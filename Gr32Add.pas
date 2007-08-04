@@ -1,9 +1,19 @@
-unit Gr32Add;
-//Addition to Gr32 functionality
+unit Gr32Add; //Addition to Gr32 functionality
+
+{$IFNDEF VER140}
+{$MODE Delphi}
+{$ENDIF}
 
 interface
 
-uses Windows, Graphics, Math, Gr32;
+uses 
+Graphics, Math, 
+{$IFDEF VER140}
+Windows, Gr32
+{$ELSE}
+LCLIntf
+{$ENDIF}
+;
 
 procedure RenderTextW_Rot(const B0: TBitmap32;
   X, Y: Integer; const Text: Widestring; AALevel: Integer; Color: TColor32;
@@ -15,7 +25,13 @@ procedure RenderTextW_Rot(const B0: TBitmap32;
 
 implementation
 
-uses WinBasic, CADSys4, Geometry;
+uses 
+{$IFDEF VER140}
+WinBasic, 
+{$ELSE}
+{$ENDIF}
+Drawings, Geometry;
+
 
 //  THJustification = (jhLeft, jhCenter, jhRight);
 //  TVJustification = (jvBaseline, jvBottom, jvCenter, jvTop);
@@ -30,7 +46,7 @@ procedure RenderTextW_Rot(const B0: TBitmap32;
 var
   LogFont2: TLOGFONT;
   B, B2: TBitmap32;
-  StockBitmap: TBitmap;
+  StockBitmap: Graphics.TBitmap;
   SZ: TSize;
   Rect, BoundRect: TRect2D;
   D, V: TVector2D;
@@ -123,7 +139,7 @@ begin
     end
     else
     begin
-      StockBitmap := TBitmap.Create;
+      StockBitmap := Graphics.TBitmap.Create;
       StockBitmap.Width := 8;
       StockBitmap.Height := 8;
       StockCanvas := StockBitmap.Canvas;

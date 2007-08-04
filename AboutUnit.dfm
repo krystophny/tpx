@@ -1,9 +1,10 @@
 object AboutForm: TAboutForm
   Left = 275
   Top = 125
-  Width = 443
-  Height = 348
+  BorderStyle = bsDialog
   Caption = 'TpX'
+  ClientHeight = 320
+  ClientWidth = 435
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -11,6 +12,8 @@ object AboutForm: TAboutForm
   Font.Name = 'MS Sans Serif'
   Font.Style = []
   OldCreateOrder = False
+  Position = poMainFormCenter
+  OnCreate = FormCreate
   PixelsPerInch = 120
   TextHeight = 16
   object Panel1: TPanel
@@ -10303,7 +10306,7 @@ object AboutForm: TAboutForm
       Top = 4
       Width = 180
       Height = 16
-      Caption = '(c) Alexander Tsyplakov, 2006'
+      Caption = '(c) Alexander Tsyplakov, 2007'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clGreen
       Font.Height = -13
@@ -10312,16 +10315,31 @@ object AboutForm: TAboutForm
       ParentFont = False
     end
     object Label2: TLabel
-      Left = 20
-      Top = 244
-      Width = 106
+      Left = 28
+      Top = 236
+      Width = 96
       Height = 16
-      Caption = 'Version 1.3 beta 2'
+      Caption = 'Version 1.4 beta'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clGreen
       Font.Height = -13
       Font.Name = 'MS Sans Serif'
       Font.Style = []
+      ParentFont = False
+    end
+    object Label3: TLabel
+      Left = 272
+      Top = 256
+      Width = 41
+      Height = 16
+      Caption = 'Label3'
+      Color = clWhite
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clGreen
+      Font.Height = -13
+      Font.Name = 'MS Sans Serif'
+      Font.Style = []
+      ParentColor = False
       ParentFont = False
     end
     object Memo1: TMemo
@@ -10332,42 +10350,44 @@ object AboutForm: TAboutForm
       Lines.Strings = (
         'Modules used in TpX:'
         ''
-        'CADSYS 4.0'
-        ' Copyright (c) 2001 Piero Valagussa'
-        ' pivalag@tin.it'
+        '  CADSYS 4.0'
+        '  Copyright (c) 2001 Piero Valagussa'
+        '  pivalag[@@@]tin.it'
         ''
-        'Graphics32 library'
-        ' Copyright (c) 2000-2004 Alex Denisov and Contributors'
-        ' http://graphics32.org'
+        '  Graphics32 library'
+        '  Copyright (c) 2000-2004 Alex Denisov and Contributors'
+        '  http://graphics32.org'
         ''
-        'PowerPdf library'
-        ' Takeshi Kanno'
-        ' takeshi_kanno@est.hi-ho.ne.jp'
+        '  PowerPdf library, ver 0.9'
+        '  Takeshi Kanno'
+        '  http://www.est.hi-ho.ne.jp/takeshi_kanno/powerpdf/'
         ''
-        'XML library'
+        '  XML library'
         
-          ' Copyright (c) 2002 Ravil Batyrshin, Mikhail Vlasov  (Aravil Sof' +
+          '  Copyright (c) 2002 Ravil Batyrshin, Mikhail Vlasov (Aravil Sof' +
           'tware)'
-        ' http://www.torry.net/vcl/internet/html/mvrbxmlparsers.zip'
+        '  http://www.torry.net/vcl/internet/html/mvrbxmlparsers.zip'
         ''
-        'PNG Component'
-        ' Copyright (c) Gustavo Huffenbacher Daud, '
-        ' http://pngdelphi.sourceforge.net'
-        ' gubadaud@terra.com.br'
+        '  PNG Component'
+        '  Copyright (c) Gustavo Huffenbacher Daud,'
+        '  http://pngdelphi.sourceforge.net'
         ''
-        'HTML Help Kit for Delphi, '
-        ' Copyright (c) 1999 The Helpware Group'
-        ' support@helpware.net'
-        ' http://www.helpware.net'
+        '  HTML Help Kit for Delphi,'
+        '  Copyright (c) 1999 The Helpware Group'
+        '  http://www.helpware.net'
         ''
-        'MD5 Message-Digest for Delphi'
-        ' Copyright (c) 1997-1999 Medienagentur Fichtner & Meyer'
-        ' Written by Matthias Fichtner'
-        ' http://www.fichtner.net/delphi/md5.delphi.phtml'
+        '  MD5 Message-Digest for Delphi'
+        '  Copyright (c) 1997-1999 Medienagentur Fichtner & Meyer'
+        '  Written by Matthias Fichtner'
+        '  http://www.fichtner.net/delphi/md5.delphi.phtml'
         ''
-        'StitchSAX 1.1 - Trivial SAX parser for Delphi'
-        ' Copyright (C) 2002, Roman Poterin '
-        ' poterin@mail.ru')
+        '  StitchSAX 1.1 - Trivial SAX parser for Delphi'
+        '  Copyright (c) 2002, Roman Poterin'
+        '  poterin[@@@]mail.ru'
+        ''
+        '  Paszlib'
+        '  Copyright (c) 1998,1999,2000,2001 by Jacques Nomssi Nzali'
+        '  http://www.nomssi.de/paszlib/paszlib.html')
       ReadOnly = True
       ScrollBars = ssVertical
       TabOrder = 0
@@ -10375,7 +10395,7 @@ object AboutForm: TAboutForm
       WordWrap = False
     end
     object WebAddress: TStaticText
-      Left = 172
+      Left = 28
       Top = 256
       Width = 153
       Height = 20
@@ -10397,7 +10417,7 @@ object AboutForm: TAboutForm
   end
   object Button1: TButton
     Left = 304
-    Top = 284
+    Top = 289
     Width = 75
     Height = 25
     Cancel = True
@@ -10408,7 +10428,7 @@ object AboutForm: TAboutForm
   end
   object Button2: TButton
     Left = 32
-    Top = 284
+    Top = 289
     Width = 169
     Height = 25
     Caption = 'Acknowledgements'

@@ -1,11 +1,27 @@
 unit Table;
 
+{$IFNDEF VER140}
+{$MODE Delphi}
+{$ENDIF}
+
 interface
 
 uses
-  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, Grids, StdCtrls, Spin, CS4Shapes, ExtCtrls, ActnList, Menus,
-  Clipbrd, StrUtils;
+{$IFDEF VER140}
+  Windows, Variants,
+{$ELSE}
+  LCLIntf, LResources, Buttons,
+{$ENDIF}
+  Messages, SysUtils, Classes, Graphics, Controls, Forms,
+  Dialogs, Grids, StdCtrls, Spin, GObjects, ExtCtrls, ActnList,
+    Menus,
+  Clipbrd, StrUtils, ComCtrls;
+
+{$IFDEF VER140}
+{$ELSE}
+const
+  VK_DELETE = 46;
+{$ENDIF}
 
 type
   TTableForm = class(TForm)
@@ -13,7 +29,6 @@ type
     Button2: TButton;
     Panel1: TPanel;
     Button3: TButton;
-    SpinEdit1: TSpinEdit;
     RadioButton1: TRadioButton;
     RadioButton2: TRadioButton;
     ActionList1: TActionList;
@@ -35,10 +50,14 @@ type
     Edit1: TEdit;
     AddFromClipboard: TAction;
     AddFromClipboard1: TMenuItem;
+    Edit2: TEdit;
+    UpDown1: TUpDown;
+    Button4: TButton;
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
-    procedure GridRowMoved(Sender: TObject; FromIndex, ToIndex: Integer);
+    procedure GridRowMoved(Sender: TObject; FromIndex, ToIndex:
+      Integer);
     procedure CheckBox1Click(Sender: TObject);
     procedure DeletePointsExecute(Sender: TObject);
     procedure AddPointsExecute(Sender: TObject);
@@ -55,6 +74,7 @@ type
       Shift: TShiftState);
     procedure GridClick(Sender: TObject);
     procedure AddFromClipboardExecute(Sender: TObject);
+    procedure Button4Click(Sender: TObject);
   private
     { Private declarations }
     function AddPoints0(N: Integer): Integer;
@@ -68,9 +88,11 @@ var
 
 implementation
 
-uses CADSys4, Geometry;
+uses Drawings, Geometry, SysBasic;
 
+{$IFDEF VER140}
 {$R *.dfm}
+{$ENDIF}
 
 procedure TTableForm.FormCreate(Sender: TObject);
 begin
@@ -96,7 +118,8 @@ begin
   Grid.SetFocus;
 end;
 
-procedure TTableForm.FormClose(Sender: TObject; var Action: TCloseAction);
+procedure TTableForm.FormClose(Sender: TObject; var Action:
+  TCloseAction);
 var
   I: Integer;
   Pts: array of TPoint2D;
@@ -104,15 +127,16 @@ begin
   if ModalResult <> mrOK then Exit;
   SetLength(Pts, Grid.RowCount - 1);
   for I := 0 to Grid.RowCount - 2 do
-    Pts[I] := Point2D(StrToFloat(Grid.Cells[1, I + 1]),
-      StrToFloat(Grid.Cells[2, I + 1]));
+    Pts[I] := Point2D(StrToFloat(Trim(Grid.Cells[1, I + 1])),
+      StrToFloat(Trim(Grid.Cells[2, I + 1])));
   PPrimitive.Points.Clear;
   PPrimitive.Points.AddPoints(Pts);
 end;
 
 procedure TTableForm.GridRowMoved(Sender: TObject; FromIndex,
   ToIndex: Integer);
-var I: Integer;
+var
+  I: Integer;
 begin
   if FromIndex > ToIndex then
   begin
@@ -137,13 +161,14 @@ var
   I, S: Integer;
 begin
   if not Grid.Focused then Exit;
-  S := Grid.Selection.Bottom - Grid.Selection.Top + 1;
-  for I := Grid.Selection.Top - 1 to Grid.RowCount - 1 do
+  S := Grid.Selection.Bottom + 1 - Grid.Selection.Top;
+  for I := Grid.Selection.Bottom + 1 to Grid.RowCount - 1 do
   begin
-    Grid.Cells[1, I + 1] := Grid.Cells[1, I + S + 1];
-    Grid.Cells[2, I + 1] := Grid.Cells[2, I + S + 1];
+    Grid.Cells[1, I - S] := Grid.Cells[1, I];
+    Grid.Cells[2, I - S] := Grid.Cells[2, I];
   end;
-  if S < Grid.RowCount - 1 then Grid.RowCount := Grid.RowCount - S
+  if S < Grid.RowCount - 1 then
+    Grid.RowCount := Grid.RowCount - S
   else
   begin
     Grid.RowCount := 2;
@@ -159,10 +184,11 @@ var
 begin
   RowCount0 := Grid.RowCount;
   if RadioButton1.Checked then
-   Result := Grid.Selection.Top
-  else Result := Grid.Selection.Bottom + 1;
+    Result := Grid.Selection.Top
+  else
+    Result := Grid.Selection.Bottom + 1;
   Grid.RowCount := Grid.RowCount + N;
-  for I := RowCount0 downto Result - 1 do
+  for I := RowCount0 - 1 downto Result - 1 do
   begin
     Grid.Cells[1, I + N] := Grid.Cells[1, I];
     Grid.Cells[2, I + N] := Grid.Cells[2, I];
@@ -180,7 +206,7 @@ procedure TTableForm.AddPointsExecute(Sender: TObject);
 var
   Top: Integer;
 begin
-  Top := AddPoints0(SpinEdit1.Value);
+  Top := AddPoints0(UpDown1.Position);
   if not RadioButton1.Checked then Grid.Row := Top;
 end;
 
@@ -198,8 +224,10 @@ begin
     for I := Grid.Selection.Top to Grid.Selection.Bottom do
     begin
       for J := Grid.Selection.Left to Grid.Selection.Right do
-        if J = Grid.Selection.Left then Write(Grid.Cells[J, I])
-        else Write(#9 + Grid.Cells[J, I]);
+        if J = Grid.Selection.Left then
+          Write(Grid.Cells[J, I])
+        else
+          Write(#9 + Grid.Cells[J, I]);
       Write(#13#10);
     end;
     if Stream.DataString <> '' then
@@ -264,10 +292,12 @@ begin
       Line.DelimitedText := Strings[I];
       if Line.Count >= 1 then
         Grid.Cells[1, Top + I] := Line[0]
-      else Grid.Cells[1, Top + I] := '0';
+      else
+        Grid.Cells[1, Top + I] := '0';
       if Line.Count >= 2 then
         Grid.Cells[2, Top + I] := Line[1]
-      else Grid.Cells[2, Top + I] := '0';
+      else
+        Grid.Cells[2, Top + I] := '0';
     end;
   finally
     Strings.Free;
@@ -287,7 +317,8 @@ begin
   Grid.Selection := R;
 end;
 
-procedure TTableForm.GridSelectCell(Sender: TObject; ACol, ARow: Integer;
+procedure TTableForm.GridSelectCell(Sender: TObject; ACol, ARow:
+  Integer;
   var CanSelect: Boolean);
 begin
   Edit1.OnChange := nil;
@@ -300,6 +331,8 @@ var
   I, J: Integer;
 begin
   if not (Sender = Edit1) then Exit;
+  Edit1.Text := Trim(Edit1.Text);
+  if Edit1.Text = '' then Exit;
   I := Grid.Row;
   if I < 1 then I := 1;
   if I >= Grid.RowCount then I := 1;
@@ -308,7 +341,8 @@ begin
   Grid.Cells[J, I] := Edit1.Text;
 end;
 
-procedure TTableForm.GridSetEditText(Sender: TObject; ACol, ARow: Integer;
+procedure TTableForm.GridSetEditText(Sender: TObject; ACol, ARow:
+  Integer;
   const Value: string);
 begin
   Edit1.OnChange := nil;
@@ -336,5 +370,23 @@ begin
   Edit1.OnChange := Edit1Change;
 end;
 
-end.
+procedure TTableForm.Button4Click(Sender: TObject);
+var
+  I, J: Integer;
+  TmpStr: string;
+begin
+  for J := 1 to 2 do
+    for I := 0 to (Grid.RowCount - 3) div 2 do
+    begin
+      TmpStr := Grid.Cells[J, I + 1];
+      Grid.Cells[J, I + 1] := Grid.Cells[J, Grid.RowCount - I - 1];
+      Grid.Cells[J, Grid.RowCount - I - 1] := TmpStr;
+    end;
+end;
 
+initialization
+{$IFDEF VER140}
+{$ELSE}
+{$I Table.lrs}
+{$ENDIF}
+end.

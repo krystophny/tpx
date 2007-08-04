@@ -1,7 +1,13 @@
 unit Options0;
 
+{$IFNDEF VER140}
+{$MODE Delphi}
+{$ENDIF}
+
 interface
 uses SysUtils, Contnrs, Classes, StrUtils, Dialogs, md5;
+
+{$I tpx.inc}
 
 type
 
@@ -24,6 +30,8 @@ type
     function GetMask: string; virtual;
     property AsString: string read GetAsString write
       SetAsString;
+    procedure SaveToStream(const AStream: TStream); virtual;
+    procedure LoadFromStream(const AStream: TStream); virtual;
   end;
 
   TIntegerOption = class(TOptionData)
@@ -34,16 +42,22 @@ type
     procedure SetAsString(St: string); override;
     function GetAsString: string; override;
     function GetMask: string; override;
+    procedure SaveToStream(const AStream: TStream); override;
+    procedure LoadFromStream(const AStream: TStream); override;
   end;
 
   TBooleanOption = class(TOptionData)
     procedure SetAsString(St: string); override;
     function GetAsString: string; override;
+    procedure SaveToStream(const AStream: TStream); override;
+    procedure LoadFromStream(const AStream: TStream); override;
   end;
 
   TRealTypeOption = class(TOptionData)
     procedure SetAsString(St: string); override;
     function GetAsString: string; override;
+    procedure SaveToStream(const AStream: TStream); override;
+    procedure LoadFromStream(const AStream: TStream); override;
   end;
 
   TStringOption0 = class(TOptionData)
@@ -66,6 +80,8 @@ type
   TStringListOption = class(TStringOption0)
     procedure SetAsString(St: string); override;
     function GetAsString: string; override;
+    procedure SaveToStream(const AStream: TStream); override;
+    procedure LoadFromStream(const AStream: TStream); override;
   end;
 
   TChoiceOption = class(TOptionData)
@@ -75,9 +91,15 @@ type
     destructor Destroy; override;
     procedure SetAsString(St: string); override;
     function GetAsString: string; override;
+    procedure SaveToStream(const AStream: TStream); override;
+    procedure LoadFromStream(const AStream: TStream); override;
   end;
 
+{$IFDEF VER140}
   TCheckSum = MD5Digest;
+{$ELSE}
+  TCheckSum = TMD5Digest;
+{$ENDIF}
 
   TOptionsList = class(TObjectList)
     constructor Create; overload;
@@ -99,6 +121,11 @@ type
     procedure AddChoice(Key0: string;
       PData0: Pointer; const Choices0: string; Hint0: string);
     function GetCheckSum: TCheckSum;
+    procedure SaveToStream(const AStream: TStream);
+    procedure LoadFromStream(const AStream: TStream);
+    // HintsText is used to store hints information to a file
+    // for subsequent use in TpX help 
+    function HintsText: string;
   end;
 
 implementation
@@ -127,9 +154,7 @@ procedure THistoryList.Remove(const S: string);
 var
   J: Integer;
 begin
-//ShowMessage(S);
   J := IndexOf(S);
-//ShowMessage(IntToStr(J));
   if J >= 0 then Delete(J);
 end;
 
@@ -157,6 +182,32 @@ begin
   Result := '';
 end;
 
+procedure TOptionData.SaveToStream(const AStream: TStream);
+var
+  Len: Integer;
+  Str: string;
+begin
+  Str := GetAsString;
+  Len := Length(Str);
+  AStream.Write(Len, SizeOf(Len));
+  if Len > 0 then AStream.Write(Str[1], Len);
+end;
+
+procedure TOptionData.LoadFromStream(const AStream: TStream);
+var
+  Len: Integer;
+  Str: string;
+begin
+  AStream.Read(Len, SizeOf(Len));
+  if Len > 0 then
+  begin
+    SetLength(Str, Len);
+    AStream.Read(Str[1], Len);
+  end
+  else Str := '';
+  SetAsString(Str);
+end;
+
 constructor TIntegerOption.Create(Key0: string;
   PData0: Pointer; MinValue0, MaxValue0: Integer;
   Hint0: string);
@@ -182,6 +233,16 @@ begin
   //Result := '99999999';
 end;
 
+procedure TIntegerOption.SaveToStream(const AStream: TStream);
+begin
+  AStream.Write(PData^, SizeOf(Integer));
+end;
+
+procedure TIntegerOption.LoadFromStream(const AStream: TStream);
+begin
+  AStream.Read(PData^, SizeOf(Integer));
+end;
+
 procedure TBooleanOption.SetAsString(St: string);
 begin
   Boolean(PData^) := Trim(St) = '1';
@@ -193,18 +254,34 @@ begin
   else Result := '0';
 end;
 
+procedure TBooleanOption.SaveToStream(const AStream: TStream);
+begin
+  AStream.Write(PData^, SizeOf(Boolean));
+end;
+
+procedure TBooleanOption.LoadFromStream(const AStream: TStream);
+begin
+  AStream.Read(PData^, SizeOf(Boolean));
+end;
+
 procedure TRealTypeOption.SetAsString(St: string);
 begin
-  TRealType(PData^) := StrToRealType(St);
+  TRealType(PData^) := StrToRealType(St, 0);
 end;
 
 function TRealTypeOption.GetAsString: string;
 begin
-  //Result := FloatToStr(TRealType(PData^));
   Result := Format('%.5g', [TRealType(PData^)]);
-  {if DecimalSeparator <> '.' then
-    Result := AnsiReplaceStr(Result,
-      DecimalSeparator, '.');}
+end;
+
+procedure TRealTypeOption.SaveToStream(const AStream: TStream);
+begin
+  AStream.Write(PData^, SizeOf(TRealType));
+end;
+
+procedure TRealTypeOption.LoadFromStream(const AStream: TStream);
+begin
+  AStream.Read(PData^, SizeOf(TRealType));
 end;
 
 procedure TStringOption0.SetAsString(St: string);
@@ -234,6 +311,16 @@ begin
   Result := TStrings(PData).DelimitedText;
 end;
 
+procedure TStringListOption.SaveToStream(const AStream: TStream);
+begin
+  TStrings(PData).SaveToStream(AStream);
+end;
+
+procedure TStringListOption.LoadFromStream(const AStream: TStream);
+begin
+  TStrings(PData).LoadFromStream(AStream);
+end;
+
 constructor TChoiceOption.Create(Key0: string; PData0: Pointer;
   const Choices0: string; Hint0: string);
 begin
@@ -261,6 +348,16 @@ begin
   I := Byte(PData^);
   if I < Choices.Count then Result := Choices[Byte(PData^)]
   else Result := '';
+end;
+
+procedure TChoiceOption.SaveToStream(const AStream: TStream);
+begin
+  AStream.Write(PData^, SizeOf(Byte));
+end;
+
+procedure TChoiceOption.LoadFromStream(const AStream: TStream);
+begin
+  AStream.Read(PData^, SizeOf(Byte));
 end;
 
 constructor TOptionsList.Create;
@@ -321,16 +418,68 @@ end;
 function TOptionsList.GetCheckSum: TCheckSum;
 var
   I: Integer;
+{$IFDEF VER140}
   Context: MD5Context;
+{$ELSE}
+  Context: TMD5Context;
+{$ENDIF}
   St: string;
 begin
   MD5Init(Context);
   for I := 0 to Count - 1 do
   begin
     St := (Items[I] as TOptionData).GetAsString;
+{$IFDEF VER140}
     MD5Update(Context, @St[1], Length(St));
+{$ELSE}
+    MD5Update(Context, St[1], Length(St));
+{$ENDIF}
   end;
   MD5Final(Context, Result);
+end;
+
+procedure TOptionsList.SaveToStream(const AStream: TStream);
+var
+  I: Integer;
+begin
+  for I := 0 to Count - 1 do
+    (Items[I] as TOptionData).SaveToStream(AStream);
+end;
+
+procedure TOptionsList.LoadFromStream(const AStream: TStream);
+var
+  I: Integer;
+begin
+  for I := 0 to Count - 1 do
+    (Items[I] as TOptionData).LoadFromStream(AStream);
+end;
+
+function TOptionsList.HintsText: string;
+var
+  I: Integer;
+  HintSt: string;
+  procedure AddStr(St: string);
+  begin
+    Result := Result + St;
+  end;
+begin
+  Result := '';
+  for I := 0 to Count - 1 do
+  begin
+    AddStr('<li><b>');
+    AddStr((Items[I] as TOptionData).Key);
+    AddStr('</b>:');
+    AddStr(EOL);
+    HintSt := (Items[I] as TOptionData).Hint;
+    HintSt := AnsiReplaceStr(HintSt, '<', '(<)');
+    HintSt := AnsiReplaceStr(HintSt, '>', '(>)');
+    HintSt := AnsiReplaceStr(HintSt, '"', '(")');
+    HintSt := AnsiReplaceStr(HintSt, '&', '(&)');
+    AddStr(HintSt);
+    AddStr('</li>');
+    AddStr(EOL);
+    AddStr(EOL);
+  end;
 end;
 
 end.

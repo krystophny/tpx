@@ -1,7 +1,7 @@
 object TransfForm: TTransfForm
   Left = 275
   Top = 125
-  BorderStyle = bsSingle
+  BorderStyle = bsDialog
   Caption = 'Custom transform'
   ClientHeight = 347
   ClientWidth = 457
@@ -12,6 +12,7 @@ object TransfForm: TTransfForm
   Font.Name = 'MS Sans Serif'
   Font.Style = []
   OldCreateOrder = False
+  Position = poMainFormCenter
   OnClose = FormClose
   OnCloseQuery = FormCloseQuery
   OnCreate = FormCreate

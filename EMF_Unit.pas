@@ -3,8 +3,10 @@ unit EMF_Unit;
 interface
 
 uses
-  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, ExtDlgs, ExtCtrls, StdCtrls, Clipbrd, CheckLst, ComCtrls,
+  Windows, Messages, SysUtils, Variants, Classes, Graphics,
+    Controls, Forms,
+  Dialogs, ExtDlgs, ExtCtrls, StdCtrls, Clipbrd, CheckLst,
+    ComCtrls,
   ActnList, Menus, ToolWin, Printers, Buttons, Spin;
 
 type
@@ -106,7 +108,7 @@ var
 
 implementation
 
-uses EMF, EMF_Add, MainUnit, math, pngimage, PrintEpsOpt;
+uses MprtEMF, EMF_Add, MainUnit, Math, pngimage, PrintEpsOpt;
 
 {$R *.dfm}
 
@@ -148,7 +150,7 @@ procedure GraphicToEps(const Graphic: TGraphic;
   const Scale, MaxW, MaxH: Double;
   const PostscriptPrinter: string; const FileName: string);
 var
-  picWidth, picHeight: Integer;
+  PicWidth, picHeight: Integer;
   PhWidth, PhHeight: Integer;
   PhOffsetX, PhOffsetY: Integer;
   PxPerInch: Integer;
@@ -163,7 +165,8 @@ var
   //in=72.27pt  in=25.4mm  mm=2.845pt
 begin
   if FileExists(FileName) then
-    if MessageDlg(Format('Overwrite %s?', [ExtractFileName(FileName)]),
+    if MessageDlg(Format('Overwrite %s?',
+      [ExtractFileName(FileName)]),
       mtWarning, [mbOK, mbCancel], 0) <> mrOK then Exit;
 
   // set printer so that it prints to a file
@@ -184,21 +187,25 @@ begin
   if Graphic is TMetaFile then
     if Resolution = 0 then
     begin //use printer resolution
-      picHeight := MulDiv((Graphic as TMetaFile).MMHeight, PxPerInch, 2540);
-      picWidth := MulDiv((Graphic as TMetaFile).MMWidth, PxPerInch, 2540);
+      picHeight := MulDiv((Graphic as TMetaFile).MMHeight,
+        PxPerInch, 2540);
+      PicWidth := MulDiv((Graphic as TMetaFile).MMWidth, PxPerInch,
+        2540);
     end
     else
     begin //use custom resolution
-      picHeight := MulDiv((Graphic as TMetaFile).MMHeight, Resolution, 2540);
-      picWidth := MulDiv((Graphic as TMetaFile).MMWidth, Resolution, 2540);
+      picHeight := MulDiv((Graphic as TMetaFile).MMHeight,
+        Resolution, 2540);
+      PicWidth := MulDiv((Graphic as TMetaFile).MMWidth,
+        Resolution, 2540);
     end
   else
   begin
     picHeight := Round(Graphic.Height * PxPerInch / 72.27);
-    picWidth := Round(Graphic.Width * PxPerInch / 72.27);
+    PicWidth := Round(Graphic.Width * PxPerInch / 72.27);
   end;
   picHeight := Round(picHeight * Scale);
-  picWidth := Round(picWidth * Scale);
+  PicWidth := Round(PicWidth * Scale);
 
   if UseOffset then
   begin
@@ -214,7 +221,7 @@ begin
   BB.Left := Floor(PhOffsetX / PxPerInch * 72.27);
   BB.Bottom := Floor(PhOffsetY / PxPerInch * 72.27);
 
-  BB.Right := Ceil((PhOffsetX + picWidth) / PxPerInch * 72.27);
+  BB.Right := Ceil((PhOffsetX + PicWidth) / PxPerInch * 72.27);
   BB.Top := Ceil((PhOffsetY + picHeight) / PxPerInch * 72.27);
     // in=72.27pt
 
@@ -224,7 +231,7 @@ begin
   Printer.BeginDoc;
   Rect.Left := 0;
   Rect.Top := Printer.PageHeight - picHeight;
-  Rect.Right := picWidth;
+  Rect.Right := PicWidth;
   Rect.Bottom := Printer.PageHeight;
   if Graphic is TMetaFile then
   //if Scale <> 1 then
@@ -278,19 +285,21 @@ begin
   if not IsBitmap then
   begin
     StatusBar1.Panels[0].Text := Format('Metafile: %g x %g (cm)',
-      [Pic.Metafile.MMWidth / 1000,
-      Pic.Metafile.MMHeight / 1000]);
+      [Pic.MetaFile.MMWidth / 1000,
+      Pic.MetaFile.MMHeight / 1000]);
   end
   else StatusBar1.Panels[0].Text := 'Bitmap: ';
   StatusBar1.Panels[0].Text := StatusBar1.Panels[0].Text +
     Format(' %d x %d (px)',
     [Pic.Width, Pic.Height]);
-  Image1.Picture.Metafile.Height := Round(Pic.Height * SpinEdit1.Value / 100);
-  Image1.Picture.Metafile.Width := Round(Pic.Width * SpinEdit1.Value / 100);
-  with TMetaFileCanvas.Create(Image1.Picture.Metafile, 0) do
+  Image1.Picture.MetaFile.Height := Round(Pic.Height *
+    SpinEdit1.Value / 100);
+  Image1.Picture.MetaFile.Width := Round(Pic.Width * SpinEdit1.Value
+    / 100);
+  with TMetaFileCanvas.Create(Image1.Picture.MetaFile, 0) do
   try
-    StretchDraw(Rect(0, 0, Image1.Picture.Metafile.Width - 1,
-      Image1.Picture.Metafile.Height - 1), Pic.Graphic);
+    StretchDraw(Rect(0, 0, Image1.Picture.MetaFile.Width - 1,
+      Image1.Picture.MetaFile.Height - 1), Pic.Graphic);
   finally
     Free;
   end;
@@ -307,7 +316,7 @@ begin
   IsBitmap := OpenPictureDialog1.FilterIndex = 2;
   Pic.LoadFromFile(OpenPictureDialog1.FileName);
   if not IsBitmap then
-    Pic.Metafile.Enhanced := True;
+    Pic.MetaFile.Enhanced := True;
   ListView1.Clear;
   MF.Clear;
   ShowGraphic;
@@ -340,16 +349,17 @@ procedure TEMF_Form.ClipboardPasteExecute(Sender: TObject);
 begin
   if Clipboard.HasFormat(CF_ENHMETAFILE) then
   begin
-    Pic.Metafile.Assign(Clipboard);
+    Pic.MetaFile.Assign(Clipboard);
     IsBitmap := False;
   end
   else if Clipboard.HasFormat(CF_METAFILEPICT) then
   begin
-    Pic.Metafile.Assign(Clipboard);
-    Pic.Metafile.Enhanced := True;
+    Pic.MetaFile.Assign(Clipboard);
+    Pic.MetaFile.Enhanced := True;
     IsBitmap := False;
   end
-  else if Clipboard.HasFormat(CF_BITMAP) or Clipboard.HasFormat(CF_DIB) then
+  else if Clipboard.HasFormat(CF_BITMAP) or
+    Clipboard.HasFormat(CF_DIB) then
   begin
     Pic.Bitmap.Assign(Clipboard);
     IsBitmap := True;
@@ -374,12 +384,12 @@ begin
   ShowEmfPanel.Checked := True;
   if IsBitmap then Exit;
   if Pic.Graphic = nil then Exit;
-  if Pic.Metafile = nil then Exit;
-  MF.Assign(Pic.Metafile);
+  if Pic.MetaFile = nil then Exit;
+  MF.Assign(Pic.MetaFile);
   EMF_Struct := T_EMF_Structure.Create;
   Stream := TMemoryStream.Create;
   try
-    Pic.Metafile.SaveToStream(Stream);
+    Pic.MetaFile.SaveToStream(Stream);
     Stream.Seek(0, soFromBeginning);
     EMF_Struct.LoadFromStream(Stream);
     ListView1.Clear;
@@ -469,7 +479,7 @@ begin
         + ' ' + IntToStr(OutHeader.Size);
     end;
     StreamOut.Seek(0, soFromBeginning);
-    Pic.Metafile.LoadFromStream(StreamOut);
+    Pic.MetaFile.LoadFromStream(StreamOut);
   finally
     EMF_Struct.Free;
     Stream.Free;
@@ -555,7 +565,8 @@ procedure TEMF_Form.SetPreferencesExecute(Sender: TObject);
 begin
   PrintEpsOptForm.PrinterEdit.Text := PostscriptPrinter;
   //PrintEpsOptForm.ResolutionEdit.Text := IntToStr(Resolution);
-  PrintEpsOptForm.UseOffsetBox.Checked := PostscriptPrinterUseOffset;
+  PrintEpsOptForm.UseOffsetBox.Checked :=
+    PostscriptPrinterUseOffset;
   //PrintEpsOptForm.RadioGroup1.ItemIndex := Ord(FigPathKind);
   PrintEpsOptForm.SpinEdit1.Value := Round(Scale * 100);
   PrintEpsOptForm.Edit1.Text := Format('%.2f', [MaxW]);
@@ -566,7 +577,8 @@ begin
   begin
     PostscriptPrinter := Trim(PrintEpsOptForm.PrinterEdit.Text);
     //Resolution := StrToInt(Trim(PrintEpsOptForm.ResolutionEdit.Text));
-    PostscriptPrinterUseOffset := PrintEpsOptForm.UseOffsetBox.Checked;
+    PostscriptPrinterUseOffset :=
+      PrintEpsOptForm.UseOffsetBox.Checked;
     //FigPathKind :=      TFigPathKind(PrintEpsOptForm.RadioGroup1.ItemIndex);
     Scale := PrintEpsOptForm.SpinEdit1.Value / 100;
     MaxW := StrToFloat(PrintEpsOptForm.Edit1.Text);
@@ -585,4 +597,3 @@ begin
 end;
 
 end.
-
