@@ -65,21 +65,12 @@ type
      of the above transformations) using the property
      <See Property=TViewport@VisualRect>, that is the portion of the
      window plane that you see on the canvas of the control.
-     You change the VisualRect using the zooming methods (see
-     <See Method=TViewport@ZoomIn>, <See Method=TViewport@ZoomOut>,
-     <See Method=TViewport@ZoomWindow>, <See Method=TViewport@ZoomToExtension>
-     <See Method=TViewport@PanWindow> and <See Method=TViewport@MoveWindow>).
-     All of these changes the mapping transformation (the second component explained
-     above).
+     All changes to VisualRect change the mapping transformation
+     (the second component explained above).
 
-     A viewport use a back buffer to store the current rapresentation of the
+     A viewport use a back buffer to store the current representation of the
      Drawing display list. When you start a <See Method=TViewport@Repaint>,
      this buffer is created and copied on the canvas of the control.
-     The repaint can use a thread (painting thread) to allow the user to stop
-     the operation at any time. However using a thread require some additional
-     steps that require a bit of time, so it is advisable to use the thread
-     (see <See Property=TViewport@UsePaintingThread>) only when you have
-     a complex draw made up of thousand of objects.
      During the repaint process you can also copy the buffer content on the
      on screen canvas when a prestabilited number of objects (see
      <See Property=TViewport@CopingFrequency> property) is drawed. This
@@ -89,12 +80,11 @@ type
 }
   TViewport = class(TBaseViewport)
   private
-    fViewGuard: TTpXCriticalSection;
     fDrawing: TDrawing;
-    fVisualWindow: TRect2D;
       { The current viewport on the view plane. }
+    fVisualRect: TRect2D;
     fViewportToScreen, fScreenToViewport: TTransf2D;
-    //TSY: added fControlPointsPenColor
+    fPixelSize: TRealType;
     fBackGroundColor, fGridColor,
       fControlPointsColor, fControlPointsPenColor: TColor;
     { FOffScreenBitmap contain the off-screen bitmap used by the Viewport. The
@@ -108,49 +98,46 @@ type
     fOnScreenDevice: TCanvasDevice;
     fRubberDevice: TRubberCanvasDevice;
     fCopingFrequency: Integer;
-      { Indica ogni quanto copiare il buffbitmap sul canvas quando si usa il threading. }
-    fShowControlPoints, fShowGrid, fInUpdate: Boolean;
+    fShowControlPoints, fShowGrid, fShowCrossHair, fInUpdate:
+    Boolean;
     fControlPointsWidth: Byte;
     fGridStep, fSnapStep: TRealType;
     fGridOnTop: Boolean;
-    fTransparent: Boolean;
     { Event handlers }
-    fDisablePaintEvent, fDisableMouseEvents: Boolean;
+    fDisablePaintEvent: Boolean;
     fOnPaint, fOnResize, fOnBeginRedraw, fOnEndRedraw:
     TNotifyEvent;
     fOnViewMappingChanged: TNotifyEvent;
-    fOnMouseEnter, fOnMouseLeave: TNotifyEvent;
-
-    { Multithread support. }
-    fPaintingThread: TObject;
-    fUseThread: Boolean;
 
     { Set method for the property. }
     procedure SetBackColor(const Cl: TColor);
-    procedure SetTransparent(const B: Boolean);
     procedure SetGridColor(const Cl: TColor);
+    procedure SetGridOnTop(const B: Boolean);
     procedure SetShowGrid(const B: Boolean);
+    procedure SetShowCrossHair(const B: Boolean);
     procedure ClearCanvas(Sender: TObject; Cnv: TCanvas; const
       ARect: TRect2D; const BackCol: TColor);
     procedure DoCopyCanvas(const GenEvent: Boolean);
-    procedure DoCopyCanvasThreadSafe;
-    procedure ChangeViewportTransform(ViewWin: TRect2D);
+    {: This method set the visual rect to a specified rectangle.
 
-    { Per il thread }
-    procedure StopPaintingThread;
+       <I=ARect2D> is the new visual rect. This correspond to
+       zoom the viewport to a specified portion of the view plane.
+       The rectangle is in view plane coordinates.
+    }
+    procedure SetVisualRect(ARect2D: TRect2D);
+
     { Se sono in repainting lo blocco e ricomincio. }
     procedure UpdateViewport(const ARect: TRect2D);
-      { repaint all the objects contained in ARect. }
-    function GetInRepaint: Boolean;
     procedure DoResize;
     procedure CopyBitmapOnCanvas(const DestCnv: TCanvas; const
-      BMP: TBitmap; IRect: TRect; IsTransparent: Boolean;
-      TransparentColor: TColor);
+      BMP: TBitmap; IRect: TRect);
     procedure Control_Point(const P: TPoint2D;
       const VT: TTransf2D; const ClipRect: TRect2D);
     procedure Control_Point2(const P: TPoint2D;
       const VT: TTransf2D; const ClipRect: TRect2D);
     procedure Control_Point3(const P: TPoint2D;
+      const VT: TTransf2D; const ClipRect: TRect2D);
+    procedure Control_Point4(const P: TPoint2D;
       const VT: TTransf2D; const ClipRect: TRect2D);
     procedure Control_Line(const P0, P1: TPoint2D;
       const VT: TTransf2D; const ClipRect: TRect2D);
@@ -159,14 +146,6 @@ type
   protected
     { Protected declarations }
     procedure CreateParams(var Params: TCreateParams); override;
-    {: This method is called when a painting thread (if used) is terminated.
-
-       It sets the thread instance reference to nil (the thread is freed by
-       itself). It also copy the backbuffer on the canvas of the control.
-
-       See also <See Property=TViewport@UsePaintingThread>.
-    }
-    procedure OnThreadEnded(Sender: TObject); dynamic;
     {: This method copies the backbuffer image on the canvas of the control.
 
        <I=Rect> is the rectangle of the backbuffer to be copied on the same
@@ -197,13 +176,7 @@ type
        canvas and an <See Property=TViewport@OnPaint> event is fired.
     }
     procedure Paint; override; { Repaint all the objects. }
-    procedure WMEraseBkgnd(var Message: TWMEraseBkgnd); message
-      WM_ERASEBKGND;
     procedure WMSize(var Message: TWMSize); message WM_SIZE;
-    procedure CMMouseEnter(var Message: TMessage); message
-      CM_MOUSEENTER;
-    procedure CMMouseLeave(var Message: TMessage); message
-      cm_MOUSELEAVE;
     {: This method is called by the viewport whenever a changing in the
        mapping transform from window plane (view plane) and canvas
        rectangle is required.
@@ -285,7 +258,7 @@ type
     {: This method draws an object on a canvas, by transforming it with the
        view transform.
 
-       This method must be specilized to manages the objects of the correct type
+       This method must be specialized to manage the objects of the correct type
        in the display list. This method then calls the appropriate drawing
        method of the specialized object. You have also to check for
        visibility in this method, to reduce the time of drawing.
@@ -308,23 +281,6 @@ type
        new viewport that has its own projection transform).
     }
     procedure UpdateViewportTransform;
-    {: This method set the visual rect to a specified rectangle.
-
-       <I=NewWindow> is the new visual rect. This correspond to
-       zoom the viewport to a specified portion of the view plane.
-       The rectangle is in view plane coordinates.
-    }
-    procedure ZoomWindow(const NewWindow: TRect2D);
-    {: This method moves the current visual rect to a specified
-       position.
-
-       <I=NewStartX> is the new X position of the lower-left corner
-       of visual rect; <I=NewStartY> is the new y position of the lower-left corner
-       of visual rect.
-
-       The two coordinates are referred to view plane coordinates.
-    }
-    procedure MoveWindow(const NewStartX, NewStartY: TRealType);
     {: This method enlarges the current visual rect.
 
        The actual visual rect is doubled on both X and Y directions,
@@ -396,11 +352,6 @@ type
 
        At the end of the traversion a <See Property=TViewport@OnPaint> event
        is fired.
-
-       The redrawing process cannot be interrupted if you don't use a
-       painting thread. If you use it then you can interrupt the process
-       by calling <See Method=TViewport@StopRepaint>. However if you
-       use a painting thread the process takes a longer time.
     }
     procedure Repaint; override;
     procedure Invalidate; override;
@@ -425,11 +376,6 @@ type
 
        At the end of the traversion a <See Property=TViewport@OnPaint> event
        is fired.
-
-       The redrawing process cannot be interrupted if you don't use a
-       painting thread. If you use it then you can interrupt the process
-       by calling <See Method=TViewport@StopRepaint>. However if you
-       use a painting thread the process takes a longer time.
     }
     procedure RepaintRect(const ARect: TRect2D);
     {: This method refreshes a portion of the viewport contents.
@@ -444,22 +390,6 @@ type
        don't reflect changing in the objects already drawed by a repaint.
     }
     procedure RefreshRect(const ARect: TRect);
-    {: This method interrupts a repaint process.
-
-       Only if you are using the painting threads this method is
-       able to interrupt a repaint process. Otherwise it does nothing.
-    }
-    procedure StopRepaint;
-    {: Wait for the painting thread to be finished.
-
-       When you use the painting thread to repaint the viewport, you
-       may want to wait for it to be finished. This method returns
-       only when the active painting thread (if any) is finished.
-
-       If you don't use the painting threads to repaint the viewport
-       this method does nothing.
-    }
-    procedure WaitForRepaintEnd;
     {: This method returns the 2D point in view plane coordinates that
        correspond to the specified point in screen coordinates.
 
@@ -482,15 +412,6 @@ type
     }
     function ViewportToScreen(const WPt: TPoint2D): TPoint2D;
       virtual;
-    {: This method returns the width of a square in pixel in view plane coordinates.
-       This method is used
-       by the <See Method=TViewport2D@PickObject> method.
-
-       <I=L> is the width of the square in pixel that must be trasformed in
-       view plane coordinates.
-    }
-    function GetPixelAperture: TVector2D; virtual;
-    function GetAperture(const L: Word): TRealType;
     {: This property contains the <See Class=TDrawing> control that
        acts as the source for the drawing to be painted in the
        viewport.
@@ -500,9 +421,6 @@ type
 
        You must assign it before using the viewport.
     }
-    //TSY:
-    //function GetPixelSizeX: TRealType;
-    //function GetPixelSizeY: TRealType;
     property Drawing: TDrawing read fDrawing write SetDrawing;
     {: This property contains the off screen canvas used to
        store the drawing before copying it to the canvas of the
@@ -545,8 +463,11 @@ type
        Only the objects contained in this portion of the plane are
        drawed on the screen (by using clipping).
     }
-    property VisualRect: TRect2D read fVisualWindow write
-      ZoomWindow;
+    property VisualRect: TRect2D read fVisualRect write
+      SetVisualRect;
+    {: This property returns the size of pixel in view plane coordinates.
+    }
+    property PixelSize: TRealType read fPixelSize;
     {: This property is <B=True> when the viewport is inside an
        update block.
 
@@ -554,29 +475,6 @@ type
        <See Method=TViewport@EndUpdate>.
     }
     property InUpdating: Boolean read fInUpdate;
-    {: This property is <B=True> when the viewport is traversing the
-       diplay list.
-
-       When you call the <See Method=TViewport@Repaint> method this
-       property becames <B=True>.
-    }
-    property InRepainting: Boolean read GetInRepaint;
-    {: This property is used to inhibit the mouse events fired by the
-       viewport.
-
-       If it is <B=False> (the default) the mouse event are fired by
-       the control, otherwise they are not.
-    }
-    property DisableMouseEvents: Boolean read fDisableMouseEvents
-      write fDisableMouseEvents;
-    {: This property is used to inhibit the repaint event fired by the
-       viewport when it has repainted.
-
-       If it is <B=False> (the default) the <See Property=TViewport@OnPaint>
-       event is fired when the repaint process is finished, otherwise it is not.
-    }
-    property DisableRepaintEvents: Boolean read
-      fDisablePaintEvent write fDisablePaintEvent;
   published
     { Published declarations }
     property Align;
@@ -613,7 +511,7 @@ type
        drawed before any other shape and so will be covered by
        the drawing, otherwise it will be on top.
     }
-    property GridOnTop: Boolean read fGridOnTop write fGridOnTop
+    property GridOnTop: Boolean read fGridOnTop write SetGridOnTop
       default False;
     {: This property contains the main step of the reference grid along
     }
@@ -634,37 +532,9 @@ type
     }
     property ShowGrid: Boolean read fShowGrid write SetShowGrid
       default False;
-    {: If this property is <B=True> a painting thread is used for
-       the repaint process.
-
-       The library can use a thread for the traversing of display list.
-       Such a painting thread is a specilized process that runs parallel to
-       the main thread of the application. A viewport can have only one
-       running thread that can be interrupted at any moment by calling the
-       <See Method=TViewport@StopRepaint>.
-
-       Different viewports can have their own threads running
-       concurrently, fasting the repainting process. They are also useful
-       to allow the user to change the view parameters dinamically in
-       real time.
-
-       However when a painting thread is used, the repaint process take
-       more time than if the thread use is disabled. For this the use
-       of a painting thread is advisable only when there are more than
-       an hundred of object to be drawed.
-
-       By default it is <B=False>.
-    }
-    property UsePaintingThread: Boolean read fUseThread write
-      fUseThread default False;
-    {: If this property is <B=True> the the viewport will be transparent.
-
-       By default it is <B=False>.
-
-      <B=Note>: the transparency is avaiable only at run-time.
-    }
-    property IsTransparent: Boolean read fTransparent write
-      SetTransparent default False;
+    property ShowCrossHair: Boolean read fShowCrossHair write
+      SetShowCrossHair
+      default True;
     {: This property contains the number of objects that are drawed
        before the off screen buffer is copied onto the canvas of the
        control.
@@ -717,10 +587,6 @@ type
       fOnViewMappingChanged write fOnViewMappingChanged;
     property OnEnter;
     property OnExit;
-    property OnMouseEnter: TNotifyEvent read fOnMouseEnter write
-      fOnMouseEnter;
-    property OnMouseLeave: TNotifyEvent read fOnMouseLeave write
-      fOnMouseLeave;
     property OnDblClick;
     property OnKeyDown;
     property OnKeyUp;
@@ -777,18 +643,6 @@ type
     }
     constructor Create(AOwner: TComponent); override;
     procedure Paint; override;
-    {: This method is used to move the position marker of the ruler.
-
-       A ruler may have a position marker that is used to show the
-       current viewport position on the ruler.
-
-       <I=Value> is the position on the ruler of the mouse in view
-       plane reference coordinate. The value to be passed depends
-       on the orientation of the ruler. For example a vertical ruler
-       may want to show the Y coordinates of the current mouse
-       position on the view plane.
-    }
-    procedure SetMark(Value: TRealType);
   published
     property Align;
     {: This property contains the linked viewport used for the alignment
@@ -854,8 +708,6 @@ type
     fOnMouseDown2D, fOnMouseUp2D: TMouseEvent2D;
     fOnMouseMove2D: TMouseMoveEvent2D;
     FOnMouseWheel: TMouseWheelEvent;
-    fImageList: TImageList;
-    fBrushBitmap: TBitmap;
     fCursorColor: TColor;
     fLastCursorPos: TPoint2D;
     fLastMousePos: TPoint2D;
@@ -885,17 +737,6 @@ type
     procedure DrawObject(const Obj: TGraphicObject;
       const Dvc: TCanvasDevice;
       const ClipRect2D: TRect2D); override;
-    {: This method draws a 2D object on the viewport.
-
-       <I=Obj> is that object to be drawed. If <I=CtrlPts> is <B=True>
-       the control points of the object will also be drawed.
-
-       The object is drawed by calling its <See Method=TObject2D@Draw>
-       method if it is visible (that is it is contained in the
-       <See Property=TViewport@VisualRect>)).
-    }
-    procedure DrawObject2D(const Obj: TObject2D; const CtrlPts:
-      Boolean);
     procedure DrawObject2DWithRubber(
       const Obj: TGraphicObject; Transf: TTransf2D);
     procedure ZoomToExtension; override;
@@ -907,18 +748,8 @@ type
     }
     function WorldToObject(const Obj: TObject2D; WPt: TPoint2D):
       TPoint2D;
-    {: This method returns the point <I=OPt> in object coordinate system
-       transformed by the object model trasform of <I=Obj>.
-
-       This method simply obtain the point <I=OPt> referenced in
-       the world coordinate system.
-    }
-    function ObjectToWorld(const Obj: TObject2D; Opt: TPoint2D):
-      TPoint2D;
     function GetSnappedPoint(P: TPoint2D): TPoint2D;
   published
-    property ImageList: TImageList read fImageList write
-      fImageList;
     {: This property contains the <See Class=TDrawing2D> control that
        acts as the source for the drawing to be painted in the
        viewport.
@@ -959,7 +790,7 @@ type
       fOnMouseUp2D;
     property OnMouseWheel: TMouseWheelEvent read FOnMouseWheel
       write FOnMouseWheel;
-    procedure DrawCursorCross(P: TPoint2D; Visible: Boolean);
+    procedure DrawCursorCrossHair(P: TPoint2D; Visible: Boolean);
   end;
 
 // Prepare canvas device for drawing
@@ -986,111 +817,7 @@ begin
   Dvc.MiterLimit := Drawing.MiterLimit;
   Dvc.HatchingLineWidth := Drawing.HatchingLineWidth;
   Dvc.HatchingStep := Drawing.HatchingStep;
-end;
-
-type
-  TPaintingThread = class(TThread)
-  private
-    { Private declarations }
-    fOwner: TViewport;
-    fRect: TRect2D;
-  public
-    // Assign also the OnTerminate event.
-    constructor Create(const Owner: TViewport; const ARect:
-      TRect2D);
-    destructor Destroy; override;
-
-    procedure Execute; override;
-  end;
-
-// =====================================================================
-// TPaintingThread
-// =====================================================================
-
-constructor TPaintingThread.Create(const Owner: TViewport;
-  const ARect: TRect2D);
-begin
-  inherited Create(True); // Sempre disattivo alla partenza.
-
-  FreeOnTerminate := True;
-  fOwner := Owner;
-  fRect := ARect;
-end;
-
-destructor TPaintingThread.Destroy;
-begin
-  DoTerminate;
-  inherited;
-end;
-
-procedure TPaintingThread.Execute;
-var
-  Tmp: TGraphicObject;
-  TmpIter: TGraphicObjIterator;
-  I: Integer;
-  TmpCanvas: TCanvas;
-  TmpClipRect: TRect2D;
-begin
-  if not Assigned(fOwner) then
-    Exit;
-  with fOwner do
-  try
-    if fOwner is TViewport2D then
-      with fOwner as TViewport2D do
-      begin
-        SetupCanvasDevice(fDrawing2D, fOffScreenDevice,
-          fViewportToScreen);
-        SetupCanvasDevice(fDrawing2D, fOnScreenDevice,
-          fViewportToScreen);
-        SetupCanvasDevice(fDrawing2D, fRubberDevice,
-          fViewportToScreen);
-      end;
-    TmpCanvas := OffScreenCanvas;
-    TmpClipRect := RectToRect2D(ClientRect);
-    TmpCanvas.Lock;
-    try
-      if fShowGrid and not fGridOnTop then
-        DrawGrid(fRect, TmpCanvas);
-      if not Assigned(fDrawing) or fDrawing.IsBlocked then
-        Exit
-      else
-        TmpIter := fDrawing.GetListOfObjects;
-      try
-        Tmp := TmpIter.First;
-        I := 0;
-        if fCopingFrequency > 0 then
-          while Tmp <> nil do
-          begin
-            DrawObject(Tmp, OffScreenDevice, TmpClipRect);
-            Inc(I);
-            if I >= fCopingFrequency then
-            begin
-              Synchronize(DoCopyCanvasThreadSafe);
-              I := 0;
-            end;
-            Tmp := TmpIter.Next;
-            if Terminated then
-              Break;
-          end
-        else
-          while Tmp <> nil do
-          begin
-            DrawObject(Tmp, OffScreenDevice, TmpClipRect);
-            Tmp := TmpIter.Next;
-            if Terminated then
-              Break;
-          end;
-      finally
-        TmpIter.Free;
-      end;
-      if fShowGrid and fGridOnTop then
-        DrawGrid(fRect, TmpCanvas);
-    finally
-      TmpCanvas.Unlock;
-    end;
-  except
-  end;
-  Synchronize(fOwner.DoCopyCanvasThreadSafe);
+  Dvc.ApproximationPrecision := Drawing.ApproximationPrecision;
 end;
 
 // =====================================================================
@@ -1098,32 +825,18 @@ end;
 // =====================================================================
 
 procedure TViewport.CopyBitmapOnCanvas(const DestCnv:
-  TCanvas; const BMP: TBitmap; IRect: TRect; IsTransparent:
-  Boolean; TransparentColor: TColor);
+  TCanvas; const BMP: TBitmap; IRect: TRect);
 begin
 {$IFDEF LINUX}
   DestCnv.Pen.Mode := pmCopy;
-  DestCnv.Copymode := 0; //??
+  DestCnv.CopyMode := 0; //??
 {$ELSE}
 {$ENDIF}
-  if (IsTransparent and
-    not (csDesigning in ComponentState)) then
-  begin
-    DestCnv.Brush.Style := bsClear;
-{$IFDEF VER140}
-    DestCnv.BrushCopy(IRect, BMP, IRect, TransparentColor);
-{$ELSE}
-    DestCnv.CopyRect(IRect, BMP.Canvas, IRect);
-{$ENDIF}
-  end
-  else
-  begin
-    DestCnv.CopyRect(IRect, BMP.Canvas, IRect);
+  DestCnv.CopyRect(IRect, BMP.Canvas, IRect);
 {$IFDEF LINUX}
-    DestCnv.CopyRect(IRect, BMP.Canvas, IRect);
+  DestCnv.CopyRect(IRect, BMP.Canvas, IRect);
 {$ELSE}
 {$ENDIF}
-  end;
 end;
 
 procedure TViewport.Control_Point(const P: TPoint2D;
@@ -1150,6 +863,14 @@ begin
     ControlPointsWidth);
 end;
 
+procedure TViewport.Control_Point4(const P: TPoint2D;
+  const VT: TTransf2D; const ClipRect: TRect2D);
+begin
+  CnvDrawControlPoint4(fOffScreenCanvas,
+    TransformPoint2D(P, VT),
+    ControlPointsWidth);
+end;
+
 procedure TViewport.Control_Line(const P0, P1: TPoint2D;
   const VT: TTransf2D; const ClipRect: TRect2D);
 begin
@@ -1167,26 +888,14 @@ end;
 procedure TViewport.CreateParams(var Params: TCreateParams);
 begin
   inherited CreateParams(Params);
+//CS_HREDRAW	Specifies that the entire window is to be redrawn if a movement or size adjustment changes the width of the client area.
+//CS_VREDRAW	Specifies that the entire window is to be redrawn if a movement or size adjustment changes the height of the client area.
+  Exit;
   with Params.WindowClass do
   begin
     Style := Style and not ({CS_HREDRAW} DWORD(2) or {CS_VREDRAW}
       DWORD(1));
-    if fTransparent and not (csDesigning in ComponentState) then
-    begin
-      Style := Style and not {WS_CLIPCHILDREN}  $2000000;
-      Style := Style and not {WS_CLIPSIBLINGS}  $4000000;
-      Params.ExStyle := Params.ExStyle or {WS_EX_TRANSPARENT}  $20;
-    end;
   end;
-end;
-
-procedure TViewport.WMEraseBkgnd(var Message: TWMEraseBkgnd);
-begin
-  if (not fTransparent) or
-    (csDesigning in ComponentState) then
-    inherited
-  else
-    Message.Result := 1;
 end;
 
 procedure TViewport.WMSize(var Message: TWMSize);
@@ -1195,36 +904,20 @@ begin
   DoResize;
 end;
 
-procedure TViewport.CMMouseEnter(var Message: TMessage);
-begin
-  inherited;
-  if Assigned(fOnMouseEnter) then
-    fOnMouseEnter(Self);
-end;
-
-procedure TViewport.CMMouseLeave(var Message: TMessage);
-begin
-  inherited;
-  if Assigned(fOnMouseLeave) then
-    fOnMouseLeave(Self);
-end;
-
 procedure TViewport.SetBackColor(const Cl: TColor);
 begin
   if fBackGroundColor <> Cl then
   begin
-    StopRepaint;
     fBackGroundColor := Cl;
     Repaint;
   end;
 end;
 
-procedure TViewport.SetTransparent(const B: Boolean);
+procedure TViewport.SetGridOnTop(const B: Boolean);
 begin
-  if (fTransparent <> B) then
+  if fGridOnTop <> B then
   begin
-    StopRepaint;
-    fTransparent := B;
+    fGridOnTop := B;
     Repaint;
   end;
 end;
@@ -1233,8 +926,16 @@ procedure TViewport.SetShowGrid(const B: Boolean);
 begin
   if fShowGrid <> B then
   begin
-    StopRepaint;
     fShowGrid := B;
+    Repaint;
+  end;
+end;
+
+procedure TViewport.SetShowCrossHair(const B: Boolean);
+begin
+  if fShowCrossHair <> B then
+  begin
+    fShowCrossHair := B;
     Repaint;
   end;
 end;
@@ -1243,7 +944,6 @@ procedure TViewport.SetGridColor(const Cl: TColor);
 begin
   if fGridColor <> Cl then
   begin
-    StopRepaint;
     fGridColor := Cl;
     Repaint;
   end;
@@ -1253,7 +953,6 @@ procedure TViewport.SetDrawing(ADrawing: TDrawing);
 begin
   if ADrawing <> fDrawing then
   begin
-    StopRepaint;
     if Assigned(ADrawing) and not (csDesigning in ComponentState)
       then
     begin
@@ -1262,6 +961,15 @@ begin
       ADrawing.AddViewports(Self);
     end;
     fDrawing := ADrawing;
+    if Assigned(fDrawing) then
+    begin
+      fDrawing.OnControlPoint := Control_Point;
+      fDrawing.OnControlPoint2 := Control_Point2;
+      fDrawing.OnControlPoint3 := Control_Point3;
+      fDrawing.OnControlPoint4 := Control_Point4;
+      fDrawing.OnControlLine := Control_Line;
+      fDrawing.OnControlBox := Control_Box;
+    end;
   end;
 end;
 
@@ -1284,11 +992,6 @@ begin
     GenEvent);
 end;
 
-procedure TViewport.DoCopyCanvasThreadSafe;
-begin
-  CopyBackBufferRectOnCanvas(Rect(0, 0, Width, Height), False);
-end;
-
 procedure TViewport.CopyBackBufferRectOnCanvas(const Rect:
   TRect; const GenEvent: Boolean);
 begin
@@ -1296,8 +999,7 @@ begin
   begin
     fOffScreenCanvas.Lock;
     try
-      CopyBitmapOnCanvas(Canvas, fOffScreenBitmap, Rect,
-        fTransparent, fBackGroundColor);
+      CopyBitmapOnCanvas(Canvas, fOffScreenBitmap, Rect);
     finally
       fOffScreenCanvas.Unlock;
     end;
@@ -1315,29 +1017,24 @@ end;
 constructor TViewport.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  fViewGuard := TTpXCriticalSection.Create;
-  ControlStyle := ControlStyle - [csOpaque];
   ControlStyle := ControlStyle + [csClickEvents, csSetCaption,
-    csDoubleClicks {TSY}];
-  fPaintingThread := nil;
+    csDoubleClicks];
   CopingFrequency := 0;
   Height := 50;
   Width := 50;
   fBackGroundColor := clWhite;
   fGridColor := clMoneyGreen;
   fShowGrid := False;
-  fTransparent := False;
+  fShowCrossHair := True;
   fInUpdate := False;
   fGridStep := 0.0;
   fSnapStep := 10;
-  fDisableMouseEvents := False;
   fDrawing := nil;
   fShowControlPoints := False;
   fControlPointsWidth := 7;
-  fVisualWindow := Rect2D(0.0, 0.0, 100.0, 100.0);
+  fVisualRect := Rect2D(0.0, 0.0, 100.0, 100.0);
   fScreenToViewport := IdentityTransf2D;
   fViewportToScreen := IdentityTransf2D;
-  fUseThread := False;
   fGridOnTop := False;
   fOffScreenBitmap := TBitmap.Create;
   fOffScreenBitmap.Height := Height;
@@ -1365,10 +1062,8 @@ end;
 
 destructor TViewport.Destroy;
 begin
-  StopPaintingThread;
   if Assigned(fDrawing) then
     fDrawing.DelViewports(Self);
-  fViewGuard.Free;
   fOffScreenBitmap.Free;
   fOffScreenDevice.Free;
   fOnScreenDevice.Free;
@@ -1378,7 +1073,6 @@ end;
 
 procedure TViewport.BeginUpdate;
 begin
-  StopRepaint;
   fInUpdate := True;
 end;
 
@@ -1390,16 +1084,13 @@ end;
 
 procedure TViewport.Paint;
 begin
-  if fPaintingThread = nil then
-    DoCopyCanvas(True);
+  DoCopyCanvas(True);
 end;
 
 procedure TViewport.RefreshRect(const ARect: TRect);
 var
   TmpRect: TRect;
 begin
-  if fPaintingThread <> nil then
-    Exit;
   TmpRect := Rect(ARect.Left - 1, ARect.Top - 1, ARect.Right +
     1, ARect.Bottom + 1);
   CopyBackBufferRectOnCanvas(TmpRect, True);
@@ -1407,59 +1098,22 @@ end;
 
 procedure TViewport.DoResize;
 begin
-  StopRepaint;
   fOffScreenBitmap.Height := Height;
   fOffScreenBitmap.Width := Width;
-  ChangeViewportTransform(fVisualWindow);
+  SetVisualRect(fVisualRect);
   if Assigned(fOnResize) then
     fOnResize(Self);
 end;
 
-procedure TViewport.StopPaintingThread;
-begin
-  if Assigned(fPaintingThread) then
-  try
-    TPaintingThread(fPaintingThread).Terminate;
-    if Assigned(fPaintingThread) then
-      TPaintingThread(fPaintingThread).WaitFor;
-    fPaintingThread := nil;
-    if Assigned(fOnPaint) and (not fDisablePaintEvent) then
-    try
-      fDisablePaintEvent := True;
-      fOnPaint(Self);
-    finally
-      fDisablePaintEvent := False;
-    end;
-  finally
-    fPaintingThread := nil;
-  end;
-end;
-
-procedure TViewport.OnThreadEnded(Sender: TObject);
-begin
-  fPaintingThread := nil;
-  if Assigned(fOnPaint) and (not fDisablePaintEvent) then
-  try
-    fDisablePaintEvent := True;
-    fOnPaint(Self);
-  finally
-    fDisablePaintEvent := False;
-  end;
-  if Assigned(fOnEndRedraw) then
-    fOnEndRedraw(Self);
-end;
-
 procedure TViewport.UpdateViewport(const ARect: TRect2D);
 var
-  Tmp: TGraphicObject;
-  TmpIter: TGraphicObjIterator;
+  Obj: TGraphicObject;
   TmpCanvas: TCanvas;
   TmpClipRect: TRect2D;
   I: Integer;
 begin
   if fInUpdate then
     Exit;
-  StopRepaint;
   if Self is TViewport2D then
     with Self as TViewport2D do
     begin
@@ -1470,69 +1124,47 @@ begin
       SetupCanvasDevice(fDrawing2D, fRubberDevice,
         fViewportToScreen);
     end;
-  ClearCanvas(Self, fOffScreenCanvas, ARect,
-    fBackGroundColor);
+  ClearCanvas(Self, fOffScreenCanvas, ARect, fBackGroundColor);
   if Assigned(fOnBeginRedraw) then
     fOnBeginRedraw(Self);
-  if fUseThread then
-  begin
-    fPaintingThread := TPaintingThread.Create(Self, ARect);
-    TPaintingThread(fPaintingThread).OnTerminate :=
-      OnThreadEnded;
-    TPaintingThread(fPaintingThread).Resume;
-  end
-  else
+  if not Assigned(fDrawing) then Exit;
   try
     try
       TmpCanvas := fOffScreenCanvas;
       TmpClipRect := RectToRect2D(ClientRect);
       TmpCanvas.Lock;
-      fDrawing.OnControlPoint := Control_Point;
-      fDrawing.OnControlPoint2 := Control_Point2;
-      fDrawing.OnControlPoint3 := Control_Point3;
-      fDrawing.OnControlLine := Control_Line;
-      fDrawing.OnControlBox := Control_Box;
       try
         if fShowGrid and not fGridOnTop then
           DrawGrid(ARect, TmpCanvas);
-        if not Assigned(fDrawing)
-          or fDrawing.IsBlocked then
-          Exit
-        else
-          TmpIter := fDrawing.GetListOfObjects;
-        try
-          Tmp := TmpIter.First;
-          I := 0;
-          if fCopingFrequency > 0 then
-            while Tmp <> nil do
-            begin
-              DrawObject(Tmp, fOffScreenDevice, TmpClipRect);
-              Inc(I);
-              if I = fCopingFrequency then
-              begin
-                DoCopyCanvas(False);
-                I := 0;
-              end;
-              Tmp := TmpIter.Next;
-            end
-          else
-            while Tmp <> nil do
-            begin
-              DrawObject(Tmp, fOffScreenDevice, TmpClipRect);
-              Tmp := TmpIter.Next;
-            end;
-        //TSY:
-          Tmp := TmpIter.First;
-          while Tmp <> nil do
+        Obj := fDrawing.ObjectList.FirstObj;
+        I := 0;
+        if fCopingFrequency > 0 then
+          while Obj <> nil do
           begin
-            if Tmp is TObject2D then
-              if (Tmp as TObject2D).HasControlPoints then
-                DrawObjectControlPoints(
-                  Tmp, fOffScreenDevice, TmpClipRect);
-            Tmp := TmpIter.Next;
+            DrawObject(Obj, fOffScreenDevice, TmpClipRect);
+            Inc(I);
+            if I = fCopingFrequency then
+            begin
+              DoCopyCanvas(False);
+              I := 0;
+            end;
+            Obj := fDrawing.ObjectList.NextObj;
+          end
+        else
+          while Obj <> nil do
+          begin
+            DrawObject(Obj, fOffScreenDevice, TmpClipRect);
+            Obj := fDrawing.ObjectList.NextObj;
           end;
-        finally
-          TmpIter.Free;
+        //TSY:
+        Obj := fDrawing.ObjectList.FirstObj;
+        while Obj <> nil do
+        begin
+          if Obj is TObject2D then
+            if (Obj as TObject2D).HasControlPoints then
+              DrawObjectControlPoints(
+                Obj, fOffScreenDevice, TmpClipRect);
+          Obj := fDrawing.ObjectList.NextObj;
         end;
         if fShowGrid and fGridOnTop then
           DrawGrid(ARect, TmpCanvas);
@@ -1571,7 +1203,7 @@ end;
 function TViewport2D.GetSnappedPoint(P: TPoint2D): TPoint2D;
 begin
   Result := P;
-  if not Drawing2D.UseSnap then Exit;
+  if not UseSnap then Exit;
   if fSnapStep <> 0 then
   begin
     Result.X := Round(Result.X / fSnapStep) * fSnapStep;
@@ -1628,7 +1260,7 @@ var
   end;
 begin
   if fGridStep <= 0 then
-    fSnapStep := RoundGridStep(GetPixelAperture.X * 12)
+    fSnapStep := RoundGridStep(PixelSize * 12)
   else
     fSnapStep := fGridStep;
   with Cnv do
@@ -1646,7 +1278,7 @@ begin
     Brush.Style := bsSolid;
     // Draw the grid main divisions
     DrawGridLines(fOffScreenCanvas,
-      RoundGridStep(GetPixelAperture.X * 75));
+      RoundGridStep(PixelSize * 75));
     // Draw the grid points
     DrawGridPoints(fOffScreenCanvas, fSnapStep);
     Pen.Style := psSolid;
@@ -1661,34 +1293,11 @@ begin
   end;
 end;
 
-function TViewport.GetInRepaint: Boolean;
-begin
-  Result := Assigned(fPaintingThread);
-end;
-
 procedure TViewport.Repaint;
 begin
   if (csReadingState in ControlState) then
     Exit;
-  if fTransparent then
-    Parent.Repaint;
-  RepaintRect(fVisualWindow);
-end;
-
-procedure TViewport.WaitForRepaintEnd;
-begin
-  if Assigned(fPaintingThread) then
-  try
-     // Devo aspettare.
-    TPaintingThread(fPaintingThread).WaitFor;
-  finally
-    fPaintingThread := nil;
-  end;
-end;
-
-procedure TViewport.StopRepaint;
-begin
-  StopPaintingThread;
+  RepaintRect(fVisualRect);
 end;
 
 procedure TViewport.Refresh;
@@ -1714,36 +1323,26 @@ procedure TViewport.Notification(AComponent: TComponent;
   Operation: TOperation);
 begin
   if (AComponent = Drawing) and (Operation = opRemove) then
-  begin
-    StopPaintingThread;
     Drawing := nil;
-  end;
   inherited Notification(AComponent, Operation);
 end;
 
-procedure TViewport.ChangeViewportTransform(ViewWin:
-  TRect2D);
+procedure TViewport.SetVisualRect(ARect2D: TRect2D);
 var
   OldView: TRect2D;
 begin
-  StopRepaint;
-  ViewWin := ReorderRect2D(ViewWin);
-  OldView := fVisualWindow;
-  if (ViewWin.Bottom = ViewWin.Top) or (ViewWin.Right =
-    ViewWin.Left) then
+  ARect2D := ReorderRect2D(ARect2D);
+  OldView := fVisualRect;
+  if (ARect2D.Bottom = ARect2D.Top)
+    or (ARect2D.Right = ARect2D.Left) then
     Exit;
   try
-    fViewGuard.Enter;
-    try
-      fVisualWindow := ViewWin;
-      UpdateViewportTransform;
-    finally
-      fViewGuard.Leave;
-    end;
+    fVisualRect := ARect2D;
+    UpdateViewportTransform;
   except
     on Exception do
     begin
-      fVisualWindow := OldView;
+      fVisualRect := OldView;
       try
         UpdateViewportTransform;
       except
@@ -1756,11 +1355,12 @@ procedure TViewport.UpdateViewportTransform;
 var
   NewTransf: TTransf2D;
 begin
-  StopRepaint;
   try
-    NewTransf := BuildViewportTransform(fVisualWindow, ClientRect);
+    NewTransf := BuildViewportTransform(fVisualRect, ClientRect);
     fScreenToViewport := InvertTransform2D(NewTransf);
     fViewportToScreen := NewTransf;
+    fPixelSize := Sqrt(Abs(fScreenToViewport[1, 1] *
+      fScreenToViewport[2, 2]));
     if Assigned(fOnViewMappingChanged) then
       fOnViewMappingChanged(Self);
   except
@@ -1774,47 +1374,18 @@ begin
   Result := IdentityTransf2D;
 end;
 
-procedure TViewport.ZoomWindow(const NewWindow: TRect2D);
-begin
-  ChangeViewportTransform(NewWindow);
-end;
-
-function TViewport.GetAperture(const L: Word): TRealType;
-begin
-  Result := GetPixelAperture.X * L;
-end;
-
-procedure TViewport.MoveWindow(const NewStartX, NewStartY:
-  TRealType);
-var
-  TmpWin: TRect2D;
-  Temp: TRealType;
-begin
-  StopRepaint;
-  Temp := (fVisualWindow.Right - fVisualWindow.Left);
-  TmpWin.Left := NewStartX;
-  TmpWin.Right := NewStartX + Temp;
-  TmpWin.W1 := 1.0;
-  Temp := fVisualWindow.Top - fVisualWindow.Bottom;
-  TmpWin.Bottom := NewStartY;
-  TmpWin.Top := NewStartY + Temp;
-  TmpWin.W2 := 1.0;
-  ChangeViewportTransform(TmpWin);
-end;
-
 procedure TViewport.ZoomCenter(const C: TPoint2D; const F:
   TRealType);
 var
   TmpWin: TRect2D;
 begin
-  StopRepaint;
-  TmpWin.Left := fVisualWindow.Left * F + C.X * (1 - F);
-  TmpWin.Right := fVisualWindow.Right * F + C.X * (1 - F);
+  TmpWin.Left := fVisualRect.Left * F + C.X * (1 - F);
+  TmpWin.Right := fVisualRect.Right * F + C.X * (1 - F);
   TmpWin.W1 := 1.0;
-  TmpWin.Top := fVisualWindow.Top * F + C.Y * (1 - F);
-  TmpWin.Bottom := fVisualWindow.Bottom * F + C.Y * (1 - F);
+  TmpWin.Top := fVisualRect.Top * F + C.Y * (1 - F);
+  TmpWin.Bottom := fVisualRect.Bottom * F + C.Y * (1 - F);
   TmpWin.W2 := 1.0;
-  ChangeViewportTransform(TmpWin);
+  SetVisualRect(TmpWin);
 end;
 
 procedure TViewport.ZoomFrac(const FX, FY: TRealType; const F:
@@ -1823,8 +1394,8 @@ var
   C: TPoint2D;
 begin
   C := Point2D(
-    fVisualWindow.Left * (1 - FX) + fVisualWindow.Right * FX,
-    fVisualWindow.Bottom * (1 - FY) + fVisualWindow.Top * FY);
+    fVisualRect.Left * (1 - FX) + fVisualRect.Right * FX,
+    fVisualRect.Bottom * (1 - FY) + fVisualRect.Top * FY);
   ZoomCenter(C, F);
 end;
 
@@ -1856,23 +1427,22 @@ procedure TViewport.PanWindow(const DeltaX, DeltaY:
 var
   TmpWin: TRect2D;
 begin
-  StopRepaint;
-  TmpWin.Left := fVisualWindow.Left + DeltaX;
-  TmpWin.Right := fVisualWindow.Right + DeltaX;
+  TmpWin.Left := fVisualRect.Left + DeltaX;
+  TmpWin.Right := fVisualRect.Right + DeltaX;
   TmpWin.W1 := 1.0;
-  TmpWin.Bottom := fVisualWindow.Bottom + DeltaY;
-  TmpWin.Top := fVisualWindow.Top + DeltaY;
+  TmpWin.Bottom := fVisualRect.Bottom + DeltaY;
+  TmpWin.Top := fVisualRect.Top + DeltaY;
   TmpWin.W2 := 1.0;
   if Round(TmpWin.Right - TmpWin.Left) > 300 then
     TmpWin.W2 := 1.0;
-  ChangeViewportTransform(TmpWin);
+  SetVisualRect(TmpWin);
 end;
 
 procedure TViewport.PanWindowFraction(const FX, FY: TRealType);
 begin
   PanWindow(
-    FX * (fVisualWindow.Right - fVisualWindow.Left),
-    FY * (fVisualWindow.Bottom - fVisualWindow.Top));
+    FX * (fVisualRect.Right - fVisualRect.Left),
+    FY * (fVisualRect.Bottom - fVisualRect.Top));
 end;
 
 function TViewport.ScreenToViewport(const SPt: TPoint2D):
@@ -1896,12 +1466,6 @@ end;
 function TViewport.GetScreenToViewport: TTransf2D;
 begin
   Result := fScreenToViewport;
-end;
-
-function TViewport.GetPixelAperture: TVector2D;
-begin
-  Result.X := Abs(fScreenToViewport[1, 1]);
-  Result.Y := Abs(fScreenToViewport[2, 2]);
 end;
 
 // =====================================================================
@@ -2068,42 +1632,11 @@ begin
   XShift := fOwnerView.Left - Left;
   YShift := fOwnerView.Top - Top;
   VisualRect := fOwnerView.VisualRect;
-  PixelSize := fOwnerView.GetPixelAperture.X;
+  PixelSize := fOwnerView.PixelSize;
   V2S := fOwnerView.fViewportToScreen;
   case fOrientation of
     otHorizontal: PaintHorizontal;
     otVertical: PaintVertical;
-  end;
-end;
-
-procedure TRuler.SetMark(Value: TRealType);
-var
-  TmpPt: TPoint;
-begin
-  Paint;
-  if fOwnerView = nil then
-    Exit;
-  with Canvas do
-  begin
-    Pen.Color := fTicksColor;
-    Pen.Width := 3;
-    case fOrientation of
-      otHorizontal:
-        begin
-          TmpPt :=
-            Point2DToPoint(fOwnerView.ViewportToScreen(Point2D(Value, 0)));
-          MoveTo(TmpPt.X, ClientRect.Top);
-          LineTo(TmpPt.X, ClientRect.Bottom);
-        end;
-      otVertical:
-        begin
-          TmpPt :=
-            Point2DToPoint(fOwnerView.ViewportToScreen(Point2D(0,
-            Value)));
-          MoveTo(ClientRect.Left, TmpPt.Y);
-          LineTo(ClientRect.Right, TmpPt.Y);
-        end;
-    end;
   end;
 end;
 
@@ -2129,8 +1662,6 @@ constructor TViewport2D.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
 
-  fImageList := nil;
-  fBrushBitmap := TBitmap.Create;
   fCursorColor := clBlue;
   fLastCursorPos := Point2D(MaxInt, MaxInt);
   fLastMousePos := Point2D(0.0, 0.0);
@@ -2138,15 +1669,14 @@ end;
 
 destructor TViewport2D.Destroy;
 begin
-  fBrushBitmap.Free;
   inherited Destroy;
 end;
 
 procedure TViewport2D.Repaint;
 begin
-  DrawCursorCross(Point2D(0, 0), False);
+  DrawCursorCrossHair(Point2D(0, 0), False);
   inherited Repaint;
-  DrawCursorCross(fLastMousePos, True);
+  DrawCursorCrossHair(fLastMousePos, True);
 end;
 
 procedure TViewport2D.DrawObject(const Obj: TGraphicObject;
@@ -2176,57 +1706,38 @@ begin
   end;
 end;
 
-procedure TViewport2D.DrawObject2D(const Obj: TObject2D;
-  const CtrlPts: Boolean);
-var
-  TmpFlag: Boolean;
-begin
-  if not Assigned(fDrawing2D) then Exit;
-  TmpFlag := ShowControlPoints;
-  ShowControlPoints := ShowControlPoints or CtrlPts;
-  try
-    DrawObject(Obj, OffScreenDevice,
-      RectToRect2D(ClientRect));
-    DrawObject(Obj, OnScreenDevice,
-      RectToRect2D(ClientRect));
-  finally
-    ShowControlPoints := TmpFlag;
-  end;
-end;
-
 procedure TViewport2D.DrawObject2DWithRubber(
   const Obj: TGraphicObject; Transf: TTransf2D);
 begin
   if not Assigned(fDrawing2D) then Exit;
   if not Assigned(Obj) then Exit;
-  if not (Obj as TObject2D).IsVisible(VisualRect) then
-    Exit;
+//  if not (Obj as TObject2D).IsVisible(VisualRect) then
+//    Exit;
   (Obj as TObject2D).DeviceDraw(Transf, fRubberDevice,
     RectToRect2D(ClientRect));
 end;
 
 procedure TViewport2D.ZoomToExtension;
 var
-  NewWindow2D: TRect2D;
+  NewRect2D: TRect2D;
   Marg: TRealType;
 begin
   if not Assigned(fDrawing2D) then
     Exit;
-  StopRepaint;
   if Drawing2D.ObjectsCount = 0 then
   begin
     Repaint;
     Exit;
   end;
-  NewWindow2D := fDrawing2D.DrawingExtension;
-  Marg := Abs(NewWindow2D.Right - NewWindow2D.Left) / 20;
-  Marg := Max(Marg, Abs(NewWindow2D.Top -
-    NewWindow2D.Bottom) / 20);
-  NewWindow2D.Left := NewWindow2D.Left - Marg;
-  NewWindow2D.Right := NewWindow2D.Right + Marg;
-  NewWindow2D.Bottom := NewWindow2D.Bottom - Marg;
-  NewWindow2D.Top := NewWindow2D.Top + Marg;
-  ZoomWindow(NewWindow2D);
+  NewRect2D := fDrawing2D.DrawingExtension;
+  Marg := Abs(NewRect2D.Right - NewRect2D.Left) / 20;
+  Marg := Max(Marg, Abs(NewRect2D.Top -
+    NewRect2D.Bottom) / 20);
+  NewRect2D.Left := NewRect2D.Left - Marg;
+  NewRect2D.Right := NewRect2D.Right + Marg;
+  NewRect2D.Bottom := NewRect2D.Bottom - Marg;
+  NewRect2D.Top := NewRect2D.Top + Marg;
+  SetVisualRect(NewRect2D);
 end;
 
 function TViewport2D.WorldToObject(const Obj: TObject2D;
@@ -2236,20 +1747,12 @@ begin
   Result := CartesianPoint2D(WPt);
 end;
 
-function TViewport2D.ObjectToWorld(const Obj: TObject2D;
-  Opt:
-  TPoint2D): TPoint2D;
-begin
-  Opt := CartesianPoint2D(Opt);
-  Result := Opt;
-end;
-
 procedure TViewport2D.MouseMove(Shift: TShiftState;
   X, Y: Integer);
 begin
   fLastMousePos := ScreenToViewport(Point2D(X, Y));
-  DrawCursorCross(fLastMousePos, True);
-  if (not DisableMouseEvents) and Assigned(fOnMouseMove2D)
+  DrawCursorCrossHair(fLastMousePos, True);
+  if Assigned(fOnMouseMove2D)
     then
     fOnMouseMove2D(Self, Shift,
       fLastMousePos.X, fLastMousePos.Y, X, Y);
@@ -2259,7 +1762,7 @@ end;
 procedure TViewport2D.MouseDown(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
-  if (not DisableMouseEvents) and Assigned(fOnMouseDown2D)
+  if Assigned(fOnMouseDown2D)
     then
   begin
     fLastMousePos := ScreenToViewport(Point2D(X, Y));
@@ -2272,7 +1775,7 @@ end;
 procedure TViewport2D.MouseUp(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
-  if (not DisableMouseEvents) and Assigned(fOnMouseUp2D)
+  if Assigned(fOnMouseUp2D)
     then
   begin
     fLastMousePos := ScreenToViewport(Point2D(X, Y));
@@ -2286,7 +1789,7 @@ function TViewport2D.DoMouseWheel(Shift: TShiftState;
   WheelDelta: Integer; MousePos: TPoint): Boolean;
 begin
   Result := False;
-  if (not DisableMouseEvents) and Assigned(FOnMouseWheel) then
+  if Assigned(FOnMouseWheel) then
     FOnMouseWheel(Self, Shift, WheelDelta, MousePos, Result);
 end;
 
@@ -2296,9 +1799,9 @@ begin
   Result := GetVisualTransform2D(ViewWin, ScreenWin, 1);
 end;
 
-procedure TViewport2D.DrawCursorCross(P: TPoint2D; Visible:
+procedure TViewport2D.DrawCursorCrossHair(P: TPoint2D; Visible:
   Boolean);
-  procedure _DrawCursorCross2D(P: TPoint2D);
+  procedure _DrawCursorCrossHair2D(P: TPoint2D);
   var
     ScrPt: TPoint;
   begin
@@ -2309,21 +1812,22 @@ procedure TViewport2D.DrawCursorCross(P: TPoint2D; Visible:
     Canvas.LineTo(ClientRect.Right, ScrPt.Y);
   end;
 begin
-  if (HandleAllocated = False) or InRepainting then Exit;
+  if not fShowCrossHair then Exit;
+  if (HandleAllocated = False) then Exit;
 //    fLastCursorPos := Point2D(MaxInt, MaxInt);
   Canvas.Pen.Mode := pmXOr;
   Canvas.Pen.Color := fCursorColor xor BackGroundColor;
   Canvas.Pen.Style := psSolid;
   Canvas.Pen.Width := 1;
   if fLastCursorPos.X <> MaxInt then
-    _DrawCursorCross2D(fLastCursorPos);
+    _DrawCursorCrossHair2D(fLastCursorPos);
   if not Visible then
   begin
     fLastCursorPos := Point2D(MaxInt, MaxInt);
     Exit;
   end;
   fLastCursorPos := GetSnappedPoint(P);
-  _DrawCursorCross2D(fLastCursorPos);
+  _DrawCursorCrossHair2D(fLastCursorPos);
 end;
 
 initialization

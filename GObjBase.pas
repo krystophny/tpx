@@ -20,11 +20,11 @@ const
 
 type
 
-  TObject2D = class;
-  TObject2DClass = class of TObject2D;
   TGraphicObjList = class;
   TGraphicObject = class;
   TGraphicObjectClass = class of TGraphicObject;
+  TObject2D = class;
+  TObject2DClass = class of TObject2D;
   TLayers = class;
 
 {: This exception is raised when an attempt is made to use an
@@ -41,19 +41,10 @@ type
    Where <I=unused index> must be an unused index above 150.
 }
   ETpX_ObjClassNotFound = class(Exception);
-{: This exception is raised when you ask a
-   <See Class=TExclusiveGraphicObjIterator> for a list that has already
-   active iterators on it.
-   Remove the other iterators before retry.
 
-   <B=Note>: When a list has an active iterators that cannot
-    be deleted (because you have lost the reference to it), you
-    have to call <See Method=TGraphicObjList@RemoveAllIterators> to remove
-    all the pending iterators (but not the memory used by them).
-    However use this function with care expecially in a multi thread
-    application.
-}
-  ETpX_ListBlocked = class(Exception);
+// This exception is raised when you try to lock a list that is already
+// locked or unlock a list which is already unlocked.
+  ETpX_ListLocked = class(Exception);
 {: This exception is raised when a specified object is not found
     in the list.
 }
@@ -313,385 +304,155 @@ type
       fOnChange;
   end;
 
+// List of objects
 
-  { Lists of graphical objects. }
-{: This class defines an iterator for a list of graphical objects
-   (<See class=TGraphicObjList>).
+  POL_Item = ^TOL_Item;
 
-   The library can use a <I=thread> to paint the drawings and so
-   a way is needed to ensure that a list is not changed when it is
-   in use by another thread.
-
-   To do so the concept of <I=iterator> is used. An iterator is
-   an object that is used to traverse a list of objects. When you
-   ask and obtain an iterator on a list, you can access the elements
-   in the list through the iterator. You cannot modify a list if you
-   doesn't have an <I=exclusive iterator> that let you to modify the
-   list as well as iterate it (<See Class=TExclusiveGraphicObjIterator>).
-
-   As soon as you obtain an iterator the list cannot be modified and
-   so you are ensured that it will remain the same during the iteration.
-   Of course if you doen't release an iterator you cannot modify the list
-   until the end of the program, so attention is needed when using an
-   iterator.
-
-   For backward compatibility some operations on the list are avaiable
-   with the list itself (and these are however implemented with temporary
-   iterators so using them is the better approach).
-
-   See also <See Class=TExclusiveGraphicObjIterator> and
-   <See Class=TGraphicObjList>.
-
-   <B=Note>: To release an iterator simply free it. If you lost some
-   reference to iterators (and so the list is blocked) you can unblock
-   the list with the method <See Method=TGraphicObjList@RemoveAllIterators>.
-
-   <B=Note>: An iterator cannot be created directly but only with the
-   use of the methods <See Method=TGraphicObjList@GetIterator>,
-   <See Method=TGraphicObjList@GetExclusiveIterator> and
-   <See Method=TGraphicObjList@GetPrivilegedIterator>.
-}
-  TGraphicObjIterator = class(TObject)
-  private
-    fCurrent: Pointer;
-    fSourceList: TGraphicObjList;
-
-    function GetCurrentObject: TGraphicObject;
-    function SearchBlock(ID: Integer): Pointer;
-    function GetCount: Integer;
-    constructor Create(const Lst: TGraphicObjList); virtual;
-  public
-{: This is the descructor of the iterator.
-
-   When an iterator is freed (with the use of <I=Free>) the iterator's
-   count in the list from which the iterator was obtained will be decremented
-   and the list will be unblocked if it was.
-
-   <B=Remeber to free all the iterators you have when you finish with
-   them>.
-}
-    destructor Destroy; override;
-{: Return the object with the specified <I=ID> if found. If that object
-   doen't exist in the list <B=nil> will be returned.
-
-   If an object is found then the position in the list will be moved
-   to it, if no it will not be moved.
-   No exception is raised if no object is found.
-}
-    function Search(const ID: Integer): TGraphicObject;
-{: Move the current position (<See Property=TGraphicObjIterator@Current>
-   to the next object in the list, and return it.
-
-   If the current position is at the end of the list the current position
-   will be set to <B=nil> and <B=nil> will be returned.
-}
-    function Next: TGraphicObject;
-{: Move the current position (<See Property=TGraphicObjIterator@Current>
-   to the previous object in the list, and return it.
-
-   If the current position is at the beginnig of the list the current position
-   will be set to <B=nil> and <B=nil> will be returned.
-}
-    function Prev: TGraphicObject;
-{: Move the current position (<See Property=TGraphicObjIterator@Current>
-   to the first object in the list, and return it.
-
-   If the list is empty current position
-   will be set to <B=nil> and <B=nil> will be returned.
-}
-    function First: TGraphicObject;
-{: Move the current position (<See Property=TGraphicObjIterator@Current>
-   to the last object in the list, and return it.
-
-   If the list is empty current position
-   will be set to <B=nil> and <B=nil> will be returned.
-}
-    function Last: TGraphicObject;
-    //For use in "while" cicles
-    // Send nil as an argument to start from First
-    function GetNext(var Obj: TGraphicObject): Boolean;
-{: This property contains the number of items in the list.
-
-   You may want to use it in combination with
-   <See Property=TGraphicObjIterator@Items> to iterate the list
-   in an array-like mode.
-}
-    property Count: Integer read GetCount;
-{: This property contains the current object onto which the iterator
-   is positioned. If the position is invalid it will be <B=nil>.
-}
-    property Current: TGraphicObject read GetCurrentObject;
-{: This property contains the list linked to the iterator.
-}
-    property SourceList: TGraphicObjList read fSourceList;
-{: This property contains the items in the list.
-
-   You may want to use it in combination with
-   <See Property=TGraphicObjIterator@Count> to iterate the list
-   in an array-like mode.
-
-   <I=ID> is zero based so the bounds of the array are from <I=0> to
-   <See Property=TGraphicObjIterator@Count>.
-}
-    property Items[const ID: Integer]: TGraphicObject read
-    Search; default;
+  TOL_Item = record
+    Obj: TObject; // An object.
+    Next, Prev: POL_Item; // Linked list pointers
   end;
 
-{: This class defines an exclusive iterator for a list of graphical objects
-   (<See class=TGraphicObjList>).
+// A class for a doubly linked list of objects.
 
-   The library can use a <I=thread> to paint the drawings and so
-   a way is needed to ensure that a list is not changed when it is
-   in use by another thread.
+//   To traverse the list use FirstObj, NewxtObj.
 
-   To do so the concept of <I=iterator> is used. An iterator is
-   an object that is used to traverse a list of objects. When you
-   ask and obtain an iterator on a list, you can access the elements
-   in the list through the iterator. You cannot modify a list if you
-   doesn't have an <I=exclusive iterator> that let you to modify the
-   list as well as iterate it (<See Class=TExclusiveGraphicObjIterator>).
+//   A procedure which modifies the list (using Pop, Add, etc.)
+//   can lock it to prevent ...
 
-   As soon as you obtain an iterator the list cannot be modified and
-   so you are ensured that it will remain the same during the iteration.
-   Of course if you doen't release an iterator you cannot modify the list
-   until the end of the program, so attention is needed when using an
-   iterator.
-
-   For backward compatibility some operations on the list are avaiable
-   with the list itself (and these are however implemented with temporary
-   iterators so using them is the better approach).
-
-   See also <See Class=TExclusiveGraphicObjIterator> and
-   <See Class=TGraphicObjList>.
-
-   <B=Note>: To release an iterator simply free it. If you lost some
-   reference to iterators (and so the list is blocked) you can unblock
-   the list with the method <See Method=TGraphicObjList@RemoveAllIterators>.
-
-   <B=Note>: An iterator cannot be created directly but only with the
-   use of the methods <See Method=TGraphicObjList@GetIterator>,
-   <See Method=TGraphicObjList@GetExclusiveIterator> and
-   <See Method=TGraphicObjList@GetPrivilegedIterator>.
-}
-  TExclusiveGraphicObjIterator = class(TGraphicObjIterator)
+  TObjList = class(TObject)
   private
-    constructor Create(const Lst: TGraphicObjList); override;
-  public
-    destructor Destroy; override;
-{: This method delete the current object from the source list.
-   After the object is deleted the current position in the list
-   will be set to the next object in it (if it is at the end
-   of the list it will be set to the previous object).
-
-   This method is affected by the state of the
-   <See Property=TGraphicObjList@FreeOnClear> property.
-}
-    procedure DeleteCurrent;
-{: This method remove the current object from the source list but
-   doesn't free it.
-   After the object is removed the current position in the list
-   will be set to the next object in it (if it is at the end
-   of the list it will be set to the previous object).
-
-   This method is <B=NOT> affected by the state of the
-   <See Property=TGraphicObjList@FreeOnClear> property.
-}
-    procedure RemoveCurrent;
-    //TSY: deletes object from the list and puts another object to that place
-    procedure ReplaceDeleteCurrent(const Obj: TGraphicObject);
-  end;
-
-{: This class defines a double linked list of graphic objects.
-
-   The objects are referenced in the list through their
-   identifier number (<See Property=TGraphicObject@ID>). The list doens't
-   check for duplicated <I=ID> so you have to ensure uniqueness by yourself.
-
-   To traverse the list you have to use instances of
-   <See Class=TGraphicObjIterator> and <See Class=TExclusiveGraphicObjIterator>
-   that can be obtained with the methods <See Method=TGraphicObjList@GetIterator>,
-   <See Method=TGraphicObjList@GetExclusiveIterator> and <See Method=TGraphicObjList@GetPrivilegedIterator>.
-
-   All of the methods that modify the list can be used only if no iterators
-   are attached to the list. If this is not the case an
-   <See Class=ETpX_ListBlocked> exception will be raised.
-
-   The list can own the object it contains depending on the setting of
-   the property <See Property=TGraphicObjList@FreeOnClear>.
-}
-  TGraphicObjList = class(TObject)
-  private
-    fHead, fTail: Pointer;
-    fHasExclusive, fFreeOnClear: Boolean;
-    fIterators: Integer; { Usato come semaforo. }
+    fHead, fTail, fCurrent: POL_Item;
+    fFreeOnDelete: Boolean;
     fCount: Integer;
-    fListGuard: TTpXCriticalSection;
-
-    procedure DeleteBlock(ObjToDel: Pointer);
-    procedure RemoveBlock(ObjToDel: Pointer);
-    function GetHasIter: Boolean;
+    fLocked: Boolean;
+    function _CreateItem(const Prev, Next: POL_Item;
+      const Obj: TObject): POL_Item;
+// Insert object before Item
+    function InsertBefore(
+      const Item: POL_Item; const Obj: TObject): POL_Item;
+// Insert objects from another list before Item
+    procedure InsertBefore_FromList(
+      const Item: POL_Item; const Lst: TObjList);
+    function RemoveItem(const Item: POL_Item): TObject; virtual;
+    procedure DeleteItem(const Item: POL_Item); virtual;
+    procedure _TrancateFromSelf(Item: POL_Item);
+// Trancate the list after Item
+    procedure TrancateAfter(const Item: POL_Item);
+// Trancate the list starting from Item
+    procedure TrancateAt(const Item: POL_Item);
   public
-{: This is the constructor of the list. It creates a new empty list.
-
-  It sets <See Property=TGraphicObjList@FreeOnClear> to <B=True>.
-}
+// Sets FreeOnDelete to True
     constructor Create;
-{: This is the destructor of the list.
-
-  If the property <See Property=TGraphicObjList@FreeOnClear> is <B=True>
-  the the objects in the list will also be freed.
-}
+//  If the FreeOnDelete is True then the objects in the list will also be freed
     destructor Destroy; override;
-{: This method adds an object to the list.
+// Lock the list
+    procedure Lock;
+// Unlock the list
+    procedure Unlock;
+// Add an object to the end of list
+    procedure Add(const Obj: TObject);
+// Remove all objects from the list
+// The objects will be freed if FreeOnDelete is True
+    procedure Clear;
+// Return last object of the list
+    function Peek: TObject;
+// Remove and return last object of the list
+    function Pop: TObject;
+// Start internal iterator from the head and return the first object
+    function FirstObj: TObject;
+// Return current object
+    function CurrentObj: TObject;
+// Return next object
+    function NextObj: TObject;
+// Start internal iterator from the tail and return the last object
+    function LastObj: TObject;
+// Return previous object
+    function PrevObj: TObject;
+// Specifies whether the list owns its objects
+// (whether the objects in the list must be freed when deleted from it)
+// This influences delete, truncate and clear methods
+    property FreeOnDelete: Boolean read fFreeOnDelete write
+      fFreeOnDelete;
+// The number of objects in the list
+    property Count: Integer read fCount;
+  end;
 
-   The added object <I=Obj> will be placed at the end of the list, after
-   any other object already present in the list. The list doesn't check
-   for uniqueness of the object's <See Property=TGraphicObject@ID>.
+//  List of graphical objects
 
-   If the list has some iterators active on it a
-   <See Class=ETpX_ListBlocked> exception will be raised.
+{
+   The objects are referenced by their IDs.
+   The list doens't check for duplicated IDs so you have to ensure
+   uniqueness yourself.
+
 }
+  TGraphicObjList = class(TObjList)
+  private
+    function RemoveItem(const Item: POL_Item): TObject; override;
+  public
+    constructor Create;
+    destructor Destroy; override;
+// Return last object of the list
+    function Peek: TGraphicObject;
+// Remove and return last object of the list
+    function Pop: TGraphicObject;
+// Start internal iterator from the head and return the first object
+    function FirstObj: TGraphicObject;
+// Return current object
+    function CurrentObj: TGraphicObject;
+// Return next object
+    function NextObj: TGraphicObject;
+// Start internal iterator from the tail and return the last object
+    function LastObj: TGraphicObject;
+// Return previous object
+    function PrevObj: TGraphicObject;
+// Find the first object with a given ID
+    function FindObjByID(const ID: Integer): TGraphicObject;
+// Delete current object from the list
+    function DeleteCurrent: TGraphicObject;
+// Remove current object from the list
+    function RemoveCurrent: TGraphicObject;
+// Add an object to the list
     procedure Add(const Obj: TGraphicObject);
-{: This method adds all the object in another list <I=Lst> to the list.
-
-   The added objects will be placed at the end of the list, after
-   any other object already present in the list. The list doesn't check
-   for uniqueness of the object's <See Property=TGraphicObject@ID>.
-
-   If the list has some iterators active it a
-   <See Class=ETpX_ListBlocked> exception will be raised.
-}
+// Add objects from another list
     procedure AddFromList(const Lst: TGraphicObjList);
-{: This method inserts an object into the list.
-
-   The added object <I=Obj> will be inserted after the object in the
-   list with ID equal to <I=IDInsertPoint>. If no such object is present
-   a <See Class=ETpX_ListObjNotFound> exception will be raised.
-   The list doesn't check for uniqueness of the inserted object.
-
-   If the list has some iterators active on it a
-   <See Class=ETpX_ListBlocked> exception will be raised.
-}
+// Insert an object into the list
+//   The added object Obj will be inserted after the object in the
+//   list with ID equal to IDInsertPoint. If no such object is present
+//   an exception will be raised.
+//   The list doesn't check for uniqueness of the inserted object.
     procedure Insert(const IDInsertPoint: Integer; const Obj:
       TGraphicObject);
+{: This method inserts a list of objects into the list.
+
+   The added objects will be inserted after the object in the
+   list with ID equal to <I=IDInsertPoint>.
+}
+    procedure InsertFromList(const IDInsertPoint: Integer;
+      const Lst: TGraphicObjList);
 {: This method moves an object into the list.
-
-   The object with ID equal to <I=IDToMove> will be moved before the
-   object in the list with ID equal to <I=IDInsertionPoint> .
-   If no such object is present a <See Class=ETpX_ListObjNotFound>
-   exception will be raised.
-
-   If the list has some iterators active it a
-   <See Class=ETpX_ListBlocked> exception will be raised.
-
-   <B=Note>: This method is useful if you want to change the
-   drawing order in the list of object of a <See Class=TDrawing>
-   control.
+   The object with ID equal to IDToMove will be moved before the
+   object in the list with ID equal to IDInsertionPoint.
+   This method is useful if you want to change the
+   drawing order in the list of objects.
 }
     procedure Move(const IDToMove, IDInsertPoint: Integer);
 {: This method deletes an object from the list.
-
-   The object with ID equal to <I=ID> will be deleted.
-   If no such object is present a <See Class=ETpX_ListObjNotFound>
-   exception will be raised.
-
-   If the list has the property <See Property=TGraphicObjList@FreeOnClear>
-   set to <B=True> then the object will be deleted by calling its <I=Free>
-   method.
-
-   If the list has some iterators active on it a
-   <See Class=ETpX_ListBlocked> exception will be raised.
-
-   <B=Note>: If you want to delete more that one object from the
-   list use an exclusive iterator for better performances.
+   The object with ID equal to ID will be deleted. If the list has
+   the property FreeOnDelete set to True then the object will be
+   deleted by calling its Free method.
 }
     function Delete(const ID: Integer): Boolean;
-{: This method removes an object from the list.
-
-   The object with ID equal to <I=ID> will be removed.
-   If no such object is present a <See Class=ETpX_ListObjNotFound>
-   exception will be raised.
-
-   The object will not also be deleted if the property <See Property=TGraphicObjList@FreeOnClear>
-   is set to <B=True>.
-
-   If the list has some iterators active on it a
-   <See Class=ETpX_ListBlocked> exception will be raised.
-
-   <B=Note>: If you want to remove more that one object from the
-   list use an exclusive iterator for better performances.
-}
-    function Remove(const ID: Integer): Boolean;
-{: This method returns the object with the gived Id.
-
-   The object with ID equal to <I=ID> will be returned if found, or <B=nil>
-   will be returned if no object is found.
-
-   If the list has some exclusive iterators active on it a
-   <See Class=ETpX_ListBlocked> exception will be raised.
-
-   <B=Note>: If you have an iterator on the list don't use this method.
-   Use it only if you want to find a single object.
-}
+// Same as FindObjByID, but locks the list
     function Find(const ID: Integer): TGraphicObject;
-{: This method remove all the object from the list.
-
-   The objects will be deleted if the property <See Property=TGraphicObjList@FreeOnClear>
-   is set to <B=True>.
-
-   If the list has some iterators active on it a
-   <See Class=ETpX_ListBlocked> exception will be raised.
+// Replace current object with another object
+    procedure ReplaceDeleteCurrent(const Obj: TGraphicObject);
+{: This method remove all the objectû from the list.
+   The objects will be deleted if the property FreeOnDelete
+   is set to True.
 }
     procedure Clear;
-{: This method set a new iterator on the list.
-
-   The new iterator will be returned and you can start to use it.
-   After you have used it remember to <B=Free> it. It is better to
-   protect the use of the iterator in a <B=try-finally> block.
-
-   If the list has an exclusive iterator active on it a
-   <See Class=ETpX_ListBlocked> exception will be raised.
-}
-    function GetIterator: TGraphicObjIterator;
-{: This method set a new exclusive iterator on the list.
-
-   The new iterator will be returned and you can start to use it.
-   After you have used it remember to <B=Free> it. It is better to
-   protect the use of the iterator in a <B=try-finally> block.
-
-   An exclusive iterator prevent any other thread to modify the list,
-   so grant you an exclusive use of the list. With this kind of
-   iterator you can remove objects from the list.
-
-   If the list has any iterators active on it a
-   <See Class=ETpX_ListBlocked> exception will be raised.
-}
-    function GetExclusiveIterator: TExclusiveGraphicObjIterator;
-{: This method set a new exclusive iterator on the list ignoring
-   any other pending iterator already present.
-
-   The new iterator will be returned and you can start to use it.
-   After you have used it remember to <B=Free> it. It is better to
-   protect the use of the iterator in a <B=try-finally> block.
-
-   A priviliged iterator is somewhat dangerous and must be used only
-   in case of error when an iterator was active on the list and cannot
-   be freed (for instance it is useful when the application must be
-   aborted in presence of errors but you want to save any other
-   present in the drawing).
-}
-    function GetPrivilegedIterator:
-      TExclusiveGraphicObjIterator;
-{: This method removes any pending iterator active on the list.
-
-   This method is somewhat dangerous and must be used only
-   in case of error when an iterator was active on the list and cannot
-   be freed (for instance it is useful when the application must be
-   aborted in presence of errors but you want to save any other
-   present in the drawing).
-}
-    procedure RemoveAllIterators;
-    procedure TransForm(const T: TTransf2D);
+    procedure Transform(const T: TTransf2D);
 //TSY: reproduced from former viewport method with the same name
     {: This method returns an object that has the point <I=Pt> on it.
 
@@ -735,38 +496,12 @@ type
     }
     function PickObject(const P: TPoint2D;
       Layers: TLayers; const Aperture: TRealType;
-      const VisualRect: TRect2D; const PickFilter: TObject2DClass;
-      const FirstFound: Boolean; var NPoint: Integer): TObject2D;
-{: This property returns the number of objects present in the list.
-
-   It is useful when you want to iterate through the object in the
-   list with an iterators.
-}
-    property Count: Integer read fCount;
-{: This property returns <B=True> if the list has some iterator active on
-   it.
-
-   Check this property before asking for an iterator.
-}
-    property HasIterators: Boolean read GetHasIter;
-{: This property returns <B=True> if the list has an exclusive iterator
-   active on it.
-
-   Check this property before asking for an exclusive iterator.
-}
-    property HasExclusiveIterators: Boolean read fHasExclusive;
-{: This property tells the list if the objects in the list must
-   be freed when removed from it.
-
-   If it is set to <B=True> the objects in the list are deleted
-   (by calling their <I=Free> method) when they are removed from
-   the list by using the <See Method=TGraphicObjList@Delete>,
-   <See Method=TGraphicObjList@Clear> methods or when the list
-   is deleted.
-}
-    property FreeOnClear: Boolean read fFreeOnClear write
-      fFreeOnClear;
+      const VisualRect: TRect2D; const PickFilter:
+      TObject2DClass;
+      const FirstFound: Boolean; var NPoint: Integer):
+      TObject2D;
   end;
+
 
   {: A <I=2D graphic object> is a graphic object that is defined on
      a 2D plane.
@@ -835,7 +570,8 @@ type
   public
     constructor Create(ID: Integer); override;
     destructor Destroy; override;
-    constructor CreateFromStream(const Stream: TStream); override;
+    constructor CreateFromStream(const Stream: TStream);
+      override;
     procedure SaveToStream(const Stream: TStream); override;
     procedure Assign(const Obj: TGraphicObject); override;
     {: This method transform the object with a give transformation matrix.
@@ -847,7 +583,7 @@ type
        See the <See Class=TObject2D> class for details about the
        model matrix of a 2D object.
     }
-    procedure TransForm(const T: TTransf2D); dynamic;
+    procedure Transform(const T: TTransf2D); dynamic;
     {: This method moves the object.
 
        <I=DragPt> is the base point of the movement and <I=ToPt>
@@ -859,7 +595,8 @@ type
        appropriately.
     }
     procedure DeviceDraw(Transf: TTransf2D;
-      const Dvc: TDevice; const ClipRect2D: TRect2D); virtual;
+      const Dvc: TDevice; const ClipRect2D: TRect2D);
+      virtual;
       abstract;
     {: This method returns <B=True> if the object is visible in the
        portion of the view plane given by the
@@ -875,7 +612,8 @@ type
        of the object is contained (also partially) in the <I=Clip>
        rectangle.
     }
-    function IsVisible(const Clip: TRect2D): Boolean; virtual;
+    function IsVisible(const Clip: TRect2D): Boolean;
+      virtual;
     {: This method draws only the control points of the object.
 
        An 2D object may have a set of points that are called
@@ -897,7 +635,8 @@ type
        is drawed.
     }
     procedure DrawControlPoints(const VT: TTransf2D;
-      const ClipRect2D: TRect2D; const Width: Integer); dynamic;
+      const ClipRect2D: TRect2D; const Width: Integer);
+      dynamic;
     {: This returns the part of the object that is picked by a point.
 
        <I=Pt> is the picking point, <I=Aperture> is the picking aperture
@@ -940,7 +679,8 @@ type
     {: If this property is <B=True> then the bounding box is drawed
        in the <See Method=TObject2D@DrawControlPoints>.
     }
-    property DrawBoundingBox: Boolean read fDrawBoundingBox write
+    property DrawBoundingBox: Boolean read fDrawBoundingBox
+      write
       fDrawBoundingBox;
     {: This property contains the current handler object.
 
@@ -959,11 +699,6 @@ type
      Since a container embrace a group of objects, the picking take
      effect at group level returning the ID of the selected object
      instead of its control point.
-
-     A container can be used to group objects that must be moved or
-     transformed as a whole. On the other hand, if you want to reuse
-     a set of objects in different place on the drawing use the
-     <See Class=TSourceBlock2D> class.
   }
   TContainer2D = class(TObject2D)
   private
@@ -993,32 +728,17 @@ type
     constructor CreateSpec(ID: Integer; const Objs: array of
       TObject2D);
     destructor Destroy; override;
-    constructor CreateFromStream(const Stream: TStream); override;
+    constructor CreateFromStream(const Stream: TStream);
+      override;
     procedure SaveToStream(const Stream: TStream); override;
     procedure Assign(const Obj: TGraphicObject); override;
-    {: This method updates the references of the source blocks
-       that are used in the container.
-
-       This method is called automatically at the end of the loading
-       process from a stream. Indeed when you save a container it
-       may contains <See Class=TBlock2D> instances that references
-       to <See Class=TSourceBlock2D> instances. When the application
-       is closed these references are no longer valid, so the blocks
-       must be relinked to the corrent source blocks.
-
-       The method needs the iterator of source blocks list in order
-       to relink the blocks. This iterator can be obtained from
-       <See Property=TDrawing@SourceBlocksIterator>.
-
-       The method call the <See Method=TGraphicObject@UpdateExtension>.
-    }
-    procedure UpdateSourceReferences(const BlockList:
-      TGraphicObjIterator);
-    procedure TransForm(const T: TTransf2D); override;
+    procedure Transform(const T: TTransf2D); override;
     procedure DeviceDraw(Transf: TTransf2D;
-      const Dvc: TDevice; const ClipRect2D: TRect2D); override;
+      const Dvc: TDevice; const ClipRect2D: TRect2D);
+      override;
     procedure DrawControlPoints(const VT: TTransf2D;
-      const ClipRect2D: TRect2D; const Width: Integer); override;
+      const ClipRect2D: TRect2D; const Width: Integer);
+      override;
     function OnMe(P: TPoint2D; Aperture: TRealType; var
       Distance: TRealType): Integer; override;
     {: This property contains the list that contians the object in the container.
@@ -1027,6 +747,16 @@ type
        this property to manage these objects.
     }
     property Objects: TGraphicObjList read fObjects;
+  end;
+
+{: This class defines a group of 2D objects
+
+     It is used to group objects that must be moved or
+     transformed as a whole. On the other hand, if you want to reuse
+     a set of objects in different place on the drawing use the
+     <See Class=TSourceBlock2D> class.}
+
+  TGroup2D = class(TContainer2D)
   end;
 
 {: This type define the general type for source block names.
@@ -1076,10 +806,27 @@ type
     constructor Create(ID: Integer); override;
     constructor CreateSpec(ID: Integer; const Name:
       TSourceBlockName; const Objs: array of TObject2D);
-    constructor CreateFromStream(const Stream: TStream); override;
+    constructor CreateFromStream(const Stream: TStream);
+      override;
     destructor Destroy; override;
     procedure SaveToStream(const Stream: TStream); override;
     procedure Assign(const Obj: TGraphicObject); override;
+    {: This method updates the references of the source blocks
+       that are used in the container.
+
+       This method is called automatically at the end of the loading
+       process from a stream. Indeed when you save a container it
+       may contains <See Class=TBlock2D> instances that references
+       to <See Class=TSourceBlock2D> instances. When the application
+       is closed these references are no longer valid, so the blocks
+       must be relinked to the corrent source blocks.
+
+       The method needs the source blocks list in order
+       to relink the blocks. This list can be obtained from
+       TDrawing@SourceBlocksList.??
+    }
+    procedure UpdateSourceReferences(
+      const BlockList: TGraphicObjList);
     {: This property contains the name of the source block.
 
        See also <See Type=TSourceBlockName>.
@@ -1147,7 +894,8 @@ type
     constructor CreateSpec(ID: Integer; const Source:
       TSourceBlock2D);
     destructor Destroy; override;
-    constructor CreateFromStream(const Stream: TStream); override;
+    constructor CreateFromStream(const Stream: TStream);
+      override;
     procedure SaveToStream(const Stream: TStream); override;
     procedure Assign(const Obj: TGraphicObject); override;
     {: This method updates the references of the block.
@@ -1158,16 +906,17 @@ type
        so the block must be relinked to the correct source blocks
        instance.
 
-       The method needs the iterator of the source blocks of a drawing in
-       order to relink the block's source block. This iterator can be
-       obtained by <See Property=TDrawing@SourceBlocksIterator>
+       The method needs the list of source blocks of a drawing in
+       order to relink the block's source block. This list can be
+       obtained by TDrawing@SourceBlocksList.
     }
-    procedure UpdateReference(const BlockList:
-      TGraphicObjIterator);
+    procedure UpdateReference(const BlockList: TGraphicObjList);
     procedure DrawControlPoints(const VT: TTransf2D;
-      const ClipRect2D: TRect2D; const Width: Integer); override;
+      const ClipRect2D: TRect2D; const Width: Integer);
+      override;
     procedure DeviceDraw(Transf: TTransf2D;
-      const Dvc: TDevice; const ClipRect2D: TRect2D); override;
+      const Dvc: TDevice; const ClipRect2D: TRect2D);
+      override;
     function OnMe(P: TPoint2D; Aperture: TRealType; var
       Distance: TRealType): Integer; override;
     {: This property contains the base position of the block.
@@ -1184,7 +933,8 @@ type
 
        See also <See Class=TSourceBlock2D>.
     }
-    property SourceBlock: TSourceBlock2D read fSourceBlock write
+    property SourceBlock: TSourceBlock2D read fSourceBlock
+      write
       SetSourceBlock;
     {: This property contains the name of the source block
        referenced by the block.
@@ -1218,13 +968,11 @@ type
     fActive: Boolean;
     fVisible: Boolean;
     fOpaque: Boolean;
-    fModified: Boolean;
     fStreamable: Boolean;
     fIdx: Byte;
     fTag: Integer;
 
     procedure SetName(NM: TLayerName);
-    procedure Changed(Sender: TObject);
   public
 {: This is the constructor of the layer.
 
@@ -1278,12 +1026,6 @@ type
    If an object is transparent then the brush will not cover the background.
 }
     property OPAQUE: Boolean read fOpaque write fOpaque;
-{: This property is <B=True> if the layer was modified and so it must be
-   saved, otherwise it will not be saved to a drawing.
-
-   If a layer is not saved it will get the default settings.
-}
-    property Modified: Boolean read fModified;
 {: This property is <B=True> if the objects on the layer must be saved into
    a drawing.
 
@@ -1332,7 +1074,8 @@ type
 
    Use this property to change the setting of a layer for a <See Class=TDrawing>.
 }
-    property Layers[Index: Byte]: TLayer read GetLayer; default;
+    property Layers[Index: Byte]: TLayer read GetLayer;
+    default;
 {: This property contains the set of 256 layers that can be accessed through
    their names.
 
@@ -1413,13 +1156,6 @@ type
   TGraphicClassRegistered = array[0..512] of
     TGraphicObjectClass;
 
-  PObjBlock = ^TObjBlock;
-
-  TObjBlock = record
-    Obj: TGraphicObject; { Graphic object. }
-    Next, Prev: PObjBlock; { Linked list pointer. }
-  end;
-
 var
   GraphicObjectsRegistered: TGraphicClassRegistered;
 
@@ -1468,14 +1204,7 @@ end;
 
 constructor TGraphicObject.CreateDupe(Obj: TGraphicObject);
 begin
-  inherited Create;
-  fID := -1;
-  fLayer := 0;
-  fVisible := True;
-  fEnabled := True;
-  fToBeSaved := True;
-  fTag := 0;
-  fOnChange := nil;
+  Create(-1);
   Assign(Obj);
 end;
 
@@ -1504,6 +1233,12 @@ begin
   fVisible := Obj.Visible;
   fEnabled := Obj.Enabled;
   fToBeSaved := Obj.ToBeSaved;
+//    fID, fTag: Integer;
+//    fLayer: Byte;
+//    fToBeSaved: Boolean;
+//    fOnChange: TNotifyEvent;
+  fOwnerDrawing := Obj.fOwnerDrawing;
+  fParentDrawing := Obj.fParentDrawing;
 end;
 
 procedure TGraphicObject.UpdateExtension(Sender: TObject);
@@ -1585,93 +1320,310 @@ begin
 end;
 
 // =====================================================================
+// TObjList
+// =====================================================================
+
+constructor TObjList.Create;
+begin
+  inherited Create;
+  fLocked := False;
+  fHead := nil;
+  fTail := nil;
+  fCount := 0;
+  fFreeOnDelete := True;
+  fCurrent := nil;
+end;
+
+destructor TObjList.Destroy;
+begin
+  Clear;
+  inherited Destroy;
+end;
+
+function TObjList._CreateItem(const Prev, Next: POL_Item;
+  const Obj: TObject): POL_Item;
+begin
+  GetMem(Result, SizeOf(TOL_Item));
+  Result^.Prev := Prev;
+  Result^.Next := Next;
+  Result^.Obj := Obj;
+  Inc(fCount);
+end;
+
+procedure TObjList.Add(const Obj: TObject);
+begin
+  InsertBefore(nil, Obj);
+end;
+
+function TObjList.InsertBefore(
+  const Item: POL_Item; const Obj: TObject): POL_Item;
+begin
+  if Item = nil then
+  begin
+    Result := _CreateItem(fTail, nil, Obj);
+    if fTail <> nil then fTail^.Next := Result
+    else fHead := Result;
+    fTail := Result;
+    Exit;
+  end;
+  Result := _CreateItem(Item^.Prev, Item, Obj);
+  if Item^.Prev <> nil then Item^.Prev^.Next := Result
+  else fHead := Result;
+  Item^.Prev := Result;
+end;
+
+procedure TObjList.InsertBefore_FromList(
+  const Item: POL_Item; const Lst: TObjList);
+var
+  Prev, NewItem, CurrItem: POL_Item;
+begin
+  CurrItem := Lst.fHead;
+  if Item <> nil then Prev := Item^.Prev else Prev := fTail;
+  while CurrItem <> nil do
+  begin
+    NewItem := _CreateItem(Prev, Item, CurrItem^.Obj);
+    if Prev <> nil then Prev^.Next := NewItem
+    else fHead := NewItem;
+    Prev := NewItem;
+    CurrItem := CurrItem^.Next;
+  end;
+  if Item <> nil then Item^.Prev := NewItem else fTail := NewItem;
+end;
+
+function TObjList.RemoveItem(const Item: POL_Item): TObject;
+begin
+  Result := Item^.Obj;
+  if Item^.Next <> nil then Item^.Next^.Prev := Item^.Prev
+  else fTail := Item^.Prev;
+  if Item^.Prev <> nil then Item^.Prev^.Next := Item^.Next
+  else fHead := Item^.Next;
+  FreeMem(Item, SizeOf(TOL_Item));
+  Dec(fCount);
+end;
+
+procedure TObjList.DeleteItem(const Item: POL_Item);
+var
+  Obj: TObject;
+begin
+  Obj := RemoveItem(Item);
+  if Assigned(Obj) and fFreeOnDelete then Obj.Free
+end;
+
+procedure TObjList._TrancateFromSelf(Item: POL_Item);
+var
+  Next: POL_Item;
+begin
+  while Item <> nil do
+  begin
+    Next := Item^.Next;
+    if Assigned(Item^.Obj) and fFreeOnDelete then Item^.Obj.Free;
+    FreeMem(Item, SizeOf(TOL_Item));
+    Dec(fCount);
+    Item := Next;
+  end;
+end;
+
+procedure TObjList.TrancateAfter(const Item: POL_Item);
+begin
+  _TrancateFromSelf(Item^.Next);
+  fTail := Item;
+  Item^.Next := nil;
+end;
+
+procedure TObjList.TrancateAt(const Item: POL_Item);
+var
+  Prev: POL_Item;
+begin
+  Prev := Item^.Prev;
+  _TrancateFromSelf(Item);
+  if Prev = nil then fHead := nil else Prev^.Next := nil;
+  fTail := Prev;
+end;
+
+procedure TObjList.Clear;
+begin
+  _TrancateFromSelf(fHead);
+  fHead := nil;
+  fTail := nil;
+end;
+
+procedure TObjList.Lock;
+begin
+  if fLocked then raise ETpX_ListLocked.Create(
+      'TObjList.Lock: The list is alredy locked.');
+  fLocked := True;
+end;
+
+procedure TObjList.Unlock;
+begin
+  if not fLocked then raise ETpX_ListLocked.Create(
+      'TObjList.Unlock: The list is not locked. Can not unlock.');
+  fLocked := False;
+end;
+
+function TObjList.Peek: TObject;
+begin
+  if fTail = nil then Result := nil
+  else Result := fTail^.Obj;
+end;
+
+function TObjList.Pop: TObject;
+var
+  Prev: POL_Item;
+begin
+  if fTail = nil then Result := nil
+  else
+  begin
+    Result := fTail^.Obj;
+    Prev := fTail^.Prev;
+    FreeMem(fTail, SizeOf(TOL_Item));
+    Dec(fCount);
+    if Prev = nil then fHead := nil else Prev^.Next := nil;
+    fTail := Prev;
+  end;
+end;
+
+function TObjList.FirstObj: TObject;
+begin
+  fCurrent := fHead;
+  Result := CurrentObj;
+end;
+
+function TObjList.CurrentObj: TObject;
+begin
+  if fCurrent = nil then Result := nil
+  else Result := fCurrent^.Obj;
+end;
+
+function TObjList.NextObj: TObject;
+begin
+  if fCurrent = nil then Result := nil
+  else
+  begin
+    fCurrent := fCurrent^.Next;
+    Result := CurrentObj;
+  end;
+end;
+
+function TObjList.LastObj: TObject;
+begin
+  fCurrent := fTail;
+  Result := CurrentObj;
+end;
+
+function TObjList.PrevObj: TObject;
+begin
+  if fCurrent = nil then Result := nil
+  else
+  begin
+    fCurrent := fCurrent^.Prev;
+    Result := CurrentObj;
+  end;
+end;
+
+// =====================================================================
 // TGraphicObjList
 // =====================================================================
 
 constructor TGraphicObjList.Create;
 begin
   inherited Create;
-
-  fListGuard := TTpXCriticalSection.Create;
-  fHead := nil;
-  fTail := nil;
-  fIterators := 0;
-  fHasExclusive := False;
-  fCount := 0;
-  fFreeOnClear := True;
 end;
 
 destructor TGraphicObjList.Destroy;
-var
-  TmpBlock: PObjBlock;
 begin
-  while fHead <> nil do
-  begin
-    try
-      if fFreeOnClear and Assigned(TObjBlock(fHead^).Obj) then
-        TObjBlock(fHead^).Obj.Free;
-    except
+  inherited Destroy;
+end;
+
+function TGraphicObjList.RemoveItem(const Item: POL_Item): TObject;
+begin
+  Result := inherited RemoveItem(Item);
+end;
+
+procedure TGraphicObjList.Add(const Obj: TGraphicObject);
+begin
+  inherited Add(Obj);
+end;
+
+function TGraphicObjList.Peek: TGraphicObject;
+begin
+  Result := inherited Peek as TGraphicObject;
+end;
+
+function TGraphicObjList.Pop: TGraphicObject;
+begin
+  Result := inherited Pop as TGraphicObject;
+end;
+
+function TGraphicObjList.FirstObj: TGraphicObject;
+begin
+  Result := inherited FirstObj as TGraphicObject;
+end;
+
+function TGraphicObjList.CurrentObj: TGraphicObject;
+begin
+  Result := inherited CurrentObj as TGraphicObject;
+end;
+
+function TGraphicObjList.NextObj: TGraphicObject;
+begin
+  Result := inherited NextObj as TGraphicObject;
+end;
+
+function TGraphicObjList.LastObj: TGraphicObject;
+begin
+  Result := inherited LastObj as TGraphicObject;
+end;
+
+function TGraphicObjList.PrevObj: TGraphicObject;
+begin
+  Result := inherited PrevObj as TGraphicObject;
+end;
+
+function TGraphicObjList.FindObjByID(
+  const ID: Integer): TGraphicObject;
+begin
+  Result := FirstObj;
+  while (Result <> nil) and (Result.fID <> ID) do
+    Result := NextObj;
+end;
+
+function TGraphicObjList.DeleteCurrent: TGraphicObject;
+var
+  Item: POL_Item;
+begin
+  Result := nil;
+  if fCurrent = nil then Exit;
+  Item := fCurrent;
+  fCurrent := fCurrent^.Next;
+  DeleteItem(Item);
+end;
+
+function TGraphicObjList.RemoveCurrent: TGraphicObject;
+var
+  Item: POL_Item;
+begin
+  Result := nil;
+  if fCurrent = nil then Exit;
+  Item := fCurrent;
+  fCurrent := fCurrent^.Next;
+  RemoveItem(Item);
+end;
+
+procedure TGraphicObjList.Transform(const T: TTransf2D);
+var
+  Obj: TGraphicObject;
+begin
+  Lock;
+  try
+    Obj := FirstObj;
+    while Obj <> nil do
+    begin
+      if Obj is TObject2D then (Obj as TObject2D).Transform(T);
+      Obj := NextObj;
     end;
-    TmpBlock := fHead;
-    fHead := TObjBlock(fHead^).Next;
-    FreeMem(TmpBlock, SizeOf(TObjBlock));
-  end;
-  fListGuard.Free;
-  inherited;
-end;
-
-function TGraphicObjList.GetHasIter: Boolean;
-begin
-  Result := fIterators > 0;
-end;
-
-function TGraphicObjList.GetIterator: TGraphicObjIterator;
-begin
-  if fHasExclusive then
-    raise
-      ETpX_ListBlocked.Create('TGraphicObjList.GetIterator: The list has exclusive iterator.');
-  Result := TGraphicObjIterator.Create(Self);
-end;
-
-function TGraphicObjList.GetExclusiveIterator:
-  TExclusiveGraphicObjIterator;
-begin
-  if fIterators > 0 then
-    raise
-      ETpX_ListBlocked.Create('TGraphicObjList.GetExclusiveIterator: The list has active iterators.');
-  Result := TExclusiveGraphicObjIterator.Create(Self);
-end;
-
-function TGraphicObjList.GetPrivilegedIterator:
-  TExclusiveGraphicObjIterator;
-begin
-  Result := TExclusiveGraphicObjIterator.Create(Self);
-end;
-
-procedure TGraphicObjList.RemoveAllIterators;
-begin
-  fListGuard.Enter;
-  try
-    fIterators := 0;
-    fHasExclusive := False;
   finally
-    fListGuard.Leave;
-  end;
-end;
-
-procedure TGraphicObjList.TransForm(const T: TTransf2D);
-var
-  ExIter: TExclusiveGraphicObjIterator;
-  Current: TGraphicObject;
-begin
-  ExIter := GetExclusiveIterator;
-  try
-    Current := nil;
-    while ExIter.GetNext(Current) do
-      if Current is TObject2D then
-        (Current as TObject2D).TransForm(T);
-  finally
-    ExIter.Free;
+    Unlock;
   end;
 end;
 
@@ -1681,9 +1633,8 @@ function TGraphicObjList.PickObject(const P: TPoint2D;
   const FirstFound: Boolean; var NPoint: Integer): TObject2D;
 var
   TmpNPoint: Integer;
-  Tmp: TObject2D;
+  Obj: TGraphicObject;
   MinDist, Distance: TRealType;
-  TmpIter: TExclusiveGraphicObjIterator;
   //TSY:
   function NPointLevel(const NPoint: Integer): TRealType;
   begin
@@ -1693,161 +1644,157 @@ var
 begin
   Result := nil;
   if Layers = nil then Exit;
-  TmpIter := GetExclusiveIterator;
+  Lock;
   try
     MinDist := Aperture;
     NPoint := PICK_NOOBJECT;
-    Tmp := TmpIter.Current as TObject2D;
-    while Tmp <> nil do
-      with (Layers[Tmp.Layer]) do
-      begin
-        if Active and Visible and (Tmp is PickFilter) and
-          Tmp.IsVisible(VisualRect) then
-        begin
-          TmpNPoint := Tmp.OnMe(P, Aperture, Distance);
+    Obj := FirstObj;
+    while Obj <> nil do
+    begin
+      if Obj is TObject2D then with (Layers[Obj.Layer]) do
+          if Active and Visible and (Obj is PickFilter) and
+            (Obj as TObject2D).IsVisible(VisualRect) then
+          begin
+            TmpNPoint := (Obj as TObject2D).OnMe(P, Aperture,
+              Distance);
           //TSY:
           //if TmpNPoint = -2 then Distance := 0;
-          if (NPointLevel(TmpNPoint) >= NPointLevel(NPoint))
-            and (Distance <= MinDist) then
-          begin
-            Result := Tmp;
-            NPoint := TmpNPoint;
-            MinDist := Distance;
-            if FirstFound then
-              Break;
+            if (NPointLevel(TmpNPoint) >= NPointLevel(NPoint))
+              and (Distance <= MinDist) then
+            begin
+              Result := Obj as TObject2D;
+              NPoint := TmpNPoint;
+              MinDist := Distance;
+              if FirstFound then
+                Break;
+            end;
           end;
-        end;
-        Tmp := TmpIter.Next as TObject2D;
-      end;
+      Obj := NextObj;
+    end;
   finally
-    TmpIter.Free;
-  end;
-end;
-
-
-procedure TGraphicObjList.Add(const Obj: TGraphicObject);
-var
-  NewBlock: PObjBlock;
-begin
-  if fIterators > 0 then
-    raise
-      ETpX_ListBlocked.Create('TGraphicObjList.Add: The list has active iterators.');
-  fListGuard.Enter;
-  try
-    { Allocate new blocks. }
-    GetMem(NewBlock, SizeOf(TObjBlock));
-    { Initialize the block. }
-    NewBlock^.Prev := fTail;
-    NewBlock^.Next := nil;
-    NewBlock^.Obj := Obj;
-    if fHead = nil then
-      fHead := NewBlock;
-    if fTail <> nil then
-      TObjBlock(fTail^).Next := NewBlock;
-    fTail := NewBlock;
-    Inc(fCount);
-  finally
-    fListGuard.Leave;
+    Unlock;
   end;
 end;
 
 procedure TGraphicObjList.AddFromList(const Lst:
   TGraphicObjList);
 var
-  TmpIter: TGraphicObjIterator;
+  Obj: TGraphicObject;
   I: Integer;
 begin
-  if Lst.Count = 0 then
-    Exit;
-  if fIterators > 0 then
-    raise
-      ETpX_ListBlocked.Create('TGraphicObjList.AddFromList: The list has active iterators.');
-  // Alloca un iterator locale
-  fListGuard.Enter;
+  if Lst.Count = 0 then Exit;
+  Lst.Lock;
+  Lock;
   try
-    TmpIter := Lst.GetIterator;
     I := 0;
-    try
-      repeat
-        Add(TmpIter.Current);
-        Inc(I);
-        if I mod 100 = 0 then ShowProgress(I / Lst.Count);
-      until TmpIter.Next = nil;
-    finally
-      TmpIter.Free;
+    Obj := Lst.FirstObj;
+    while Obj <> nil do
+    begin
+      Add(Obj);
+      Inc(I);
+      if I mod 100 = 0 then ShowProgress(I / Lst.Count);
+      Obj := Lst.NextObj;
     end;
   finally
-    fListGuard.Leave;
+    Lst.Unlock;
+    Unlock;
   end;
 end;
 
-procedure TGraphicObjList.Insert(const IDInsertPoint: Integer;
-  const Obj: TGraphicObject);
+procedure TGraphicObjList.Insert(
+  const IDInsertPoint: Integer; const Obj: TGraphicObject);
 var
-  NewBlock: PObjBlock;
-  InsertPoint: PObjBlock;
-  TmpIter: TExclusiveGraphicObjIterator;
+  NewItem: POL_Item;
+  InsertPoint: POL_Item;
+  TmpObj: TGraphicObject;
 begin
-  { Safe guard. }
-  if fHead = nil then
-    raise
-      ETpX_SysException.Create('TGraphicObjList.Insert: No objects in the list');
-  if fIterators > 0 then
-    raise
-      ETpX_ListBlocked.Create('TGraphicObjList.Insert: The list has active iterators.');
-  // Alloca un iterator locale
-  TmpIter := GetExclusiveIterator;
+  if fHead = nil then raise ETpX_SysException.Create(
+      'TGraphicObjList.Insert: No objects in the list');
+  Lock;
   try
-    InsertPoint := TmpIter.SearchBlock(IDInsertPoint);
-    if (InsertPoint = nil) then
-      raise
-        ETpX_ListObjNotFound.Create('TGraphicObjList.Insert: Object not found');
-    { Allocate new blocks. }
-    GetMem(NewBlock, SizeOf(TObjBlock));
-    { Initialize the block. }
-    NewBlock^.Prev := InsertPoint^.Prev;
-    NewBlock^.Next := InsertPoint;
-    NewBlock^.Obj := Obj;
+    FindObjByID(IDInsertPoint);
+    if fCurrent = nil then raise ETpX_ListObjNotFound.Create(
+        'TGraphicObjList.Move: Insertion point not found');
+    InsertPoint := fCurrent;
+    // Allocate new item.
+    GetMem(NewItem, SizeOf(TOL_Item));
+    // Initialize the item.
+    NewItem^.Prev := InsertPoint^.Prev;
+    NewItem^.Next := InsertPoint;
+    NewItem^.Obj := Obj;
     if InsertPoint^.Prev <> nil then
-      InsertPoint^.Prev^.Next := NewBlock
+      InsertPoint^.Prev^.Next := NewItem
     else
-      fHead := NewBlock;
-    InsertPoint^.Prev := NewBlock;
+      fHead := NewItem;
+    InsertPoint^.Prev := NewItem;
     Inc(fCount);
   finally
-    TmpIter.Free;
+    Unlock;
   end;
 end;
 
-procedure TGraphicObjList.Move(const IDToMove, IDInsertPoint:
-  Integer);
+procedure TGraphicObjList.InsertFromList(
+  const IDInsertPoint: Integer; const Lst: TGraphicObjList);
 var
-  InsertPoint, ToMove: PObjBlock;
-  TmpIter: TExclusiveGraphicObjIterator;
+  NewItem: POL_Item;
+  InsertPoint: POL_Item;
 begin
-  { Safe guard. }
-  if fHead = nil then
-    raise
-      ETpX_SysException.Create('TGraphicObjList.Move: No objects in the list');
-  if fIterators > 0 then
-    raise
-      ETpX_ListBlocked.Create('TGraphicObjList.Move: The list has active iterators.');
-  // Alloca un iterator locale
-  TmpIter := GetExclusiveIterator;
+  if fHead = nil then raise ETpX_SysException.Create(
+      'TGraphicObjList.Insert: No objects in the list');
+  Lock;
   try
-    { Check if the current and insert point are the same. }
-    if IDInsertPoint = IDToMove then
-      raise
-        ETpX_SysException.Create('TGraphicObjList.Move: Bad object to move');
-    InsertPoint := TmpIter.SearchBlock(IDInsertPoint);
-    ToMove := TmpIter.SearchBlock(IDToMove);
-    if (InsertPoint = nil) then
-      raise
-        ETpX_ListObjNotFound.Create('TGraphicObjList.Move: Insertion point not found');
-    if (ToMove = nil) then
-      raise
-        ETpX_ListObjNotFound.Create('TGraphicObjList.Move: Object to move not found');
-    { Now I have the block to move and the insertion point. }
+    FindObjByID(IDInsertPoint);
+    if (fCurrent = nil) then raise ETpX_ListObjNotFound.Create(
+        'TGraphicObjList.Move: Insertion point not found');
+    InsertPoint := fCurrent;
+    Lst.Lock;
+    try
+      Lst.FirstObj;
+      while Lst.CurrentObj <> nil do
+      begin
+        // Allocate new item.
+        GetMem(NewItem, SizeOf(TOL_Item));
+        // Initialize the item. }
+        NewItem^.Prev := InsertPoint^.Prev;
+        NewItem^.Next := InsertPoint;
+        NewItem^.Obj := Lst.CurrentObj;
+        if InsertPoint^.Prev <> nil then
+          InsertPoint^.Prev^.Next := NewItem
+        else
+          fHead := NewItem;
+        InsertPoint^.Prev := NewItem;
+        Inc(fCount);
+        Lst.NextObj;
+      end;
+    finally
+      Lst.Unlock;
+    end;
+  finally
+    Unlock;
+  end;
+end;
+
+procedure TGraphicObjList.Move(
+  const IDToMove, IDInsertPoint: Integer);
+var
+  InsertPoint, ToMove: POL_Item;
+begin
+  if fHead = nil then raise ETpX_SysException.Create(
+      'TGraphicObjList.Move: No objects in the list');
+  // Check if the current and insert point are the same.
+  if IDInsertPoint = IDToMove then raise ETpX_SysException.Create(
+      'TGraphicObjList.Move: Bad object to move');
+  Lock;
+  try
+    FindObjByID(IDInsertPoint);
+    if fCurrent = nil then raise ETpX_ListObjNotFound.Create(
+        'TGraphicObjList.Move: Insertion point not found');
+    InsertPoint := fCurrent;
+    FindObjByID(IDToMove);
+    if fCurrent = nil then raise ETpX_ListObjNotFound.Create(
+        'TGraphicObjList.Move: Object to move not found');
+    ToMove := fCurrent;
+    // Move object
     if ToMove^.Prev <> nil then
       ToMove^.Prev^.Next := ToMove^.Next
     else
@@ -1856,7 +1803,7 @@ begin
       ToMove^.Next^.Prev := ToMove^.Prev
     else
       fTail := ToMove^.Prev;
-    { Set new link. }
+    // Set new link
     if InsertPoint^.Prev <> nil then
       InsertPoint^.Prev^.Next := ToMove
     else
@@ -1865,393 +1812,72 @@ begin
     ToMove^.Prev := InsertPoint^.Prev;
     InsertPoint^.Prev := ToMove;
   finally
-    TmpIter.Free;
-  end;
-end;
-
-procedure TGraphicObjList.DeleteBlock(ObjToDel: Pointer);
-begin
-  fListGuard.Enter;
-  try
-    // Free the first object. So if it cannot be deleted it will be later.
-    if Assigned(TObjBlock(ObjToDel^).Obj) and fFreeOnClear then
-      TObjBlock(ObjToDel^).Obj.Free;
-    // First extract the block from all list.
-    if TObjBlock(ObjToDel^).Next <> nil then
-      TObjBlock(ObjToDel^).Next^.Prev :=
-        TObjBlock(ObjToDel^).Prev
-    else
-     { I reached the Last block. }
-      fTail := TObjBlock(ObjToDel^).Prev;
-    if TObjBlock(ObjToDel^).Prev <> nil then
-      TObjBlock(ObjToDel^).Prev^.Next :=
-        TObjBlock(ObjToDel^).Next
-    else
-     { I reached the head. }
-      fHead := TObjBlock(ObjToDel^).Next;
-    FreeMem(ObjToDel, SizeOf(TObjBlock));
-    Dec(fCount);
-  finally
-    fListGuard.Leave;
+    Unlock;
   end;
 end;
 
 function TGraphicObjList.Delete(const ID: Integer): Boolean;
-var
-  ObjToDel: PObjBlock;
-  TmpIter: TExclusiveGraphicObjIterator;
 begin
   Result := False;
-  if fIterators > 0 then
-    raise
-      ETpX_ListBlocked.Create('TGraphicObjList.Delete: The list has active iterators.');
-  // Alloca un iterator locale
-  TmpIter := GetExclusiveIterator;
+  Lock;
   try
-    ObjToDel := TmpIter.SearchBlock(ID);
-    if ObjToDel = nil then
-      raise
-        ETpX_ListObjNotFound.Create('TGraphicObjList.Delete: Object not found');
-    DeleteBlock(ObjToDel);
+    FindObjByID(ID);
+    if fCurrent = nil then raise ETpX_ListObjNotFound.Create(
+        'TGraphicObjList.Delete: Object not found');
+    DeleteItem(fCurrent);
     Result := True;
   finally
-    TmpIter.Free;
+    Unlock;
   end;
 end;
 
 function TGraphicObjList.Find(const ID: Integer):
   TGraphicObject;
-var
-  FoundObj: PObjBlock;
-  TmpIter: TGraphicObjIterator;
 begin
-  Result := nil;
-  // Alloca un iterator locale
-  TmpIter := GetIterator;
+  Lock;
   try
-    FoundObj := TmpIter.SearchBlock(ID);
-    if FoundObj = nil then
-      Exit;
-    Result := TObjBlock(FoundObj^).Obj;
+    Result := FindObjByID(ID);
   finally
-    TmpIter.Free;
+    Unlock;
   end;
 end;
 
-procedure TGraphicObjList.RemoveBlock(ObjToDel: Pointer);
-begin
-  fListGuard.Enter;
-  try
-    // First extract the block from all list.
-    if TObjBlock(ObjToDel^).Next <> nil then
-      TObjBlock(ObjToDel^).Next^.Prev :=
-        TObjBlock(ObjToDel^).Prev
-    else
-     { I reached the Last block. }
-      fTail := TObjBlock(ObjToDel^).Prev;
-    if TObjBlock(ObjToDel^).Prev <> nil then
-      TObjBlock(ObjToDel^).Prev^.Next :=
-        TObjBlock(ObjToDel^).Next
-    else
-     { I reached the head. }
-      fHead := TObjBlock(ObjToDel^).Next;
-    FreeMem(ObjToDel, SizeOf(TObjBlock));
-    Dec(fCount);
-  finally
-    fListGuard.Leave;
-  end;
-end;
-
-function TGraphicObjList.Remove(const ID: Integer): Boolean;
-var
-  ObjToDel: PObjBlock;
-  TmpIter: TExclusiveGraphicObjIterator;
-begin
-  Result := False;
-  if fIterators > 0 then
-    raise
-      ETpX_ListBlocked.Create('TGraphicObjList.Remove: The list has active iterators.');
-  // Alloca un iterator locale
-  TmpIter := GetExclusiveIterator;
-  try
-    ObjToDel := TmpIter.SearchBlock(ID);
-    if ObjToDel = nil then
-      raise
-        ETpX_ListObjNotFound.Create('TGraphicObjList.Remove: No object found');
-    RemoveBlock(ObjToDel);
-    Result := False;
-  finally
-    TmpIter.Free;
-  end;
-end;
-
-procedure TGraphicObjList.Clear;
-var
-  TmpBlock: PObjBlock;
-begin
-  if fIterators > 0 then
-    raise
-      ETpX_ListBlocked.Create('TGraphicObjList.Clear: The list has active iterators.');
-  fListGuard.Enter;
-  try
-    while fHead <> nil do
-    begin
-      try
-        if fFreeOnClear and Assigned(TObjBlock(fHead^).Obj) then
-          TObjBlock(fHead^).Obj.Free;
-      except
-      end;
-      TmpBlock := fHead;
-      fHead := TObjBlock(fHead^).Next;
-      FreeMem(TmpBlock, SizeOf(TObjBlock));
-    end;
-    fHead := nil;
-    fTail := nil;
-    fCount := 0;
-  finally
-    fListGuard.Leave;
-  end;
-end;
-
-// =====================================================================
-// TGraphicObjIterator
-// =====================================================================
-
-{ Search the block corresponding to ID. }
-
-function TGraphicObjIterator.SearchBlock(ID: Integer): Pointer;
-begin
-  Result := fSourceList.fHead;
-  while (Result <> nil) and (TObjBlock(Result^).Obj.ID <> ID) do
-  begin
-    if TObjBlock(Result^).Prev = fSourceList.fTail then
-    begin
-      Result := nil;
-      Break;
-    end;
-    Result := TObjBlock(Result^).Next;
-  end;
-end;
-
-function TGraphicObjIterator.GetCurrentObject: TGraphicObject;
-begin
-  if fCurrent <> nil then
-    Result := TObjBlock(fCurrent^).Obj
-  else
-    Result := nil;
-end;
-
-constructor TGraphicObjIterator.Create(const Lst:
-  TGraphicObjList);
-begin
-  inherited Create;
-
-  Lst.fListGuard.Enter;
-  try
-    fCurrent := nil;
-    fSourceList := Lst;
-    if fSourceList <> nil then
-    begin
-      Inc(fSourceList.fIterators);
-      fCurrent := fSourceList.fHead;
-    end;
-  finally
-    Lst.fListGuard.Leave;
-  end;
-end;
-
-destructor TGraphicObjIterator.Destroy;
-begin
-  fSourceList.fListGuard.Enter;
-  try
-    if fSourceList <> nil then
-    begin
-      Dec(fSourceList.fIterators);
-      if fSourceList.fIterators < 0 then
-        fSourceList.fIterators := 0;
-    end;
-  finally
-    fSourceList.fListGuard.Leave;
-  end;
-  inherited;
-end;
-
-function TGraphicObjIterator.GetCount: Integer;
-begin
-  if (fSourceList = nil) then
-    Result := 0
-  else
-    Result := fSourceList.Count;
-end;
-
-function TGraphicObjIterator.Search(const ID: Integer):
-  TGraphicObject;
-var
-  TmpBlock: PObjBlock;
-begin
-  Result := nil;
-  if (fSourceList = nil) then
-    Exit;
-  TmpBlock := SearchBlock(ID);
-  if TmpBlock = nil then
-    Exit;
-  Result := TmpBlock^.Obj;
-  fCurrent := TmpBlock;
-end;
-
-function TGraphicObjIterator.Next: TGraphicObject;
-begin
-  Result := nil;
-  if (fSourceList = nil) and (fCurrent = nil) then
-    Exit;
-  { Check if the End of the list is reached. }
-  if fCurrent = Pointer(fSourceList.fTail) then
-  begin
-    fCurrent := nil;
-    Exit;
-  end;
-  fCurrent := TObjBlock(fCurrent^).Next;
-  Result := TObjBlock(fCurrent^).Obj;
-end;
-
-function TGraphicObjIterator.Prev: TGraphicObject;
-begin
-  Result := nil;
-  if (fSourceList = nil) and (fCurrent = nil) then
-    Exit;
-  { Check if the start of the list is reached. }
-  if fCurrent = Pointer(fSourceList.fHead) then
-  begin
-    fCurrent := nil;
-    Exit;
-  end;
-  fCurrent := TObjBlock(fCurrent^).Prev;
-  Result := TObjBlock(fCurrent^).Obj;
-end;
-
-function TGraphicObjIterator.First: TGraphicObject;
-begin
-  Result := nil;
-  if fSourceList = nil then
-    Exit;
-  fCurrent := fSourceList.fHead;
-  if fCurrent = nil then
-    Exit;
-  Result := TObjBlock(fCurrent^).Obj;
-end;
-
-function TGraphicObjIterator.Last: TGraphicObject;
-begin
-  Result := nil;
-  if fSourceList = nil then
-    Exit;
-  fCurrent := fSourceList.fTail;
-  if fCurrent = nil then
-    Exit;
-  Result := TObjBlock(fCurrent^).Obj;
-end;
-
-function TGraphicObjIterator.GetNext(var Obj: TGraphicObject):
-  Boolean;
-begin
-  if Obj = nil then
-    Obj := First
-  else
-    Obj := Next;
-  Result := Obj <> nil;
-end;
-
-// =====================================================================
-// TExclusiveGraphicObjIterator
-// =====================================================================
-
-constructor TExclusiveGraphicObjIterator.Create(const Lst:
-  TGraphicObjList);
-begin
-  inherited Create(Lst);
-  Lst.fListGuard.Enter;
-  try
-    if fSourceList <> nil then
-      fSourceList.fHasExclusive := True;
-  finally
-    Lst.fListGuard.Leave;
-  end;
-end;
-
-destructor TExclusiveGraphicObjIterator.Destroy;
-begin
-  fSourceList.fListGuard.Enter;
-  try
-    if fSourceList <> nil then
-      fSourceList.fHasExclusive := False;
-  finally
-    fSourceList.fListGuard.Leave;
-  end;
-  inherited;
-end;
-
-procedure TExclusiveGraphicObjIterator.DeleteCurrent;
-var
-  TmpObj: Pointer;
-begin
-  if (fSourceList <> nil) and (fCurrent <> nil) then
-  begin
-    if TObjBlock(fCurrent^).Next <> nil then
-      TmpObj := TObjBlock(fCurrent^).Next
-    else
-      TmpObj := TObjBlock(fCurrent^).Prev;
-    fSourceList.DeleteBlock(fCurrent);
-    fCurrent := TmpObj;
-  end;
-end;
-
-procedure TExclusiveGraphicObjIterator.RemoveCurrent;
-var
-  TmpObj: Pointer;
-begin
-  if (fSourceList <> nil) and (fCurrent <> nil) then
-  begin
-    if TObjBlock(fCurrent^).Next <> nil then
-      TmpObj := TObjBlock(fCurrent^).Next
-    else
-      TmpObj := TObjBlock(fCurrent^).Prev;
-    fSourceList.RemoveBlock(fCurrent);
-    fCurrent := TmpObj;
-  end;
-end;
-
-procedure TExclusiveGraphicObjIterator.ReplaceDeleteCurrent(
+procedure TGraphicObjList.ReplaceDeleteCurrent(
   const Obj: TGraphicObject);
 var
   OwnerDrawing: TObject;
 begin
-  if (fSourceList = nil) or (fCurrent = nil) then Exit;
+  if fCurrent = nil then Exit;
   OwnerDrawing := nil;
-  if Assigned(TObjBlock(fCurrent^).Obj) and
-    fSourceList.fFreeOnClear then
+  if Assigned(fCurrent^.Obj) and fFreeOnDelete then
   begin
-    OwnerDrawing := TObjBlock(fCurrent^).Obj.OwnerDrawing;
-    TObjBlock(fCurrent^).Obj.Free;
+    OwnerDrawing := (fCurrent^.Obj as
+      TGraphicObject).OwnerDrawing;
+    fCurrent^.Obj.Free;
   end;
   Obj.fOwnerDrawing := OwnerDrawing;
-  TObjBlock(fCurrent^).Obj := Obj;
+  fCurrent^.Obj := Obj;
+end;
+
+procedure TGraphicObjList.Clear;
+begin
+  Lock;
+  try
+    inherited Clear;
+  finally
+    Unlock;
+  end;
 end;
 
 // =====================================================================
 // TLayer
 // =====================================================================
 
-procedure TLayer.Changed(Sender: TObject);
-begin
-  fModified := True;
-end;
-
 procedure TLayer.SetName(NM: TLayerName);
 begin
   if fName <> NM then
   begin
     fName := NM;
-    fModified := True;
   end;
 end;
 
@@ -2272,7 +1898,6 @@ begin
   fVisible := True;
   fOpaque := False;
   fStreamable := True;
-  fModified := False;
 //  fPen.OnChange := Changed;
 //  fBrush.OnChange := Changed;
   fTag := 0;
@@ -2341,7 +1966,6 @@ begin
   Stream.Read(fOpaque, SizeOf(Boolean));
   Stream.Read(fStreamable, SizeOf(Boolean));
   Stream.Read(fName, SizeOf(TLayerName));
-  fModified := True;
 end;
 
 function TLayers.GetLayerByName(const NM: TLayerName): TLayer;
@@ -2393,11 +2017,11 @@ begin
   Stream.Write(Cont, SizeOf(Cont));
   for Cont := 0 to 255 do
     with Stream do
-      if TLayer(fLayers[Cont]).fModified then
-      begin
-        Write(Cont, SizeOf(Cont));
-        TLayer(fLayers[Cont]).SaveToStream(Stream);
-      end;
+//      if TLayer(fLayers[Cont]).fModified then
+    begin
+      Write(Cont, SizeOf(Cont));
+      TLayer(fLayers[Cont]).SaveToStream(Stream);
+    end;
   Cont := 256;
   Stream.Write(Cont, SizeOf(Cont));
 end;
@@ -2466,7 +2090,7 @@ begin
   DragPt := CartesianPoint2D(DragPt);
   TmpTransf := Translate2D(ToPt.X - DragPt.X, ToPt.Y -
     DragPt.Y);
-  TransForm(TmpTransf);
+  Transform(TmpTransf);
 end;
 
 function TObject2D.OnMe(P: TPoint2D; Aperture: TRealType; var
@@ -2494,7 +2118,7 @@ begin
     OnControlBox(BoundingBox, VT, ClipRect2D);
 end;
 
-procedure TObject2D.TransForm(const T: TTransf2D);
+procedure TObject2D.Transform(const T: TTransf2D);
 begin
   //!!!
 end;
@@ -2537,7 +2161,7 @@ begin
   inherited Create(ID);
 
   fObjects := TGraphicObjList.Create;
-  fObjects.FreeOnClear := True;
+  fObjects.FreeOnDelete := True;
   fDrawBoundingBox := True;
 end;
 
@@ -2549,7 +2173,7 @@ begin
   inherited Create(ID);
 
   fObjects := TGraphicObjList.Create;
-  fObjects.FreeOnClear := True;
+  fObjects.FreeOnDelete := True;
   for Cont := Low(Objs) to High(Objs) do
     if Objs[Cont] <> nil then fObjects.Add(Objs[Cont]);
   UpdateExtension(Self);
@@ -2557,23 +2181,19 @@ begin
 end;
 
 procedure TContainer2D._UpdateExtension;
-var
-  TmpIter: TGraphicObjIterator;
 begin
-  // Crea un iterator temporaneo.
-  TmpIter := fObjects.GetIterator;
-  try
-    if TmpIter.Count = 0 then
-    begin
-      fBoundingBox := Rect2D(0, 0, 0, 0);
-      Exit;
-    end;
-    fBoundingBox := TObject2D(TmpIter.First).BoundingBox;
-    while TmpIter.Next <> nil do
-      fBoundingBox := BoxOutBox2D(fBoundingBox,
-        TObject2D(TmpIter.Current).BoundingBox);
-  finally // Libera l'iterator
-    TmpIter.Free;
+  if fObjects.Count = 0 then
+  begin
+    fBoundingBox := Rect2D(0, 0, 0, 0);
+    Exit;
+  end;
+  fObjects.FirstObj._UpdateExtension;
+  fBoundingBox := (fObjects.CurrentObj as TObject2D).BoundingBox;
+  while fObjects.NextObj <> nil do
+  begin
+    fObjects.CurrentObj._UpdateExtension;
+    fBoundingBox := BoxOutBox2D(fBoundingBox,
+      (fObjects.CurrentObj as TObject2D).BoundingBox);
   end;
 end;
 
@@ -2585,195 +2205,118 @@ end;
 
 procedure TContainer2D.SaveToStream(const Stream: TStream);
 var
-  TmpObj: TObject2D;
-  TmpLong: Integer;
-  TmpWord: Word;
-  TmpIter: TGraphicObjIterator;
+  Obj: TObject2D;
+  N: Integer;
+  Index: Word;
 begin
   inherited SaveToStream(Stream);
-  // Crea un iterator temporaneo.
-  TmpIter := fObjects.GetIterator;
-  with Stream do
-  try
-     { Write the number of objects in the container. }
-    TmpLong := fObjects.Count;
-    Write(TmpLong, SizeOf(TmpLong));
-     { Now write the objects in the container. }
-    TmpObj := TObject2D(TmpIter.First);
-    while TmpObj <> nil do
-    begin
-      TmpWord := TpXFindClassIndex(TmpObj.ClassName);
-        { Save the class index. }
-      Write(TmpWord, SizeOf(TmpWord));
-        { Save the object. }
-      TmpObj.SaveToStream(Stream);
-      TmpObj := TObject2D(TmpIter.Next);
-    end;
-  finally // Libera l'iterator
-    TmpIter.Free;
+// Write number of objects in the container
+  N := fObjects.Count;
+  Stream.Write(N, SizeOf(N));
+// Write all contained objects
+  Obj := fObjects.FirstObj as TObject2D;
+  while Obj <> nil do
+  begin
+  // Write class index
+    Index := TpXFindClassIndex(Obj.ClassName);
+    Stream.Write(Index, SizeOf(Index));
+  // Write object itself
+    Obj.SaveToStream(Stream);
+    Obj := fObjects.NextObj as TObject2D;
   end;
 end;
 
 constructor TContainer2D.CreateFromStream(const Stream: TStream);
 var
-  TmpClass: TGraphicObjectClass;
-  TmpObj: TGraphicObject;
-  TmpLong: Integer;
-  TmpWord: Word;
+  Obj: TGraphicObject;
+  N: Integer;
+  Index: Word;
 begin
   inherited;
-  with Stream do
+// Read number of objects
+  Stream.Read(N, SizeOf(N));
+  fObjects := TGraphicObjList.Create;
+  fObjects.FreeOnDelete := True;
+// Read all objects
+  while N > 0 do
   begin
-     { Read the number of objects in the container. }
-    Read(TmpLong, SizeOf(TmpLong));
-    fObjects := TGraphicObjList.Create;
-    fObjects.FreeOnClear := True;
-     { Now read the objects for the container. }
-    while TmpLong > 0 do
-    begin
-        { Read the type of object. }
-      Read(TmpWord, SizeOf(TmpWord));
-        { Retrive the class type from the registered classes. }
-      TmpClass := TpXFindClassByIndex(TmpWord);
-      TmpObj := TmpClass.CreateFromStream(Stream);
-      TmpObj.UpdateExtension(Self);
-      fObjects.Add(TmpObj);
-      Dec(TmpLong);
-    end;
+  // Read object type index
+    Stream.Read(Index, SizeOf(Index));
+  // Create object of the corresponding class
+    Obj := TpXFindClassByIndex(Index).CreateFromStream(Stream);
+//  Obj.UpdateExtension(Self);
+    fObjects.Add(Obj);
+    Dec(N);
   end;
   UpdateExtension(Self);
 end;
 
 procedure TContainer2D.Assign(const Obj: TGraphicObject);
 var
-  TmpIter: TGraphicObjIterator;
-  TmpClass: TGraphicObjectClass;
-  TmpObj: TGraphicObject;
+  TmpObj, NewObj: TGraphicObject;
 begin
-  if (Obj = Self) then
-    Exit;
-  inherited;
+  if (Obj = Self) then Exit;
+  inherited Assign(Obj);
   if Obj is TContainer2D then
   begin
-    if fObjects = nil then
-    begin
-      fObjects := TGraphicObjList.Create;
-      fObjects.FreeOnClear := True;
-    end
-    else
-      fObjects.Clear;
-     // Copia creando gli oggetti contenuti.
-    if TContainer2D(Obj).fObjects.HasExclusiveIterators then
-      raise
-        ETpX_ListBlocked.Create('TContainer2D.Assign: The list has an exclusive iterator.');
-     // Alloca un iterator locale
-    TmpIter := TContainer2D(Obj).fObjects.GetIterator;
-    try
-      repeat
-        TmpClass :=
-          TGraphicObjectClass(TmpIter.Current.ClassType);
-        TmpObj := TmpClass.Create(TmpIter.Current.ID);
-        TmpObj.Assign(TmpIter.Current);
-        fObjects.Add(TmpObj);
-      until TmpIter.Next = nil;
-    finally
-      TmpIter.Free;
-    end;
-  end;
-end;
-
-procedure TContainer2D.UpdateSourceReferences(const BlockList:
-  TGraphicObjIterator);
-var
-  TmpObj: TObject2D;
-  TmpIter: TGraphicObjIterator;
-begin
-  // Crea un iterator temporaneo.
-  TmpIter := fObjects.GetIterator;
-  try
-    TmpObj := TObject2D(TmpIter.First);
+    // Copy contained objects
+    fObjects.Clear;
+    TmpObj := (Obj as TContainer2D).fObjects.FirstObj;
     while TmpObj <> nil do
     begin
-      if (TmpObj is TSourceBlock2D) then
-        TSourceBlock2D(TmpObj).UpdateSourceReferences(BlockList)
-      else if (TmpObj is TBlock2D) then
-        TBlock2D(TmpObj).UpdateReference(BlockList);
-      TmpObj := TObject2D(TmpIter.Next);
+      NewObj := TGraphicObjectClass(TmpObj.ClassType).Create(-1);
+      NewObj.Assign(TmpObj);
+      fObjects.Add(NewObj);
+      TmpObj := (Obj as TContainer2D).fObjects.NextObj;
     end;
-  finally // Libera l'iterator
-    TmpIter.Free;
   end;
   UpdateExtension(Self);
 end;
 
-procedure TContainer2D.TransForm(const T: TTransf2D);
-var
-  TmpObj: TObject2D;
-  TmpIter: TGraphicObjIterator;
+procedure TContainer2D.Transform(const T: TTransf2D);
 begin
-  TmpIter := fObjects.GetIterator;
-  try
-    TmpObj := TObject2D(TmpIter.First);
-    while TmpObj <> nil do
-    begin
-      TmpObj.TransForm(T);
-      TmpObj := TObject2D(TmpIter.Next);
-    end;
-  finally
-    TmpIter.Free;
-  end;
+  fObjects.Transform(T);
+  UpdateExtension(Self);
 end;
 
 procedure TContainer2D.DeviceDraw(Transf: TTransf2D;
   const Dvc: TDevice; const ClipRect2D: TRect2D);
 var
-  TmpObj: TObject2D;
-  TmpIter: TGraphicObjIterator;
+  Obj: TGraphicObject;
 begin
-  TmpIter := fObjects.GetIterator;
-  try
-    TmpObj := TObject2D(TmpIter.First);
-    while TmpObj <> nil do
-    begin
-      TmpObj.DeviceDraw(Transf, Dvc, ClipRect2D);
-      TmpObj := TObject2D(TmpIter.Next);
-    end;
-  finally
-    TmpIter.Free;
+  Obj := fObjects.FirstObj;
+  while Obj <> nil do
+  begin
+    if Obj is TObject2D then
+      (Obj as TObject2D).DeviceDraw(Transf, Dvc, ClipRect2D);
+    Obj := fObjects.NextObj;
   end;
 end;
 
 function TContainer2D.OnMe(P: TPoint2D; Aperture: TRealType;
   var Distance: TRealType): Integer;
 var
-  TmpObj: TObject2D;
+  Obj: TObject2D;
   MinDist: TRealType;
-  TmpIter: TGraphicObjIterator;
 begin
   Result := inherited OnMe(P, Aperture, Distance);
   if Result = PICK_INBBOX then
   begin
-     // Crea un iterator temporaneo.
-    TmpIter := fObjects.GetIterator;
-    try
        { Check all the objects in the container. }
-      TmpObj := TObject2D(TmpIter.First);
-      MinDist := 2.0 * Aperture;
-      while TmpObj <> nil do
+    Obj := fObjects.FirstObj as TObject2D;
+    MinDist := 2.0 * Aperture;
+    while Obj <> nil do
+    begin
+      if (Obj.OnMe(P, Aperture, Distance) >= PICK_INOBJECT)
+        and
+        (Distance < MinDist) then
       begin
-        if (TmpObj.OnMe(P, Aperture, Distance) >= PICK_INOBJECT)
-          and
-          (Distance < MinDist) then
-        begin
-          MinDist := Distance;
-          Result := TmpObj.ID;
-        end;
-        TmpObj := TObject2D(TmpIter.Next);
+        MinDist := Distance;
+        Result := Obj.ID;
       end;
-      Distance := MinDist;
-    finally
-      TmpIter.Free;
+      Obj := fObjects.NextObj as TObject2D;
     end;
+    Distance := MinDist;
   end;
 end;
 
@@ -2782,8 +2325,6 @@ procedure TContainer2D.DrawControlPoints(const VT: TTransf2D;
 begin
   if fObjects.Count > 0 then
     inherited DrawControlPoints(VT, ClipRect2D, Width);
-  _UpdateExtension; //??
-  //OwnerDrawing.OnControlPoint3(BoxCenter(Box), VT, ClipRect2D);
   (fOwnerDrawing as TDrawing2D).OnControlPoint3(
     BoundingBox.FirstEdge, VT, ClipRect2D);
   (fOwnerDrawing as TDrawing2D).OnControlPoint3(
@@ -2824,6 +2365,23 @@ begin
     raise
       ETpX_SourceBlockIsReferenced.Create('TSourceBlock2D.Destroy: This source block is referenced and cannot be deleted');
   inherited Destroy;
+end;
+
+procedure TSourceBlock2D.UpdateSourceReferences(
+  const BlockList: TGraphicObjList);
+var
+  Obj: TGraphicObject;
+begin
+  Obj := BlockList.FirstObj;
+  while Obj <> nil do
+  begin
+    if Obj is TSourceBlock2D then
+      (Obj as TSourceBlock2D).UpdateSourceReferences(BlockList)
+    else if (Obj is TBlock2D) then
+      (Obj as TBlock2D).UpdateReference(BlockList);
+    Obj := BlockList.NextObj;
+  end;
+  UpdateExtension(Self);
 end;
 
 constructor TSourceBlock2D.CreateFromStream(
@@ -2959,11 +2517,11 @@ begin
 end;
 
 procedure TBlock2D.UpdateReference(const BlockList:
-  TGraphicObjIterator);
+  TGraphicObjList);
 var
   TmpSource: TSourceBlock2D;
 begin
-  TmpSource := BlockList.First as TSourceBlock2D;
+  TmpSource := BlockList.FirstObj as TSourceBlock2D;
   while TmpSource <> nil do
   begin
     if TmpSource.Name = fSourceName then
@@ -2972,7 +2530,7 @@ begin
       UpdateExtension(Self);
       Exit;
     end;
-    TmpSource := BlockList.Next as TSourceBlock2D;
+    TmpSource := BlockList.NextObj as TSourceBlock2D;
   end;
   raise
     ETpX_ListObjNotFound.Create('TBlock2D.UpdateReference: Source block not found');
@@ -3024,7 +2582,7 @@ end;
 initialization
   TpXInitClassRegister;
 
-  TpXRegisterClass(0, TContainer2D);
+  TpXRegisterClass(0, TGroup2D);
   TpXRegisterClass(1, TSourceBlock2D);
   TpXRegisterClass(2, TBlock2D);
 
@@ -3045,6 +2603,8 @@ initialization
   TpXRegisterClass(22, TBezierPath2D);
   TpXRegisterClass(23, TClosedBezierPath2D);
   TpXRegisterClass(24, TSymbol2D);
+  TpXRegisterClass(25, TBitmap2D);
+  TpXRegisterClass(26, TCompound2D);
 
 finalization
 end.

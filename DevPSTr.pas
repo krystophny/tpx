@@ -12,7 +12,7 @@ type
 
 // A class for pstricks output
 
-  T_PSTricks_Device = class(TStreamDevice)
+  T_PSTricks_Device = class(TFileDevice)
   protected
     fColors: TStringList;
     fCurrDash: TLineStyle;
@@ -23,6 +23,9 @@ type
       const LineWidth: TRealType;
       const LineColor, FillColor: TColor; Closed: Boolean);
     procedure WriteAttr;
+    procedure WriteHatchingLines(const Lines: TPointsSet2D;
+      const HatchColor: TColor; const LineWidth: TRealType);
+      override;
     procedure Bezier(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
       const LineStyle: TLineStyle; const LineWidth: TRealType;
@@ -38,16 +41,15 @@ type
       const Hatching: THatching; const Kind: TCircularKind);
     procedure RotText(P: TPoint2D; H, ARot: TRealType;
       WideText: WideString; TeXText: AnsiString;
-      const HJustification: THJustification;
-      const VJustification: TVJustification;
+      const HAlignment: THAlignment;
       const LineColor: TColor;
       const FaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
-    procedure WriteHatchingLines(const Lines: TPointsSet2D;
-      const HatchColor: TColor; const LineWidth: TRealType);
-      override;
+    procedure Bitmap(P: TPoint2D; W, H: TRealType;
+      const KeepAspectRatio: Boolean; BitmapEntry: TObject);
   public
     DvipsFixBB: Boolean;
+    FontSizeInTeX: Boolean;
     constructor Create;
     destructor Destroy; override;
     procedure Poly(PP: TPointsSet2D;
@@ -61,7 +63,7 @@ type
 
 implementation
 
-uses ColorEtc, Output;
+uses ColorEtc, Output, Bitmaps;
 
 // =====================================================================
 // T_PSTricks_Device
@@ -76,6 +78,7 @@ begin
   OnCircle := Circle;
   OnCircular := Circular;
   OnRotText := RotText;
+  OnBitmap := Bitmap;
   fHasBezier := True;
   fHasClosedBezier := True;
   fHasArc := True;
@@ -134,7 +137,7 @@ begin
     case LineStyle of
       liDotted:
         WriteLnStream(Format('\psset{dash=%.2fmm %.2fmm}',
-          [fLineWidthBase * 2, fDottedSize]));
+          [fLineWidthBase * LineWidth, fDottedSize]));
       liDashed:
         WriteLnStream(Format('\psset{dash=%.2fmm %.2fmm}',
           [fDashSize * 2, fDashSize]));
@@ -164,9 +167,11 @@ end;
 procedure T_PSTricks_Device.WriteHeader(ExtRect: TRect2D);
 begin
   if fFactorMM = 0 then fFactorMM := 1;
+  WriteStream('{'); // Make settings local
   if DvipsFixBB then
     WriteLnStream(DvipsFixBB_RuleStr(ExtRect, fFactorMM));
-  WriteLnStream(Format('\psset{unit=%.2fmm}', [1 / fFactorMM]));
+  WriteLnStream(Format('\psset{unit=%.2fmm,dashadjust=false}',
+    [1 / fFactorMM]));
   WriteLnStream(Format('\begin{pspicture}(%.2f,%.2f)(%.2f,%.2f)',
     [ExtRect.Left, ExtRect.Bottom, ExtRect.Right, ExtRect.Top]));
   WriteLnStream(Format('\psset{linewidth=%.2fmm}',
@@ -175,7 +180,7 @@ end;
 
 procedure T_PSTricks_Device.WriteFooter;
 begin
-  WriteLnStream('\end{pspicture}%');
+  WriteLnStream('\end{pspicture}}%');
 end;
 
 procedure T_PSTricks_Device.WriteHatchingLines(
@@ -241,10 +246,13 @@ begin
   WriteStream('\pscustom');
   WriteAttr;
   WriteStream('{');
+  WriteStream('\moveto');
+  WriteStreamPoint(PP[0]);
   for I := 0 to PP.Count div 3 - 1 do
   begin
-    WriteStream('\psbezier');
-    WriteStreamPoint(PP[3 * I]);
+//    WriteStream('\psbezier');
+    WriteStream('\curveto');
+//    WriteStreamPoint(PP[3 * I]);
     WriteStreamPoint(PP[3 * I + 1]);
     WriteStreamPoint(PP[3 * I + 2]);
     WriteStreamPoint(PP[3 * I + 3]);
@@ -261,14 +269,13 @@ procedure T_PSTricks_Device.Circle(const CP: TPoint2D; const R:
   const Hatching: THatching);
 begin
   PrepareAttr(LineStyle, LineWidth, LineColor, FillColor, True);
+  AddAttr('dimen=middle');
   WriteStream('\pscircle');
   WriteAttr;
   WriteStreamPoint(CP);
   if fFactorMM = 0 then fFactorMM := 1;
-  WriteStream(Format('{%.2f}',
-    [R * fTScale
-    + fLineWidthBase * LineWidth * FactorMM / 2]));
-//    + fLineWidthBase * LineWidth / fUnitLength / 2]));
+  WriteStream(Format('{%.2f}', [R * fTScale]));
+  // + fLineWidthBase * LineWidth * FactorMM / 2
   WriteLnStream('');
 end;
 
@@ -288,9 +295,10 @@ begin
   if EA < SA then EA := EA + 2 * Pi;
   if Kind = ci_Sector then
   begin
+    AddAttr('dimen=middle');
     WriteStream('\pswedge');
     WriteAttr;
-    R := R + fLineWidthBase * LineWidth * FactorMM / 2 / fTScale;
+//    R := R + fLineWidthBase * LineWidth * FactorMM / 2 / fTScale;
   end
   else
   begin
@@ -301,6 +309,7 @@ begin
   WriteStreamPoint(CP);
   WriteStream(Format('{%.2f}{%.2f}{%.2f}',
     [R * fTScale, RadToDeg(SA), RadToDeg(EA)]));
+  WriteLnStream('');
   if Kind = ci_Segment then
   begin
     Delt := fLineWidthBase * FactorMM
@@ -312,24 +321,40 @@ begin
     WriteStreamPoint(GetPoint(SA, R));
     WriteStreamPoint(GetPoint(EA, R));
     WriteStreamPoint(GetPoint(EA - Delt, R));
+    WriteLnStream('');
   end;
 end;
 
 procedure T_PSTricks_Device.RotText(P: TPoint2D; H, ARot:
   TRealType;
   WideText: WideString; TeXText: AnsiString;
-  const HJustification: THJustification;
-  const VJustification: TVJustification;
+  const HAlignment: THAlignment;
   const LineColor: TColor;
   const FaceName: AnsiString;
   const Charset: TFontCharSet; const Style: TFontStyles);
 begin
-  ShiftTeXTextPoint(P, VJustification, H, ARot);
+  ShiftTeXTextPoint(P, H, ARot);
   if fFactorMM = 0 then fFactorMM := 1;
   WriteLnStream(Format('\put(%.2f,%.2f){%s}', [P.X, P.Y,
     GetTeXTextMakebox0(
-      H, ARot, 1 / fFactorMM, LineColor, HJustification,
-      VJustification, Style, WideText, TeXText)]));
+      H, ARot, 1 / fFactorMM, LineColor, HAlignment,
+      Style, WideText, TeXText, FontSizeInTeX)]));
+end;
+
+procedure T_PSTricks_Device.Bitmap(P: TPoint2D; W, H: TRealType;
+  const KeepAspectRatio: Boolean; BitmapEntry: TObject);
+var
+  BE: TBitmapEntry;
+  OutDir: string;
+begin
+  BE := BitmapEntry as TBitmapEntry;
+  OutDir := ExtractFilePath(BE.GetFullLink);
+  if not BE.RequireEPS(OutDir) then Exit;
+  if fFactorMM = 0 then fFactorMM := 1;
+  WriteLnStream(Format('\put(%.2f,%.2f){%s}',
+    [P.X, P.Y, BE.GetIncludeGraphics(
+      W / fFactorMM, H / fFactorMM, KeepAspectRatio,
+      IncludePath)]));
 end;
 
 end.

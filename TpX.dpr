@@ -2,6 +2,7 @@ program TpX;
 
 uses
   Forms,
+  Settings0 in 'Settings0.pas', // Initialize settings first!
   MainUnit in 'MainUnit.pas' {MainForm},
   Output in 'Output.pas',
   MprtEMF in 'MprtEMF.pas',
@@ -30,7 +31,6 @@ uses
   MiscUtils in 'MiscUtils.pas',
   PrimSAX in 'PrimSAX.pas',
   Numeric in 'Numeric.pas',
-  Settings0 in 'Settings0.pas',
   Manage in 'Manage.pas',
   Modes in 'Modes.pas',
   ViewPort in 'ViewPort.pas',
@@ -49,14 +49,16 @@ uses
   DevGr32 in 'DevGr32.pas',
   MprtSVG in 'MprtSVG.pas',
   Modify in 'Modify.pas',
-  GObjBase in 'GObjBase.pas';
+  GObjBase in 'GObjBase.pas',
+  Bitmaps in 'Bitmaps.pas',
+  InfoForm in 'InfoForm.pas' {InfoBox};
 
 {$R *.RES}
 
 begin
-  Application.Initialize;
   if not CheckCommandLine then Exit;
   Application.Title := 'TpX';
+  Application.Initialize;
   Application.CreateForm(TMainForm, MainForm);
   Application.CreateForm(TPropertiesForm, PropertiesForm);
   Application.CreateForm(TOptionsForm, OptionsForm);
@@ -66,6 +68,10 @@ begin
   Application.CreateForm(TEMF_Form, EMF_Form);
   Application.CreateForm(TPrintEpsOptForm, PrintEpsOptForm);
   Application.CreateForm(TScaleStandardForm, ScaleStandardForm);
-  Application.Run;
+  Application.CreateForm(TInfoBox, InfoBox);
+  try
+    Application.Run;
+  finally
+  end;
 end.
 

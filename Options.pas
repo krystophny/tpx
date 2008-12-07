@@ -171,14 +171,13 @@ begin
   end;
   if Data is TFilePathOption then
   begin
-//!!    OpenDialog1.FileName := AnsiDequotedStr(ComboBox1.Text, '"');
-    OpenDialog1.FileName := ComboBox1.Text;
+    OpenDialog1.FileName := AnsiDequotedStr(ComboBox1.Text, '"');
     OpenDialog1.Filter := (Data as TFilePathOption).Filter;
     if not OpenDialog1.Execute then Exit;
     if Pos(' ', OpenDialog1.FileName) > 0 then
       OpenDialog1.FileName := AnsiQuotedStr(OpenDialog1.FileName,
         '"');
-    ComboBox1.Text := OpenDialog1.FileName;
+    ComboBox1.Text := AnsiDequotedStr(OpenDialog1.FileName, '"');
     ComboBox1.Refresh;
     ComboBox1Change(Sender);
   end;

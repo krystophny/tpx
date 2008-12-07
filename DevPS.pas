@@ -16,7 +16,6 @@ type
   TPostScriptDevice = class(TStreamDevice)
   protected
     fDrawing2D: TDrawing2D;
-    fDescent: TRealType;
     FontName: string;
     procedure WriteFont; virtual;
     procedure WriteStreamPoint0(const X, Y: TRealType); override;
@@ -48,15 +47,21 @@ type
       const Hatching: THatching; const Kind: TCircularKind);
     procedure RotText(P: TPoint2D; H, ARot: TRealType;
       WideText: WideString; TeXText: AnsiString;
-      const HJustification: THJustification;
-      const VJustification: TVJustification;
+      const HAlignment: THAlignment;
       const LineColor: TColor;
       const FaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
+    procedure Bitmap(P: TPoint2D; W, H: TRealType;
+      const KeepAspectRatio: Boolean; BitmapEntry: TObject);
+    procedure GenPath(const GP: TGenericPath;
+      const LineColor, HatchColor, FillColor: TColor;
+      const LineStyle: TLineStyle; const LineWidth: TRealType;
+      const Hatching: THatching; const Transf: TTransf2D);
   public
     Light: Boolean;
     ForPdf: Boolean;
     TextLabels: TStringList;
+    FontSizeInTeX: Boolean;
     constructor Create(Drawing: TDrawing2D);
     destructor Destroy; override;
     procedure Poly(PP: TPointsSet2D;
@@ -70,10 +75,10 @@ type
 
 implementation
 
-uses ColorEtc, SysBasic, Output;
+uses ColorEtc, SysBasic, Output, Bitmaps;
 
 procedure pfb2pfa_Stream(Stream_pfb, Stream_pfa: TStream;
-  var FontName: string; var Descent: TRealType);
+  var FontName: string);
 //	Program converts a binary MSDOS representation for a type1
 //	PostScript font into a readable ASCII version. The MSDOS
 //	newline (\r) is converted into the UNIX newline (\n).
@@ -83,7 +88,7 @@ procedure pfb2pfa_Stream(Stream_pfb, Stream_pfa: TStream;
 var
   L, I, J: Integer;
   T: Byte;
-  St, DescentSt: string;
+  St: string;
 const
   NewLine = EOL; //\012 \n
   HEX_PER_LINE = 30;
@@ -120,28 +125,6 @@ begin
               Inc(J);
             FontName := Trim(Copy(St, I, J - I));
           end;
-          J := Pos('/FontBBox', St);
-          if J > 0 then
-          begin
-            J := J + 8;
-            while St[J] <> '{' do
-              Inc(J);
-            Inc(J);
-            while St[J] in [#10, #13, ' '] do
-              Inc(J);
-            while not (St[J] in [#10, ' ', '/', '}']) do
-              Inc(J);
-            while St[J] in [#10, #13, ' '] do
-              Inc(J);
-            I := J;
-            while not (St[J] in [#10, ' ', '/', '}']) do
-              Inc(J);
-            DescentSt := Trim(Copy(St, I, J - I));
-            Val(DescentSt, I, J);
-            if J > 0 then I := 200;
-            Descent := Abs(I) / 1000;
-            //Application.MessageBox(PChar(DescentSt), nil);
-          end;
           for I := 1 to L do
           begin
             if St[I] = #10 then
@@ -175,8 +158,7 @@ begin
   end;
 end;
 
-procedure pfb2pfa(const FileName_pfb, FileName_pfa: string;
-  var Descent: TRealType);
+procedure pfb2pfa(const FileName_pfb, FileName_pfa: string);
 var
   Stream_pfb, Stream_pfa: TFileStream;
   FontName: string;
@@ -184,7 +166,7 @@ begin
   Stream_pfb := TFileStream.Create(FileName_pfb, fmOpenRead);
   Stream_pfa := TFileStream.Create(FileName_pfa, fmCreate);
   try
-    pfb2pfa_Stream(Stream_pfb, Stream_pfa, FontName, Descent);
+    pfb2pfa_Stream(Stream_pfb, Stream_pfa, FontName);
   finally
     Stream_pfb.Free;
     Stream_pfa.Free;
@@ -203,6 +185,8 @@ begin
   OnCircle := Circle;
   OnCircular := Circular;
   OnRotText := RotText;
+  OnBitmap := Bitmap;
+  OnGenPath := GenPath;
   fHasBezier := True;
   fHasClosedBezier := True;
   fHasArc := True;
@@ -234,7 +218,7 @@ begin
     TFileStream.Create(Font_pfb_Path, fmOpenRead);
   try
     WriteLnStream('%%BeginProlog');
-    pfb2pfa_Stream(Stream_pfb, fStream, FontName, fDescent);
+    pfb2pfa_Stream(Stream_pfb, fStream, FontName);
     WriteLnStream('%%Endprolog');
   finally
     Stream_pfb.Free;
@@ -244,7 +228,7 @@ end;
 procedure TPostScriptDevice.WriteStreamPoint0(const X, Y:
   TRealType);
 begin
-  WriteStream(Format('%.1f %.1f ', [X, Y]));
+  WriteStream(Format('%.2f %.2f ', [X, Y]));
 end;
 
 procedure TPostScriptDevice.WriteColor(Color: TColor);
@@ -277,7 +261,8 @@ begin
       liDotted: WriteStream(
           Format('%.2f setlinewidth [%.2f %.2f] 0 setdash ',
           [LineWidthBase * LineWidth * fFactorMM,
-          LineWidthBase * 2 * fFactorMM, DottedSize * fFactorMM]));
+          LineWidthBase * LineWidth * fFactorMM, DottedSize *
+            fFactorMM]));
     end;
   end;
   WriteColor(LineColor);
@@ -350,7 +335,6 @@ end;
 
 procedure TPostScriptDevice.WriteHeader(ExtRect: TRect2D);
 begin
-  fDescent := 0.2;
   ExtRect := TransformRect2D(ExtRect, fT);
     // Transform drawing rectangle
   WriteLnStream('%!PS-Adobe-3.0 EPSF-3.0');
@@ -364,7 +348,8 @@ begin
   WriteLnStream('%%Creator: TpX drawing tool');
   WriteLnStream('%%CreationDate: ' + DateTimeToStr(Now));
   WriteLnStream('%%EndComments');
-  if ForPdf then  // set page size for conversion to pdf using ghostscript
+  if ForPdf then
+    // set page size for conversion to pdf using ghostscript
     WriteLnStream(Format(
       '<< /PageSize [%.2f %.2f] >> setpagedevice',
       [ExtRect.Right - ExtRect.Left,
@@ -434,71 +419,6 @@ begin
   WriteStroke(LineStyle, LineWidth, LineColor);
 end;
 
-procedure TPostScriptDevice.RotText(
-  P: TPoint2D; H, ARot: TRealType;
-  WideText: WideString; TeXText: AnsiString;
-  const HJustification: THJustification;
-  const VJustification: TVJustification;
-  const LineColor: TColor;
-  const FaceName: AnsiString;
-  const Charset: TFontCharSet; const Style: TFontStyles);
-var
-  D: TVector2D;
-  St: string;
-begin
-  if Light then
-  begin
-    ShiftTeXTextPoint(P, VJustification, H, ARot);
-    if fFactorMM = 0 then fFactorMM := 1;
-    TextLabels.Add(Format('\put(%.2f,%.2f){%s}', [P.X, P.Y,
-      GetTeXTextMakebox0(
-        H, ARot, 1 / fFactorMM, LineColor, HJustification,
-        VJustification, Style, WideText, TeXText)]));
-    Exit;
-  end;
-  case VJustification of
-    jvBottom: D.Y := fDescent;
-    jvCenter: D.Y := fDescent - 0.5;
-    jvTop: D.Y := fDescent - 1;
-    jvBaseline: D.Y := 0;
-  end;
-  D.X := 0;
-  if ARot <> 0 then D := TransformVector2D(D, Rotate2D(ARot));
-  D := TransformVector2D(D, Scale2D(H, H));
-  P := ShiftPoint(P, D);
-  St := AnsiReplaceText(WideText, '\', '\\');
-  St := AnsiReplaceText(St, '(', '\(');
-  St := AnsiReplaceText(St, ')', '\)');
-  WriteStream(Format('/%s findfont %d scalefont setfont newpath ',
-    [FontName, Round(H)]));
-  if LineColor <> clDefault then
-    WriteColor(LineColor)
-  else
-    WriteColor(clBlack);
-  WriteStreamPoint(P);
-  WriteLnStream('moveto ');
-  case HJustification of
-    jhLeft: D.X := 0;
-    jhCenter: D.X := 0.5;
-    jhRight: D.X := 1;
-  end;
-  // "string" stringwidth -> "wx" "wy"
-  //  stringwidth returns the length of the string ( ... ) and (usually) the value 0.0
-  if D.X <> 0 then
-    if ARot = 0 then
-      WriteStream(Format('(%s) stringwidth pop %.5g mul 0 rmoveto',
-        [St, -D.X * Cos(ARot)]))
-    else
-      WriteStream(Format('(%s) stringwidth pop %.5g mul (%s) stringwidth pop %.5g mul rmoveto',
-        [St, -D.X * Cos(ARot), St, -D.X * Sin(ARot)]));
-  if ARot <> 0 then
-    WriteStream(Format(' %.5g rotate', [RadToDeg(ARot)]));
-  if (D.X <> 0) or (ARot <> 0) then WriteLnStream('');
-  WriteLnStream(Format('(%s) show stroke', [St]));
-  if ARot <> 0 then
-    WriteStream('initmatrix ');
-end;
-
 procedure TPostScriptDevice.Circle(const CP: TPoint2D; const R:
   TRealType;
   const LineColor, HatchColor, FillColor: TColor;
@@ -532,11 +452,159 @@ begin
       WriteStream('moveto ');
     end;
     WriteStreamPoint(CP);
-    WriteStream(Format('%.1f %.1f %.1f arc ',
+    WriteStream(Format('%.2f %.2f %.2f arc ',
       [R, RadToDeg(SA), RadToDeg(EA)]));
     if Kind <> ci_Arc then WriteStream('closepath ');
     WriteFill(FillColor, LineStyle);
   end;
+  WriteStroke(LineStyle, LineWidth, LineColor);
+end;
+
+procedure TPostScriptDevice.RotText(
+  P: TPoint2D; H, ARot: TRealType;
+  WideText: WideString; TeXText: AnsiString;
+  const HAlignment: THAlignment;
+  const LineColor: TColor;
+  const FaceName: AnsiString;
+  const Charset: TFontCharSet; const Style: TFontStyles);
+var
+  D: TVector2D;
+  St: string;
+begin
+  if Light then
+  begin
+    ShiftTeXTextPoint(P, H, ARot);
+    if fFactorMM = 0 then fFactorMM := 1;
+    TextLabels.Add(Format('\put(%.2f,%.2f){%s}', [P.X, P.Y,
+      GetTeXTextMakebox0(
+        H, ARot, 1 / fFactorMM, LineColor, HAlignment,
+        Style, WideText, TeXText, FontSizeInTeX)]));
+    Exit;
+  end;
+  D.Y := 0;
+  D.X := 0;
+  if ARot <> 0 then D := TransformVector2D(D, Rotate2D(ARot));
+  D := TransformVector2D(D, Scale2D(H, H));
+  P := ShiftPoint(P, D);
+  St := AnsiReplaceText(WideText, '\', '\\');
+  St := AnsiReplaceText(St, '(', '\(');
+  St := AnsiReplaceText(St, ')', '\)');
+  WriteStream(Format('/%s findfont %d scalefont setfont newpath ',
+    [FontName, Round(H)]));
+  if LineColor <> clDefault then
+    WriteColor(LineColor)
+  else
+    WriteColor(clBlack);
+  WriteStreamPoint(P);
+  WriteLnStream('moveto ');
+  case HAlignment of
+    ahLeft: D.X := 0;
+    ahCenter: D.X := 0.5;
+    ahRight: D.X := 1;
+  end;
+  // "string" stringwidth -> "wx" "wy"
+  //  stringwidth returns the length of the string ( ... ) and (usually) the value 0.0
+  if D.X <> 0 then
+    if ARot = 0 then
+      WriteStream(Format('(%s) stringwidth pop %.5g mul 0 rmoveto',
+        [St, -D.X * Cos(ARot)]))
+    else
+      WriteStream(Format('(%s) stringwidth pop %.5g mul (%s) stringwidth pop %.5g mul rmoveto',
+        [St, -D.X * Cos(ARot), St, -D.X * Sin(ARot)]));
+  if ARot <> 0 then
+    WriteStream(Format(' %.5g rotate', [RadToDeg(ARot)]));
+  if (D.X <> 0) or (ARot <> 0) then WriteLnStream('');
+  WriteLnStream(Format('(%s) show stroke', [St]));
+  if ARot <> 0 then
+    WriteStream('initmatrix ');
+end;
+
+procedure TPostScriptDevice.Bitmap(P: TPoint2D; W, H: TRealType;
+  const KeepAspectRatio: Boolean; BitmapEntry: TObject);
+var
+  St: string;
+  I: Integer;
+  BE: TBitmapEntry;
+  FEps: TextFile;
+  Start: Boolean;
+  SX, SY: TRealType;
+begin
+  BE := BitmapEntry as TBitmapEntry;
+  if not BE.RequireEPS(GetTempDir) then Exit;
+  AssignFile(FEps, GetTempDir + BE.GetOnlyName + '.eps');
+  Reset(FEps);
+  Start := True;
+  SX := W / BE.Bitmap.Width;
+  SY := H / BE.Bitmap.Height;
+  try
+    while not Eof(FEps) do
+    begin
+      ReadLn(FEps, St);
+      // Seeking for the start of bitmap data
+      if Start then
+      begin
+        if Pos('%', St) = 1 then Continue;
+        Start := False;
+        // The first line without % found
+        WriteLnStream('save');
+        WriteLnStream(Format('%.2f %.2f translate',
+          [P.X, P.Y]));
+        WriteLnStream(Format('%.2f %.2f scale',
+          [SX, SY]));
+        WriteLnStream(St);
+        Continue;
+      end;
+      // Delete unnecessary stuff
+      if Pos('%', St) <> 1 then
+      begin
+        // showpage command must be removed from PS
+        I := Pos('showpage', St);
+        if I > 0 then Delete(St, I, 8);
+      end
+      else
+        if (Pos('%%EOF', St) = 1) or (Pos('%%Trailer', St) = 1)
+          then St := '%';
+      WriteLnStream(St);
+    end;
+    WriteLnStream('restore');
+  finally
+    CloseFile(FEps);
+  end;
+end;
+
+procedure TPostScriptDevice.GenPath(const GP: TGenericPath;
+  const LineColor, HatchColor, FillColor: TColor;
+  const LineStyle: TLineStyle; const LineWidth: TRealType;
+  const Hatching: THatching; const Transf: TTransf2D);
+var
+  Kind: TPathItemKind;
+  P1, P2, P3: TPoint2D;
+begin
+  if (LineStyle = liNone) and (FillColor = clDefault) then Exit;
+  WriteStream('newpath ');
+  GP.StartIterations;
+  while GP.GetNext(Kind, P1, P2, P3) do
+    case Kind of
+      pik_MoveTo:
+        begin
+          WriteStreamPointT(P1, Transf);
+          WriteStream('moveto ');
+        end;
+      pik_LineTo:
+        begin
+          WriteStreamPointT(P1, Transf);
+          WriteStream('lineto ');
+        end;
+      pik_BezierTo:
+        begin
+          WriteStreamPointT(P1, Transf);
+          WriteStreamPointT(P2, Transf);
+          WriteStreamPointT(P3, Transf);
+          WriteLnStream('curveto ');
+        end;
+      pik_Close: WriteStream('closepath ');
+    end;
+  WriteFill(FillColor, LineStyle);
   WriteStroke(LineStyle, LineWidth, LineColor);
 end;
 

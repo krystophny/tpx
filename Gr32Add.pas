@@ -20,7 +20,7 @@ procedure RenderTextW_Rot(const B0: TBitmap32;
   const FontName: string; const FontSize: Double;
   const Bold, Italic: Boolean;
   const Charset: TFontCharSet;
-  const HJustification, VJustification: Integer;
+  const HAlignment: Integer;
   const Rot: Double);
 
 implementation
@@ -33,15 +33,15 @@ WinBasic,
 Drawings, Geometry;
 
 
-//  THJustification = (jhLeft, jhCenter, jhRight);
-//  TVJustification = (jvBaseline, jvBottom, jvCenter, jvTop);
+//  THAlignment = (ahLeft, ahCenter, ahRight);
+//  TVAlignment = (jvBaseline, jvBottom, jvCenter, jvTop);
 
 procedure RenderTextW_Rot(const B0: TBitmap32;
   X, Y: Integer; const Text: Widestring; AALevel: Integer; Color: TColor32;
   const FontName: string; const FontSize: Double;
   const Bold, Italic: Boolean;
   const Charset: TFontCharSet;
-  const HJustification, VJustification: Integer;
+  const HAlignment: Integer;
   const Rot: Double);
 var
   LogFont2: TLOGFONT;
@@ -169,18 +169,12 @@ begin
         //SZ.CY := (SZ.CY shr AALevel + 1) shl AALevel;
         Rect := Rect2D(-Text_Metric.tmAveCharWidth, 0,
           SZ.CX + Text_Metric.tmAveCharWidth, -SZ.CY);
-        case HJustification of
-          0 {jhLeft}: V.X := 0;
-          1 {jhCenter}: V.X := SZ.CX / 2;
-          2 {jhRight}: V.X := SZ.CX;
+        case HAlignment of
+          0 {ahLeft}: V.X := 0;
+          1 {ahCenter}: V.X := SZ.CX / 2;
+          2 {ahRight}: V.X := SZ.CX;
         end;
-        case VJustification of
-          3 {jvTop}: V.Y := 0 - Text_Metric.tmInternalLeading;
-          2 {jvCenter}:
-            V.Y := -(SZ.CY + Text_Metric.tmInternalLeading) / 2 + 0.25;
-          1 {jvBottom}: V.Y := -SZ.CY;
-          0 {jvBaseline}: V.Y := -SZ.CY + Text_Metric.tmDescent + 0.5;
-        end;
+        V.Y := -SZ.CY + Text_Metric.tmDescent + 0.5; //??
         //T := RotateCenter2D(Rot, Points[0]);
         T := Rotate2D(DegToRad(Rot / 10));
         BoundRect := TransformBoundingBox2D(Rect, T);

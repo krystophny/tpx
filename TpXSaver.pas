@@ -2,7 +2,8 @@ unit TpXSaver;
 
 interface
 
-uses GObjects, Drawings, Output, XmlOut, Classes, SysUtils,
+uses GObjBase, GObjects, Drawings, Output, XmlOut, Classes,
+  SysUtils,
   Graphics;
 
 // A class for saving TpX drawing
@@ -19,11 +20,15 @@ type
     procedure WriteCircle2D(Obj: TCircle2D); override;
     procedure WriteCircular2D(Obj: TCircular2D); override;
     procedure WritePoly2D(Obj: TPolyline2D0); override;
+    procedure WriteSmooth2D(Obj: TSmoothPath2D0); override;
+    procedure WriteBezier2D(Obj: TBezierPath2D0); override;
     procedure WriteText2D(Obj: TText2D); override;
     procedure WriteStar2D(Obj: TStar2D); override;
     procedure WriteSymbol2D(Obj: TSymbol2D); override;
-    procedure WriteSmooth2D(Obj: TSmoothPath2D0); override;
-    procedure WriteBezier2D(Obj: TBezierPath2D0); override;
+    procedure WriteBitmap2D(Obj: TBitmap2D); override;
+    procedure StartGroup2D(Obj: TGroup2D); override;
+    procedure FinishGroup2D(Obj: TGroup2D); override;
+    procedure WriteCompound2D(Obj: TCompound2D); override;
   public
     constructor Create(Drawing: TDrawing2D); override;
     destructor Destroy; override;
@@ -67,13 +72,16 @@ begin
     for I := 0 to PP.Count - 1 do
     begin
       P := PP[I];
-      //if not IsSamePoint2D(P1, PPrev) then
       begin
-        WriteSt(FF(P.X));
+        if P.X > -1E+38 then WriteSt(FF(P.X))
+        else if P.X = gp_MoveTo then WriteSt('M')
+        else if P.X = gp_LineTo then WriteSt('L')
+        else if P.X = gp_BezierTo then WriteSt('C')
+        else if P.X = gp_Close then WriteSt('Z')
+        else WriteSt(FF(P.X));
         WriteSt(',');
         WriteSt(FF(P.Y));
       end;
-      //PPrev := P1;
       if (I mod 100) = 88 then WriteSt(EOL);
       if I < PP.Count - 1 then WriteSt(' ');
     end;
@@ -166,6 +174,8 @@ begin
     fXML.AddAttribute('FontName', fDrawing2D.FontName);
   fXML.AddAttribute('DefaultSymbolSize',
     FF(fDrawing2D.DefaultSymbolSize));
+  fXML.AddAttribute('ApproximationPrecision',
+    FF(fDrawing2D.ApproximationPrecision));
   fXML.AddAttribute('PicScale', FF(fDrawing2D.PicScale));
   fXML.AddAttribute('Border', FF(fDrawing2D.Border));
   fXML.AddAttribute('BitmapRes', FF(fDrawing2D.BitmapRes));
@@ -203,6 +213,9 @@ begin
   if fDrawing2D.PicMagnif <> PicMagnif_Default
     then fXML.AddAttribute('PicMagnif',
       FF(fDrawing2D.PicMagnif));
+  if fDrawing2D.FontSizeInTeX <> True
+    then fXML.AddAttribute('FontSizeInTeX',
+      IntToStr(Integer(fDrawing2D.FontSizeInTeX)));
   if fDrawing2D.MetaPostTeXText <> True
     then fXML.AddAttribute('MetaPostTeXText',
       IntToStr(Integer(fDrawing2D.MetaPostTeXText)));
@@ -302,107 +315,6 @@ begin
   fXML.CloseTag;
 end;
 
-procedure T_TpX_Saver.WriteText2D(Obj: TText2D);
-var
-  P: TPoint2D;
-  procedure WriteFont;
-  var
-    Data: TStringList;
-    I: Integer;
-    ID: string;
-  begin
-    if Obj.Font.Name = ' ' then Exit;
-    fXML.OpenTag('font');
-    begin
-      fXML.AddAttribute('face', Obj.Font.Name);
-      if fsBold in Obj.Font.Style then
-        fXML.AddAttribute('bf', '1');
-      if fsItalic in Obj.Font.Style then
-        fXML.AddAttribute('it', '1');
-      fXML.AddAttribute('charset',
-        IntToStr(Integer(Obj.Font.Charset)));
-    end;
-    fXML.CloseTag;
-    {Data := TStringList.Create;
-    try
-      StoreObjectProp(Obj.Font, Data);
-      for I := 0 to Data.Count - 1 do
-      begin
-        ID := Data.Names[I];
-        XMLNodeF.AttributeValue[ID] := Data.Values[ID];
-      end;
-    finally
-      Data.Free;
-    end;}
-  end;
-begin
-  fXML.OpenTag('text');
-  with Obj do
-  begin
-    P := Points[0];
-    fXML.AddAttribute('x', FF(P.X));
-    fXML.AddAttribute('y', FF(P.Y));
-    fXML.AddAttribute('t', Text);
-    if TeXText <> '' then
-      fXML.AddAttribute('tex', TeXText);
-    fXML.AddAttribute('h', FF(Height));
-    case HJustification of
-      //jhLeft: fXML.AddAttribute('jh', 'l'; //default
-      jhCenter: fXML.AddAttribute('jh', 'c');
-      jhRight: fXML.AddAttribute('jh', 'r');
-    end;
-    case VJustification of
-      jvBottom: fXML.AddAttribute('jv', 'b');
-      jvCenter: fXML.AddAttribute('jv', 'c');
-      jvTop: fXML.AddAttribute('jv', 't');
-      //jvBaseline: fXML.AddAttribute('jv', '0'; //default
-    end;
-    if Rot <> 0 then
-      fXML.AddAttribute('rotdeg', FF(RadToDeg(Rot)));
-    WritePrimitiveAttr(Obj);
-    WriteFont;
-  end;
-  fXML.CloseTag;
-end;
-
-procedure T_TpX_Saver.WriteStar2D(Obj: TStar2D);
-var
-  P: TPoint2D;
-begin
-  fXML.OpenTag('star');
-  with Obj do
-  begin
-    P := Points[0];
-    fXML.AddAttribute('x', FF(P.X));
-    fXML.AddAttribute('y', FF(P.Y));
-    if StarKind <> starCircle then
-      fXML.AddAttribute('s', StarsIDs[Ord(StarKind)]);
-    if StarSizeFactor <> 1 then
-      fXML.AddAttribute('d', FF(StarSizeFactor));
-    WritePrimitiveAttr(Obj);
-  end;
-  fXML.CloseTag;
-end;
-
-procedure T_TpX_Saver.WriteSymbol2D(Obj: TSymbol2D);
-var
-  CP: TPoint2D;
-begin
-  fXML.OpenTag('symbol');
-  with Obj do
-  begin
-    CP := Points[0];
-    fXML.AddAttribute('x', FF(CP.X));
-    fXML.AddAttribute('y', FF(CP.Y));
-    if Rot <> 0 then
-      fXML.AddAttribute('rotdeg', FF(RadToDeg(Rot)));
-    fXML.AddAttribute('d', FF(Diameter));
-    fXML.AddAttribute('s', SymbolsIDs[Ord(SymbolKind)]);
-    WritePrimitiveAttr(Obj);
-  end;
-  fXML.CloseTag;
-end;
-
 procedure T_TpX_Saver.WriteEllipse2D(Obj: TEllipse2D);
 var
   CP: TPoint2D;
@@ -464,6 +376,20 @@ begin
   fXML.CloseTag;
 end;
 
+procedure T_TpX_Saver.WritePoly2D(Obj: TPolyline2D0);
+begin
+  if Obj is TPolygon2D then fXML.OpenTag('polygon')
+  else fXML.OpenTag('polyline');
+  begin
+    if Obj is TPolyline2D then WriteArrows(Obj);
+    WritePrimitiveAttr(Obj);
+    fXML.PreserveSpace := True;
+    fXML.AddText(GetPathString(Obj.Points, fXML.EOL_Str));
+  end;
+  fXML.CloseTag;
+  fXML.PreserveSpace := False;
+end;
+
 procedure T_TpX_Saver.WriteSmooth2D(Obj: TSmoothPath2D0);
 begin
   fXML.OpenTag('curve');
@@ -494,18 +420,139 @@ begin
   fXML.PreserveSpace := False;
 end;
 
-procedure T_TpX_Saver.WritePoly2D(Obj: TPolyline2D0);
-begin
-  if Obj is TPolygon2D then fXML.OpenTag('polygon')
-  else fXML.OpenTag('polyline');
+procedure T_TpX_Saver.WriteText2D(Obj: TText2D);
+var
+  P: TPoint2D;
+  procedure WriteFont;
+  var
+    Data: TStringList;
+    I: Integer;
+    ID: string;
   begin
-    if Obj is TPolyline2D then WriteArrows(Obj);
+    if Obj.Font.Name = ' ' then Exit;
+    fXML.OpenTag('font');
+    begin
+      fXML.AddAttribute('face', Obj.Font.Name);
+      if fsBold in Obj.Font.Style then
+        fXML.AddAttribute('bf', '1');
+      if fsItalic in Obj.Font.Style then
+        fXML.AddAttribute('it', '1');
+      fXML.AddAttribute('charset',
+        IntToStr(Integer(Obj.Font.Charset)));
+    end;
+    fXML.CloseTag;
+    {Data := TStringList.Create;
+    try
+      StoreObjectProp(Obj.Font, Data);
+      for I := 0 to Data.Count - 1 do
+      begin
+        ID := Data.Names[I];
+        XMLNodeF.AttributeValue[ID] := Data.Values[ID];
+      end;
+    finally
+      Data.Free;
+    end;}
+  end;
+begin
+  fXML.OpenTag('text');
+  with Obj do
+  begin
+    P := Points[0];
+    fXML.AddAttribute('x', FF(P.X));
+    fXML.AddAttribute('y', FF(P.Y));
+    fXML.AddAttribute('t', Text);
+    if TeXText <> '' then
+      fXML.AddAttribute('tex', TeXText);
+    fXML.AddAttribute('h', FF(Height));
+    case HAlignment of
+      //ahLeft: fXML.AddAttribute('ah', 'l'; //default
+      ahCenter: fXML.AddAttribute('halign', 'c');
+      ahRight: fXML.AddAttribute('halign', 'r');
+    end;
+    if Rot <> 0 then
+      fXML.AddAttribute('rotdeg', FF(RadToDeg(Rot)));
     WritePrimitiveAttr(Obj);
-    fXML.PreserveSpace := True;
-    fXML.AddText(GetPathString(Obj.Points, fXML.EOL_Str));
+    WriteFont;
   end;
   fXML.CloseTag;
+end;
+
+procedure T_TpX_Saver.WriteStar2D(Obj: TStar2D);
+var
+  P: TPoint2D;
+begin
+  fXML.OpenTag('star');
+  with Obj do
+  begin
+    P := Points[0];
+    fXML.AddAttribute('x', FF(P.X));
+    fXML.AddAttribute('y', FF(P.Y));
+    if StarKind <> starCircle then
+      fXML.AddAttribute('s', StarsIDs[Ord(StarKind)]);
+    if StarSizeFactor <> 1 then
+      fXML.AddAttribute('d', FF(StarSizeFactor));
+    WritePrimitiveAttr(Obj);
+  end;
+  fXML.CloseTag;
+end;
+
+procedure T_TpX_Saver.WriteSymbol2D(Obj: TSymbol2D);
+var
+  CP: TPoint2D;
+begin
+  fXML.OpenTag('symbol');
+  with Obj do
+  begin
+    CP := Points[0];
+    fXML.AddAttribute('x', FF(CP.X));
+    fXML.AddAttribute('y', FF(CP.Y));
+    if Rot <> 0 then
+      fXML.AddAttribute('rotdeg', FF(RadToDeg(Rot)));
+    fXML.AddAttribute('d', FF(Diameter));
+    fXML.AddAttribute('s', SymbolsIDs[Ord(SymbolKind)]);
+  end;
+  WritePrimitiveAttr(Obj);
+  fXML.CloseTag;
+end;
+
+procedure T_TpX_Saver.WriteBitmap2D(Obj: TBitmap2D);
+var
+  P: TPoint2D;
+  W, H: TRealType;
+begin
+  fXML.OpenTag('bitmap');
+  with Obj do
+  begin
+    P := GetBitmapParams(W, H, KeepAspectRatio);
+    fXML.AddAttribute('x', FF(P.X));
+    fXML.AddAttribute('y', FF(P.Y));
+    fXML.AddAttribute('w', FF(W));
+    fXML.AddAttribute('h', FF(H));
+    fXML.AddAttribute('link', BitmapEntry.ImageLink);
+    if not KeepAspectRatio then
+      fXML.AddAttribute('keepaspectratio', '0');
+  end;
+  fXML.CloseTag;
+end;
+
+procedure T_TpX_Saver.StartGroup2D(Obj: TGroup2D);
+begin
+  fXML.OpenTag('group');
+end;
+
+procedure T_TpX_Saver.FinishGroup2D(Obj: TGroup2D);
+begin
+  fXML.CloseTag;
+end;
+
+procedure T_TpX_Saver.WriteCompound2D(Obj: TCompound2D);
+begin
+  fXML.OpenTag('compound');
+  WritePrimitiveAttr(Obj);
+  fXML.PreserveSpace := True;
+  fXML.AddText(GetPathString(Obj.Points, fXML.EOL_Str));
   fXML.PreserveSpace := False;
+  fXML.CloseTag;
 end;
 
 end.

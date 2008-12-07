@@ -1,8 +1,8 @@
 object MainForm: TMainForm
-  Left = 299
-  Top = 124
-  Width = 705
-  Height = 586
+  Left = 362
+  Top = 196
+  Width = 662
+  Height = 572
   HelpType = htKeyword
   HelpContext = 101
   Caption = 'TpX Editor'
@@ -14,7 +14,7 @@ object MainForm: TMainForm
   Font.Style = []
   Menu = MainMenu1
   OldCreateOrder = True
-  Position = poScreenCenter
+  Position = poDefault
   OnCloseQuery = FormCloseQuery
   OnCreate = FormCreate
   OnDestroy = FormDestroy
@@ -23,10 +23,28 @@ object MainForm: TMainForm
   OnShow = FormShow
   PixelsPerInch = 120
   TextHeight = 13
+  object Image1: TImage
+    Left = 233
+    Top = 2
+    Width = 17
+    Height = 22
+    Center = True
+    Picture.Data = {
+      07544269746D6170F6000000424DF60000000000000076000000280000001000
+      0000100000000100040000000000800000007412000074120000100000000000
+      0000000000000000800000800000008080008000000080008000808000008080
+      8000C0C0C0000000FF0000FF000000FFFF00FF000000FF00FF00FFFF0000FFFF
+      FF00888888888888888888888008800888888888880088008888888008800880
+      0888888800880088008880088008800880088800880088008808888008800880
+      0888888800880088008880088008800880088800880088008808888008800880
+      0888888800880088088888888008800888888888880088088888888888808888
+      8888}
+    Transparent = True
+  end
   object StatusBar1: TStatusBar
     Left = 0
-    Top = 519
-    Width = 697
+    Top = 500
+    Width = 654
     Height = 15
     Panels = <
       item
@@ -41,8 +59,8 @@ object MainForm: TMainForm
   end
   object ProgressBar1: TProgressBar
     Left = 0
-    Top = 513
-    Width = 697
+    Top = 494
+    Width = 654
     Height = 6
     Align = alBottom
     Min = 0
@@ -55,8 +73,8 @@ object MainForm: TMainForm
   object Panel30: TPanel
     Left = 0
     Top = 0
-    Width = 697
-    Height = 46
+    Width = 654
+    Height = 68
     Align = alTop
     AutoSize = True
     BevelInner = bvRaised
@@ -65,7 +83,7 @@ object MainForm: TMainForm
     object ToolBar1: TToolBar
       Left = 1
       Top = 1
-      Width = 695
+      Width = 652
       Height = 22
       Anchors = [akLeft, akTop, akRight, akBottom]
       AutoSize = True
@@ -242,46 +260,99 @@ object MainForm: TMainForm
         Caption = 'ToolButton15'
         ImageIndex = 66
         Style = tbsSeparator
+        Visible = False
       end
       object ToolButton4: TToolButton
         Left = 539
         Top = 0
         Action = SimplifyPoly
+        Visible = False
+      end
+      object ToolButton16: TToolButton
+        Left = 562
+        Top = 0
+        Caption = 'ToolButton16'
+        ImageIndex = 74
+        Visible = False
+        OnClick = ToolButton16Click
       end
     end
-    object ToolBar3: TToolBar
+    object PropertiesToolbar1: TToolBar
       Left = 1
-      Top = 21
-      Width = 695
-      Height = 24
-      Align = alBottom
+      Top = 23
+      Width = 652
+      Height = 22
       AutoSize = True
-      Caption = 'ToolBar3'
+      Caption = 'PropertiesToolbar1'
       Customizable = True
       DragKind = dkDock
       EdgeInner = esNone
       EdgeOuter = esNone
+      Flat = True
+      Images = ImageList2
+      ParentShowHint = False
+      ShowHint = True
       TabOrder = 1
-      object Panel4: TPanel
+      object ToolButton24: TToolButton
         Left = 0
-        Top = 2
-        Width = 37
+        Top = 0
+        Action = PickUpProperties
+      end
+      object ToolButton26: TToolButton
+        Left = 23
+        Top = 0
+        Action = DefaultProperties
+      end
+      object ToolButton27: TToolButton
+        Left = 46
+        Top = 0
+        Action = ApplyProperties
+      end
+      object ToolButton25: TToolButton
+        Left = 69
+        Top = 0
+        Width = 10
+        Caption = 'ToolButton25'
+        ImageIndex = 1
+        Style = tbsSeparator
+      end
+      object Panel4: TPanel
+        Left = 79
+        Top = 0
+        Width = 24
         Height = 22
-        Alignment = taRightJustify
         BevelOuter = bvNone
-        BorderWidth = 5
-        Caption = 'Line'
+        Caption = ' '
         TabOrder = 6
+        object Image3: TImage
+          Left = 0
+          Top = 0
+          Width = 24
+          Height = 22
+          Align = alClient
+          Center = True
+          Picture.Data = {
+            07544269746D6170F6000000424DF60000000000000076000000280000001000
+            0000100000000100040000000000800000007412000074120000100000000000
+            0000000000000000800000800000008080008000000080008000808000008080
+            8000C0C0C0000000FF0000FF000000FFFF00FF000000FF00FF00FFFF0000FFFF
+            FF00888888888888888888888888888888888000880008800088888888888888
+            888888044478888888888880F4448888888888880F444888888888880F444488
+            8888888880F444488888888880FF444888888888880FF4488888888888800008
+            8888888888870BB08888888888880BB088888888888880BB0888888888888888
+            8888}
+          Transparent = True
+        end
       end
       object ComboBox1: TComboBox
-        Left = 37
-        Top = 2
+        Left = 103
+        Top = 0
         Width = 63
         Height = 21
         Style = csDropDownList
         ItemHeight = 13
         TabOrder = 0
-        OnSelect = ComboBox1Select
+        OnSelect = ChangeProperties
         Items.Strings = (
           'None'
           'Solid'
@@ -289,45 +360,68 @@ object MainForm: TMainForm
           'Dashed')
       end
       object ComboBox3: TComboBox
-        Left = 100
-        Top = 2
+        Left = 166
+        Top = 0
         Width = 72
         Height = 22
         Style = csOwnerDrawFixed
         ItemHeight = 16
         TabOrder = 1
         OnDrawItem = ColorBox_DrawItem
-        OnSelect = ComboBox3Select
+        OnSelect = ChangeProperties
       end
       object ComboBox6: TComboBox
-        Left = 172
-        Top = 2
-        Width = 100
+        Left = 238
+        Top = 0
+        Width = 63
         Height = 21
         ItemHeight = 13
         TabOrder = 5
-        Text = ' '
-        OnChange = ComboBox6Change
+        OnChange = ChangeProperties
         Items.Strings = (
           '0.5'
           '1'
           '2'
           '4')
       end
+      object ToolButton22: TToolButton
+        Left = 301
+        Top = 0
+        Width = 10
+        Caption = 'ToolButton22'
+        Style = tbsSeparator
+      end
       object Panel5: TPanel
-        Left = 272
-        Top = 2
-        Width = 65
+        Left = 311
+        Top = 0
+        Width = 24
         Height = 22
-        Alignment = taRightJustify
         BevelOuter = bvNone
-        BorderWidth = 5
-        Caption = 'Hatching'
+        Caption = ' '
         TabOrder = 7
+        object Image4: TImage
+          Left = 0
+          Top = 0
+          Width = 24
+          Height = 22
+          Align = alClient
+          Center = True
+          Picture.Data = {
+            07544269746D6170F6000000424DF60000000000000076000000280000001000
+            0000100000000100040000000000800000007412000074120000100000000000
+            0000000000000000800000800000008080008000000080008000808000008080
+            8000C0C0C0000000FF0000FF000000FFFF00FF000000FF00FF00FFFF0000FFFF
+            FF00888888888888888888888008800888888888880088008888888008800880
+            0888888800880088008880088008800880088800880088008808888008800880
+            0888888800880088008880088008800880088800880088008808888008800880
+            0888888800880088088888888008800888888888880088088888888888808888
+            8888}
+          Transparent = True
+        end
       end
       object ComboBox2: TComboBox
-        Left = 337
-        Top = 2
+        Left = 335
+        Top = 0
         Width = 68
         Height = 21
         Style = csDropDownList
@@ -335,7 +429,7 @@ object MainForm: TMainForm
         ItemIndex = 0
         TabOrder = 2
         Text = 'None'
-        OnSelect = ComboBox2Select
+        OnSelect = ChangeProperties
         Items.Strings = (
           'None'
           'Horizontal'
@@ -346,45 +440,385 @@ object MainForm: TMainForm
           'DiagCross')
       end
       object ComboBox4: TComboBox
-        Left = 405
-        Top = 2
+        Left = 403
+        Top = 0
         Width = 72
         Height = 22
         Style = csOwnerDrawFixed
         ItemHeight = 16
         TabOrder = 3
         OnDrawItem = ColorBox_DrawItem
-        OnSelect = ComboBox4Select
+        OnSelect = ChangeProperties
+      end
+      object ToolButton23: TToolButton
+        Left = 475
+        Top = 0
+        Width = 10
+        Caption = 'ToolButton23'
+        ImageIndex = 0
+        Style = tbsSeparator
       end
       object Panel6: TPanel
-        Left = 477
-        Top = 2
-        Width = 32
+        Left = 485
+        Top = 0
+        Width = 24
         Height = 22
-        Alignment = taRightJustify
         BevelOuter = bvNone
-        BorderWidth = 5
-        Caption = 'Fill'
+        Caption = ' '
         TabOrder = 8
+        object Image2: TImage
+          Left = 0
+          Top = 0
+          Width = 24
+          Height = 22
+          Align = alClient
+          Center = True
+          Picture.Data = {
+            07544269746D6170F6000000424DF60000000000000076000000280000001000
+            0000100000000100040000000000800000007412000074120000100000000000
+            0000000000000000800000800000008080008000000080008000808000008080
+            8000C0C0C0000000FF0000FF000000FFFF00FF000000FF00FF00FFFF0000FFFF
+            FF00888888888888888888888888888888888888880888888888888880708888
+            888888880777088878888880888770884788880F888877084488808FF8888774
+            44888808FF808874448888808F0408444488888808F487444888888840847078
+            8888888848040788888888884884788888888888744788888888888888888888
+            8888}
+          Transparent = True
+        end
       end
       object ComboBox5: TComboBox
         Left = 509
-        Top = 2
+        Top = 0
         Width = 72
         Height = 22
         Style = csOwnerDrawFixed
         ItemHeight = 16
         TabOrder = 4
         OnDrawItem = ColorBox_DrawItem
-        OnSelect = ComboBox5Select
+        OnSelect = ChangeProperties
+      end
+    end
+    object PropertiesToolbar2: TToolBar
+      Left = 1
+      Top = 45
+      Width = 652
+      Height = 22
+      ButtonHeight = 21
+      Caption = 'PropertiesToolbar2'
+      Customizable = True
+      DragKind = dkDock
+      EdgeInner = esNone
+      EdgeOuter = esNone
+      Flat = True
+      ParentShowHint = False
+      ShowHint = True
+      TabOrder = 2
+      object Panel7: TPanel
+        Left = 0
+        Top = 0
+        Width = 24
+        Height = 21
+        BevelOuter = bvNone
+        Caption = ' '
+        TabOrder = 3
+        object Image5: TImage
+          Left = 0
+          Top = 0
+          Width = 24
+          Height = 21
+          Align = alClient
+          Center = True
+          Picture.Data = {
+            07544269746D6170F6000000424DF60000000000000076000000280000001000
+            0000100000000100040000000000800000007412000074120000100000000000
+            0000000000000000800000800000008080008000000080008000808000008080
+            8000C0C0C0000000FF0000FF000000FFFF00FF000000FF00FF00FFFF0000FFFF
+            FF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+            FFFFFFFF0FFFFFFFFFFFFFFFF00FFFFFFFFFFFFFFF000FFFFFFFFFFFFFF0000F
+            FFFFF777777000000FFFF00000000000000FF777777000000FFFFFFFFFF0000F
+            FFFFFFFFFF000FFFFFFFFFFFF00FFFFFFFFFFFFF0FFFFFFFFFFFFFFFFFFFFFFF
+            FFFF}
+          Transparent = True
+        end
+      end
+      object ComboBox8: TComboBox
+        Left = 24
+        Top = 0
+        Width = 97
+        Height = 22
+        Style = csOwnerDrawFixed
+        ItemHeight = 16
+        ItemIndex = 0
+        TabOrder = 0
+        Text = 'none'
+        OnSelect = ChangeProperties
+        Items.Strings = (
+          'none'
+          'h40'
+          'h41'
+          'h42'
+          'h43'
+          'h44'
+          'h45'
+          'h46'
+          'h47'
+          'h48'
+          't40'
+          't43'
+          't44'
+          't45'
+          'h20'
+          'h21'
+          'h22'
+          'h23'
+          'h24'
+          't20'
+          't21'
+          't22'
+          't23'
+          'hr10'
+          'hr11'
+          'hr12'
+          'tr10'
+          'h10'
+          'h11'
+          'h12'
+          'h12c'
+          't10'
+          'r0'
+          'r10'
+          'r11'
+          'r12'
+          'r20'
+          'r20c'
+          'r21'
+          'r33'
+          'ts10'
+          'ts11'
+          'ts12'
+          'hs10'
+          'hs12'
+          'ts20'
+          'ts21'
+          'ts23'
+          'hs20'
+          'hs23'
+          'o'
+          'oc')
+      end
+      object ComboBox9: TComboBox
+        Left = 121
+        Top = 0
+        Width = 96
+        Height = 22
+        Style = csOwnerDrawFixed
+        ItemHeight = 16
+        ItemIndex = 0
+        TabOrder = 1
+        Text = 'none'
+        OnSelect = ChangeProperties
+        Items.Strings = (
+          'none'
+          'h40'
+          'h41'
+          'h42'
+          'h43'
+          'h44'
+          'h45'
+          'h46'
+          'h47'
+          'h48'
+          't40'
+          't43'
+          't44'
+          't45'
+          'h20'
+          'h21'
+          'h22'
+          'h23'
+          'h24'
+          't20'
+          't21'
+          't22'
+          't23'
+          'hr10'
+          'hr11'
+          'hr12'
+          'tr10'
+          'h10'
+          'h11'
+          'h12'
+          'h12c'
+          't10'
+          'r0'
+          'r10'
+          'r11'
+          'r12'
+          'r20'
+          'r20c'
+          'r21'
+          'r33'
+          'ts10'
+          'ts11'
+          'ts12'
+          'hs10'
+          'hs12'
+          'ts20'
+          'ts21'
+          'ts23'
+          'hs20'
+          'hs23'
+          'o'
+          'oc')
+      end
+      object Edit3: TEdit
+        Left = 217
+        Top = 0
+        Width = 41
+        Height = 21
+        TabOrder = 2
+        Text = '1'
+        OnChange = ChangeProperties
+      end
+      object ToolButton28: TToolButton
+        Left = 258
+        Top = 0
+        Width = 10
+        Caption = 'ToolButton28'
+        Style = tbsSeparator
+      end
+      object Panel8: TPanel
+        Left = 268
+        Top = 0
+        Width = 24
+        Height = 21
+        BevelOuter = bvNone
+        Caption = ' '
+        TabOrder = 4
+        object Image6: TImage
+          Left = 0
+          Top = 0
+          Width = 24
+          Height = 21
+          Align = alClient
+          Center = True
+          Picture.Data = {
+            07544269746D6170F6000000424DF60000000000000076000000280000001000
+            0000100000000100040000000000800000007412000074120000100000000000
+            0000000000000000800000800000008080008000000080008000808000008080
+            8000C0C0C0000000FF0000FF000000FFFF00FF000000FF00FF00FFFF0000FFFF
+            FF00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+            FFFFFFFFFFFFFFFFFFFFFF0000FF00FFF00FFFF00FFFF00F00FFFFF00FFFFF00
+            0FFFFFF00FFFFF000FFFFFF00FFFF00F00FFFFF00FFF00FFF00FF0F00F0FFFFF
+            FFFFF000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+            FFFF}
+          Transparent = True
+        end
+      end
+      object Edit4: TEdit
+        Left = 292
+        Top = 0
+        Width = 37
+        Height = 21
+        TabOrder = 6
+        Text = '5'
+        OnChange = ChangeProperties
+      end
+      object ComboBox7: TComboBox
+        Left = 329
+        Top = 0
+        Width = 64
+        Height = 21
+        Style = csDropDownList
+        ItemHeight = 13
+        ItemIndex = 0
+        TabOrder = 5
+        Text = 'Left'
+        OnSelect = ChangeProperties
+        Items.Strings = (
+          'Left'
+          'Center'
+          'Right')
+      end
+      object ToolButton29: TToolButton
+        Left = 393
+        Top = 0
+        Width = 10
+        Caption = 'ToolButton29'
+        ImageIndex = 0
+        Style = tbsSeparator
+      end
+      object Panel9: TPanel
+        Left = 403
+        Top = 0
+        Width = 24
+        Height = 21
+        BevelOuter = bvNone
+        Caption = ' '
+        TabOrder = 7
+        object Image7: TImage
+          Left = 0
+          Top = 0
+          Width = 24
+          Height = 21
+          Align = alClient
+          Center = True
+          Picture.Data = {
+            07544269746D6170F6000000424DF60000000000000076000000280000001000
+            0000100000000100040000000000800000007412000074120000100000000000
+            0000000000000000800000800000008080008000000080008000808000008080
+            8000C0C0C0000000FF0000FF000000FFFF00FF000000FF00FF00FFFF0000FFFF
+            FF00888888888888888888800088888888888801110888888888880111088888
+            8888880111088888888888800088008880088888888880080088888888888000
+            008888888888870007888888888800000008800000800000000080CCC0888800
+            088880CCC0888880888880CCC088888088888000008888888888888888888888
+            8888}
+          Transparent = True
+        end
+      end
+      object ComboBox10: TComboBox
+        Left = 427
+        Top = 0
+        Width = 54
+        Height = 22
+        Style = csOwnerDrawFixed
+        ItemHeight = 16
+        TabOrder = 8
+        OnDrawItem = ComboBox10DrawItem
+        OnSelect = ChangeProperties
+        Items.Strings = (
+          ' '
+          ' '
+          ' '
+          ' '
+          ' '
+          ' '
+          ' '
+          ' '
+          ' '
+          ' '
+          ' '
+          ' '
+          ' '
+          ' '
+          ' ')
+      end
+      object Edit5: TEdit
+        Left = 481
+        Top = 0
+        Width = 37
+        Height = 21
+        TabOrder = 9
+        Text = '1'
+        OnChange = ChangeProperties
       end
     end
   end
   object Panel31: TPanel
     Left = 0
-    Top = 46
-    Width = 697
-    Height = 467
+    Top = 68
+    Width = 654
+    Height = 426
     Align = alClient
     BevelOuter = bvNone
     Caption = ' '
@@ -393,7 +827,7 @@ object MainForm: TMainForm
       Left = 0
       Top = 0
       Width = 25
-      Height = 467
+      Height = 426
       Align = alLeft
       AutoSize = True
       BevelInner = bvRaised
@@ -403,7 +837,7 @@ object MainForm: TMainForm
         Left = 1
         Top = 1
         Width = 23
-        Height = 465
+        Height = 424
         Align = alLeft
         AutoSize = True
         Customizable = True
@@ -512,18 +946,30 @@ object MainForm: TMainForm
           Action = InsertSymbol
           Wrap = True
         end
-        object FreehandPolylineBtn: TToolButton
+        object InsertBitmapBtn: TToolButton
           Left = 0
           Top = 352
+          Action = InsertBitmap
+          Wrap = True
+        end
+        object FreehandPolylineBtn: TToolButton
+          Left = 0
+          Top = 374
           Action = FreehandPolyline
+          Wrap = True
+        end
+        object FreehandBezierBtn: TToolButton
+          Left = 0
+          Top = 396
+          Action = FreehandBezier
         end
       end
     end
     object Panel32: TPanel
       Left = 25
       Top = 0
-      Width = 672
-      Height = 467
+      Width = 629
+      Height = 426
       Align = alClient
       BevelOuter = bvNone
       Caption = ' '
@@ -531,8 +977,8 @@ object MainForm: TMainForm
       object Panel33: TPanel
         Left = 57
         Top = 0
-        Width = 615
-        Height = 467
+        Width = 572
+        Height = 426
         Align = alClient
         BevelOuter = bvNone
         Caption = ' '
@@ -541,16 +987,16 @@ object MainForm: TMainForm
         object Panel34: TPanel
           Left = 0
           Top = 0
-          Width = 615
-          Height = 450
+          Width = 572
+          Height = 409
           Align = alClient
           BevelOuter = bvNone
           Caption = ' '
           TabOrder = 0
           object Panel2: TPanel
             Left = 0
-            Top = 424
-            Width = 615
+            Top = 383
+            Width = 572
             Height = 26
             Align = alBottom
             BevelOuter = bvNone
@@ -563,17 +1009,17 @@ object MainForm: TMainForm
           object Panel1: TPanel
             Left = 0
             Top = 0
-            Width = 615
-            Height = 424
+            Width = 572
+            Height = 383
             Align = alClient
             BevelOuter = bvNone
             Caption = ' '
             TabOrder = 1
             object VScrollBar: TScrollBar
-              Left = 598
+              Left = 555
               Top = 0
               Width = 17
-              Height = 424
+              Height = 383
               Align = alRight
               Ctl3D = False
               Kind = sbVertical
@@ -589,8 +1035,8 @@ object MainForm: TMainForm
         end
         object HScrollBar: TScrollBar
           Left = 0
-          Top = 450
-          Width = 615
+          Top = 409
+          Width = 572
           Height = 17
           Align = alBottom
           Ctl3D = False
@@ -607,7 +1053,7 @@ object MainForm: TMainForm
         Left = 0
         Top = 0
         Width = 57
-        Height = 467
+        Height = 426
         Align = alLeft
         BevelOuter = bvNone
         Caption = ' '
@@ -621,8 +1067,8 @@ object MainForm: TMainForm
   object MainMenu1: TMainMenu
     AutoHotkeys = maManual
     Images = ImageList2
-    Left = 33
-    Top = 56
+    Left = 57
+    Top = 128
     object File1: TMenuItem
       Caption = 'File'
       object New1: TMenuItem
@@ -785,11 +1231,17 @@ object MainForm: TMainForm
       object Insertsymbol1: TMenuItem
         Action = InsertSymbol
       end
+      object Insertbitmap1: TMenuItem
+        Action = InsertBitmap
+      end
       object N18: TMenuItem
         Caption = '-'
       end
       object Freehandpolyline1: TMenuItem
         Action = FreehandPolyline
+      end
+      object FreehandBeziercurve1: TMenuItem
+        Action = FreehandBezier
       end
     end
     object Transform1: TMenuItem
@@ -945,17 +1397,32 @@ object MainForm: TMainForm
       object Group1: TMenuItem
         Action = Group
       end
+      object Ungroup1: TMenuItem
+        Action = Ungroup
+      end
+      object Makecompound1: TMenuItem
+        Action = MakeCompound
+      end
+      object Uncompound1: TMenuItem
+        Action = Uncompound
+      end
       object Converttopolyline1: TMenuItem
         Action = ConvertTo
       end
       object Simplifypolylinepolygon1: TMenuItem
         Action = SimplifyPoly
       end
+      object SimplifyBezier1: TMenuItem
+        Action = SimplifyBezier
+      end
       object Connectpaths1: TMenuItem
         Action = ConnectPaths
       end
       object Reversepoints1: TMenuItem
         Action = ReversePoints
+      end
+      object Deletesmallobjects1: TMenuItem
+        Action = DeleteSmallObjects
       end
       object Converttograyscale1: TMenuItem
         Action = ConvertToGrayScale
@@ -1043,11 +1510,23 @@ object MainForm: TMainForm
       object Showgrid2: TMenuItem
         Action = ShowGrid
       end
+      object Gridontop1: TMenuItem
+        Action = GridOnTop
+      end
+      object Showcrosshair1: TMenuItem
+        Action = ShowCrossHair
+      end
       object ShowRulers1: TMenuItem
         Action = ShowRulers
       end
       object Showscrollbars1: TMenuItem
         Action = ShowScrollBars
+      end
+      object ShowPropertiesToolbar11: TMenuItem
+        Action = ShowPropertiesToolbar1
+      end
+      object ShowPropertiesToolbar21: TMenuItem
+        Action = ShowPropertiesToolbar2
       end
       object Useareatoselectobjects2: TMenuItem
         Caption = 'Use area to select objects'
@@ -1071,8 +1550,8 @@ object MainForm: TMainForm
     AutoHotkeys = maManual
     AutoPopup = False
     Images = ImageList2
-    Left = 63
-    Top = 64
+    Left = 87
+    Top = 128
     object Test1: TMenuItem
       Caption = 'Test'
       OnClick = Test1Click
@@ -1091,12 +1570,6 @@ object MainForm: TMainForm
     Options = [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing]
     Left = 123
     Top = 90
-  end
-  object OpenDialog1: TOpenDialog
-    DefaultExt = 'xml'
-    Filter = '*.xml|*.xml'
-    Left = 196
-    Top = 32
   end
   object EMFOpenDialog: TOpenPictureDialog
     DefaultExt = 'tpx'
@@ -1157,6 +1630,12 @@ object MainForm: TMainForm
       SecondaryShortCuts.Strings = (
         'Shift+Del')
       OnExecute = UserEventExecute
+    end
+    object ShowCrossHair: TAction
+      Category = 'View'
+      Caption = 'Show crosshair'
+      Checked = True
+      OnExecute = ShowCrossHairExecute
     end
     object DeleteSelected: TAction
       Category = 'Edit'
@@ -1269,6 +1748,7 @@ object MainForm: TMainForm
     object ConvertToGrayScale: TAction
       Category = 'Modify'
       Caption = 'Convert to grayscale'
+      Hint = 'Convert to grayscale'
       OnExecute = UserEventExecute
     end
     object RotateCounterclockW: TAction
@@ -1673,36 +2153,42 @@ object MainForm: TMainForm
     object PreviewSVG: TAction
       Category = 'Tools'
       Caption = 'Preview SVG'
+      Hint = 'Preview SVG'
       ShortCut = 49235
       OnExecute = UserEventExecute
     end
     object PreviewEPS: TAction
       Category = 'Tools'
       Caption = 'Preview EPS'
+      Hint = 'Preview EPS'
       ShortCut = 49221
       OnExecute = UserEventExecute
     end
     object PreviewPDF: TAction
       Category = 'Tools'
       Caption = 'Preview PDF'
+      Hint = 'Preview PDF'
       ShortCut = 49232
       OnExecute = UserEventExecute
     end
     object PreviewPNG: TAction
       Category = 'Tools'
       Caption = 'Preview PNG'
+      Hint = 'Preview PNG'
       ShortCut = 49230
       OnExecute = UserEventExecute
     end
     object PreviewBMP: TAction
       Category = 'Tools'
       Caption = 'Preview BMP'
+      Hint = 'Preview BMP'
       ShortCut = 49218
       OnExecute = UserEventExecute
     end
     object PreviewEMF: TAction
       Category = 'Tools'
       Caption = 'Preview EMF'
+      Hint = 'Preview EMF'
       ShortCut = 49229
       OnExecute = UserEventExecute
     end
@@ -1738,12 +2224,19 @@ object MainForm: TMainForm
     object SimplifyPoly: TAction
       Category = 'Modify'
       Caption = 'Simplify polyline/polygon'
-      ImageIndex = 65
+      Hint = 'Simplify polyline/polygon'
+      OnExecute = UserEventExecute
+    end
+    object SimplifyBezier: TAction
+      Category = 'Modify'
+      Caption = 'Simplify Bezier'
+      Hint = 'Simplify Bezier'
       OnExecute = UserEventExecute
     end
     object ConnectPaths: TAction
       Category = 'Modify'
       Caption = 'Connect paths'
+      Hint = 'Connect paths'
       OnExecute = UserEventExecute
     end
     object RotateTextAction: TAction
@@ -1767,22 +2260,26 @@ object MainForm: TMainForm
     object DrawingSource: TAction
       Category = 'Tools'
       Caption = 'Drawing source'
+      Hint = 'Drawing source'
       ShortCut = 24644
       OnExecute = UserEventExecute
     end
     object preview_tex_inc: TAction
       Category = 'Tools'
       Caption = 'preview.tex.inc'
+      Hint = 'preview.tex.inc'
       OnExecute = UserEventExecute
     end
     object metapost_tex_inc: TAction
       Category = 'Tools'
       Caption = 'metapost.tex.inc'
+      Hint = 'metapost.tex.inc'
       OnExecute = UserEventExecute
     end
     object CaptureEMF: TAction
       Category = 'Tools'
       Caption = 'Capture EMF'
+      Hint = 'Capture EMF'
       OnExecute = UserEventExecute
     end
     object ImageTool: TAction
@@ -1874,15 +2371,26 @@ object MainForm: TMainForm
       ShortCut = 27
       OnExecute = BasicModeExecute
     end
+    object InsertBitmap: TAction
+      Category = 'Insert'
+      Caption = 'Insert bitmap'
+      Hint = 'Insert bitmap'
+      ImageIndex = 76
+      ShortCut = 77
+      OnExecute = InsertBitmapExecute
+    end
     object FreehandPolyline: TAction
       Category = 'Insert'
       Caption = 'Freehand polyline'
+      Hint = 'Freehand polyline'
       ImageIndex = 63
+      Visible = False
       OnExecute = FreehandPolylineExecute
     end
     object ReversePoints: TAction
       Category = 'Modify'
       Caption = 'Reverse points'
+      Hint = 'Reverse points'
       OnExecute = UserEventExecute
     end
     object AlignLeft: TAction
@@ -1921,36 +2429,121 @@ object MainForm: TMainForm
       ImageIndex = 72
       OnExecute = UserEventExecute
     end
+    object DeleteSmallObjects: TAction
+      Category = 'Modify'
+      Caption = 'Delete small objects'
+      Hint = 'Delete small objects'
+      OnExecute = UserEventExecute
+    end
     object Group: TAction
       Category = 'Modify'
       Caption = 'Group'
+      Hint = 'Group'
+      ShortCut = 16455
+      OnExecute = UserEventExecute
+    end
+    object Ungroup: TAction
+      Category = 'Modify'
+      Caption = 'Ungroup'
+      Hint = 'Ungroup'
+      ShortCut = 24647
+      SecondaryShortCuts.Strings = (
+        'Ctrl+U')
+      OnExecute = UserEventExecute
+    end
+    object MakeCompound: TAction
+      Category = 'Modify'
+      Caption = 'Make compound'
+      Enabled = False
+      ShortCut = 16459
+      Visible = False
+      OnExecute = UserEventExecute
+    end
+    object Uncompound: TAction
+      Category = 'Modify'
+      Caption = 'Uncompound'
+      Enabled = False
+      Hint = 'Uncompound'
+      ShortCut = 24651
+      Visible = False
       OnExecute = UserEventExecute
     end
     object BreakPath: TAction
       Category = 'Modify'
       Caption = 'Break path'
+      Hint = 'Break path'
       ImageIndex = 75
       OnExecute = UserEventExecute
     end
     object DeletePoint: TAction
       Category = 'Modify'
       Caption = 'Delete point'
+      Hint = 'Delete point'
       ImageIndex = 74
       OnExecute = UserEventExecute
     end
     object AddPoint: TAction
       Category = 'Modify'
       Caption = 'Add point'
+      Hint = 'Add point'
       ImageIndex = 73
       OnExecute = UserEventExecute
+    end
+    object FreehandBezier: TAction
+      Category = 'Insert'
+      Caption = 'Freehand Bezier curve'
+      Hint = 'Freehand Bezier curve'
+      ImageIndex = 64
+      ShortCut = 70
+      OnExecute = FreehandBezierExecute
+    end
+    object GridOnTop: TAction
+      Category = 'View'
+      Caption = 'Grid on top'
+      OnExecute = GridOnTopExecute
+    end
+    object PickUpProperties: TAction
+      Category = 'Edit'
+      Caption = 'Pick up properties'
+      Hint = 'Pick up properties'
+      ImageIndex = 77
+      OnExecute = PickUpPropertiesExecute
+    end
+    object DefaultProperties: TAction
+      Category = 'Edit'
+      Caption = 'Set default properties'
+      Hint = 'Set default properties'
+      ImageIndex = 78
+      OnExecute = DefaultPropertiesExecute
+    end
+    object ApplyProperties: TAction
+      Category = 'Edit'
+      Caption = 'Apply properties'
+      Hint = 'Apply properties'
+      ImageIndex = 79
+      OnExecute = ApplyPropertiesExecute
+    end
+    object ShowPropertiesToolbar1: TAction
+      Category = 'View'
+      Caption = 'Show the first properties toolbar'
+      Enabled = False
+      Visible = False
+      OnExecute = ShowPropertiesToolbar1Execute
+    end
+    object ShowPropertiesToolbar2: TAction
+      Category = 'View'
+      Caption = 'Show the second properties toolbar'
+      Enabled = False
+      Visible = False
+      OnExecute = ShowPropertiesToolbar2Execute
     end
   end
   object ImageList2: TImageList
     Left = 164
-    Top = 44
+    Top = 132
     Bitmap = {
-      494C01014C004F00040010001000FFFFFFFFFF10FFFFFFFFFFFFFFFF424D3600
-      0000000000003600000028000000400000004001000001002000000000000040
+      494C010150005400040010001000FFFFFFFFFF10FFFFFFFFFFFFFFFF424D3600
+      0000000000003600000028000000400000005001000001002000000000000050
       0100000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
@@ -2079,6 +2672,134 @@ object MainForm: TMainForm
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000080800000808000008080
+      0000808000008080000080800000808000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000008000000080000000808080000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000008080000080800000000000000000
+      0000000000008080000080800000808000008080000080800000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      00000000000000000000000000008080800000000000FFFFFF00800000008000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000080800000000000008080
+      0000808000000000000080800000808000008080000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      00000000000000000000000000000000000000000000FFFFFF00800000008000
+      0000800000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      000000000000000000000000000000000000000000000000000000000000FFFF
+      FF00FFFFFF008080000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000FFFFFF008000
+      0000800000008000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000FFFFFF00FFFFFF0080800000000000000000000000000000000000000000
+      000000000000000000000000000000000000000000000000000080808000C0C0
+      C00080808000C0C0C00080808000C0C0C0000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      000000000000000000000000000000000000000000008080800080808000FFFF
+      FF00800000008000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      000000000000FFFFFF00FFFFFF00808000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000C0C0C0008080
+      8000C0C0C00080808000C0C0C000808080000000000000808000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      000000000000000000000000000000000000000000000000000000000000FFFF
+      FF00FFFFFF008000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      00000000000000000000FFFFFF00FFFFFF008080800000000000000000000000
+      000000000000000000000000000000000000000000000000000080808000C0C0
+      C00080808000C0C0C00080808000C0C0C0000000000000808000008080000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000808080000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000FFFFFF00FFFFFF0080808000000000000000
+      000000000000000000000000000000000000000000000000000000000000FFFF
+      FF0000FFFF00FFFFFF0000FFFF00FFFFFF0000FFFF0000000000008080000080
+      8000000000000000000000000000000000000000000000000000000000008080
+      8000808080008080800000000000000000000000000080008000000000008080
+      80000000000000FFFF0000000000808080000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      000000000000000000000000000000000000FFFFFF00FFFFFF00808080000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000FFFFFF0000FFFF00FFFFFF0000FFFF00FFFFFF0000FFFF00000000000080
+      8000008080000000000000000000000000000000000000000000C0C0C000C0C0
+      C000C0C0C0008080800080808000000000000000000080008000800080000000
+      0000000000000000000000FFFF00000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      00000000000000000000000000000000000000000000FFFFFF00000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      000000000000FFFFFF0000FFFF00FFFFFF0000FFFF00FFFFFF0000FFFF000000
+      00000080800000808000000000000000000000000000C0C0C000FFFFFF00C0C0
+      C000C0C0C000C0C0C00080808000808080008000800080008000800080000000
+      0000000000000000000000FFFF00000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      00000000000000000000FFFFFF0000FFFF00FFFFFF0000FFFF00FFFFFF0000FF
+      FF00000000000080800000000000000000000000000000000000C0C0C000FFFF
+      FF00C0C0C00000000000C0C0C000808080008080800080008000800080000000
+      0000000000008080800000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000FFFFFF0000FFFF00FFFFFF0000FFFF00FFFF
+      FF0000FFFF00000000000000000000000000000000000000000000000000C0C0
+      C000000000008000000000000000C0C0C0008000800080008000800080000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      000000000000000000000000000000000000FFFFFF0000FFFF00FFFFFF0000FF
+      FF00FFFFFF0000FFFF0000000000000000000000000000000000800000000000
+      0000C0C0C00080000000C0C0C000808080008000800080008000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      000000000000000000000000000000000000000000000000000080000000C0C0
+      C000000000008000000080808000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      000000000000000000000000000000000000000000000000000080000000C0C0
+      C000C0C0C0008000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000000000000000
+      0000000000000000000000000000000000000000000000000000808080008000
+      0000800000008080800000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
@@ -4512,12 +5233,16 @@ object MainForm: TMainForm
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       000000000000000000000000000000000000424D3E000000000000003E000000
-      2800000040000000400100000100010000000000000A00000000000000000000
+      2800000040000000500100000100010000000000800A00000000000000000000
       000000000000000000000000FFFFFF0000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
-      000000000000000000000000000000008000FFFFFFFFFFFFBF7EFFFFFFFFFFFF
+      00000000000000000000000000000000FFFF80FFFFFFFC1F8001003FFFFFFE0F
+      BFFD807FFFFFFF07BFFDC1FFC07FFF83BFFDE0FF803FFF83BFFDF07F801FF7C3
+      BFFDF83F800FE3E1FFFDFC17C007C1A0CD57FE07E0038094D557FF03F0010018
+      CD53FF81F8018018D555FF00FC01C01FCCB3FFC0FE01C03FFFFFFFE8FF03C0FF
+      8001FFF1FFFFC1FFFFFFFFFFFFFFC3FF8000FFFFFFFFFFFFBF7EFFFFFFFFFFFF
       BD5EFFFFFFFFFFFFBE3EFFFFFFFFFFFFBF7EFFFFFFFFFFFFB80EF81FE7E7E7E7
       B80EF81FF00FF3CF80000000F81FF99FB80E000000000000B80EF81F00000000
       BF7EF81FF81FF99FBE3EFE7FF00FF3CFBD5EFE7FE7E7E7E7BF7EFC3FFFFFFFFF
@@ -4714,5 +5439,14 @@ object MainForm: TMainForm
       RadioItem = True
       OnClick = Pdf_Format_Click
     end
+  end
+  object OpenBitmapDlg: TOpenPictureDialog
+    Filter = 
+      'All Images (*.jpg;*.jpeg;*.bmp;*.png)|*.jpg;*.jpeg;*.bmp;*.png|J' +
+      'PEG (*.jpg;*.jpeg)|*.jpg;*.jpeg|BMP (*.bmp)|*.bmp|PNG (*.png)|*.' +
+      'png'
+    Options = [ofPathMustExist, ofFileMustExist, ofEnableSizing]
+    Left = 200
+    Top = 120
   end
 end

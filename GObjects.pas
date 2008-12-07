@@ -15,7 +15,7 @@ uses Types, SysUtils, Classes,
   LCLIntf, LCLType, LMessages, LCLProc, LazBasic
 {$ENDIF}
   , Graphics, Drawings, Geometry, Contnrs,
-  Pieces, Devices, GObjBase;
+  Pieces, Devices, GObjBase, Bitmaps;
 
 type
 
@@ -93,9 +93,6 @@ type
 
      <B=Warning>: This is an abstract class that cannot be used
      directly.
-
-     <B=Note>: The control points are always in the object model
-     coordinate system !
   }
   TPrimitive2D = class(TObject2D)
   protected
@@ -165,10 +162,10 @@ type
     procedure FinishFirstDraw; virtual;
     destructor Destroy; override;
     constructor CreateFromStream(const Stream: TStream); override;
+    procedure AssignProperties(const Obj: TGraphicObject);
     procedure Assign(const Obj: TGraphicObject); override;
     procedure SaveToStream(const Stream: TStream); override;
     procedure FillPieces; virtual;
-    //TSY:
     procedure BezierPoints(PP: TPointsSet2D); virtual;
     procedure DeviceDrawPiece(Piece: TPiece;
       const Transf: TTransf2D; const Dvc: TDevice;
@@ -183,7 +180,7 @@ type
       const Dvc: TDevice; const ClipRect2D: TRect2D); override;
     function OnMe(P: TPoint2D; Aperture: TRealType;
       var Distance: TRealType): Integer; override;
-    procedure TransForm(const T: TTransf2D); override;
+    procedure Transform(const T: TTransf2D); override;
     procedure ReversePoints; virtual;
     function DeleteControlPoint0(I: Integer): Integer; virtual;
     procedure DeleteControlPoint(const I: Integer); virtual;
@@ -193,7 +190,8 @@ type
     function InsertControlPoint(P: TPoint2D;
       Aperture, Precision: TRealType): Boolean; virtual;
     procedure MoveControlPoint0(const Pos: Integer;
-      P: TPoint2D; Shift: TShiftState); virtual;
+      P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
+      virtual;
     procedure BreakPath(P: TPoint2D;
       Aperture, Precision: TRealType; var Obj1, Obj2:
       TPrimitive2D);
@@ -275,8 +273,8 @@ type
         <See Property=TPrimitive2D@Points>.>
     }
     constructor Create(ID: Integer); override;
-    constructor CreateSpec(ID: Integer; const Pts: array of
-      TPoint2D);
+    constructor CreateSpec(ID: Integer;
+      const Pts: array of TPoint2D);
     procedure WhenCreated;
     procedure FillPieces; override;
     procedure Assign(const Obj: TGraphicObject); override;
@@ -305,8 +303,8 @@ type
   public
     class function GetName: string; override;
     constructor Create(ID: Integer); override;
-    constructor CreateSpec(ID: Integer; const Pts: array of
-      TPoint2D);
+    constructor CreateSpec(ID: Integer;
+      const Pts: array of TPoint2D);
     procedure WhenCreated;
     procedure FillPieces; override;
     procedure Assign(const Obj: TGraphicObject); override;
@@ -315,7 +313,6 @@ type
       TPrimitive2D);
       override;
   end;
-
 
   TStarKind = (starCircle, starSquare, starDiamond, starTriUp,
     starTriDown,
@@ -367,7 +364,8 @@ type
     procedure PolyPoints(var PP: TPointsSet2D; T:
       TTransf2D);
     procedure MoveControlPoint0(const Pos: Integer;
-      P: TPoint2D; Shift: TShiftState); override;
+      P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
+      override;
   end;
 
   {: This class defines a 2D rectangle.
@@ -447,8 +445,9 @@ type
     procedure SaveToStream(const Stream: TStream); override;
     procedure FillPieces; override;
     procedure ReversePoints; override;
-    procedure MoveControlPoint0(const Pos: Integer; P: TPoint2D;
-      Shift: TShiftState); override;
+    procedure MoveControlPoint0(const Pos: Integer;
+      P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
+      override;
     property Radius: TRealType read GetRadius write
       SetRadius;
     property StartAngle: TRealType read GetStartAngle write
@@ -508,8 +507,8 @@ type
   TBezierPath2D0 = class(TBezierPrimitive2D)
   public
     constructor Create(ID: Integer); override;
-    constructor CreateSpec(ID: Integer; const Pts: array of
-      TPoint2D);
+    constructor CreateSpec(ID: Integer;
+      const Pts: array of TPoint2D);
     procedure WhenCreated;
     procedure Assign(const Obj: TGraphicObject); override;
     procedure BezierPoints(PP: TPointsSet2D); override;
@@ -525,8 +524,9 @@ type
     function DeleteControlPoint0(I: Integer): Integer; override;
     function InsertControlPoint0(const Pos: Integer;
       P: TPoint2D; Precision: TRealType): Integer; override;
-    procedure MoveControlPoint0(const Pos: Integer; P: TPoint2D;
-      Shift: TShiftState); override;
+    procedure MoveControlPoint0(const Pos: Integer;
+      P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
+      override;
     procedure BreakPath(P: TPoint2D;
       Aperture, Precision: TRealType; var Obj1, Obj2:
       TPrimitive2D);
@@ -538,8 +538,8 @@ type
   public
     class function GetName: string; override;
     constructor Create(ID: Integer); override;
-    constructor CreateSpec(ID: Integer; const Pts: array of
-      TPoint2D);
+    constructor CreateSpec(ID: Integer;
+      const Pts: array of TPoint2D);
     procedure WhenCreated;
     procedure FinishFirstDraw; override;
     procedure BezierPoints(PP: TPointsSet2D);
@@ -547,8 +547,10 @@ type
     function DeleteControlPoint0(I: Integer): Integer; override;
     function InsertControlPoint0(const Pos: Integer;
       P: TPoint2D; Precision: TRealType): Integer; override;
-    procedure MoveControlPoint0(const Pos: Integer; P: TPoint2D;
-      Shift: TShiftState); override;
+    procedure MoveControlPoint0(const Pos: Integer;
+      P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
+      override;
+    procedure ReversePoints; override;
     procedure BreakPath(P: TPoint2D;
       Aperture, Precision: TRealType; var Obj1, Obj2:
       TPrimitive2D);
@@ -562,8 +564,8 @@ type
     //function FillProfile: TRect2D; override;
   public
     constructor Create(ID: Integer); override;
-    constructor CreateSpec(ID: Integer; const Pts: array of
-      TPoint2D);
+    constructor CreateSpec(ID: Integer;
+      const Pts: array of TPoint2D);
     procedure WhenCreated;
     procedure Assign(const Obj: TGraphicObject); override;
     procedure BezierPoints(PP: TPointsSet2D); override;
@@ -586,8 +588,8 @@ type
   public
     class function GetName: string; override;
     constructor Create(ID: Integer); override;
-    constructor CreateSpec(ID: Integer; const Pts: array of
-      TPoint2D);
+    constructor CreateSpec(ID: Integer;
+      const Pts: array of TPoint2D);
     procedure WhenCreated;
     procedure BezierPoints(PP: TPointsSet2D); override;
     procedure BreakPath(P: TPoint2D;
@@ -604,12 +606,10 @@ type
     fTeXText: AnsiString;
     fHeight: TRealType;
     fRot: TRealType;
-    fHJustification: THJustification;
-    fVJustification: TVJustification;
-    procedure ResetJustification;
-    procedure SetHJustification(J: THJustification);
-    procedure SetVJustification(J: TVJustification);
-    function GetWideText: Widestring;
+    fHAlignment: THAlignment;
+    procedure ResetAlignment;
+    procedure SetHAlignment(J: THAlignment);
+    function GetWideText: WideString;
     function GetFaceName: string;
     function GetStyle: TFontStyles;
     function GetCharset: TFontCharSet;
@@ -641,7 +641,7 @@ type
     procedure Assign(const Obj: TGraphicObject); override;
     procedure SaveToStream(const Stream: TStream); override;
     procedure FillPieces; override;
-    procedure TransForm(const T: TTransf2D); override;
+    procedure Transform(const T: TTransf2D); override;
     {: This property contains the heigth of the text in world
        units.
        This is different from the Heigth of font used to render
@@ -657,7 +657,7 @@ type
     }
     property Text: AnsiString read fText write fText;
     property TeXText: AnsiString read fTeXText write fTeXText;
-    property WideText: Widestring read GetWideText;
+    property WideText: WideString read GetWideText;
     property FaceName: string read GetFaceName;
     property Style: TFontStyles read GetStyle;
     property Charset: TFontCharSet read GetCharset;
@@ -666,10 +666,8 @@ type
 
        By default the are setted to <I=DT_NOCLIP>.
     }
-    property HJustification: THJustification read
-      fHJustification write SetHJustification;
-    property VJustification: TVJustification read
-      fVJustification write SetVJustification;
+    property HAlignment: THAlignment read
+      fHAlignment write SetHAlignment;
   end;
 
   TSymbolKind = (symProcess, symDecision, symInputOutput,
@@ -701,11 +699,11 @@ type
   protected
     fDiameter: TRealType;
     fRot: TRealType;
-    fHJustification: THJustification;
-    fVJustification: TVJustification;
+    fHAlignment: THAlignment;
+    fVAlignment: TVAlignment;
     fSymbolKind: TSymbolKind;
-    procedure SetHJustification(J: THJustification);
-    procedure SetVJustification(J: TVJustification);
+    procedure SetHAlignment(J: THAlignment);
+    procedure SetVAlignment(J: TVAlignment);
   public
     class function GetName: string; override;
     constructor Create(ID: Integer); override;
@@ -718,102 +716,84 @@ type
     procedure FillPieces; override;
     {function OnMe(P: TPoint2D; Aperture: TRealType; var
       Distance: TRealType): Integer; override;}
-    procedure TransForm(const T: TTransf2D); override;
+    procedure Transform(const T: TTransf2D); override;
     property Diameter: TRealType read fDiameter write fDiameter;
     property Rot: TRealType read fRot write fRot;
     property SymbolKind: TSymbolKind read
       fSymbolKind write fSymbolKind;
-    property HJustification: THJustification read
-      fHJustification write SetHJustification;
-    property VJustification: TVJustification read
-      fVJustification write SetVJustification;
+    property HAlignment: THAlignment read
+      fHAlignment write SetHAlignment;
+    property VAlignment: TVAlignment read
+      fVAlignment write SetVAlignment;
   end;
 
 
-  {: This class rapresents a scalable raster bitmap.
-
-     This object is useful when you want a bitmap with world
-     dimension that is scaled when you zoom in a portion of the
-     drawing.
-
-  }
+  {: This class rapresents a scalable raster bitmap.}
   TBitmap2D = class(TPrimitive2D)
   protected
-    fBitmap: TBitmap;
-    fScaleFactor: TRealType;
-    fAspectRatio: TRealType;
-    fCopyMode: TCopyMode;
-
-    procedure SetScaleFactor(SF: TRealType);
-    procedure SetAspectRatio(AR: TRealType);
+    fBitmapEntry: TBitmapEntry;
+    fKeepAspectRatio: Boolean;
+    function GetBitmap: TBitmap;
   public
     class function GetName: string; override;
-    {: This constructor creates a new bitmap object.
-
-       <I=Bmp> is the bitmap to be drawed and it will be freed
-        by the object.
-
-       <I=P1> and <I=P2> are the corner points of the bitmap
-       in world coordinates (and the bitmap will be stretched
-       to fit in).
-
-       <B=Note>: The bitmap cannot be rotated !
-    }
     constructor Create(ID: Integer); override;
-    constructor CreateSpec(ID: Integer; const P1, P2: TPoint2D;
-      BMP:
-      TBitmap);
+    constructor CreateSpec(ID: Integer; const P0, P1: TPoint2D;
+      const BitmapEntry: TBitmapEntry);
     procedure WhenCreated;
     destructor Destroy; override;
+    function AdjustBitmapPoints(const P0, P1: TPoint2D;
+      const KeepAspectRatio: Boolean): TPoint2D;
+    function GetBitmapParams(var W, H: TRealType;
+      const KeepAspectRatio: Boolean): TPoint2D;
     procedure Assign(const Obj: TGraphicObject); override;
     constructor CreateFromStream(const Stream: TStream); override;
     procedure SaveToStream(const Stream: TStream); override;
-    procedure DeviceDraw(Transf: TTransf2D;
-      const Dvc: TDevice; const ClipRect2D: TRect2D); override;
-    {: This property contains the bitmap to be drawed.
+    procedure FillPieces; override;
+    procedure Transform(const T: TTransf2D); override;
+    procedure MoveControlPoint0(const Pos: Integer;
+      P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
+      override;
+    property BitmapEntry: TBitmapEntry read fBitmapEntry write
+      fBitmapEntry;
+    property Bitmap: TBitmap read GetBitmap;
+    property KeepAspectRatio: Boolean read fKeepAspectRatio
+      write fKeepAspectRatio;
+  end;
 
-       It will be freed by the object.
-    }
-    property Bitmap: TBitmap read fBitmap;
-    {: This property may contain the scale factor to be used for the
-       bitmap.
+// Graphical object for generic path
+// It takes its shape from a list of child objects
 
-       If you set this property the bounding box is recomputed and
-       the bitmap is not stretched. The first Points will remain
-       in the position specified but the second point will be
-       repositioned using the ScaleFactor.
-
-       The value rapresent how many drawing unit aorrespond to
-       one pixel in the image. So an image of 50x50 pixels with
-       a ScaleFactor of 2.0 will be 100x100 drawing units large.
-       How many application units (cm, inch, etc) is a drawing
-       unit is left to you.
-
-       Setting it to zero (the default) means that no scale is
-       needed.
-    }
-    property ScaleFactor: TRealType read fScaleFactor write
-      SetScaleFactor;
-    {: This property may contains the aspect ratio (Width/Heigth) to
-       be used for the bitmap.
-
-       This property is used only if ScaleFactor is not 0.0
-
-       Setting it to zero (the default) means that no aspect ratio is
-       needed.
-    }
-    property AspectRatio: TRealType read fAspectRatio write
-      SetAspectRatio;
-    {: This property contains the CopyMode used to copy the
-       bitmap.
-    }
-    property CopyMode: TCopyMode read fCopyMode write fCopyMode;
+  TCompound2D = class(TPrimitive2D)
+  protected
+    fGenPath: TGenericPath;
+  public
+    class function GetName: string; override;
+    constructor Create(ID: Integer); override;
+    destructor Destroy; override;
+    procedure WhenCreated;
+    procedure SaveToStream(const Stream: TStream); override;
+    constructor CreateFromStream(const Stream: TStream);
+      override;
+    procedure Assign(const Obj: TGraphicObject); override;
+    procedure FillPieces; override;
+    function OnMe(P: TPoint2D; Aperture: TRealType;
+      var Distance: TRealType): Integer; override;
+    procedure Transform(const T: TTransf2D); override;
+    procedure DrawControlPoints0(const VT: TTransf2D;
+      const ClipRect2D: TRect2D; const Width: Integer); override;
+    procedure AddPiece(const Piece: TPiece);
+    procedure MoveControlPoint0(const Pos: Integer;
+      P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
+      override;
+    property GenPath: TGenericPath read fGenPath;
   end;
 
 procedure GetEllipseParams0(const P0, P1, P2: TPoint2D;
   var P3, P4: TPoint2D;
   var CP: TPoint2D; var RX, RY, ARot: TRealType);
 function GetLineStyleString(const LineStyle: TLineStyle): string;
+procedure UncompoundCompound(const Compound: TCompound2D;
+  const Lst: TGraphicObjList);
 
 const
   {: This constats rapresent the maximum number of vectorial fonts
@@ -822,12 +802,12 @@ const
   MAX_REGISTERED_FONTS = 512;
 
 const
-  GraphicObjectClasses: array[1..16] of TGraphicObjectClass
+  GraphicObjectClasses: array[1..17] of TGraphicObjectClass
   = (TLine2D, TCircle2D, TRectangle2D, TEllipse2D,
     TArc2D, TSector2D, TSegment2D,
     TPolyline2D, TPolygon2D, TSmoothPath2D, TClosedSmoothPath2D,
     TBezierPath2D, TClosedBezierPath2D,
-    TText2D, //TBitmap2D,
+    TText2D, TBitmap2D,
     TStar2D, TSymbol2D);
 
 implementation
@@ -912,6 +892,17 @@ begin
   inherited Destroy;
 end;
 
+procedure TPrimitive2D.AssignProperties(const Obj: TGraphicObject);
+begin
+  if not (Obj is TPrimitive2D) then Exit;
+  fHatching := (Obj as TPrimitive2D).fHatching;
+  fLineStyle := (Obj as TPrimitive2D).fLineStyle;
+  fLineWidth := (Obj as TPrimitive2D).fLineWidth;
+  fLineColor := (Obj as TPrimitive2D).fLineColor;
+  fHatchColor := (Obj as TPrimitive2D).fHatchColor;
+  fFillColor := (Obj as TPrimitive2D).fFillColor;
+end;
+
 procedure TPrimitive2D.Assign(const Obj: TGraphicObject);
 begin
   if (Obj = Self) then Exit;
@@ -919,7 +910,7 @@ begin
   if not Assigned(Pieces) then
     Pieces := TArrayOfPiece.Create(1);
   if (Obj is TPrimitive2D) then
-  begin // Per default non aggiunge i punti.
+  begin
     if not Assigned(fPoints) then
     begin
       fPoints := CreateVect(0);
@@ -927,12 +918,7 @@ begin
       fPoints.OnChange := UpdateExtension;
     end;
     fPoints.Clear;
-    fHatching := (Obj as TPrimitive2D).fHatching;
-    fLineStyle := (Obj as TPrimitive2D).fLineStyle;
-    fLineWidth := (Obj as TPrimitive2D).fLineWidth;
-    fLineColor := (Obj as TPrimitive2D).fLineColor;
-    fHatchColor := (Obj as TPrimitive2D).fHatchColor;
-    fFillColor := (Obj as TPrimitive2D).fFillColor;
+    AssignProperties(Obj);
     fCanDeletePoints := (Obj as TPrimitive2D).fCanDeletePoints;
     fDrawPathBezier := (Obj as TPrimitive2D).fDrawPathBezier;
     FirstDrawPoint := -1;
@@ -952,33 +938,32 @@ var
   TmpBoolean: Boolean;
 begin
   { Load the standard properties }
-  inherited;
+  inherited CreateFromStream(Stream);
   WhenCreated;
-  with Stream do
-  begin
-    Read(TmpN, SizeOf(TmpN));
-    fPoints := CreateVect(TmpN);
+  Stream.Read(TmpN, SizeOf(TmpN));
+  if not Assigned(fPoints) then
+    fPoints := CreateVect(TmpN)
+  else fPoints.Expand(TmpN);
      { Read all the points. }
-    for Cont := 0 to TmpN - 1 do
-    begin
-      Read(TmpPt, SizeOf(TmpPt));
-      fPoints.Points[Cont] := TmpPt;
-    end;
-    Read(TmpBoolean, SizeOf(TmpBoolean));
-    fPoints.GrowingEnabled := TmpBoolean;
-    Read(fHatching, SizeOf(fHatching));
-    Read(fLineStyle, SizeOf(fLineStyle));
-    Read(fLineWidth, SizeOf(fLineWidth));
-    Read(fLineColor, SizeOf(fLineColor));
-    Read(fHatchColor, SizeOf(fHatchColor));
-    Read(fFillColor, SizeOf(fFillColor));
-    Read(fCanDeletePoints, SizeOf(fCanDeletePoints));
-    Read(fDrawPathBezier, SizeOf(fDrawPathBezier));
-    Read(fOwnsInterior, SizeOf(fOwnsInterior));
-    Read(fBeginArrowKind, SizeOf(fBeginArrowKind));
-    Read(fEndArrowKind, SizeOf(fEndArrowKind));
-    Read(fArrowSizeFactor, SizeOf(fArrowSizeFactor));
+  for Cont := 0 to TmpN - 1 do
+  begin
+    Stream.Read(TmpPt, SizeOf(TmpPt));
+    fPoints.Points[Cont] := TmpPt;
   end;
+  Stream.Read(TmpBoolean, SizeOf(TmpBoolean));
+  fPoints.GrowingEnabled := TmpBoolean;
+  Stream.Read(fHatching, SizeOf(fHatching));
+  Stream.Read(fLineStyle, SizeOf(fLineStyle));
+  Stream.Read(fLineWidth, SizeOf(fLineWidth));
+  Stream.Read(fLineColor, SizeOf(fLineColor));
+  Stream.Read(fHatchColor, SizeOf(fHatchColor));
+  Stream.Read(fFillColor, SizeOf(fFillColor));
+  Stream.Read(fCanDeletePoints, SizeOf(fCanDeletePoints));
+  Stream.Read(fDrawPathBezier, SizeOf(fDrawPathBezier));
+  Stream.Read(fOwnsInterior, SizeOf(fOwnsInterior));
+  Stream.Read(fBeginArrowKind, SizeOf(fBeginArrowKind));
+  Stream.Read(fEndArrowKind, SizeOf(fEndArrowKind));
+  Stream.Read(fArrowSizeFactor, SizeOf(fArrowSizeFactor));
   fPoints.OnChange := UpdateExtension;
 end;
 
@@ -991,31 +976,28 @@ var
 begin
   { Save the standard properties }
   inherited SaveToStream(Stream);
-  with Stream do
-  begin
-    TmpN := fPoints.Count;
-    Write(TmpN, SizeOf(TmpN));
+  TmpN := fPoints.Count;
+  Stream.Write(TmpN, SizeOf(TmpN));
      { Write all points. }
-    for Cont := 0 to TmpN - 1 do
-    begin
-      TmpPt := fPoints.Points[Cont];
-      Write(TmpPt, SizeOf(TmpPt));
-    end;
-    TmpBoolean := fPoints.GrowingEnabled;
-    Write(TmpBoolean, SizeOf(TmpBoolean));
-    Write(fHatching, SizeOf(fHatching));
-    Write(fLineStyle, SizeOf(fLineStyle));
-    Write(fLineWidth, SizeOf(fLineWidth));
-    Write(fLineColor, SizeOf(fLineColor));
-    Write(fHatchColor, SizeOf(fHatchColor));
-    Write(fFillColor, SizeOf(fFillColor));
-    Write(fCanDeletePoints, SizeOf(fCanDeletePoints));
-    Write(fDrawPathBezier, SizeOf(fDrawPathBezier));
-    Write(fOwnsInterior, SizeOf(fOwnsInterior));
-    Write(fBeginArrowKind, SizeOf(fBeginArrowKind));
-    Write(fEndArrowKind, SizeOf(fEndArrowKind));
-    Write(fArrowSizeFactor, SizeOf(fArrowSizeFactor));
+  for Cont := 0 to TmpN - 1 do
+  begin
+    TmpPt := fPoints.Points[Cont];
+    Stream.Write(TmpPt, SizeOf(TmpPt));
   end;
+  TmpBoolean := fPoints.GrowingEnabled;
+  Stream.Write(TmpBoolean, SizeOf(TmpBoolean));
+  Stream.Write(fHatching, SizeOf(fHatching));
+  Stream.Write(fLineStyle, SizeOf(fLineStyle));
+  Stream.Write(fLineWidth, SizeOf(fLineWidth));
+  Stream.Write(fLineColor, SizeOf(fLineColor));
+  Stream.Write(fHatchColor, SizeOf(fHatchColor));
+  Stream.Write(fFillColor, SizeOf(fFillColor));
+  Stream.Write(fCanDeletePoints, SizeOf(fCanDeletePoints));
+  Stream.Write(fDrawPathBezier, SizeOf(fDrawPathBezier));
+  Stream.Write(fOwnsInterior, SizeOf(fOwnsInterior));
+  Stream.Write(fBeginArrowKind, SizeOf(fBeginArrowKind));
+  Stream.Write(fEndArrowKind, SizeOf(fEndArrowKind));
+  Stream.Write(fArrowSizeFactor, SizeOf(fArrowSizeFactor));
 end;
 
 function TPrimitive2D.GetArrowSize: TRealType;
@@ -1038,8 +1020,9 @@ var
 begin
   if Pieces.Count = 0 then
     LinPolyToBezier(fPoints, True, PP)
-  else if Pieces[0] is TLinPath then
-    LinPolyToBezier(Pieces[0], (Pieces[0] as TLinPath).Closed, PP)
+  else if Pieces[0] is TPolyLinPiece then
+    LinPolyToBezier(Pieces[0], (Pieces[0] as TPolyLinPiece).Closed,
+      PP)
   else
   begin
     Pieces[0].BezierPoints(PP);
@@ -1089,8 +1072,8 @@ procedure TPrimitive2D.DrawControlPoints0(const VT: TTransf2D;
 var
   I: Integer;
 begin
-  for I := 0 to Points.Count - 1 do
-    (OwnerDrawing as TDrawing2D).OnControlPoint(Points[I], VT,
+  for I := 0 to fPoints.Count - 1 do
+    (OwnerDrawing as TDrawing2D).OnControlPoint(fPoints[I], VT,
       ClipRect2D);
 end;
 
@@ -1138,7 +1121,7 @@ begin
     Distance := 0;
 end;
 
-procedure TPrimitive2D.TransForm(const T: TTransf2D);
+procedure TPrimitive2D.Transform(const T: TTransf2D);
 begin
   fPoints.TransformPoints(T);
   if ScaleLineWidth then
@@ -1200,7 +1183,7 @@ begin
 end;
 
 procedure TPrimitive2D.MoveControlPoint0(const Pos: Integer;
-  P: TPoint2D; Shift: TShiftState);
+  P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
 begin
   fPoints[Pos] := P;
 end;
@@ -1413,19 +1396,12 @@ end;
 
 constructor TLine2D.CreateFromStream(const Stream: TStream);
 begin
-  inherited;
-  WhenCreated;
-  with Stream do
-  begin
-  end;
+  inherited CreateFromStream(Stream);
 end;
 
 procedure TLine2D.SaveToStream(const Stream: TStream);
 begin
   inherited SaveToStream(Stream);
-  with Stream do
-  begin
-  end;
 end;
 
 type
@@ -1497,7 +1473,7 @@ var
   APiece: TPiece;
   I: Integer;
 begin
-  APiece := TLinPath.Create(Length(Arr));
+  APiece := TPolyLinPiece.Create(Length(Arr));
   Data := APiece;
   for I := 0 to Length(Arr) - 1 do
     APiece.Add(Point2D(Arr[I][1], Arr[I][2]));
@@ -1555,16 +1531,12 @@ begin
           'M 0 0 L 1 -0.5 L 1.5 -1.5 L 2 -0.5 L 3 0 L 2 0.5 L 1.5 1.5 L 1 0.5 Z');
       arrOC:
         begin
-        //APiece := TLinPath.Create(31);
-        //LinearizeCircle(APiece, Point2D(0, 0), 1 {radius}, 30);
           APiece := TCirclePiece.Create(1);
           APiece.Add(Point2D(0, 0));
           (APiece as TCirclePiece).R := 1;
         end;
     else //arrO
       begin
-      //APiece := TLinPath.Create(31);
-      //LinearizeCircle(APiece, Point2D(ArrowSize, 0), 1, 30);
         APiece := TCirclePiece.Create(1);
         APiece.Add(Point2D(1, 0));
         (APiece as TCirclePiece).R := 1;
@@ -1588,11 +1560,11 @@ end;
 procedure TLine2D.FillPieces;
 var
   P0, P1: TPoint2D;
-  APiece: TLinPath;
+  APiece: TPolyLinPiece;
 begin
   P0 := fPoints[0];
   P1 := fPoints[1];
-  APiece := TLinPath.Create(2);
+  APiece := TPolyLinPiece.Create(2);
   Pieces.Add(APiece);
   APiece.Add(P0);
   APiece.Add(P1);
@@ -1656,18 +1628,20 @@ end;
 
 procedure TPolyline2D0.FillPieces;
 var
-  APath: TLinPath;
+  APiece: TPolyLinPiece;
 begin
-  APath := TLinPath.Create(fPoints.Count);
-  Pieces.Add(APath);
-  APath.Line := pliDefault;
-  APath.Fill := pfiDefault;
-  APath.Hatch := phaDefault;
-  APath.Closed := False;
-  APath.Copy(fPoints, 0, fPoints.Count - 1);
+  APiece := TPolyLinPiece.Create(fPoints.Count);
+  Pieces.Add(APiece);
+  APiece.Line := pliDefault;
+  APiece.Fill := pfiDefault;
+  APiece.Hatch := phaDefault;
+  APiece.Closed := False;
+  APiece.Copy(fPoints, 0, fPoints.Count - 1);
 end;
 
 procedure TPolyline2D0.Assign(const Obj: TGraphicObject);
+var
+  Precision: TRealType;
 begin
   if (Obj = Self) then Exit;
   inherited Assign(Obj);
@@ -1678,7 +1652,14 @@ begin
     if (Obj is TPrimitive2D) and not (Obj is TPolyline2D0)
       and ((Obj as TPrimitive2D).Pieces.Count > 0) then
     begin
-      (Obj as TPrimitive2D).Pieces[0].Linearize(fPoints);
+      if Obj.ParentDrawing is TDrawing2D then
+        Precision :=
+          (Obj.ParentDrawing as TDrawing2D).ApproximationPrecision
+          / (Obj.ParentDrawing as TDrawing2D).PicScale
+      else Precision := ApproximationPrecision_Default /
+        PicScale_Default;
+      (Obj as TPrimitive2D).Pieces[0].Linearize(fPoints,
+        Precision);
       if ((Obj as TPrimitive2D).Pieces[0].Closed)
         and (fPoints.Count > 0)
         and not IsSamePoint2D(
@@ -1864,11 +1845,11 @@ var
   APiece: TPiece;
   function FillSimplePoly(
     const PArr: PSimplePointArr2D; const Count: Integer;
-    const R: TRealType): TLinPath;
+    const R: TRealType): TPolyLinPiece;
   var
     I: Integer;
   begin
-    Result := TLinPath.Create(Count);
+    Result := TPolyLinPiece.Create(Count);
     for I := 0 to Pred(Count) do
       Result.Add(Point2D(PArr^[I][1] * R, PArr^[I][2] * R));
     Pieces.Add(Result);
@@ -1919,10 +1900,6 @@ begin
         Scale2D(StarSize * 0.0115, StarSize * 0.0115));
   else //starCircle
     begin
-{      APiece := TLinPath.Create(30);
-      Pieces.Add(APiece);
-      LinearizeCircle(APiece,
-        Point2D(0, 0), StarSize, 30);}
       APiece := TCirclePiece.Create(1);
       APiece.Add(Point2D(0, 0));
       (APiece as TCirclePiece).R := StarSize;
@@ -1983,22 +1960,16 @@ end;
 
 constructor TStar2D.CreateFromStream(const Stream: TStream);
 begin
-  inherited;
-  with Stream do
-  begin
-    Read(fStarKind, SizeOf(fStarKind));
-    Read(fStarSizeFactor, SizeOf(fStarSizeFactor));
-  end;
+  inherited CreateFromStream(Stream);
+  Stream.Read(fStarKind, SizeOf(fStarKind));
+  Stream.Read(fStarSizeFactor, SizeOf(fStarSizeFactor));
 end;
 
 procedure TStar2D.SaveToStream(const Stream: TStream);
 begin
   inherited SaveToStream(Stream);
-  with Stream do
-  begin
-    Write(fStarKind, SizeOf(fStarKind));
-    Write(fStarSizeFactor, SizeOf(fStarSizeFactor));
-  end;
+  Stream.Write(fStarKind, SizeOf(fStarKind));
+  Stream.Write(fStarSizeFactor, SizeOf(fStarSizeFactor));
 end;
 
 // =====================================================================
@@ -2097,7 +2068,7 @@ begin
 end;
 
 procedure TBox2D0.MoveControlPoint0(const Pos: Integer;
-  P: TPoint2D; Shift: TShiftState);
+  P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
 var
   T: TTransf2D;
   CP: TPoint2D;
@@ -2177,19 +2148,19 @@ end;
 
 procedure TRectangle2D.FillPieces;
 var
-  APath: TPiece;
+  APiece: TPiece;
   P0, P1, P2, P: TPoint2D;
   RXX, RYY, ARot, H, W: TRealType;
 begin
   if RX = 0 then
-    APath := TRectanglePiece.Create(1)
+    APiece := TRectanglePiece.Create(1)
   else
-    APath := TBezierPath.Create(25);
-  Pieces.Add(APath);
-  APath.Closed := True;
-  APath.Line := pliDefault;
-  APath.Fill := pfiDefault;
-  APath.Hatch := phaDefault;
+    APiece := TBezierPiece.Create(25);
+  Pieces.Add(APiece);
+  APiece.Closed := True;
+  APiece.Line := pliDefault;
+  APiece.Fill := pfiDefault;
+  APiece.Hatch := phaDefault;
   P0 := fPoints[0];
   P1 := fPoints[1];
   P2 := fPoints[2];
@@ -2197,10 +2168,10 @@ begin
     ARot, W, H, 1E-10);
   if RX = 0 then
   begin
-    (APath as TRectanglePiece).ARot := ARot;
-    (APath as TRectanglePiece).H := H;
-    (APath as TRectanglePiece).W := W;
-    APath.Add(P);
+    (APiece as TRectanglePiece).ARot := ARot;
+    (APiece as TRectanglePiece).H := H;
+    (APiece as TRectanglePiece).W := W;
+    APiece.Add(P);
   end
   else
   begin
@@ -2211,8 +2182,8 @@ begin
     if RXX < 0 then RXX := 0;
     if RYY > H / 2 then RYY := H / 2;
     if RYY < 0 then RYY := 0;
-    RoundRectBezierPoints(P, W, H, RXX, RYY, ARot, APath);
-    APath.Add(APath[0]);
+    RoundRectBezierPoints(P, W, H, RXX, RYY, ARot, APiece);
+    APiece.Add(APiece[0]);
   end;
 end;
 
@@ -2250,21 +2221,15 @@ end;
 constructor TRectangle2D.CreateFromStream(const Stream: TStream);
 begin
   inherited CreateFromStream(Stream);
-  with Stream do
-  begin
-    Read(fRX, SizeOf(fRX));
-    Read(fRY, SizeOf(fRY));
-  end;
+  Stream.Read(fRX, SizeOf(fRX));
+  Stream.Read(fRY, SizeOf(fRY));
 end;
 
 procedure TRectangle2D.SaveToStream(const Stream: TStream);
 begin
   inherited SaveToStream(Stream);
-  with Stream do
-  begin
-    Write(fRX, SizeOf(fRX));
-    Write(fRY, SizeOf(fRY));
-  end;
+  Stream.Write(fRX, SizeOf(fRX));
+  Stream.Write(fRY, SizeOf(fRY));
 end;
 
 // =====================================================================
@@ -2278,17 +2243,17 @@ end;
 
 procedure TEllipse2D.FillPieces;
 var
-  APath: TEllipsePiece;
+  APiece: TEllipsePiece;
   CP: TPoint2D;
 begin
-  APath := TEllipsePiece.Create(1);
-  Pieces.Add(APath);
-  APath.Line := pliDefault;
-  APath.Fill := pfiDefault;
-  APath.Hatch := phaDefault;
-  APath.Closed := True;
-  GetEllipseParams(CP, APath.RX, APath.RY, APath.ARot);
-  APath.Add(CP);
+  APiece := TEllipsePiece.Create(1);
+  Pieces.Add(APiece);
+  APiece.Line := pliDefault;
+  APiece.Fill := pfiDefault;
+  APiece.Hatch := phaDefault;
+  APiece.Closed := True;
+  GetEllipseParams(CP, APiece.RX, APiece.RY, APiece.ARot);
+  APiece.Add(CP);
 end;
 
 constructor TEllipse2D.Create(ID: Integer);
@@ -2379,16 +2344,16 @@ end;
 
 procedure TCircle2D.FillPieces;
 var
-  APath: TCirclePiece;
+  APiece: TCirclePiece;
 begin
-  APath := TCirclePiece.Create(1);
-  Pieces.Add(APath);
-  APath.Line := pliDefault;
-  APath.Fill := pfiDefault;
-  APath.Hatch := phaDefault;
-  APath.Closed := True;
-  APath.Add(fPoints[0]);
-  APath.R := PointDistance2D(fPoints[0], fPoints[1]);
+  APiece := TCirclePiece.Create(1);
+  Pieces.Add(APiece);
+  APiece.Line := pliDefault;
+  APiece.Fill := pfiDefault;
+  APiece.Hatch := phaDefault;
+  APiece.Closed := True;
+  APiece.Add(fPoints[0]);
+  APiece.R := PointDistance2D(fPoints[0], fPoints[1]);
 end;
 
 constructor TCircle2D.Create(ID: Integer);
@@ -2461,7 +2426,7 @@ end;
 
 procedure TCircular2D.FillPieces;
 var
-  APath: TCircularPiece;
+  APiece: TCircularPiece;
   P0, P1, P2: TPoint2D;
   procedure FillArcArrows;
   var
@@ -2474,45 +2439,45 @@ var
   begin
     // First arrow-head
     Delta := GetDelta(ArrowSize *
-      MeasureArrow(fBeginArrowKind) / APath.R);
+      MeasureArrow(fBeginArrowKind) / APiece.R);
     FillArrow(fBeginArrowKind,
-      ShiftPoint(P0, PolarVector(APath.R, APath.SA)),
-      ShiftPoint(P0, PolarVector(APath.R, APath.SA + Delta)),
+      ShiftPoint(P0, PolarVector(APiece.R, APiece.SA)),
+      ShiftPoint(P0, PolarVector(APiece.R, APiece.SA + Delta)),
       ArrowSize, Pieces);
     // Second arrow-head
     Delta := GetDelta(ArrowSize *
-      MeasureArrow(fEndArrowKind) / APath.R);
+      MeasureArrow(fEndArrowKind) / APiece.R);
     if Delta > 1 then Delta := Pi / 3
     else Delta := ArcCos(1 - Sqr(Delta) / 2);
     FillArrow(fEndArrowKind,
-      ShiftPoint(P0, PolarVector(APath.R, APath.EA)),
-      ShiftPoint(P0, PolarVector(APath.R, APath.EA - Delta)),
+      ShiftPoint(P0, PolarVector(APiece.R, APiece.EA)),
+      ShiftPoint(P0, PolarVector(APiece.R, APiece.EA - Delta)),
       ArrowSize, Pieces);
   end;
 begin
-  APath := TCircularPiece.Create(1);
-  Pieces.Add(APath);
-  APath.Line := pliDefault;
-  APath.Fill := pfiDefault;
-  APath.Hatch := phaDefault;
-  APath.Closed := not (Self is TArc2D);
+  APiece := TCircularPiece.Create(1);
+  Pieces.Add(APiece);
+  APiece.Line := pliDefault;
+  APiece.Fill := pfiDefault;
+  APiece.Hatch := phaDefault;
+  APiece.Closed := not (Self is TArc2D);
   P0 := fPoints[0];
   P1 := fPoints[1];
   P2 := fPoints[2];
-  APath.Add(P0);
-  APath.R := PointDistance2D(P0, P1);
-  APath.SA := ArcTan2(P1.Y - P0.Y, P1.X - P0.X);
-  APath.EA := ArcTan2(P2.Y - P0.Y, P2.X - P0.X);
+  APiece.Add(P0);
+  APiece.R := PointDistance2D(P0, P1);
+  APiece.SA := ArcTan2(P1.Y - P0.Y, P1.X - P0.X);
+  APiece.EA := ArcTan2(P2.Y - P0.Y, P2.X - P0.X);
   if (Self is TArc2D) then
   begin
-    APath.Kind := ci_Arc;
+    APiece.Kind := ci_Arc;
     if (fBeginArrowKind <> arrNone) or
       (fEndArrowKind <> arrNone) then FillArcArrows;
   end
   else if (Self is TSector2D) then
-    APath.Kind := ci_Sector
+    APiece.Kind := ci_Sector
   else if (Self is TSegment2D) then
-    APath.Kind := ci_Segment;
+    APiece.Kind := ci_Segment;
 end;
 
 procedure TCircular2D.GetArcParams(var CX, CY, R, SA, EA:
@@ -2670,7 +2635,7 @@ end;
 constructor TCircular2D.CreateFromStream(const Stream: TStream);
 begin
   { Load the standard properties }
-  inherited;
+  inherited CreateFromStream(Stream);
 end;
 
 procedure TCircular2D.SaveToStream(const Stream: TStream);
@@ -2693,7 +2658,7 @@ end;
 
 
 procedure TCircular2D.MoveControlPoint0(const Pos: Integer;
-  P: TPoint2D; Shift: TShiftState);
+  P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
 var
   CX, CY, R, SA, EA: TRealType;
 begin
@@ -2847,7 +2812,7 @@ end;
 
 procedure TBezierPrimitive2D.FillPieces;
 var
-  APath: TBezierPath;
+  APiece: TBezierPiece;
   procedure FillBezierArrows;
   var
     P0, P1: TPoint2D;
@@ -2902,15 +2867,15 @@ var
     FillArrow(fEndArrowKind, P0, P1, ArrowSize, Pieces);
   end;
 begin
-  APath := TBezierPath.Create(0);
-  Pieces.Add(APath);
-  APath.Line := pliDefault;
-  APath.Fill := pfiDefault;
-  APath.Hatch := phaDefault;
-  BezierPoints(APath);
-  APath.Closed := (Self is TClosedSmoothPath2D)
+  APiece := TBezierPiece.Create(0);
+  Pieces.Add(APiece);
+  APiece.Line := pliDefault;
+  APiece.Fill := pfiDefault;
+  APiece.Hatch := phaDefault;
+  BezierPoints(APiece);
+  APiece.Closed := (Self is TClosedSmoothPath2D)
     or (Self is TClosedBezierPath2D);
-  if not APath.Closed and
+  if not APiece.Closed and
     ((fBeginArrowKind <> arrNone) or
     (fEndArrowKind <> arrNone)) then FillBezierArrows;
 end;
@@ -3002,7 +2967,7 @@ var
 begin
   if (Obj = Self) then Exit;
   inherited Assign(Obj);
-  if Obj is TPrimitive2D then
+  if (Obj is TPrimitive2D) and not (Obj is TCompound2D) then
   begin
     fPoints.DisableEvents := True;
     if not (Obj is TBezierPath2D0) then
@@ -3054,11 +3019,11 @@ begin
       end;
     end;
     fPoints.DisableEvents := False;
-    fPoints.GrowingEnabled := True;
-    fOwnsInterior := False;
-    fCanDeletePoints := True;
-    fDrawPathBezier := True;
   end;
+  fPoints.GrowingEnabled := True;
+  fOwnsInterior := False;
+  fCanDeletePoints := True;
+  fDrawPathBezier := True;
   UpdateExtension(Self);
 end;
 
@@ -3198,7 +3163,7 @@ begin
 end;
 
 procedure TBezierPath2D.MoveControlPoint0(const Pos: Integer;
-  P: TPoint2D; Shift: TShiftState);
+  P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
 var
   V: TVector2D;
   PosC, PosM: Integer;
@@ -3281,9 +3246,8 @@ begin
   WhenCreated;
 end;
 
-constructor TClosedBezierPath2D.CreateSpec(ID: Integer; const
-  Pts:
-  array of TPoint2D);
+constructor TClosedBezierPath2D.CreateSpec(ID: Integer;
+  const Pts: array of TPoint2D);
 begin
   inherited CreateSpec(ID, Pts);
   WhenCreated;
@@ -3445,7 +3409,7 @@ end;
 
 procedure TClosedBezierPath2D.MoveControlPoint0(const Pos:
   Integer;
-  P: TPoint2D; Shift: TShiftState);
+  P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
 var
   V: TVector2D;
   PosC, PosM: Integer;
@@ -3504,6 +3468,17 @@ begin
     fPoints[fPoints.Count - 1]
       := ShiftPoint(fPoints[fPoints.Count - 1], V);
   fPoints[Pos] := P;
+end;
+
+procedure TClosedBezierPath2D.ReversePoints;
+begin
+  fPoints.ReversePoints;
+  if fPoints.Count mod 3 = 0 then
+  begin
+    fPoints.Insert(0, fPoints[fPoints.Count - 1]);
+    fPoints.Delete(fPoints.Count - 1);
+  end;
+  UpdateExtension(Self);
 end;
 
 procedure TClosedBezierPath2D.BreakPath(P: TPoint2D;
@@ -3774,9 +3749,8 @@ begin
   WhenCreated;
 end;
 
-constructor TClosedSmoothPath2D.CreateSpec(ID: Integer; const
-  Pts:
-  array of TPoint2D);
+constructor TClosedSmoothPath2D.CreateSpec(ID: Integer;
+  const Pts: array of TPoint2D);
 begin
   inherited CreateSpec(ID, Pts);
   WhenCreated;
@@ -3836,21 +3810,15 @@ begin
   Result := 'Text';
 end;
 
-procedure TText2D.ResetJustification;
+procedure TText2D.ResetAlignment;
 begin
   UpdateExtension(Self);
 end;
 
-procedure TText2D.SetHJustification(J: THJustification);
+procedure TText2D.SetHAlignment(J: THAlignment);
 begin
-  fHJustification := J;
-  ResetJustification;
-end;
-
-procedure TText2D.SetVJustification(J: TVJustification);
-begin
-  fVJustification := J;
-  ResetJustification;
+  fHAlignment := J;
+  ResetAlignment;
 end;
 
 constructor TText2D.Create(ID: Integer);
@@ -3904,7 +3872,7 @@ begin
   inherited Destroy;
 end;
 
-function TText2D.GetWideText: Widestring;
+function TText2D.GetWideText: WideString;
 var
   St, StCode: string;
   I: Integer;
@@ -3963,31 +3931,27 @@ var
   TmpSt: string;
 begin
   { Load the standard properties }
-  inherited;
-  with Stream do
-  begin
-    Read(TmpInt, SizeOf(TmpInt));
-    SetString(fText, nil, TmpInt);
-    Read(Pointer(fText)^, TmpInt);
-    Read(TmpInt, SizeOf(TmpInt));
-    SetString(fTeXText, nil, TmpInt);
-    Read(Pointer(fTeXText)^, TmpInt);
-    Read(fHeight, SizeOf(fHeight));
-    Read(fRot, SizeOf(fRot));
-    Read(fHJustification, SizeOf(fHJustification));
-    Read(fVJustification, SizeOf(fVJustification));
-    Font := TFont.Create;
-    Read(TmpInt, SizeOf(TmpInt));
-    SetString(TmpSt, nil, TmpInt);
-    Read(Pointer(TmpSt)^, TmpInt);
-    Font.Name := TmpSt;
-    Read(TmpInt, SizeOf(TmpInt));
-    if TmpInt = 1 then Font.Style := Font.Style + [fsItalic];
-    Read(TmpInt, SizeOf(TmpInt));
-    if TmpInt = 1 then Font.Style := Font.Style + [fsBold];
-    Read(TmpInt, SizeOf(TmpInt));
-    Font.Charset := TmpInt;
-  end;
+  inherited CreateFromStream(Stream);
+  Stream.Read(TmpInt, SizeOf(TmpInt));
+  SetString(fText, nil, TmpInt);
+  Stream.Read(Pointer(fText)^, TmpInt);
+  Stream.Read(TmpInt, SizeOf(TmpInt));
+  SetString(fTeXText, nil, TmpInt);
+  Stream.Read(Pointer(fTeXText)^, TmpInt);
+  Stream.Read(fHeight, SizeOf(fHeight));
+  Stream.Read(fRot, SizeOf(fRot));
+  Stream.Read(fHAlignment, SizeOf(fHAlignment));
+  Font := TFont.Create;
+  Stream.Read(TmpInt, SizeOf(TmpInt));
+  SetString(TmpSt, nil, TmpInt);
+  Stream.Read(Pointer(TmpSt)^, TmpInt);
+  Font.Name := TmpSt;
+  Stream.Read(TmpInt, SizeOf(TmpInt));
+  if TmpInt = 1 then Font.Style := Font.Style + [fsItalic];
+  Stream.Read(TmpInt, SizeOf(TmpInt));
+  if TmpInt = 1 then Font.Style := Font.Style + [fsBold];
+  Stream.Read(TmpInt, SizeOf(TmpInt));
+  Font.Charset := TmpInt;
 end;
 
 procedure TText2D.SaveToStream(const Stream: TStream);
@@ -3997,29 +3961,25 @@ var
 begin
   { Save the standard properties }
   inherited SaveToStream(Stream);
-  with Stream do
-  begin
-    TmpInt := Length(fText);
-    Write(TmpInt, SizeOf(TmpInt));
-    Write(Pointer(fText)^, TmpInt);
-    TmpInt := Length(fTeXText);
-    Write(TmpInt, SizeOf(TmpInt));
-    Write(Pointer(fTeXText)^, TmpInt);
-    Write(fHeight, SizeOf(fHeight));
-    Write(fRot, SizeOf(fRot));
-    Write(fHJustification, SizeOf(fHJustification));
-    Write(fVJustification, SizeOf(fVJustification));
-    TmpInt := Length(Font.Name);
-    Write(TmpInt, SizeOf(TmpInt));
-    TmpSt := Font.Name;
-    Write(Pointer(TmpSt)^, TmpInt);
-    TmpInt := Integer(fsItalic in Font.Style);
-    Write(TmpInt, SizeOf(TmpInt));
-    TmpInt := Integer(fsBold in Font.Style);
-    Write(TmpInt, SizeOf(TmpInt));
-    TmpInt := Font.Charset;
-    Write(TmpInt, SizeOf(TmpInt));
-  end;
+  TmpInt := Length(fText);
+  Stream.Write(TmpInt, SizeOf(TmpInt));
+  Stream.Write(Pointer(fText)^, TmpInt);
+  TmpInt := Length(fTeXText);
+  Stream.Write(TmpInt, SizeOf(TmpInt));
+  Stream.Write(Pointer(fTeXText)^, TmpInt);
+  Stream.Write(fHeight, SizeOf(fHeight));
+  Stream.Write(fRot, SizeOf(fRot));
+  Stream.Write(fHAlignment, SizeOf(fHAlignment));
+  TmpInt := Length(Font.Name);
+  Stream.Write(TmpInt, SizeOf(TmpInt));
+  TmpSt := Font.Name;
+  Stream.Write(Pointer(TmpSt)^, TmpInt);
+  TmpInt := Integer(fsItalic in Font.Style);
+  Stream.Write(TmpInt, SizeOf(TmpInt));
+  TmpInt := Integer(fsBold in Font.Style);
+  Stream.Write(TmpInt, SizeOf(TmpInt));
+  TmpInt := Font.Charset;
+  Stream.Write(TmpInt, SizeOf(TmpInt));
 end;
 
 procedure TText2D.Assign(const Obj: TGraphicObject);
@@ -4042,8 +4002,7 @@ begin
     if not Assigned(Font) then
       Font := TFont.Create;
     Font.Assign(TText2D(Obj).Font);
-    fHJustification := (Obj as TText2D).fHJustification;
-    fVJustification := (Obj as TText2D).fVJustification;
+    fHAlignment := (Obj as TText2D).fHAlignment;
   end;
   UpdateExtension(Self);
 end;
@@ -4060,15 +4019,14 @@ begin
   APiece.WideText := GetWideText;
   APiece.TeXText := TeXText;
   APiece.Height := Height;
-  APiece.HJustification := HJustification;
-  APiece.VJustification := VJustification;
+  APiece.HAlignment := HAlignment;
   APiece.FaceName := GetFaceName;
   APiece.Style := GetStyle;
   APiece.Charset := GetCharset;
   APiece.Closed := True;
 end;
 
-procedure TText2D.TransForm(const T: TTransf2D);
+procedure TText2D.Transform(const T: TTransf2D);
 var
   V: TVector2D;
 begin
@@ -4097,15 +4055,15 @@ const
   = ((0, 1), (1, 1), (1, 0.33), (0.4, 0.33),
     (0.13, 0.05), (0.2, 0.33), (0, 0.33), (0, 1));
 
-procedure TSymbol2D.SetHJustification(J: THJustification);
+procedure TSymbol2D.SetHAlignment(J: THAlignment);
 begin
-  fHJustification := J;
+  fHAlignment := J;
   UpdateExtension(Self);
 end;
 
-procedure TSymbol2D.SetVJustification(J: TVJustification);
+procedure TSymbol2D.SetVAlignment(J: TVAlignment);
 begin
-  fVJustification := J;
+  fVAlignment := J;
   UpdateExtension(Self);
 end;
 
@@ -4119,7 +4077,7 @@ var
     APiece: TPiece;
     I: Integer;
   begin
-    APiece := TLinPath.Create(30);
+    APiece := TPolyLinPiece.Create(30);
     Pieces.Add(APiece);
     for I := 0 to Pred(Count) do
       APiece.Add(Point2D(PArr^[I][1], PArr^[I][2]));
@@ -4230,8 +4188,8 @@ begin
     symBaloon1:
       begin
         FillPiece(@Baloon1Arr, Length(Baloon1Arr));
-        Pieces.TransForm(Translate2D(-0.5, -0.665));
-        Pieces.TransForm(Scale2D(2, 2));
+        Pieces.Transform(Translate2D(-0.5, -0.665));
+        Pieces.Transform(Scale2D(2, 2));
       end;
     symBaloon2: Pieces.AddFromSvgPathT(
         'M 0.93 0.28 C 0.98 0.32 1 0.4 1 0.46 V 0.82 C 1 0.92 0.93 1 0.84 1 H 0.16 C 0.07 1 0 0.92 0 0.82 ' +
@@ -4256,25 +4214,25 @@ begin
   else //symDecision
     begin
       FillPiece(@DecisionArr, Length(DecisionArr));
-      Pieces.TransForm(Translate2D(-0.5, -0.5));
-      Pieces.TransForm(Scale2D(2, 1.336));
+      Pieces.Transform(Translate2D(-0.5, -0.5));
+      Pieces.Transform(Scale2D(2, 1.336));
     end;
   end;
   SetPiecesAttr;
   P0 := fPoints[0];
-  case fHJustification of
-    jhLeft: HShift := P0.X - fDiameter / 2;
-    jhCenter: HShift := P0.X;
-    jhRight: HShift := P0.X + fDiameter;
+  case fHAlignment of
+    ahLeft: HShift := P0.X - fDiameter / 2;
+    ahCenter: HShift := P0.X;
+    ahRight: HShift := P0.X + fDiameter;
   end;
-  case fVJustification of
+  case fVAlignment of
     jvBottom: VShift := P0.Y - fDiameter / 2;
     jvCenter: VShift := P0.Y;
     jvTop: VShift := P0.Y + fDiameter / 2;
   end;
-  Pieces.TransForm(Scale2D(fDiameter / 2, fDiameter / 2));
-  Pieces.TransForm(Rotate2D(fRot));
-  Pieces.TransForm(Translate2D(HShift, VShift));
+  Pieces.Transform(Scale2D(fDiameter / 2, fDiameter / 2));
+  Pieces.Transform(Rotate2D(fRot));
+  Pieces.Transform(Translate2D(HShift, VShift));
 end;
 
 constructor TSymbol2D.Create(ID: Integer);
@@ -4315,8 +4273,8 @@ begin
   LineWidth := 1;
   fRot := 0;
   fPoints.GrowingEnabled := False;
-  fHJustification := jhCenter;
-  fVJustification := jvCenter;
+  fHAlignment := ahCenter;
+  fVAlignment := jvCenter;
 end;
 
 procedure TSymbol2D.Assign(const Obj: TGraphicObject);
@@ -4337,8 +4295,8 @@ begin
       fSymbolKind := (Obj as TSymbol2D).fSymbolKind;
       fDiameter := (Obj as TSymbol2D).fDiameter;
       fRot := (Obj as TSymbol2D).fRot;
-      fHJustification := (Obj as TSymbol2D).fHJustification;
-      fVJustification := (Obj as TSymbol2D).fVJustification;
+      fHAlignment := (Obj as TSymbol2D).fHAlignment;
+      fVAlignment := (Obj as TSymbol2D).fVAlignment;
       fPoints.GrowingEnabled := False;
     end;
   UpdateExtension(Self);
@@ -4346,31 +4304,25 @@ end;
 
 constructor TSymbol2D.CreateFromStream(const Stream: TStream);
 begin
-  inherited;
-  with Stream do
-  begin
-    Read(fSymbolKind, SizeOf(fSymbolKind));
-    Read(fDiameter, SizeOf(fDiameter));
-    Read(fRot, SizeOf(fRot));
-    Read(fHJustification, SizeOf(fHJustification));
-    Read(fVJustification, SizeOf(fVJustification));
-  end;
+  inherited CreateFromStream(Stream);
+  Stream.Read(fSymbolKind, SizeOf(fSymbolKind));
+  Stream.Read(fDiameter, SizeOf(fDiameter));
+  Stream.Read(fRot, SizeOf(fRot));
+  Stream.Read(fHAlignment, SizeOf(fHAlignment));
+  Stream.Read(fVAlignment, SizeOf(fVAlignment));
 end;
 
 procedure TSymbol2D.SaveToStream(const Stream: TStream);
 begin
   inherited SaveToStream(Stream);
-  with Stream do
-  begin
-    Write(fSymbolKind, SizeOf(fSymbolKind));
-    Write(fDiameter, SizeOf(fDiameter));
-    Write(fRot, SizeOf(fRot));
-    Write(fHJustification, SizeOf(fHJustification));
-    Write(fVJustification, SizeOf(fVJustification));
-  end;
+  Stream.Write(fSymbolKind, SizeOf(fSymbolKind));
+  Stream.Write(fDiameter, SizeOf(fDiameter));
+  Stream.Write(fRot, SizeOf(fRot));
+  Stream.Write(fHAlignment, SizeOf(fHAlignment));
+  Stream.Write(fVAlignment, SizeOf(fVAlignment));
 end;
 
-procedure TSymbol2D.TransForm(const T: TTransf2D);
+procedure TSymbol2D.Transform(const T: TTransf2D);
 var
   V: TVector2D;
 begin
@@ -4393,56 +4345,70 @@ begin
   Result := 'Bitmap';
 end;
 
-procedure TBitmap2D.SetScaleFactor(SF: TRealType);
+function TBitmap2D.GetBitmapParams(var W, H: TRealType;
+  const KeepAspectRatio: Boolean): TPoint2D;
 var
-  TmpPt: TPoint2D;
+  R: TRect2D;
+  A: TRealType;
 begin
-  if (fScaleFactor <> SF) then
+  R.FirstEdge := fPoints[0];
+  R.SecondEdge := fPoints[2];
+  R := ReorderRect2D(R);
+  Result := R.FirstEdge;
+  W := R.Right - R.Left;
+  H := R.Top - R.Bottom;
+  if KeepAspectRatio then
   begin
-    fScaleFactor := SF;
-    if (fScaleFactor <> 0.0) then
+    if Bitmap.Width > 0 then
     begin
-      if (fAspectRatio <> 0.0) then
-        TmpPt.X := fPoints[0].X + fBitmap.Height * fScaleFactor
-          /
-          fAspectRatio
-      else
-        TmpPt.X := fPoints[0].X + fBitmap.Width * fScaleFactor;
-      TmpPt.Y := fPoints[0].Y + fBitmap.Height * fScaleFactor;
-      TmpPt.W := 1.0;
-      fPoints[1] := TmpPt;
+      A := W * Bitmap.Height / Bitmap.Width;
+      if H < A then H := A;
+    end;
+    if Bitmap.Height > 0 then
+    begin
+      A := H * Bitmap.Width / Bitmap.Height;
+      if W < A then W := A;
     end;
   end;
 end;
 
-procedure TBitmap2D.SetAspectRatio(AR: TRealType);
+function TBitmap2D.AdjustBitmapPoints(const P0, P1: TPoint2D;
+  const KeepAspectRatio: Boolean): TPoint2D;
 var
-  TmpPt: TPoint2D;
+  PositiveW, PositiveH: Boolean;
+  W, H: TRealType;
+  A: TRealType;
 begin
-  if (fAspectRatio <> AR) then
+  PositiveW := P1.X > P0.X;
+  PositiveH := P1.Y > P0.Y;
+  W := Abs(P1.X - P0.X);
+  H := Abs(P1.Y - P0.Y);
+  if KeepAspectRatio then
   begin
-    fAspectRatio := AR;
-    if (fScaleFactor <> 0.0) then
+    if Bitmap.Width > 0 then
     begin
-      if (fAspectRatio <> 0.0) then
-        TmpPt.X := fPoints[0].X + fBitmap.Height * fScaleFactor
-          /
-          fAspectRatio
-      else
-        TmpPt.X := fPoints[0].X + fBitmap.Width * fScaleFactor;
-      TmpPt.Y := fPoints[0].Y + fBitmap.Height * fScaleFactor;
-      TmpPt.W := 1.0;
-      fPoints[1] := TmpPt;
+      A := W * Bitmap.Height / Bitmap.Width;
+      if H < A then H := A;
+    end;
+    if Bitmap.Height > 0 then
+    begin
+      A := H * Bitmap.Width / Bitmap.Height;
+      if W < A then W := A;
     end;
   end;
+  if not PositiveW then W := -W;
+  if not PositiveH then H := -H;
+  Result := Point2D(P0.X + W, P0.Y + H);
 end;
 
 constructor TBitmap2D.Create(ID: Integer);
 begin
-  inherited CreateSpec(ID, 2, 0);
+  inherited CreateSpec(ID, 4, 0);
+  fBitmapEntry := nil;
   fPoints.DisableEvents := True;
   try
-    fBitmap := TBitmap.Create;
+    fPoints.Add(Point2D(0, 0));
+    fPoints.Add(Point2D(0, 0));
     fPoints.Add(Point2D(0, 0));
     fPoints.Add(Point2D(0, 0));
   finally
@@ -4452,16 +4418,18 @@ begin
   WhenCreated;
 end;
 
-constructor TBitmap2D.CreateSpec(ID: Integer; const P1, P2:
-  TPoint2D; BMP: TBitmap);
+constructor TBitmap2D.CreateSpec(ID: Integer;
+  const P0, P1: TPoint2D;
+  const BitmapEntry: TBitmapEntry);
 begin
-  inherited CreateSpec(ID, 2, 0);
+  inherited CreateSpec(ID, 4, 0);
+  fBitmapEntry := BitmapEntry;
   fPoints.DisableEvents := True;
   try
-    fBitmap := TBitmap.Create;
-    fBitmap.Assign(BMP);
+    fPoints.Add(P0);
+    fPoints.Add(Point2D(P0.X, P1.Y));
     fPoints.Add(P1);
-    fPoints.Add(P2);
+    fPoints.Add(Point2D(P1.X, P0.Y));
   finally
     fPoints.DisableEvents := False;
     UpdateExtension(Self);
@@ -4471,10 +4439,14 @@ end;
 
 procedure TBitmap2D.WhenCreated;
 begin
-  fScaleFactor := 0.0;
-  fAspectRatio := 1.0;
-  fCopyMode := cmSrcCopy;
+  fKeepAspectRatio := True;
   fPoints.GrowingEnabled := False;
+end;
+
+function TBitmap2D.GetBitmap: TBitmap;
+begin
+  if Assigned(fBitmapEntry) then
+    Result := fBitmapEntry.Bitmap;
 end;
 
 procedure TBitmap2D.Assign(const Obj: TGraphicObject);
@@ -4483,67 +4455,415 @@ begin
   inherited;
   if (Obj is TBitmap2D) or (Obj is TRectangle2D) then
   begin
-    fScaleFactor := TBitmap2D(Obj).ScaleFactor;
-    fAspectRatio := TBitmap2D(Obj).AspectRatio;
-    fCopyMode := TBitmap2D(Obj).CopyMode;
-    if Obj is TBitmap2D then
-      fBitmap.Assign(TBitmap2D(Obj).fBitmap);
-    fPoints.Copy((Obj as TPrimitive2D).fPoints, 0, 1);
+    fKeepAspectRatio := TBitmap2D(Obj).KeepAspectRatio;
+    fBitmapEntry := TBitmap2D(Obj).fBitmapEntry;
+    fPoints.Copy((Obj as TPrimitive2D).fPoints, 0, 3);
     fPoints.GrowingEnabled := True;
   end;
 end;
 
 destructor TBitmap2D.Destroy;
 begin
-  fBitmap.Free;
   inherited Destroy;
 end;
 
 constructor TBitmap2D.CreateFromStream(const Stream: TStream);
+var
+  TmpInt: Integer;
 begin
-  { Load the standard properties }
-  inherited;
-  fBitmap := TBitmap.Create;
-  fBitmap.LoadFromStream(Stream);
-  Stream.Read(fScaleFactor, SizeOf(fScaleFactor));
-  Stream.Read(fAspectRatio, SizeOf(fAspectRatio));
-  Stream.Read(fCopyMode, SizeOf(fCopyMode));
+  inherited CreateFromStream(Stream);
+  Stream.Read(fKeepAspectRatio, SizeOf(fKeepAspectRatio));
+  Stream.Read(fBitmapEntry, SizeOf(fBitmapEntry));
 end;
 
 procedure TBitmap2D.SaveToStream(const Stream: TStream);
+var
+  TmpInt: Integer;
 begin
-  { Save the standard properties }
   inherited SaveToStream(Stream);
-  fBitmap.SaveToStream(Stream);
-  Stream.Write(fScaleFactor, SizeOf(fScaleFactor));
-  Stream.Write(fAspectRatio, SizeOf(fAspectRatio));
-  Stream.Write(fCopyMode, SizeOf(fCopyMode));
+  Stream.Write(fKeepAspectRatio, SizeOf(fKeepAspectRatio));
+  Stream.Write(fBitmapEntry, SizeOf(fBitmapEntry));
 end;
 
-{procedure TBitmap2D.Draw(VT: TTransf2D; const Cnv:
-  TCanvas; const ClipRect2D: TRect2D; const
-  DrawMode:
-  Integer);
+procedure TBitmap2D.FillPieces;
 var
-  TmpPt1, TmpPt2: TPoint2D;
-  TmpTransf: TTransf2D;
-  TmpRect: TRect;
-  OldMode: TCopyMode;
+  BitmapPiece: TBitmapPiece;
+  W, H: TRealType;
 begin
-  TmpTransf := VT;
-  TmpPt1 := TransformPoint2D(fPoints[0], TmpTransf);
-  TmpPt2 := TransformPoint2D(fPoints[1], TmpTransf);
-  TmpRect := Rect2DToRect(Rect2D(TmpPt1.X, TmpPt1.Y, TmpPt2.X,
-    TmpPt2.Y));
-  OldMode := Cnv.CopyMode;
-  Cnv.CopyMode := fCopyMode;
-  Cnv.StretchDraw(TmpRect, fBitmap);
-  Cnv.CopyMode := OldMode;
-end;}
+  BitmapPiece := TBitmapPiece.Create(1);
+  Pieces.Add(BitmapPiece);
+  BitmapPiece.Add(GetBitmapParams(W, H, fKeepAspectRatio));
+  BitmapPiece.Width := W;
+  BitmapPiece.Height := H;
+  BitmapPiece.BitmapEntry := fBitmapEntry;
+  BitmapPiece.KeepAspectRatio := fKeepAspectRatio;
+end;
 
-procedure TBitmap2D.DeviceDraw(Transf: TTransf2D;
-  const Dvc: TDevice; const ClipRect2D: TRect2D);
+procedure TBitmap2D.Transform(const T: TTransf2D);
 begin
+  fPoints.TransformPoints(T);
+  UpdateExtension(Self);
+end;
+
+procedure TBitmap2D.MoveControlPoint0(const Pos: Integer;
+  P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
+var
+  W, H: TRealType;
+begin
+  case Pos of
+    0: fPoints[0] := AdjustBitmapPoints(
+        fPoints[2], P, fKeepAspectRatio);
+    1:
+      begin
+        fPoints[1] := AdjustBitmapPoints(
+          fPoints[3], P, fKeepAspectRatio);
+        fPoints[0] := Point2D(fPoints[1].X, fPoints[3].Y);
+        fPoints[2] := Point2D(fPoints[3].X, fPoints[1].Y);
+      end;
+    2: fPoints[2] := AdjustBitmapPoints(
+        fPoints[0], P, fKeepAspectRatio);
+  else //3:
+    begin
+      fPoints[3] := AdjustBitmapPoints(
+        fPoints[1], P, fKeepAspectRatio);
+      fPoints[0] := Point2D(fPoints[1].X, fPoints[3].Y);
+      fPoints[2] := Point2D(fPoints[3].X, fPoints[1].Y);
+    end;
+  end;
+  if not Final then Exit;
+  fPoints[0] := GetBitmapParams(W, H, fKeepAspectRatio);
+  fPoints[1] := ShiftPoint(fPoints[0], V2D(0, H));
+  fPoints[2] := ShiftPoint(fPoints[0], V2D(W, H));
+  fPoints[3] := ShiftPoint(fPoints[0], V2D(W, 0));
+end;
+
+// =====================================================================
+// TCompound2D
+// =====================================================================
+
+procedure UncompoundCompound(const Compound: TCompound2D;
+  const Lst: TGraphicObjList);
+var
+  GenPath: TGenericPath;
+  Kind: TPathItemKind;
+  P1, P2, P3, CurrP, FirstP: TPoint2D;
+  PP: TPointsSet2D;
+  HasCurves, HasObj: Boolean;
+  Prim: TPrimitive2D;
+  procedure AddObj(const Closed: Boolean);
+  begin
+    if HasCurves then
+      if Closed then Lst.Add(TClosedBezierPath2D.Create(-1))
+      else Lst.Add(TBezierPath2D.Create(-1))
+    else
+      if Closed then Lst.Add(TPolygon2D.Create(-1))
+      else Lst.Add(TPolyline2D.Create(-1));
+    HasCurves := False;
+  end;
+begin
+  Lst.Clear;
+  GenPath := Compound.GenPath;
+  GenPath.StartIterations;
+  HasCurves := False;
+  HasObj := False;
+  while GenPath.GetNext(Kind, P1, P2, P3) do
+  begin
+    case Kind of
+      pik_MoveTo:
+        begin
+          if HasObj then AddObj(False);
+          HasObj := True;
+        end;
+      pik_LineTo:
+        begin
+        end;
+      pik_BezierTo:
+        begin
+          HasCurves := True;
+        end;
+      pik_Close:
+        begin
+          AddObj(True);
+          HasObj := False;
+        end;
+    end;
+  end;
+  if HasObj then AddObj(False);
+  Prim := nil;
+  GenPath.StartIterations;
+  while GenPath.GetNext(Kind, P1, P2, P3) do
+  begin
+    case Kind of
+      pik_MoveTo:
+        begin
+          if Prim = nil
+            then Prim := Lst.FirstObj as TPrimitive2D
+          else Prim := Lst.NextObj as TPrimitive2D;
+          HasCurves := Prim is TBezierPrimitive2D;
+          Prim.AssignProperties(Compound);
+          PP := Prim.fPoints;
+          PP.Add(P1);
+          CurrP := P1;
+          FirstP := P1;
+        end;
+      pik_LineTo:
+        begin
+          if HasCurves then
+          begin
+            PP.Add(MixPoint(CurrP, P1, 0.25));
+            PP.Add(MixPoint(CurrP, P1, 0.75));
+            PP.Add(P1);
+          end
+          else PP.Add(P1);
+          CurrP := P1;
+        end;
+      pik_BezierTo:
+        begin
+          PP.Add(P1);
+          PP.Add(P2);
+          PP.Add(P3);
+          CurrP := P3;
+        end;
+      pik_Close:
+        begin
+          if IsSamePoint2D(FirstP, PP[PP.Count - 1])
+            then PP.Delete(PP.Count - 1)
+          else if HasCurves then
+          begin
+            P1 := PP[PP.Count - 1];
+            PP.Add(MixPoint(P1, FirstP, 0.25));
+            PP.Add(MixPoint(P1, FirstP, 0.75));
+          end;
+        end;
+    end;
+  end;
+end;
+
+class function TCompound2D.GetName: string;
+begin
+  Result := 'Generic path';
+end;
+
+constructor TCompound2D.Create(ID: Integer);
+begin
+  inherited Create(ID);
+  WhenCreated;
+end;
+
+procedure TCompound2D.WhenCreated;
+begin
+  if not Assigned(fGenPath) then
+    fGenPath := TGenericPath.Create(fPoints);
+  fPoints.GrowingEnabled := True;
+end;
+
+destructor TCompound2D.Destroy;
+begin
+  fGenPath.Free;
+  inherited Destroy;
+end;
+
+procedure TCompound2D.SaveToStream(const Stream: TStream);
+begin
+  inherited SaveToStream(Stream);
+end;
+
+constructor TCompound2D.CreateFromStream(const Stream: TStream);
+begin
+  inherited CreateFromStream(Stream);
+  WhenCreated;
+end;
+
+procedure TCompound2D.Assign(const Obj: TGraphicObject);
+begin
+  if (Obj = Self) then Exit;
+  inherited Assign(Obj);
+  if Obj is TCompound2D then
+  begin
+    fPoints.DisableEvents := True;
+    fPoints.Clear;
+    fPoints.Copy((Obj as TPrimitive2D).fPoints, 0,
+      (Obj as TPrimitive2D).fPoints.Count - 1);
+    fPoints.DisableEvents := False;
+  end
+  else if Obj is TPrimitive2D then
+  begin
+
+  end;
+  WhenCreated;
+  UpdateExtension(Self);
+end;
+
+procedure TCompound2D.FillPieces;
+var
+  APiece: TGenPathPiece;
+begin
+  APiece := TGenPathPiece.Create(fGenPath);
+  APiece.Line := pliDefault;
+  APiece.Fill := pfiDefault;
+  APiece.Hatch := phaDefault;
+  Pieces.Add(APiece);
+end;
+
+function TCompound2D.OnMe(P: TPoint2D; Aperture: TRealType;
+  var Distance: TRealType): Integer;
+begin
+  Result := inherited OnMe(P, Aperture, Distance);
+end;
+
+procedure TCompound2D.Transform(const T: TTransf2D);
+var
+  I: Integer;
+begin
+  fPoints.DisableEvents := True;
+  for I := 1 to fPoints.Count - 1 do
+    if not fGenPath.IsCommand(I) then
+      fPoints[I] := TransformPoint2D(fPoints[I], T);
+  if ScaleLineWidth then
+    LineWidth := LineWidth * IsotropicScale(T);
+  fPoints.DisableEvents := False;
+  UpdateExtension(Self);
+end;
+
+procedure TCompound2D.DrawControlPoints0(const VT: TTransf2D;
+  const ClipRect2D: TRect2D; const Width: Integer);
+var
+  I: Integer;
+  Kind: TPathItemKind;
+  P1, P2, P3: TPoint2D;
+begin
+  if fPoints.Count = 0 then Exit;
+  fGenPath.StartIterations;
+  while fGenPath.GetNext(Kind, P1, P2, P3) do
+  begin
+    case Kind of
+      pik_MoveTo, pik_LineTo:
+        (OwnerDrawing as TDrawing2D).OnControlPoint(
+          P1, VT, ClipRect2D);
+      pik_BezierTo:
+        begin
+          (OwnerDrawing as TDrawing2D).OnControlPoint2(
+            P1, VT, ClipRect2D);
+          (OwnerDrawing as TDrawing2D).OnControlPoint2(
+            P2, VT, ClipRect2D);
+          (OwnerDrawing as TDrawing2D).OnControlPoint(
+            P3, VT, ClipRect2D);
+        end;
+    end;
+  end;
+  (OwnerDrawing as TDrawing2D).OnControlPoint4(
+    BoundingBox.FirstEdge, VT, ClipRect2D);
+  (OwnerDrawing as TDrawing2D).OnControlPoint4(
+    BoundingBox.SecondEdge, VT, ClipRect2D);
+  (OwnerDrawing as TDrawing2D).OnControlPoint4(
+    Point2D(BoundingBox.Left, BoundingBox.Top), VT, ClipRect2D);
+  (OwnerDrawing as TDrawing2D).OnControlPoint4(
+    Point2D(BoundingBox.Right, BoundingBox.Bottom), VT,
+    ClipRect2D);
+end;
+
+procedure TCompound2D.AddPiece(const Piece: TPiece);
+  procedure AddLinearPath0(const PP: TPointsSet2D;
+    const Closed: Boolean);
+  var
+    I: Integer;
+  begin
+    if PP.Count = 0 then Exit;
+    fGenPath.AddMoveTo(PP[0]);
+    for I := 1 to PP.Count - 1 do fGenPath.AddLineTo(PP[I]);
+    if Closed then fGenPath.AddClose;
+  end;
+  procedure AddLinearPath;
+  var
+    PP: TPointsSet2D;
+    Precision: TRealType;
+  begin
+    if ParentDrawing is TDrawing2D then
+      Precision :=
+        (ParentDrawing as TDrawing2D).ApproximationPrecision
+        / (ParentDrawing as TDrawing2D).PicScale
+    else Precision := ApproximationPrecision_Default
+      / PicScale_Default;
+    PP := TPointsSet2D.Create(0);
+    try
+      Piece.Linearize(PP, Precision);
+      AddLinearPath0(PP, Piece.Closed);
+    finally
+      PP.Free;
+    end;
+  end;
+  procedure AddBezierPath0(const PP: TPointsSet2D;
+    const Closed: Boolean);
+  var
+    I, N: Integer;
+  begin
+    if PP.Count = 0 then Exit;
+    N := PP.Count div 3;
+    fGenPath.AddMoveTo(PP[0]);
+    for I := 1 to N do
+    begin
+      if Closed and (I = N) then
+        fGenPath.AddBezierTo(
+          PP[I * 3 - 2], PP[I * 3 - 1], PP[0])
+      else
+        fGenPath.AddBezierTo(
+          PP[I * 3 - 2], PP[I * 3 - 1], PP[I * 3]);
+    end;
+    if Closed then fGenPath.AddClose;
+  end;
+  procedure AddBezierPath;
+  var
+    PP: TPointsSet2D;
+  begin
+    PP := TPointsSet2D.Create(0);
+    try
+      Piece.BezierPoints(PP);
+      AddBezierPath0(PP, Piece.Closed);
+    finally
+      PP.Free;
+    end;
+  end;
+begin
+  if Piece is TPolyLinPiece
+    then AddLinearPath0(Piece, Piece.Closed)
+  else if Piece is TBezierPiece
+    then AddBezierPath0(Piece, Piece.Closed)
+  else if (Piece is TRectanglePiece)
+    or (Piece is TTextPiece) or (Piece is TBitmapPiece)
+    then AddLinearPath
+  else AddBezierPath;
+end;
+
+procedure TCompound2D.MoveControlPoint0(const Pos: Integer;
+  P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
+var
+  V: TVector2D;
+  //PosC, PosM: Integer;
+begin
+  V := Vector2D(fPoints[Pos], P);
+  fPoints[Pos] := P;
+  if Pos > 5 then
+    if fPoints[Pos - 1].X = gp_BezierTo then
+    begin
+      if ((SSAlt in Shift) xor SmoothBezierNodes)
+        and (fPoints[Pos - 5].X = gp_BezierTo) then
+        TurnBezierHandle(fPoints, Pos, Pos - 2, Pos - 3);
+      Exit;
+    end;
+  if (Pos > 2) and (Pos < fPoints.Count - 5) then
+    if fPoints[Pos - 2].X = gp_BezierTo then
+    begin
+      if ((SSAlt in Shift) xor SmoothBezierNodes)
+        and (fPoints[Pos + 2].X = gp_BezierTo) then
+        TurnBezierHandle(fPoints, Pos, Pos + 1, Pos + 3);
+      Exit;
+    end;
+  if Pos > 3 then
+    if fPoints[Pos - 3].X = gp_BezierTo then
+      fPoints[Pos - 1] := ShiftPoint(fPoints[Pos - 1], V);
+  if Pos < fPoints.Count - 4 then
+    if fPoints[Pos + 1].X = gp_BezierTo then
+      fPoints[Pos + 2] := ShiftPoint(fPoints[Pos + 2], V);
 end;
 
 initialization

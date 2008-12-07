@@ -25,7 +25,7 @@ U=0
 V=1
 W=0
 X=1
-Y=0
+Y=2
 Z=1
 ShowHints=1
 ShowWarnings=1
@@ -48,7 +48,7 @@ PackageDCPOutputDir=
 SearchPath=$(DELPHI)\Lib\Debug;$(DELPHI)\Lib;Lib\Graphics32\;Lib\HtmlHelp;Lib\PNG;Lib\PowerPdf;Lib\XML;Lib\md5;Lib\StitchSAX;Lib\paszlib
 Packages=vclx30;VCL30;vcldb30;vcldbx30;VclSmp30;Qrpt30;teeui30;teedb30;tee30;IBEVNT30;CADSys;vcl;VclSmp;TpXPack
 Conditionals=
-DebugSourceDirs=
+DebugSourceDirs=C:\WRK\Delphi\TpX\Lib\PowerPdf\
 UsePackages=0
 [Parameters]
 RunParams=
@@ -90,7 +90,7 @@ c:\program files\borland\delphi6\Bin\dcltee60.bpl=TeeChart Components
 c:\program files\borland\delphi6\Bin\dcldss60.bpl=Borland Decision Cube Components
 c:\program files\borland\delphi6\Bin\dcltqr60.bpl=TeeChart for QuickReport Components
 c:\program files\borland\delphi6\Bin\dclclxdb60.bpl=Borland CLX Database Components
-c:\program files\borland\delphi6\Bin\dclclxstd60.bpl=Borland CLX Standard Components
+C:\Program Files\Borland\Delphi6\Bin\dclclxstd60.bpl=Borland CLX Standard Components
 c:\program files\borland\delphi6\Bin\dclsmp60.bpl=Borland Sample Components
 [HistoryLists\hlUnitAliases]
 Count=1

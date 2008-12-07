@@ -13,13 +13,12 @@ type
 
 // A class for SVG export
 
-  TSvgDevice = class(TStreamDevice)
+  TSvgDevice = class(TFileDevice)
   protected
     fDrawing2D: TDrawing2D;
     fXML: TXmlOutput;
     fPattIDs: TStringList;
     fGlobalFaceName: string;
-    fGlobalDescent: TRealType;
     procedure SetStream(AStream: TStream); override;
     procedure RegisterPatt(const Hatching: THatching;
       const HatchColor, FillColor: TColor);
@@ -54,11 +53,18 @@ type
       const Hatching: THatching; const Kind: TCircularKind);
     procedure RotText(P: TPoint2D; H, ARot: TRealType;
       WideText: WideString; TeXText: AnsiString;
-      const HJustification: THJustification;
-      const VJustification: TVJustification;
+      const HAlignment: THAlignment;
       const LineColor: TColor;
       const FaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
+    procedure Bitmap(P: TPoint2D; W, H: TRealType;
+      const KeepAspectRatio: Boolean; BitmapEntry: TObject);
+    procedure StartGroup;
+    procedure FinishGroup;
+    procedure GenPath(const GP: TGenericPath;
+      const LineColor, HatchColor, FillColor: TColor;
+      const LineStyle: TLineStyle; const LineWidth: TRealType;
+      const Hatching: THatching; const Transf: TTransf2D);
   public
     DevEOL: string;
     constructor Create(Drawing: TDrawing2D);
@@ -74,7 +80,7 @@ type
 
 implementation
 
-uses ColorEtc, SysBasic;
+uses ColorEtc, Bitmaps, SysBasic;
 
 function GetPattID(Hatching: THatching;
   HatchColor, FillColor: TColor): string;
@@ -117,6 +123,10 @@ begin
   OnRect := Rect;
   OnCircular := Circular;
   OnRotText := RotText;
+  OnBitmap := Bitmap;
+  OnGenPath := GenPath;
+  OnStartGroup := StartGroup;
+  OnFinishGroup := FinishGroup;
   fHasBezier := True;
   fHasClosedBezier := True;
   fHasArc := True;
@@ -225,31 +235,20 @@ begin
 end;
 
 procedure TSvgDevice.RegisterPatterns;
-var
-  TmpIter: TGraphicObjIterator;
   // Recursive registering
-  procedure RegisterPatterns0(const Iter: TGraphicObjIterator;
-    const DoShowProgress: Boolean);
+  procedure RegisterPatterns0(const Objects: TGraphicObjList);
   var
-    TmpIter: TGraphicObjIterator;
     Prim: TPrimitive2D;
     TmpObj: TGraphicObject;
     I: Integer;
   begin
     I := 0;
-    TmpObj := Iter.First as TPrimitive2D;
+    TmpObj := Objects.FirstObj;
     while TmpObj <> nil do
     begin
       try
-        if TmpObj is TContainer2D then
-        begin
-          TmpIter := (TmpObj as TContainer2D).Objects.GetIterator;
-          try
-            RegisterPatterns0(TmpIter, False);
-          finally
-            TmpIter.Free;
-          end;
-        end
+        if TmpObj is TGroup2D then
+          RegisterPatterns0((TmpObj as TGroup2D).Objects)
         else if TmpObj is TPrimitive2D then
         begin
           Prim := TmpObj as TPrimitive2D;
@@ -257,24 +256,16 @@ var
             RegisterPatt(Prim.Hatching, Prim.HatchColor,
               Prim.FillColor);
         end;
-        TmpObj := Iter.Next;
-        if DoShowProgress then
-        begin
-          Inc(I);
-          if I mod 100 = 0 then ShowProgress(I / Iter.Count);
-        end;
+        TmpObj := Objects.NextObj;
+        Inc(I);
+        if I mod 100 = 0 then ShowProgress(I / Objects.Count);
       except
         MessageBoxError(TmpObj.ClassName);
       end;
     end;
   end;
 begin
-  TmpIter := fDrawing2D.ObjectsIterator;
-  try
-    RegisterPatterns0(TmpIter, True);
-  finally
-    TmpIter.Free;
-  end;
+  RegisterPatterns0(fDrawing2D.ObjectList);
 end;
 
 procedure TSvgDevice.WriteHeader(ExtRect: TRect2D);
@@ -306,13 +297,13 @@ begin
     fGlobalFaceName := FontName_Default
   else
     fGlobalFaceName := 'Times New Roman';
-  fGlobalDescent :=
-    SysBasic.GetFontDescent(fGlobalFaceName, [], 0);
   fXML.AddAttribute('style',
     'font-family: ''' + fGlobalFaceName +
     '''; font-weight:normal');
   fXML.AddAttribute('xmlns',
     'http://www.w3.org/2000/svg');
+  fXML.AddAttribute('xmlns:xlink',
+    'http://www.w3.org/1999/xlink');
   fXML.AddComment('Created by TpX drawing tool');
   if fDrawing2D.Caption <> '' then
   begin
@@ -366,7 +357,7 @@ begin
     case LineStyle of
       liDotted:
         fXML.AddAttribute('stroke-dasharray', Format('%.1f,%.1f',
-          [fLineWidthBase * 2 * fFactorMM,
+          [fLineWidthBase * LineWidth * fFactorMM,
           fDottedSize * fFactorMM]));
       liDashed:
         fXML.AddAttribute('stroke-dasharray',
@@ -522,19 +513,16 @@ const
 procedure TSvgDevice.RotText(
   P: TPoint2D; H, ARot: TRealType;
   WideText: WideString; TeXText: AnsiString;
-  const HJustification: THJustification;
-  const VJustification: TVJustification;
+  const HAlignment: THAlignment;
   const LineColor: TColor;
   const FaceName: AnsiString;
   const Charset: TFontCharSet; const Style: TFontStyles);
 var
-  PNew: TPoint2D;
   D: TVector2D;
   Descent: TRealType;
   procedure WriteFont;
   var
     AddFont: string;
-    I: Integer;
   begin
     //"Times", Times-Roman,'Times Roman','Times New Roman', Georgia, serif
     //Arial, Helvetica, Geneva, 'Lucida Sans Unicode', sans-serif
@@ -596,32 +584,18 @@ var
 begin
   fXML.OpenTag('text');
   fXML.PreserveSpace := True;
-  if FaceName = ' ' then
-    Descent := fGlobalDescent
-  else
-    Descent := GetFontDescent(FaceName, Style, Charset);
-  D.X := 0;
-  case VJustification of
-    jvBottom: D.Y := Descent;
-    jvCenter: D.Y := Descent - 0.5;
-    jvTop: D.Y := Descent - 1;
-    jvBaseline: D.Y := 0;
-  end;
-  if ARot <> 0 then D := TransformVector2D(D, Rotate2D(ARot));
-  D := TransformVector2D(D, Scale2D(H, -H));
-  PNew := ShiftPoint(P, D); //ConvertPnt(
-  fXML.AddAttribute('x', FF2(PNew.X));
-  fXML.AddAttribute('y', FF2(PNew.Y));
+  fXML.AddAttribute('x', FF2(P.X));
+  fXML.AddAttribute('y', FF2(P.Y));
   fXML.AddAttribute('font-size', FF2(H));
   if ARot <> 0 then
     fXML.AddAttribute('transform',
       Format('rotate(%.2f %.2f %.2f)',
-      [RadToDeg(-ARot), PNew.X, PNew.Y]));
+      [RadToDeg(-ARot), P.X, P.Y]));
   fXML.AddAttribute('xml:space', 'preserve');
-  case HJustification of
-    jhLeft: fXML.AddAttribute('text-anchor', 'start');
-    jhCenter: fXML.AddAttribute('text-anchor', 'middle');
-    jhRight: fXML.AddAttribute('text-anchor', 'end');
+  case HAlignment of
+    ahLeft: fXML.AddAttribute('text-anchor', 'start');
+    ahCenter: fXML.AddAttribute('text-anchor', 'middle');
+    ahRight: fXML.AddAttribute('text-anchor', 'end');
   end;
   if LineColor <> clDefault then
     fXML.AddAttribute('fill', ColorToHtml(LineColor))
@@ -716,6 +690,106 @@ begin
   fXML.AddAttribute('d', PathSt);
   WritePrimitiveAttr0(LineColor, HatchColor, FillColor,
     LineStyle, LineWidth, Hatching, fMiterLimit);
+  fXML.CloseTag;
+end;
+
+procedure TSvgDevice.Bitmap(P: TPoint2D; W, H: TRealType;
+  const KeepAspectRatio: Boolean; BitmapEntry: TObject);
+var
+  ImageFileName: string;
+  OutFileName: string;
+  BE: TBitmapEntry;
+begin
+  if fFileName = '' then Exit;
+  BE := BitmapEntry as TBitmapEntry;
+  ImageFileName := BE.GetFullLink;
+  OutFileName := ExtractFilePath(fFileName)
+    + ExtractFileName(ImageFileName);
+  case BE.Kind of
+    bek_None: Exit;
+    bek_BMP:
+      begin
+        if not BE.RequirePNGJPEG(ExtractFilePath(fFileName)) then
+          Exit;
+        OutFileName := ChangeFileExt(OutFileName, '.png');
+      end;
+    bek_PNG, bek_JPEG:
+      if not BE.CopyImage(ImageFileName, OutFileName) then Exit;
+  end;
+  fXML.OpenTag('image');
+  fXML.AddAttribute('x', FF2(P.X));
+  fXML.AddAttribute('y', FF2(P.Y - H));
+  fXML.AddAttribute('width', FF2(W));
+  fXML.AddAttribute('height', FF2(H));
+  fXML.AddAttribute('xlink:href', ExtractFileName(OutFileName));
+  if not KeepAspectRatio then
+    fXML.AddAttribute('preserveAspectRatio', 'none');
+  fXML.CloseTag;
+end;
+
+procedure TSvgDevice.StartGroup;
+begin
+  fXML.OpenTag('g');
+end;
+
+procedure TSvgDevice.FinishGroup;
+begin
+  fXML.CloseTag;
+end;
+
+procedure TSvgDevice.GenPath(const GP: TGenericPath;
+  const LineColor, HatchColor, FillColor: TColor;
+  const LineStyle: TLineStyle; const LineWidth: TRealType;
+  const Hatching: THatching; const Transf: TTransf2D);
+var
+  Kind: TPathItemKind;
+  P1, P2, P3: TPoint2D;
+  I: Integer;
+  PathSt: string;
+  procedure AddSt(const St: string);
+  begin
+    if I > 80 then
+    begin
+      PathSt := PathSt + DevEOL;
+      I := 0;
+    end;
+    PathSt := PathSt + St;
+    Inc(I, Length(St));
+  end;
+  procedure AddPoint(P: TPoint2D);
+  begin
+    P := TransformPoint2D(P, MultTransf(Transf));
+    AddSt(Format(' %.2f,%.2f', [P.X, P.Y]));
+  end;
+begin
+  fXML.OpenTag('path');
+  WritePrimitiveAttr0(LineColor, HatchColor, FillColor,
+    LineStyle, LineWidth, Hatching, fMiterLimit);
+  PathSt := '';
+  I := 0;
+  GP.StartIterations;
+  while GP.GetNext(Kind, P1, P2, P3) do
+    case Kind of
+      pik_MoveTo:
+        begin
+          AddSt(' M');
+          AddPoint(P1);
+        end;
+      pik_LineTo:
+        begin
+          AddSt(' L');
+          AddPoint(P1);
+        end;
+      pik_BezierTo:
+        begin
+          AddSt(' C');
+          AddPoint(P1);
+          AddPoint(P2);
+          AddPoint(P3);
+        end;
+      pik_Close: AddSt(' Z');
+    end;
+  fXML.AddAttribute0('d', PathSt);
   fXML.CloseTag;
 end;
 

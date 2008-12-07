@@ -14,7 +14,7 @@ type
 
 // A class for Pgf output
 
-  T_PGF_Device = class(TStreamDevice)
+  T_PGF_Device = class(TFileDevice)
   protected
     fCurrColor: TColor;
     fCurrLineWidth: TRealType;
@@ -22,7 +22,8 @@ type
     procedure WriteStreamPoint0(const X, Y: TRealType); override;
     function GetColor(Color: TColor): string;
     procedure WriteColor(Color: TColor);
-    procedure WriteDash(LineStyle: TLineStyle);
+    procedure WriteDash(const LineStyle: TLineStyle;
+      const LineWidth: TRealType);
     procedure WriteLineWidth(W: TRealType);
     procedure WritePathAttr(
       const LineColor, FillColor: TColor;
@@ -31,6 +32,12 @@ type
     function GetPathKindString(const PathKind: TPathKind): string;
     function GetPathKind(const FillColor: TColor;
       const LineStyle: TLineStyle): TPathKind;
+    procedure HatchingLine(P0, P1: TPoint2D;
+      const LineColor: TColor; const LineStyle: TLineStyle;
+      const LineWidth: TRealType); override;
+    procedure WriteHatchingLines(const Lines: TPointsSet2D;
+      const HatchColor: TColor; const LineWidth: TRealType);
+      override;
 {procedure WritePath(const PP, HatchPP: TPointsSet2D;
   PathProc: TPathProcPathKind;
   const LineColor, HatchColor, FillColor: TColor;
@@ -54,19 +61,15 @@ type
       const Hatching: THatching);
     procedure RotText(P: TPoint2D; H, ARot: TRealType;
       WideText: WideString; TeXText: AnsiString;
-      const HJustification: THJustification;
-      const VJustification: TVJustification;
+      const HAlignment: THAlignment;
       const LineColor: TColor;
       const FaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
-    procedure HatchingLine(P0, P1: TPoint2D;
-      const LineColor: TColor; const LineStyle: TLineStyle;
-      const LineWidth: TRealType); override;
-    procedure WriteHatchingLines(const Lines: TPointsSet2D;
-      const HatchColor: TColor; const LineWidth: TRealType);
-      override;
+    procedure Bitmap(P: TPoint2D; W, H: TRealType;
+      const KeepAspectRatio: Boolean; BitmapEntry: TObject);
   public
     DvipsFixBB: Boolean;
+    FontSizeInTeX: Boolean;
     constructor Create;
     procedure Poly(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
@@ -79,7 +82,7 @@ type
 
 implementation
 
-uses ColorEtc, Output;
+uses ColorEtc, Output, Bitmaps;
 
 // =====================================================================
 // T_PGF_Device
@@ -93,6 +96,7 @@ begin
   OnCircle := Circle;
   OnRotEllipse := RotEllipse;
   OnRotText := RotText;
+  OnBitmap := Bitmap;
   fHasBezier := True;
   fHasClosedBezier := True;
   fHasArc := True;
@@ -128,7 +132,8 @@ begin
   WriteStream(GetColor(Color));
 end;
 
-procedure T_PGF_Device.WriteDash(LineStyle: TLineStyle);
+procedure T_PGF_Device.WriteDash(const LineStyle: TLineStyle;
+  const LineWidth: TRealType);
 begin
   if LineStyle = fCurrLineStyle then Exit;
   fCurrLineStyle := LineStyle;
@@ -137,7 +142,7 @@ begin
       WriteStream('\pgfsetdash{}{0mm}');
     liDotted:
       WriteStream(Format('\pgfsetdash{{%.2fmm}{%.2fmm}}{0mm}',
-        [fLineWidthBase * 2, fDottedSize]));
+        [fLineWidthBase * LineWidth, fDottedSize]));
     liDashed:
       WriteStream(Format('\pgfsetdash{{%.2fmm}{%.2fmm}}{0mm}',
         [fDashSize * 2, fDashSize]));
@@ -163,7 +168,7 @@ begin
   begin
     if LineColor <> clDefault then WriteColor(LineColor)
     else WriteColor(clBlack);
-    WriteDash(LineStyle);
+    WriteDash(LineStyle, LineWidth);
     if LineStyle <> liNone then
       WriteLineWidth(fLineWidthBase * LineWidth);
   end;
@@ -220,7 +225,7 @@ begin
     WriteColor(clBlack)
   else
     WriteColor(HatchColor);
-  WriteDash(liSolid);
+  WriteDash(liSolid, 0);
   WriteLineWidth(fLineWidthBase * fHatchingLineWidth);
   Lines.TransformPoints(T);
   for I := 0 to Lines.Count div 2 - 1 do
@@ -239,8 +244,10 @@ end;
 procedure T_PGF_Device.WriteHeader(ExtRect: TRect2D);
 begin
   if fFactorMM = 0 then fFactorMM := 1;
+//  if DvipsFixBB then
+//    WriteLnStream(DvipsFixBB_RuleStr(ExtRect, fFactorMM));
   if DvipsFixBB then
-    WriteLnStream(DvipsFixBB_RuleStr(ExtRect, fFactorMM));
+    WriteLnStream('\beginpgfgraphicnamed{\jobname}%');
   WriteLnStream(Format('\begin{pgfpicture}{%.2fmm}{%.2fmm}{%.2fmm}{%.2fmm}',
     [ExtRect.Left / fFactorMM, ExtRect.Bottom / fFactorMM,
     ExtRect.Right / fFactorMM, ExtRect.Top / fFactorMM]));
@@ -256,13 +263,15 @@ begin
         [fMiterLimit]));
   WriteColor(clBlack);
   WriteLineWidth(fLineWidthBase);
-  WriteDash(liSolid);
+  WriteDash(liSolid, 0);
   WriteLnStream('');
 end;
 
 procedure T_PGF_Device.WriteFooter;
 begin
   WriteLnStream('\end{pgfpicture}%');
+  if DvipsFixBB then
+    WriteLnStream('\endpgfgraphicnamed');
 end;
 
 procedure T_PGF_Device.Poly(PP: TPointsSet2D;
@@ -324,8 +333,8 @@ begin
   WriteLnStream('')
 end;
 
-procedure T_PGF_Device.Circle(const CP: TPoint2D; const R:
-  TRealType;
+procedure T_PGF_Device.Circle(const CP: TPoint2D;
+  const R: TRealType;
   const LineColor, HatchColor, FillColor: TColor;
   const LineStyle: TLineStyle; const LineWidth: TRealType;
   const Hatching: THatching);
@@ -360,21 +369,38 @@ end;
 
 procedure T_PGF_Device.RotText(P: TPoint2D; H, ARot: TRealType;
   WideText: WideString; TeXText: AnsiString;
-  const HJustification: THJustification;
-  const VJustification: TVJustification;
+  const HAlignment: THAlignment;
   const LineColor: TColor;
   const FaceName: AnsiString;
   const Charset: TFontCharSet; const Style: TFontStyles);
 begin
   if LineColor = clDefault then WriteStream(GetColor(clBlack));
   WriteStream('\pgfputat');
-  ShiftTeXTextPoint(P, VJustification, H, ARot);
+  ShiftTeXTextPoint(P, H, ARot);
   WriteStreamPoint(P);
   if fFactorMM = 0 then fFactorMM := 1;
+//  WriteLnStream(Format('{\pgftext{%s}}',
   WriteLnStream(Format('{\pgfbox[bottom,left]{%s}}',
     [GetTeXTextMakebox0(H, ARot, 1 / fFactorMM, LineColor,
-      HJustification,
-      VJustification, Style, WideText, TeXText)]));
+      HAlignment, Style, WideText, TeXText, FontSizeInTeX)]));
+end;
+
+procedure T_PGF_Device.Bitmap(P: TPoint2D; W, H: TRealType;
+  const KeepAspectRatio: Boolean; BitmapEntry: TObject);
+var
+  BE: TBitmapEntry;
+  OutDir: string;
+begin
+  BE := BitmapEntry as TBitmapEntry;
+  OutDir := ExtractFilePath(BE.GetFullLink);
+  if not BE.RequirePNGJPEG(OutDir) then Exit;
+  if not BE.RequireEPS(OutDir) then Exit;
+  WriteStream('\pgftext[bottom,left,at=');
+  WriteStreamPoint(P);
+  WriteStream(']');
+  WriteLnStream('{' + BE.GetIncludeGraphics(
+    W / fFactorMM, H / fFactorMM, KeepAspectRatio,
+    IncludePath) + '};');
 end;
 
 end.

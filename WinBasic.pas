@@ -160,31 +160,11 @@ type
       SetFaceName;
   end;
 
-{ Syncronization object to prevent linking of Delphi's packages. }
-{: For Internal use of TpX library.
-}
-  TTpXSynchroObject = class(TObject)
-  public
-    procedure Acquire; virtual;
-    procedure Release; virtual;
-  end;
-
-{: For Internal use of TpX library.
-}
-  TTpXCriticalSection = class(TTpXSynchroObject)
-  private
-    FSection: TRTLCriticalSection;
-  public
-    constructor Create;
-    destructor Destroy; override;
-    procedure Acquire; override;
-    procedure Release; override;
-    procedure Enter;
-    procedure Leave;
-  end;
-
   TEnhMetaHeader = Windows.TEnhMetaHeader;
 
+function GetLongPath(const ShortName: string): string;
+function GetLongPathName(lpszShortName: LPCTSTR;
+  lpszLongName: LPTSTR; cchBuffer: DWORD): DWORD; stdcall;
 function HasFontFamily(const FontName: string): Boolean;
 procedure SetBkMode(Canvas: TCanvas; const OPAQUE: Boolean);
 procedure GetCanvasResolution(Canvas: TCanvas; var LogHeight,
@@ -198,6 +178,15 @@ function SetWindowLong(HWnd: LongWord; dwNewLong: Longint):
   Longint;
 
 implementation
+
+function GetLongPathName; external kernel32 name 'GetLongPathNameA';
+
+function GetLongPath(const ShortName: string): string;
+begin
+  SetLength(Result, MAX_PATH + 1);
+  SetLength(Result, GetLongPathName(PChar(ShortName), PChar(Result),
+MAX_PATH));
+end;
 
 procedure Set_FaceName(
   var LogFont: TLOGFONT; const Value: TFaceName);
@@ -447,54 +436,6 @@ begin
     Read(LogFont, sizeof(LogFont));
     SetNewValue;
   end;
-end;
-
-// =====================================================================
-// TTpXSynchroObject
-// =====================================================================
-
-procedure TTpXSynchroObject.Acquire;
-begin
-end;
-
-procedure TTpXSynchroObject.Release;
-begin
-end;
-
-// =====================================================================
-// TTpXCriticalSection
-// =====================================================================
-
-constructor TTpXCriticalSection.Create;
-begin
-  inherited Create;
-  InitializeCriticalSection(FSection);
-end;
-
-destructor TTpXCriticalSection.Destroy;
-begin
-  DeleteCriticalSection(FSection);
-  inherited Destroy;
-end;
-
-procedure TTpXCriticalSection.Acquire;
-begin
-  EnterCriticalSection(FSection);
-end;
-
-procedure TTpXCriticalSection.Release;
-begin
-  LeaveCriticalSection(FSection);
-end;
-
-procedure TTpXCriticalSection.Enter;
-begin
-  Acquire;
-end;
-
-procedure TTpXCriticalSection.Leave;
-begin
-  Release;
 end;
 
 procedure SetBkMode(Canvas: TCanvas; const OPAQUE: Boolean);

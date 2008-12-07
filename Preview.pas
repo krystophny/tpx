@@ -6,14 +6,16 @@ unit PreView;
 
 interface
 uses
-  SysUtils, StrUtils, Forms, Classes, Drawings, Graphics;
+  SysUtils, StrUtils, Classes, Forms, Dialogs, Controls,
+  Drawings, Graphics;
 
 type
   TLaTeXPreviewKind = (ltxview_Dvi, ltxview_Pdf, ltxview_PS);
 
-procedure Run_LaTeX_Temp(const Drawing: TDrawing2D; PreviewKind:
-  TLaTeXPreviewKind; var TempDvi: string; const Hide: Boolean;
-  const DvipsFixBB: Boolean);
+function Run_LaTeX_Temp(const Drawing: TDrawing2D;
+  const PreviewKind: TLaTeXPreviewKind;
+  var TempDvi: string; const Hide: Boolean;
+  const DvipsFixBB: Boolean): Boolean;
 procedure Preview_LaTeX(const Drawing: TDrawing2D;
   PreviewKind: TLaTeXPreviewKind);
 procedure Preview_Picture(const Drawing: TDrawing2D;
@@ -22,12 +24,20 @@ procedure GhostScriptConvert(const FileName: string;
   const Keys: string; const OutFileName: string);
 function GetPostScriptPreview(const FileName: string): TBitmap;
 procedure View_Source(const Drawing: TDrawing2D);
+procedure StoreToFile_PreviewSource(
+  const Drawing: TDrawing2D; const FileName: string;
+  const PreviewKind: TLaTeXPreviewKind);
 
 var
+{$IFNDEF LINUX}
   LatexPath: string = 'latex.exe';
   PdfLatexPath: string = 'pdflatex.exe';
   DviPsPath: string = 'dvips.exe';
-  //Ps2PdfPath: string = 'dvips.exe';
+{$ELSE}
+  LatexPath: string = 'latex';
+  PdfLatexPath: string = 'pdflatex';
+  DviPsPath: string = 'dvips';
+{$ENDIF}
   DviViewerPath: string = '';
   PdfViewerPath: string = '';
   TextViewerPath: string = '';
@@ -36,7 +46,11 @@ var
   SvgViewerPath: string = '';
   PngViewerPath: string = '';
   BmpViewerPath: string = '';
+{$IFNDEF LINUX}
   GhostscriptPath: string = 'gswin32c.exe';
+{$ELSE}
+  GhostscriptPath: string = 'gs'; //??
+{$ENDIF}
     // or mgs.exe from MikTeX
 
 implementation
@@ -51,31 +65,13 @@ uses Output,
 procedure WritePreamble(const List: TStringList);
 begin
   List.Add('\documentclass[a4paper,10pt]{article}');
-  List.Add('% comment unused packages below');
-  List.Add('\usepackage{color}');
   List.Add('%\pdfoutput=0 % uncomment this to run pdfLaTeX in DVI mode');
-  List.Add('\usepackage{ifpdf}');
-  List.Add('\ifpdf %if using pdfLaTeX in PDF mode');
-  List.Add('  \usepackage[pdftex]{graphicx}');
-  List.Add('  \DeclareGraphicsExtensions{.pdf,.png,.mps}');
-  List.Add('  \usepackage{pgf}');
-  List.Add('  \usepackage{tikz}');
-  List.Add('\else %if using LaTeX or pdfLaTeX in DVI mode');
-  List.Add('  \usepackage{graphicx}');
-  List.Add('  \DeclareGraphicsExtensions{.eps,.bmp}');
-  List.Add('  \DeclareGraphicsRule{.emf}{bmp}{}{}% declare EMF filename extension');
-  List.Add('  \DeclareGraphicsRule{.png}{bmp}{}{}% declare PNG filename extension');
-  List.Add('  \usepackage{pgf}');
-  List.Add('  \usepackage{tikz}');
-  List.Add('  \usepackage{pstricks}%variant: \usepackage{pst-all}');
-  List.Add('\fi');
-  List.Add('\usepackage{epic,bez123}');
-  List.Add('\usepackage{floatflt}% package for floatingfigure environment');
-  List.Add('\usepackage{wrapfig}% package for wrapfigure environment');
 end;
 
 procedure WriteTempTeXFile(const FileName, TpXName: string;
-  const PreviewKind: TLaTeXPreviewKind);
+  const Drawing: TDrawing2D;
+  const PreviewKind: TLaTeXPreviewKind;
+  const PgfDvipsFixBB: Boolean);
 var
   IncludeFile: string;
   List: TStringList;
@@ -83,6 +79,7 @@ begin
   IncludeFile := ExtractFilePath(Application.ExeName) +
     'preview.tex.inc';
   List := TStringList.Create;
+  //List.Insert();'%TpX%'
   try
     if FileExists(IncludeFile) then List.LoadFromFile(IncludeFile)
     else
@@ -91,8 +88,46 @@ begin
       List.SaveToFile(IncludeFile);
     end;
     if PreviewKind = ltxview_Pdf then
-    List.Text := AnsiReplaceStr(
+      List.Text := AnsiReplaceStr(
         List.Text, '\pdfoutput=0', '\pdfoutput=1');
+    List.Add('\usepackage{ifpdf}');
+    List.Add('\usepackage{color}');
+    if PreviewKind = ltxview_Pdf then
+    begin
+      List.Add('\usepackage[pdftex]{graphicx}');
+      List.Add('\DeclareGraphicsExtensions{.pdf,.png,.jpg,.jpeg,.mps}');
+    end
+    else
+    begin
+      List.Add('\usepackage{graphicx}');
+      List.Add('\DeclareGraphicsExtensions{.eps,.bmp}');
+    end;
+    if PreviewKind = ltxview_Pdf then
+    begin
+      case Drawing.PdfTeXFormat of
+        pdftex_tex: List.Add('\usepackage{epic,bez123}');
+        pdftex_pgf: List.Add('\usepackage{pgf}');
+        pdftex_tikz: List.Add('\usepackage{tikz}');
+      end;
+    end
+    else
+    begin
+      case Drawing.TeXFormat of
+        tex_tex: List.Add('\usepackage{epic,bez123}');
+        tex_pgf: List.Add('\usepackage{pgf}');
+        tex_tikz: List.Add('\usepackage{tikz}');
+        tex_pstricks: List.Add('\usepackage{pstricks}');
+        tex_emf:
+          List.Add('\DeclareGraphicsRule{.emf}{bmp}{}{}% declare EMF filename extension');
+        tex_png:
+          List.Add('\DeclareGraphicsRule{.png}{bmp}{}{}% declare PNG filename extension');
+      end;
+    end;
+    case Drawing.TeXFigure of
+      fig_floating: List.Add('\usepackage{floatflt}');
+      fig_wrap: List.Add('\usepackage{wrapfig}');
+    end;
+    if PgfDvipsFixBB then List.Add('\pgfrealjobname{dummy}');
     List.Add('\begin{document}');
     //List.Add('\hrule height 1ex');
     List.Add('\thispagestyle{empty}');
@@ -109,32 +144,22 @@ begin
   end;
 end;
 
-procedure Run_LaTeX_Temp(const Drawing: TDrawing2D; PreviewKind:
-  TLaTeXPreviewKind; var TempDvi: string; const Hide: Boolean;
-  const DvipsFixBB: Boolean);
+function WritePreviewSource(const Drawing: TDrawing2D;
+  const PreviewKind: TLaTeXPreviewKind;
+  const DvipsFixBB: Boolean;
+  const TeXFileName, TpXFileName: string): Boolean;
 var
-  TempDir, TempIncludePath, TempTpX, TempTeX, TempTeXLog: string;
-  Res: Boolean;
-  LatexCompPath: string;
+  IncludePath0, FileName0: string;
   TeXFormat0: TeXFormatKind;
   PdfTeXFormat0: PdfTeXFormatKind;
-const
-  TempTpX0 = '(tpx)TpX.TpX';
 begin
-  TempDir := GetTempDir;
-  TempTpX := TempDir + TempTpX0;
-  TempTeX := TempDir + '(doc)TpX.tex';
-  TempTeXLog := ChangeFileExt(TempTeX, '.log');
-  TryDeleteFile(TempTpX);
-  TryDeleteFile(TempTeX);
+  Result := False;
+  TryDeleteFile(TpXFileName);
+  TryDeleteFile(TeXFileName);
   //StringReplace(TpXName, '\', '/', [rfReplaceAll])
-  case PreviewKind of
-    ltxview_Dvi, ltxview_PS: TempDvi := TempDir + '(doc)TpX.dvi';
-    ltxview_Pdf: TempDvi := TempDir + '(doc)TpX.pdf';
-  end;
-  TryDeleteFile(TempDvi);
   // Set IncludePath to empty string for preview
-  TempIncludePath := Drawing.IncludePath;
+  IncludePath0 := Drawing.IncludePath;
+  FileName0 := Drawing.FileName;
   Drawing.IncludePath := '';
   TeXFormat0 := Drawing.TeXFormat;
   PdfTeXFormat0 := Drawing.PdfTeXFormat;
@@ -143,46 +168,73 @@ begin
     ltxview_Pdf: Drawing.TeXFormat := tex_none;
   end;
   try
-    StoreToFile_TpX(Drawing, TempTpX, DvipsFixBB);
+    Drawing.FileName := TpXFileName;
+    Result := StoreToFile_TpX(Drawing, TpXFileName, DvipsFixBB);
   except
-    Drawing.IncludePath := TempIncludePath;
+    Drawing.IncludePath := IncludePath0;
     Drawing.TeXFormat := TeXFormat0;
     Drawing.PdfTeXFormat := PdfTeXFormat0;
+    Drawing.FileName := FileName0;
     Exit;
   end;
-  Drawing.IncludePath := TempIncludePath;
+  if not Result then Exit;
+  Result := False;
+  Drawing.IncludePath := IncludePath0;
   Drawing.TeXFormat := TeXFormat0;
   Drawing.PdfTeXFormat := PdfTeXFormat0;
-  if not FileExists(TempTpX) then
+  Drawing.FileName := FileName0;
+  if not FileExists(TpXFileName) then
   begin
-    MessageBoxError('Temporary TpX file not created');
+    MessageBoxError('Preview/temporary TpX file not created');
     Exit;
   end;
-  WriteTempTeXFile(TempTeX, TempTpX0, PreviewKind);
-  if not FileExists(TempTeX) then
+  WriteTempTeXFile(TeXFileName, ExtractFileName(TpXFileName),
+    Drawing, PreviewKind,
+    (Drawing.TeXFormat in [tex_pgf, tex_tikz]) and DvipsFixBB);
+  if not FileExists(TeXFileName) then
   begin
-    MessageBoxError('Temporary TeX file not created');
-    TryDeleteFile(TempTpX);
+    MessageBoxError('Preview/temporary TeX file not created');
+    TryDeleteFile(TpXFileName);
     Exit;
   end;
+  Result := True;
+end;
+
+function Run_LaTeX_Temp(const Drawing: TDrawing2D;
+  const PreviewKind: TLaTeXPreviewKind; var TempDvi: string;
+  const Hide: Boolean; const DvipsFixBB: Boolean): Boolean;
+var
+  TempDir, TempTpX, TempTeX, TempTeXLog: string;
+  LatexCompPath: string;
+const
+  TempTpX0 = '(tpx)TpX.TpX';
+begin
+  Result := False;
+  TempDir := GetTempDir;
+  TempTpX := TempDir + TempTpX0;
+  TempTeX := TempDir + '(doc)TpX.tex';
+  if not WritePreviewSource(
+    Drawing, PreviewKind, DvipsFixBB, TempTeX, TempTpX) then Exit;
   case PreviewKind of
     ltxview_Dvi, ltxview_PS: LatexCompPath := LatexPath;
     ltxview_Pdf: LatexCompPath := PdfLatexPath;
   end;
-
-  {if not FileExists(ExpandFileName(LatexCompPath)) then
-  begin
-    MessageBoxError('LaTeX (PDFLaTeX) path not found'+ExpandFileName(LatexCompPath);
-    Exit;
-  end;}
+  if not CheckFilePath(LatexCompPath, 'LaTeX/PdfLaTeX') then Exit;
+  case PreviewKind of
+    ltxview_Dvi, ltxview_PS: TempDvi := TempDir + '(doc)TpX.dvi';
+    ltxview_Pdf: TempDvi := TempDir + '(doc)TpX.pdf';
+  end;
+  TryDeleteFile(TempDvi);
+  TempTeXLog := ChangeFileExt(TempTeX, '.log');
+  TryDeleteFile(TempTeXLog);
   try
-    TryDeleteFile(TempTeXLog);
-    Res := FileExec(Format('%s "%s" -quiet',
-      [LatexCompPath, TempTeX]), '', '',
+    Result := FileExec(Format('%s -interaction=batchmode "%s"',
+      [PrepareFilePath(LatexCompPath), TempTeX]), '', '',
       {IncludeTrailingPathDelimiter(ExtractFilePath(FileName))} TempDir,
       Hide, True);
-    if not FileExists(TempDvi) then
+    if not Result or not FileExists(TempDvi) then
     begin
+      Result := False;
       if not FileExists(TempTeXLog) then
         MessageBoxError('DVI (PDF) file not created')
       else if MessageBoxErrorAsk(
@@ -190,7 +242,6 @@ begin
         then
       begin
         OpenOrExec(TextViewerPath, TempTeXLog);
-        Res := False;
       end;
       Exit;
     end;
@@ -199,6 +250,7 @@ begin
     TryDeleteFile(TempTeX);
     //TryDeleteFile(TempDvi);
   end;
+  Result := True;
 end;
 
 procedure Preview_LaTeX(const Drawing: TDrawing2D; PreviewKind:
@@ -206,12 +258,15 @@ procedure Preview_LaTeX(const Drawing: TDrawing2D; PreviewKind:
 var
   TempDvi, ViewerPath: string;
 begin
-  Run_LaTeX_Temp(Drawing, PreviewKind, TempDvi, False, False);
+  if not Run_LaTeX_Temp(Drawing, PreviewKind, TempDvi, False, False)
+    then Exit;
   if PreviewKind = ltxview_PS then
   begin
+    if not CheckFilePath(DviPsPath, 'DviPs') then Exit;
     TryDeleteFile(ChangeFileExt(TempDvi, '.ps'));
-    FileExec(Format('%s "%s"', // -E
-      [DviPsPath, ExtractFileName(TempDvi)]), '', '',
+    FileExec(Format('%s "%s"', 
+      [PrepareFilePath(DviPsPath), ExtractFileName(TempDvi)]), '',
+      '',
       {IncludeTrailingPathDelimiter(ExtractFilePath(FileName))} GetTempDir,
       True, True);
     TempDvi := ChangeFileExt(TempDvi, '.ps');
@@ -234,13 +289,15 @@ begin
     ltxview_PS: ViewerPath := PSViewerPath;
     ltxview_Pdf: ViewerPath := PdfViewerPath;
   end;
+  if ViewerPath <> '' then
+    if not CheckFilePath(ViewerPath, 'Viewer') then Exit;
   OpenOrExec(ViewerPath, TempDvi);
 end;
 
 procedure Preview_Picture(const Drawing: TDrawing2D;
   PreviewKind: ExportFormatKind);
 var
-  TmpFileName, Ext: string;
+  TmpFileName, Ext, ViewerPath: string;
 begin
   TmpFileName := GetTempDir + '(img)TpX';
   Ext := CSV_Item(ExportDefaultExt, Ord(PreviewKind) + 1);
@@ -249,8 +306,7 @@ begin
   TryDeleteFile(TmpFileName);
   case PreviewKind of
     export_SVG:
-      StoreToFile_Saver(Drawing,
-        TmpFileName, T_SVG_Export);
+      StoreToFile_Saver(Drawing, TmpFileName, T_SVG_Export);
     export_EMF:
       StoreToFile_EMF(Drawing, TmpFileName);
     export_EPS:
@@ -282,28 +338,32 @@ begin
     MessageBoxError(Format('Output file % not created', [Ext]));
     Exit;
   end;
-  if PreviewKind in [export_EPS]
-    then OpenOrExec(PSViewerPath, TmpFileName)
-  else if PreviewKind in [export_PDF]
-    then OpenOrExec(PdfViewerPath, TmpFileName)
-  else if PreviewKind in [export_SVG]
-    then OpenOrExec(SvgViewerPath, TmpFileName)
-  else if PreviewKind in [export_PNG]
-    then OpenOrExec(PngViewerPath, TmpFileName)
-  else if PreviewKind in [export_BMP]
-    then OpenOrExec(BmpViewerPath, TmpFileName)
-  else OpenOrExec('', TmpFileName);
+  if PreviewKind in [export_EPS] then
+    ViewerPath := PSViewerPath
+  else if PreviewKind in [export_PDF] then
+    ViewerPath := PdfViewerPath
+  else if PreviewKind in [export_SVG] then
+    ViewerPath := SvgViewerPath
+  else if PreviewKind in [export_PNG] then
+    ViewerPath := PngViewerPath
+  else if PreviewKind in [export_BMP] then
+    ViewerPath := BmpViewerPath
+  else ViewerPath := '';
+  if ViewerPath <> '' then
+    if not CheckFilePath(ViewerPath, 'Viewer') then Exit;
+  OpenOrExec(ViewerPath, TmpFileName);
 end;
 
 procedure GhostScriptConvert(const FileName: string;
   const Keys: string; const OutFileName: string);
 begin
-  if not FileExists(GhostscriptPath) then Exit;
+  if not CheckFilePath(GhostscriptPath, 'Ghostscript') then Exit;
   if not FileExists(FileName) then Exit;
   FileExec(Format(
     '%s -dSAFER -dBATCH -dNOPAUSE -dEPSCrop -q %s -sOutputFile="%s" "%s"',
-    [GhostscriptPath, Keys, OutFileName, FileName]), '', '',
-    GetTempDir, True, True);
+    [PrepareFilePath(GhostscriptPath),
+    Keys, OutFileName, FileName]), '', '',
+      GetTempDir, True, True);
 end;
 
 function GetPostScriptPreview(const FileName: string): TBitmap;
@@ -321,34 +381,61 @@ end;
 
 procedure View_Source(const Drawing: TDrawing2D);
 var
-  TempDir, TempTpX, TempIncludePath: string;
+  TempDir, TempTpX, IncludePath0: string;
+  DlgResult: Word;
+  ShowCurrent: Boolean;
 const
   TempTpX0 = '(tpx)TpX.TpX';
 begin
-  if Drawing.FileName <> Drawing_NewFileName then
-    OpenOrExec(TextViewerPath, Drawing.FileName)
-  else
+  ShowCurrent := Drawing.FileName = Drawing_NewFileName;
+  if (not ShowCurrent) and Drawing.History.IsChanged then
   begin
-    TempDir := GetTempDir;
-    TempTpX := TempDir + TempTpX0;
-    TryDeleteFile(TempTpX);
-  // Set IncludePath to empty string for preview
-    TempIncludePath := Drawing.IncludePath;
-    Drawing.IncludePath := '';
-    try
-      StoreToFile_TpX(Drawing, TempTpX, False);
-    except
-      Drawing.IncludePath := TempIncludePath;
-      Exit;
-    end;
-    Drawing.IncludePath := TempIncludePath;
-    if not FileExists(TempTpX) then
-    begin
-      MessageBoxError('Temporary TpX file not created');
-      Exit;
-    end;
-    OpenOrExec(TextViewerPath, TempTpX);
+    DlgResult := MessageDlg(
+      'Drawing has changed. Do you want to see the current variant?',
+      mtWarning, [mbYes, mbNo, mbCancel], 0);
+    if DlgResult = mrCancel then Exit;
+    ShowCurrent := DlgResult = mrYes;
   end;
+  if not ShowCurrent then
+  begin
+    if not CheckFilePath(TextViewerPath, 'TextViewerPath') then
+      Exit;
+    OpenOrExec(TextViewerPath, Drawing.FileName);
+    Exit;
+  end;
+  TempDir := GetTempDir;
+  TempTpX := TempDir + TempTpX0;
+  TryDeleteFile(TempTpX);
+  // Set IncludePath to empty string for preview
+  IncludePath0 := Drawing.IncludePath;
+  Drawing.IncludePath := '';
+  try
+    StoreToFile_TpX(Drawing, TempTpX, False);
+  except
+    Drawing.IncludePath := IncludePath0;
+    Exit;
+  end;
+  Drawing.IncludePath := IncludePath0;
+  if not FileExists(TempTpX) then
+  begin
+    MessageBoxError('Temporary TpX file not created');
+    Exit;
+  end;
+  if not CheckFilePath(TextViewerPath, 'TextViewerPath') then
+    Exit;
+  OpenOrExec(TextViewerPath, TempTpX);
+end;
+
+procedure StoreToFile_PreviewSource(
+  const Drawing: TDrawing2D; const FileName: string;
+  const PreviewKind: TLaTeXPreviewKind);
+var
+  TpXFileName: string;
+begin
+  TpXFileName := ExtractFilePath(FileName)
+    + ChangeFileExt(ExtractFileName(FileName), '') + '(TpX).TpX';
+  WritePreviewSource(
+    Drawing, PreviewKind, False, FileName, TpXFileName);
 end;
 
 procedure WritePreambleForHelp;
@@ -358,9 +445,9 @@ begin
   List := TStringList.Create;
   try
     WritePreamble(List);
-    if OutHelp then // Save preamble for inclusion into help
-      List.SaveToFile(ExtractFilePath(ParamStr(0))
-        + '\Help\preamble.inc');
+//    if OutHelp then // Save preamble for inclusion into help
+//      List.SaveToFile(ExtractFilePath(ParamStr(0))
+//        + '\Help\preamble.inc');
   finally
     List.Free;
   end;

@@ -7,7 +7,10 @@ type
   TMatrix = array of array of Double;
   PMatrix = TMatrix;
 
-procedure Householder(X: TMatrix; const NRows, NCols, NCols1: Integer);
+// Fitting linear regression using Householder method
+function OLS_Householder(Y, X: TMatrix;
+  const NObs, NDep, NRegs: Integer;
+  var RSS: Double; B, E: TMatrix): Boolean;
 procedure Test;
 
 implementation
@@ -24,18 +27,21 @@ begin
     for J := 0 to Pred(NCols) do
     begin
       if J > 0 then Result := Result + #9;
-      Result := Result + FloatToStr(X[I, J]); //FloatToStr(I * 10 + J);
+      Result := Result + FloatToStr(X[I, J]);
+        //FloatToStr(I * 10 + J);
     end;
     if I < Pred(NRows) then Result := Result + #13#10;
   end;
 end;
 
-procedure Householder(X: TMatrix; const NRows, NCols, NCols1: Integer);
+function Householder(X: TMatrix;
+  const NRows, NCols, NCols1: Integer): Boolean;
 var
   I, J, K: Integer;
   Tkk, Tkj, AbsA, Sgnm: Double;
 begin
-  MessageBoxInfo(MatToStr(X, NRows, NCols));
+  //MessageBoxInfo(MatToStr(X, NRows, NCols));
+  Result := True; // Success
   for K := 0 to Pred(NCols1) do
   begin
     if X[K, K] > 0 then
@@ -49,31 +55,42 @@ begin
       Tkk := Tkk + Sqr(X[I, K]);
     Tkk := Sqrt(Tkk);
     AbsA := Abs(X[K, K]) + Tkk;
+    if AbsA <> 0 then AbsA := 1 / AbsA
+    else Result := False;
     for J := Succ(K) to Pred(NCols) do
     begin
       Tkj := 0;
       for I := K to Pred(NRows) do
         Tkj := Tkj + X[I, K] * X[I, J];
-      Tkj := Tkj / Tkk;
+      if Tkk = 0 then
+      begin
+        Tkj := 0;
+        Result := False;
+      end
+      else Tkj := Tkj / Tkk;
       for I := Succ(K) to Pred(NRows) do
-        X[I, J] := X[I, J] - X[I, K] / AbsA * (X[K, J] * Sgnm + Tkj);
+        X[I, J] := X[I, J] - X[I, K] * AbsA
+          * (X[K, J] * Sgnm + Tkj);
       X[K, J] := Tkj;
     end;
     X[K, K] := Tkk;
     for I := Succ(K) to Pred(NRows) do
       X[I, K] := 0;
-    MessageBoxInfo(MatToStr(X, NRows, NCols));
+    //MessageBoxInfo(MatToStr(X, NRows, NCols));
   end;
 end;
 
-procedure OLS_Householder(Y, X: TMatrix; const NObs, NDep, NRegs: Integer;
-  var RSS: Double; B, E: TMatrix);
+function OLS_Householder(Y, X: TMatrix;
+  const NObs, NDep, NRegs: Integer;
+  var RSS: Double; B, E: TMatrix): Boolean;
 var
   I, J, K: Integer;
   A: TMatrix;
   S: Double;
 begin
 //if x=nil then exit;
+//  MessageBoxInfo(MatToStr(Y, NObs, NDep));
+//  MessageBoxInfo(MatToStr(X, NObs, NRegs));
   SetLength(A, NRegs + NObs, NRegs + NDep);
   for K := 0 to Pred(NRegs) do
     for J := 0 to Pred(NRegs + NDep) do
@@ -85,7 +102,7 @@ begin
     for J := 0 to Pred(NDep) do
       A[I + NRegs, J + NRegs] := Y[I, J];
   end;
-  Householder(A, NRegs + NObs, NRegs + NDep, NRegs);
+  Result := Householder(A, NRegs + NObs, NRegs + NDep, NRegs);
   RSS := 0;
   if NDep > 0 then
     for I := 0 to Pred(NObs) do
@@ -99,7 +116,13 @@ begin
         S := A[I, K + NRegs];
         for J := Succ(I) to Pred(NRegs) do
           S := S - A[I, J] * B[J, K];
-        B[I, K] := S / A[I, I];
+        if A[I, I] = 0 then
+        begin
+          B[I, K] := 0;
+          Result := False;
+        end
+        else
+          B[I, K] := S / A[I, I];
       end;
   end;
   if E <> nil then

@@ -1,6 +1,6 @@
 object PropertiesForm: TPropertiesForm
-  Left = 333
-  Top = 165
+  Left = 556
+  Top = 252
   BorderStyle = bsDialog
   Caption = 'Primitive properties'
   ClientHeight = 483
@@ -23,11 +23,11 @@ object PropertiesForm: TPropertiesForm
     Top = 169
     Width = 460
     Height = 281
-    ActivePage = RectSheet
+    ActivePage = TextSheet
     Align = alClient
     MultiLine = True
     TabHeight = 1
-    TabIndex = 4
+    TabIndex = 1
     TabOrder = 0
     object VoidSheet: TTabSheet
       Caption = ' '
@@ -38,7 +38,7 @@ object PropertiesForm: TPropertiesForm
       ImageIndex = 1
       object LabeledEdit1: TLabeledEdit
         Left = 20
-        Top = 20
+        Top = 36
         Width = 313
         Height = 24
         EditLabel.Width = 26
@@ -50,7 +50,7 @@ object PropertiesForm: TPropertiesForm
       end
       object LabeledEdit2: TLabeledEdit
         Left = 20
-        Top = 120
+        Top = 136
         Width = 121
         Height = 24
         EditLabel.Width = 39
@@ -62,10 +62,11 @@ object PropertiesForm: TPropertiesForm
       end
       object RadioGroup1: TRadioGroup
         Left = 20
-        Top = 152
-        Width = 125
-        Height = 85
+        Top = 176
+        Width = 309
+        Height = 41
         Caption = 'H. justification'
+        Columns = 3
         ItemIndex = 0
         Items.Strings = (
           'Left'
@@ -73,23 +74,9 @@ object PropertiesForm: TPropertiesForm
           'Right')
         TabOrder = 3
       end
-      object RadioGroup2: TRadioGroup
-        Left = 192
-        Top = 152
-        Width = 125
-        Height = 101
-        Caption = 'V. justification'
-        ItemIndex = 0
-        Items.Strings = (
-          'Baseline'
-          'Bottom'
-          'Center'
-          'Top')
-        TabOrder = 4
-      end
       object LabeledEdit3: TLabeledEdit
         Left = 20
-        Top = 68
+        Top = 84
         Width = 313
         Height = 24
         EditLabel.Width = 48
@@ -101,7 +88,7 @@ object PropertiesForm: TPropertiesForm
       end
       object LabeledEdit4: TLabeledEdit
         Left = 164
-        Top = 120
+        Top = 136
         Width = 121
         Height = 24
         EditLabel.Width = 35
@@ -109,24 +96,24 @@ object PropertiesForm: TPropertiesForm
         EditLabel.Caption = 'Angle'
         LabelPosition = lpAbove
         LabelSpacing = 3
-        TabOrder = 5
+        TabOrder = 4
       end
       object Button4: TButton
         Left = 344
-        Top = 32
+        Top = 48
         Width = 75
         Height = 21
         Caption = 'Font'
-        TabOrder = 6
+        TabOrder = 5
         OnClick = Button4Click
       end
       object FontCheckBox: TCheckBox
         Left = 344
-        Top = 8
+        Top = 24
         Width = 97
         Height = 17
         Caption = 'Custom font'
-        TabOrder = 7
+        TabOrder = 6
         OnClick = FontCheckBoxClick
       end
     end
@@ -345,6 +332,32 @@ object PropertiesForm: TPropertiesForm
         EditLabel.Caption = 'RY'
         LabelPosition = lpAbove
         LabelSpacing = 3
+        TabOrder = 1
+      end
+    end
+    object BitmapSheet: TTabSheet
+      Caption = 'BitmapSheet'
+      ImageIndex = 5
+      object ImageLinkLabel: TLabel
+        Left = 56
+        Top = 16
+        Width = 61
+        Height = 16
+        Caption = 'Image link'
+      end
+      object ImageLinkEdit: TEdit
+        Left = 48
+        Top = 40
+        Width = 289
+        Height = 24
+        TabOrder = 0
+      end
+      object KeepAspectCheck: TCheckBox
+        Left = 56
+        Top = 88
+        Width = 305
+        Height = 17
+        Caption = 'Keep aspect ratio'
         TabOrder = 1
       end
     end

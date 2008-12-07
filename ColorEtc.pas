@@ -12,7 +12,7 @@ uses Types, Classes, SysUtils, Graphics, StdCtrls, Dialogs,
 {$ELSE}
 //  LCLIntf,
 {$ENDIF}
-StrUtils;
+  StrUtils;
 
 type
   T_PS_RGB = record R, G, B: Single;
@@ -21,6 +21,7 @@ type
 function SwapColor(Color: TColor): TColor;
 function GrayScale(Color: TColor): TColor;
 function HSVToRGB(Hue, Sat, V: Double): TColor;
+function MixColors(const C1, C2: TColor; const A: Double): TColor;
 function HtmlToColor(ColorName: string): TColor;
   // HTML-color -> TColor
 function ColorToHtml(Color: TColor): string; // TColor -> HTML-color
@@ -65,9 +66,9 @@ const
 
   BasicColors: array[1..16] of TColor = (
     clBlack, clMaroon, clGreen, clOlive, clNavy, clPurple, clTeal,
-      clGray,
+    clGray,
     clSilver, clRed, clLime, clYellow, clBlue, clFuchsia, clAqua,
-      clWhite);
+    clWhite);
 
   DelphiAddColors: array[1..4] of TColor = (
     clMoneyGreen, clSkyBlue, clCream, clMedGray);
@@ -167,12 +168,38 @@ begin
  // Result := Windows.RGB(R, G, B);
 end;
 
-function HtmlToColor(ColorName: string): TColor;
+function MixColors(const C1, C2: TColor; const A: Double): TColor;
 begin
+  Result :=
+    Round((C1 and $FF) * A +
+    (C2 and $FF) * (1 - A)) +
+    Round((C1 shr 8 and $FF) * A +
+    (C2 shr 8 and $FF) * (1 - A)) shl 8 +
+    Round((C1 shr 16 and $FF) * A +
+    (C2 shr 16 and $FF) * (1 - A)) shl 16;
+end;
+
+function HtmlToColor(ColorName: string): TColor;
+const
+  Bytes: array[1..6] of Integer = (6, 7, 4, 5, 2, 3);
+var
+  St: string;
+  Ch: Char;
+  I: Integer;
+begin
+  ColorName := Trim(ColorName);
   Result := TheHTMLColor.HtmlColor(ColorName);
-  if Result = clNone then
-    Result := StringToColor('$' + Copy(ColorName, 6, 2)
-      + Copy(ColorName, 4, 2) + Copy(ColorName, 2, 2));
+  if Result <> clNone then Exit;
+  if Pos('#', ColorName) <> 1 then Exit;
+  if Length(ColorName) <> 7 then Exit;
+  St := '$';
+  for I := 1 to 6 do
+  begin
+    Ch := ColorName[Bytes[I]];
+    if not (Ch in ['0'..'9', 'a'..'f', 'A'..'F']) then Exit;
+    St := St + Ch;
+  end;
+  Result := StringToColor(St);
 end;
 
 function ColorToHtml(Color: TColor): string;
@@ -481,6 +508,7 @@ begin
     ComboBox.ItemIndex := 1;
   end;
   ComboBox.Items.Objects[1] := TObject(Color);
+  ComboBox.Refresh;
 end;
 
 function ColorBoxGet(ComboBox: TComboBox): TColor;
@@ -510,3 +538,4 @@ initialization
 finalization
   TheHTMLColor.Free;
 end.
+

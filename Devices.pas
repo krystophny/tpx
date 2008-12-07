@@ -21,11 +21,11 @@ type
   THatching = (haNone, haHorizontal, haVertical,
     haFDiagonal, haBDiagonal, haCross, haDiagCross);
 
-  { Text horizontal justification }
-  THJustification = (jhLeft, jhCenter, jhRight);
+  { Text horizontal alignment }
+  THAlignment = (ahLeft, ahCenter, ahRight);
 
-  { Text vertical justification }
-  TVJustification = (jvBaseline, jvBottom, jvCenter, jvTop);
+  { Text vertical alignment }
+  TVAlignment = (jvBaseline, jvBottom, jvCenter, jvTop);
 
   TPathProc = procedure(PP: TPointsSet2D;
     const LineColor, HatchColor, FillColor: TColor;
@@ -69,22 +69,32 @@ type
     object;
 
   TTextProc = procedure(P: TPoint2D; H: TRealType;
-    WideText: Widestring; TeXText: AnsiString;
-    const HJustification: THJustification;
-    const VJustification: TVJustification;
+    WideText: WideString; TeXText: AnsiString;
+    const HAlignment: THAlignment;
     const LineColor: TColor;
     const AFaceName: AnsiString;
     const Charset: TFontCharSet; const Style: TFontStyles) of
     object;
 
   TRotTextProc = procedure(P: TPoint2D; H, ARot: TRealType;
-    WideText: Widestring; TeXText: AnsiString;
-    const HJustification: THJustification;
-    const VJustification: TVJustification;
+    WideText: WideString; TeXText: AnsiString;
+    const HAlignment: THAlignment;
     const LineColor: TColor;
     const AFaceName: AnsiString;
     const Charset: TFontCharSet; const Style: TFontStyles) of
     object;
+
+  TBitmapProc = procedure(P: TPoint2D; W, H: TRealType;
+    const KeepAspectRatio: Boolean;
+    BitmapEntry: TObject) of object;
+
+  TGroupProc = procedure of object;
+
+  TGenPathProc = procedure(const GP: TGenericPath;
+    const LineColor, HatchColor, FillColor: TColor;
+    const LineStyle: TLineStyle; const LineWidth: TRealType;
+    const Hatching: THatching;
+    const Transf: TTransf2D) of object;
 
 { ===============================================================
  TDevice is a basic class for output devices, which are used to
@@ -104,7 +114,8 @@ type
       fHasNativeHatching, fDisjointFill,
       fTextAsRect: Boolean;
     fHatchingStep, fHatchingLineWidth: TRealType;
-    fLineWidthBase, fDottedSize, fDashSize, fMiterLimit: TRealType;
+    fLineWidthBase, fDottedSize, fDashSize, fMiterLimit,
+      fApproximationPrecision: TRealType;
     procedure SetTransform(const Transf: TTransf2D);
     function MultTransf(const Transf: TTransf2D): TTransf2D;
     procedure HatchPath(
@@ -119,6 +130,12 @@ type
     procedure WriteHatchingLines(const Lines: TPointsSet2D;
       const HatchColor: TColor; const LineWidth: TRealType);
       virtual;
+    procedure Poly(PP: TPointsSet2D;
+      const LineColor, HatchColor, FillColor: TColor;
+      const LineStyle: TLineStyle; const LineWidth: TRealType;
+      const Hatching: THatching; const Transf: TTransf2D;
+      const Closed: Boolean);
+      virtual; abstract;
   public
     OnCircle: TCircleProc;
     OnEllipse: TEllipseProc;
@@ -129,16 +146,13 @@ type
     OnCircular: TCircularProc;
     OnText: TTextProc;
     OnRotText: TRotTextProc;
+    OnBitmap: TBitmapProc;
+    OnStartGroup, OnFinishGroup: TGroupProc;
+    OnGenPath: TGenPathProc;
     constructor Create;
 { Polyline/polygon and polybezier methods (Poly, Bezier)
    must do their transforms themselves!
   (This allows to use the points from the object without duplicating them)}
-    procedure Poly(PP: TPointsSet2D;
-      const LineColor, HatchColor, FillColor: TColor;
-      const LineStyle: TLineStyle; const LineWidth: TRealType;
-      const Hatching: THatching; const Transf: TTransf2D;
-      const Closed: Boolean);
-      virtual; abstract;
     procedure PiecePath(Piece: TObject;
       const LineColor, HatchColor, FillColor: TColor;
       const LineStyle: TLineStyle; const LineWidth: TRealType;
@@ -179,14 +193,16 @@ type
       const Transf: TTransf2D);
       virtual;
     procedure TextCh(const P: TPoint2D; H, ARot: TRealType;
-      WideText: Widestring; TeXText: AnsiString;
-      const HJustification: THJustification;
-      const VJustification: TVJustification;
+      WideText: WideString; TeXText: AnsiString;
+      const HAlignment: THAlignment;
       const LineColor: TColor;
       const AFaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles;
       const Transf: TTransf2D);
       virtual;
+    procedure BitmapCh(const P: TPoint2D;
+      const W, H: TRealType; const KeepAspectRatio: Boolean;
+      BitmapEntry: TObject; const Transf: TTransf2D); virtual;
     procedure WriteHatching(
       const PP: TPointsSet2D; const Hatching: THatching;
       HatchColor: TColor; const LineWidth: TRealType;
@@ -207,6 +223,8 @@ type
     property HatchingStep: TRealType write fHatchingStep;
     property HatchingLineWidth: TRealType write fHatchingLineWidth;
     property LineWidthBase: TRealType write fLineWidthBase;
+    property ApproximationPrecision: TRealType
+      write fApproximationPrecision;
     property DottedSize: TRealType write fDottedSize;
     property DashSize: TRealType write fDashSize;
     property MiterLimit: TRealType write fMiterLimit;
@@ -224,6 +242,16 @@ type
     procedure WriteStreamPointT(P: TPoint2D;
       const Transf: TTransf2D); virtual;
     property Stream: TStream read fStream write SetStream;
+  end;
+
+  TFileDevice = class(TStreamDevice)
+  protected
+    fFileName: string;
+    fIncludePath: string;
+  public
+    property FileName: string read fFileName write fFileName;
+    property IncludePath: string read fIncludePath write
+      fIncludePath;
   end;
 
 function FF_N(const X: TRealType; const Prec: Integer): string;
@@ -246,6 +274,7 @@ begin
   inherited Create;
   fT := IdentityTransf2D;
   fDisjointFill := False;
+//  OnBitmap := nil;
 end;
 
 procedure TDevice.SetTransform(const Transf: TTransf2D);
@@ -271,10 +300,10 @@ var
   Size: TVector2D;
 begin
   APiece := Piece as TPiece;
-  if APiece is TLinPath then
+  if APiece is TPolyLinPiece then
     Poly(APiece, LineColor, HatchColor, FillColor,
       LineStyle, LineWidth, Hatching, Transf, Closed)
-  else if APiece is TBezierPath then
+  else if APiece is TBezierPiece then
     OnBezier(APiece, LineColor, HatchColor, FillColor,
       LineStyle, LineWidth, Hatching, Transf, Closed)
   else if APiece is TCirclePiece then
@@ -301,16 +330,12 @@ begin
   else if APiece is TTextPiece then
     if not fTextAsRect then
     begin
-//      (APiece as TTextPiece).MeasureTextRectangle(P, Size);
-//      RectCh(P, Size.X, Size.Y, (APiece as TTextPiece).ARot,
-//        clBlue, clNone, clCream, liSolid, 1, haNone, Transf);
       TextCh(APiece[0],
         (APiece as TTextPiece).Height,
         (APiece as TTextPiece).ARot,
         (APiece as TTextPiece).WideText,
         (APiece as TTextPiece).TeXText,
-        (APiece as TTextPiece).HJustification,
-        (APiece as TTextPiece).VJustification,
+        (APiece as TTextPiece).HAlignment,
         LineColor,
         (APiece as TTextPiece).FaceName,
         (APiece as TTextPiece).Charset,
@@ -320,8 +345,30 @@ begin
     begin
       (APiece as TTextPiece).MeasureTextRectangle(P, Size);
       RectCh(P, Size.X, Size.Y, (APiece as TTextPiece).ARot,
-        clBlack, clNone, clNone, liSolid, 1, haNone, Transf);
-    end;
+        clBlue, clNone, clCream, liSolid, 1, haNone, Transf);
+    end
+  else if APiece is TBitmapPiece then
+  begin
+    BitmapCh(APiece[0],
+      (APiece as TBitmapPiece).Width,
+      (APiece as TBitmapPiece).Height,
+      (APiece as TBitmapPiece).KeepAspectRatio,
+      (APiece as TBitmapPiece).BitmapEntry,
+      Transf);
+  end
+  else if APiece is TGenPathPiece then
+  begin
+    if Assigned(OnGenPath) then
+      OnGenPath((APiece as TGenPathPiece).Path,
+        LineColor, HatchColor, FillColor,
+        LineStyle, LineWidth, Hatching, Transf);
+  end
+  else
+  begin
+    (APiece as TTextPiece).MeasureTextRectangle(P, Size);
+    RectCh(P, Size.X, Size.Y, (APiece as TTextPiece).ARot,
+      clBlack, clNone, clNone, liSolid, 1, haNone, Transf);
+  end;
   ;
 end;
 
@@ -333,11 +380,11 @@ var
   APiece: TPiece;
   procedure MakeLinear;
   var
-    LinPath: TLinPath;
+    LinPath: TPolyLinPiece;
   begin
-    LinPath := TLinPath.Create(0);
+    LinPath := TPolyLinPiece.Create(0);
     try
-      APiece.Linearize(LinPath);
+      APiece.Linearize(LinPath, fApproximationPrecision);
       LinPath.Assign(APiece);
       PieceCh(LinPath, LineColor, HatchColor, FillColor,
         LineStyle, LineWidth, Hatching, Transf);
@@ -353,7 +400,7 @@ var
   begin
     LinPP := TPointsSet2D.Create(0);
     try
-      APiece.Linearize(LinPP);
+      APiece.Linearize(LinPP, fApproximationPrecision);
       WriteHatching(LinPP, Hatching, HatchColor,
         fHatchingLineWidth, fHatchingStep, Transf);
     finally
@@ -362,13 +409,16 @@ var
   end;
 begin
   APiece := Piece as TPiece;
-  if not (APiece is TTextPiece) then
+  if not ((APiece is TTextPiece) or (APiece is TBitmapPiece)
+    ) then //    or (APiece is TGenPathPiece)
   begin
-    if APiece.Count < 1 then Exit;
-    if not (APiece is TLinPath) then
-      if not Assigned(OnBezier)
+    if (APiece.Count < 1) and
+      not (APiece is TGenPathPiece) then Exit;
+    if not (APiece is TPolyLinPiece) then
+      if (not Assigned(OnBezier)
         or (not APiece.Closed and not fHasBezier)
-        or (APiece.Closed and not fHasClosedBezier) then
+        or (APiece.Closed and not fHasClosedBezier))
+        and not (APiece is TGenPathPiece) then
       begin
         MakeLinear;
         Exit;
@@ -388,7 +438,7 @@ begin
       PiecePath(APiece, LineColor, HatchColor, FillColor,
         liNone, LineWidth, TmpHatching, Transf, True);
     if (Hatching <> haNone) and not fHasNativeHatching then
-      if APiece is TLinPath then
+      if APiece is TPolyLinPiece then
         WriteHatching(APiece, Hatching, HatchColor,
           fHatchingLineWidth, fHatchingStep, Transf) // * fFactorMM
       else
@@ -426,7 +476,7 @@ procedure TDevice.BezierCh(PP: TPointsSet2D;
   begin
     LinPP := TPointsSet2D.Create(0);
     try
-      LinearizeBezier(PP, BezierPrecision, Closed, LinPP);
+      LinearizeBezier(PP, fApproximationPrecision, Closed, LinPP);
       PolyCh(LinPP, LineColor, HatchColor, FillColor,
         LineStyle, LineWidth, Hatching, Transf,
         Closed);
@@ -467,7 +517,7 @@ var
   begin
     LinPP := TPointsSet2D.Create(0);
     try
-      LinearizeBezier(PP, BezierPrecision, Closed, LinPP);
+      LinearizeBezier(PP, fApproximationPrecision, Closed, LinPP);
       WriteHatching(LinPP, Hatching, HatchColor,
         fHatchingLineWidth, fHatchingStep, Transf);
     finally
@@ -641,9 +691,8 @@ end;
 
 procedure TDevice.TextCh(
   const P: TPoint2D; H, ARot: TRealType;
-  WideText: Widestring; TeXText: AnsiString;
-  const HJustification: THJustification;
-  const VJustification: TVJustification;
+  WideText: WideString; TeXText: AnsiString;
+  const HAlignment: THAlignment;
   const LineColor: TColor;
   const AFaceName: AnsiString;
   const Charset: TFontCharSet; const Style: TFontStyles;
@@ -654,14 +703,28 @@ begin
   begin
     OnText(TransformPoint2D(P, MultTransf(Transf)),
       H * fTScale, WideText, TeXText,
-      HJustification, VJustification,
+      HAlignment,
       LineColor, AFaceName, Charset, Style);
     Exit;
   end;
   OnRotText(TransformPoint2D(P, MultTransf(Transf)),
     H * fTScale, ARot, WideText, TeXText,
-    HJustification, VJustification,
+    HAlignment, 
     LineColor, AFaceName, Charset, Style);
+end;
+
+procedure TDevice.BitmapCh(const P: TPoint2D;
+  const W, H: TRealType; const KeepAspectRatio: Boolean;
+  BitmapEntry: TObject; const Transf: TTransf2D);
+begin
+  if not Assigned(OnBitmap) then
+  begin
+    RectCh(P, W, H, 0,
+      clBlack, clNone, clNone, liSolid, 1, haNone, Transf);
+    Exit;
+  end;
+  OnBitmap(TransformPoint2D(P, MultTransf(Transf)),
+    W * fTScale, H * fTScale, KeepAspectRatio, BitmapEntry);
 end;
 
 procedure TDevice.HatchingLine(P0, P1: TPoint2D;

@@ -10,6 +10,7 @@ interface
 
 uses Types, SysUtils, Classes, Graphics, Controls,
   Contnrs, StrUtils, md5, Options0, Geometry, Pieces,
+  Bitmaps,
 {$IFDEF VER140}
   WinBasic,
 {$ELSE}
@@ -32,7 +33,7 @@ type
     export_PNG,
     export_BMP, export_PDF, export_metapost, export_mps,
     export_epstopdf, export_latexeps, export_latexpdf,
-    export_latexcustom);
+    export_latexcustom, export_latexsrc, export_pdflatexsrc);
   TeXFigureEnvKind = (fig_none, fig_figure, fig_floating,
     fig_wrap);
 
@@ -42,9 +43,10 @@ const
   PdfTeXFormat_Choice =
     'tex;pgf;pdf;png;metapost;tikz;epstopdf;none';
   ExportFormat_Choice =
-    'svg;emf;eps;png;bmp;pdf;metapost;mps;epstopdf;latexeps;latexpdf;latexcustom';
+    'svg;emf;eps;png;bmp;pdf;metapost;mps;epstopdf;'
+    + 'latexeps;latexpdf;latexcustom;latexsrc;pdflatexsrc';
   ExportDefaultExt =
-    'svg;emf;eps;png;bmp;pdf;mp;mps;pdf;eps;pdf;*';
+    'svg;emf;eps;png;bmp;pdf;mp;mps;pdf;eps;pdf;*;tex;tex';
   TeXFigure_Choice = 'none;figure;floatingfigure;wrapfigure';
 
 var
@@ -53,6 +55,7 @@ var
   ArrowsSize_Default: TRealType = 0.7;
   StarsSize_Default: TRealType = 1;
   DefaultFontHeight_Default: TRealType = 5;
+  //DefaultTeXFontHeight_Default: TRealType = 5;
   //PicWidth_Default: Integer = 75;//=140
   //PicHeight_Default: Integer = 60;//=100
   PicScale_Default: TRealType = 1;
@@ -67,37 +70,46 @@ var
   LineWidthBase_Default: TRealType = 0.3;
   Border_Default: TRealType = 2;
   PicMagnif_Default: TRealType = 1;
+  FontSizeInTeX_Default: Boolean = True;
   MetaPostTeXText_Default: Boolean = True;
   IncludePath_Default: string = '';
   DefaultSymbolSize_Default: TRealType = 30;
+  ApproximationPrecision_Default: TRealType = 0.01;
+  New_LineStyle_Default: TLineStyle = liSolid;
+  New_LineColor_Default: TColor = clDefault;
+  New_LineWidth_Default: TRealType = 1;
+  New_Hatching_Default: THatching = haNone;
+  New_HatchColor_Default: TColor = clDefault;
+  New_FillColor_Default: TColor = clDefault;
+  New_Arr1_Default: Byte = 0;
+  New_Arr2_Default: Byte = 0;
+  New_ArrSizeFactor_Default: TRealType = 1;
+  New_HAlignment_Default: Byte = 0;
+  New_StarKind_Default: Byte = 0;
+  New_StarSizeFactor_Default: TRealType = 1;
 
   // in=72.27pt  in=25.4mm  mm=2.845pt
   // in=72pt  in=25.4mm  mm=2.8346pt
 
-  BezierPrecision: Integer = 150;
   SmoothBezierNodes: Boolean = True;
   AreaSelectInside: Boolean = True;
   ScaleText: Boolean = True;
   RotateText: Boolean = True;
   RotateSymbols: Boolean = True;
   ScaleLineWidth: Boolean = False;
+  UseSnap: Boolean = False;
+  UseAngularSnap: Boolean = False;
 
 type
-{: This type is used by the library for versioning control.
-   You doesn't need to change it but you may want to use it
-   if you are defining new shapes classes and want to make them
-   version indipendent.
-}
-  TFormatVersion = array[1..6] of Char;
 {: This type defines the modes used to collect a set of objects using the
-   <See Method=TViewport2D@GroupObjects> methods.
+   <See Method=TViewport2D@CollectObjects> methods.
 
    These are the modes avaiable:
 
    <LI=<I=gmAllInside> all the objects wholy inside the area are collected.>
    <LI=<I=gmCrossFrame> all the objects wholy or partially inside the area are collected.>
 }
-  TGroupMode = (gmAllInside, gmCrossFrame);
+  TCollectMode = (gmAllInside, gmCrossFrame);
 
 {: This exception is raised when you try to delete an source block
    that has references (that has linked instances of <See Class=TBlock2D>).
@@ -106,13 +118,6 @@ type
    source block before retry to delete it.
 }
   ETpX_SourceBlockIsReferenced = class(ETpX_SysException);
-{: This exception is raised when you try to load an invalid drawing
-   in a <See Class=TDrawing> instance.
-
-   <B=Note> that this exception is not raised when an old drawing
-    file is loaded, in which case a <See Class=TBadVersionEvent> is fired.
-}
-  ETpX_FileNotValid = class(ETpX_SysException);
 
   TDrawing = class;
   TDrawing2D = class;
@@ -131,25 +136,6 @@ type
 }
   TAddObjectEvent = procedure(Sender: TObject; Obj:
     TGraphicObject) of object;
-{: This type defines the event that is fired when a drawing created
-   with a previous version is being loaded.
-
-   <I=Sender> is the control that tried to load the file;
-   <I=Stream> is the stream opened for the file and <I=Version> is the
-   version of the library that created the file.
-   <I=StreamType> is the type of stream to read.
-   <I=Resume> is a flag that force the library to continue to
-   loading of the drawing. If this is set to True, the normal
-   loading procedure will start at the exit of the event. At
-   the call of the procedure it is set to False.
-
-   If you set an handler for this event (see
-   <See Property=TDrawing@OnInvalidFileVersion>) you have to do all the
-   necessary operation to handle the file.
-}
-  TBadVersionEvent = procedure(Sender: TObject; const Stream:
-    TStream; var Resume:
-    Boolean) of object;
 {: This type defines the event that is fired when an object is loaded from
    a drawing.
 
@@ -172,10 +158,6 @@ type
 }
   TOnSaveProgress = procedure(Sender: TObject; SavedPercent:
     Byte) of object;
-
-  // Type for procedures which change properties of a group of graphical objects
-  TChangeProc = procedure(const Obj: TGraphicObject; PData: Pointer)
-    of object;
 
   // A basic class for TViewport visual control (see ViewPort unit)
   TBaseViewport = class(TCustomControl)
@@ -227,8 +209,6 @@ type
 }
   TDrawing = class(TComponent)
   private
-    fVersion: TFormatVersion;
-      { The version info is used in file I/O. }
     fListOfObjects, fListOfBlocks: TGraphicObjList;
       { There are two list. The one of the objects and the one of the blocks. }
     fNextID, fNextBlockID: Integer;
@@ -242,25 +222,15 @@ type
     //TSY:
     fOnChangeDrawing: TOnChangeDrawing;
     fOnAddObject: TAddObjectEvent;
-    fOnVerError: TBadVersionEvent;
     fOnLoadProgress: TOnLoadProgress;
     fOnSaveProgress: TOnSaveProgress;
     fSelectedObjs: TGraphicObjList;
     fSelectionFilter: TObject2DClass;
-    fUseSnap, fUseAngularSnap: Boolean;
 
-    function GetListOfBlocks: TGraphicObjIterator;
-    procedure SetListOfObjects(NL: TGraphicObjList);
-    procedure SetListOfBlocks(NL: TGraphicObjList);
-
-    function GetExclusiveListOfObjects:
-      TExclusiveGraphicObjIterator;
-    function GetExclusiveListOfBlocks:
-      TExclusiveGraphicObjIterator;
+    procedure SetListOfObjects(Objects: TGraphicObjList);
+    procedure SetListOfBlocks(Objects: TGraphicObjList);
     function GetObjectsCount: Integer;
     function GetSourceBlocksCount: Integer;
-    function GetIsBlocked: Boolean;
-    function GetHasIterators: Boolean;
     function GetViewport(IDX: Integer): TBaseViewport;
     function GetViewportsCount: Integer;
   protected
@@ -269,7 +239,7 @@ type
        This is an abstract method that must be implemented in a concrete control.
 
        <I=Stream> is the stream that contains the blocks (and it must be
-       positioned on the first block present). 
+       positioned on the first block present).
        The blocks are created by reading the shape class registration index
        and creating the correct shape instance with the state present in the
        stream. Then this instance is saved in the list of objects of the
@@ -281,7 +251,7 @@ type
        source block, BUT this source block must be loaded before the
        source block that use it (this is automatically checked when you
        define a block). When the source block is loaded its
-       <See Method=TContainer2D@UpdateSourceReferences> is called to
+       <See Method=TSourceBlock2D@UpdateSourceReferences> is called to
        update the references.
 
        If there is a block that references to a not defined source block
@@ -289,7 +259,8 @@ type
 
        See also <See=Object's Persistance@PERSISTANCE>.
     }
-    procedure LoadBlocksFromStream(const Stream: TStream); virtual; abstract;
+    procedure LoadBlocksFromStream(const Stream: TStream); virtual;
+      abstract;
     {: This method saves the blocks definitions (see <See Class=TSourceBlock2D>
        to a drawing.
        This is an abstract method that must be implemented in a concrete control.
@@ -305,12 +276,13 @@ type
 
        See also <See=Object's Persistance@PERSISTANCE>.
     }
-    procedure SaveBlocksToStream(const Stream: TStream; const
-      AsLibrary: Boolean); virtual; abstract;
+    procedure SaveBlocksToStream(
+      const Stream: TStream; const AsLibrary: Boolean);
+      virtual; abstract;
     {: This method loads the objects saved in a drawing stream.
 
        <I=Stream> is the stream that contains the objects (and it must be
-       positioned on the first object present). 
+       positioned on the first object present).
        The objects are created by reading the shape class registration
        index and creating the correct shape instance with the state present
        in the stream. Then this instance is stored in the list of object of
@@ -324,7 +296,9 @@ type
 
        See also <See=Object's Persistance@PERSISTANCE>.
     }
-    procedure LoadObjectsFromStream(const Stream: TStream); virtual; abstract;
+    procedure LoadObjectsFromStream(const Stream: TStream);
+      virtual;
+      abstract;
     {: This method saves the objects in the display list to a drawing stream.
        This is an abstract method that must be implemented in a concrete control.
 
@@ -416,43 +390,10 @@ type
        up-cast it to the appropriate class before use.
     }
     function GetObject(ID: Integer): TGraphicObject;
-    {: This property contains the list of objects of the control.
-
-       Use this property if you want to change the display list through
-       the methods of the list of graphic objects (see <See Class=TGraphicObjList>).
-
-       If you want to traverse the list of object use the methods
-       <See Method=TDrawing@ObjectsIterator>,
-       <See Method=TDrawing@ObjectsExclusiveIterator> to obtain iterators on the
-       display list.
-
-       This property is useful if you want to use an optimized list instead of the
-       default one (it must be derived from <See Class=TGraphicObjList> class).
-       In this case use this property just after the creation of the control and
-       before adding objects to it.
-    }
-    property ObjectList: TGraphicObjList read fListOfObjects
-      write SetListOfObjects;
-    {: This property contains the list of source block of the control.
-
-       Use this property if you want to change the display list through
-       the methods of the list of graphic objects (see <See Class=TGraphicObjList>).
-
-       If you want to traverse the list of source blocks use the methods
-       <See Method=TDrawing@SourceBlocksIterator>,
-       <See Method=TDrawing@SourceBlocksExclusiveIterator> to obtain iterators on the
-       source block list.
-
-       This property is useful if you want to use an optimized list instead of the
-       default one (it must be derived from <See Class=TGraphicObjList> class).
-       In this case use this property just after the creation of the control and
-       before adding any source blocks to it.
-    }
-    property BlockList: TGraphicObjList read fListOfBlocks write
-      SetListOfBlocks;
   public
     // Procedures to show control points, lines, boxes, etc. on viewport
-    OnControlPoint, OnControlPoint2, OnControlPoint3:
+    OnControlPoint, OnControlPoint2, OnControlPoint3,
+      OnControlPoint4:
     TOnControlPoint;
     OnControlLine: TOnControlLine;
     OnControlBox: TOnControlBox;
@@ -471,99 +412,41 @@ type
        of its objects.
     }
     destructor Destroy; override;
+    {: This property contains the list of objects of the control.
+
+       Use this property if you want to change the display list through
+       the methods of the list of graphic objects (see <See Class=TGraphicObjList>).
+
+       This property is useful if you want to use an optimized list instead of the
+       default one (it must be derived from <See Class=TGraphicObjList> class).
+       In this case use this property just after the creation of the control and
+       before adding objects to it.
+    }
+    property ObjectList: TGraphicObjList read fListOfObjects
+      write SetListOfObjects;
+    {: This property contains the list of source block of the control.
+
+       Use this property if you want to change the display list through
+       the methods of the list of graphic objects (see <See Class=TGraphicObjList>).
+
+       This property is useful if you want to use an optimized list instead of the
+       default one (it must be derived from <See Class=TGraphicObjList> class).
+       In this case use this property just after the creation of the control and
+       before adding any source blocks to it.
+    }
+    property BlockList: TGraphicObjList read fListOfBlocks write
+      SetListOfBlocks;
     { Add the indicated Viewport. This function is automatically called by
       a Viewport so the user have no need to call it directly. }
     procedure AddViewports(const VP: TBaseViewport);
     { Delete the indicated Viewport. This function is automatically called
       by a Viewport so the user have no need to call it directly. }
     procedure DelViewports(const VP: TBaseViewport);
-    function GetListOfObjects: TGraphicObjIterator;
     //TSY:
     procedure AddList(const Lst: TGraphicObjList);
-    {: This method loads a drawing in the current one.
-
-       <I=Stream> is the stream that contains the drawing to merge. No
-       check is made to ensure that object's IDs are unique also in
-       the merged drawing nor duplicate source blocks. If the stream
-       doesn't contains a valid drawing then a <See Class=ETpX_FileNotValid>
-       exception will be raised. If the drawing was created with a
-       different version that the current one 
-       the event <See Property=TDrawing@OnInvalidFileVersion> will be fired.
-
-       Use this method to mix one or more drawing in one.
-
-       See also <See Method=TDrawing@MergeFromFile>.
-
-       <B=Note>: If the two drawings have different layer tables, then
-       the one in the draw to merge will be used.
-    }
-    procedure MergeFromStream(const Stream: TStream);
-    {: This method loads a drawing from a stream.
-
-       <I=Stream> is the stream that contains the drawing to load. If
-       the stream doesn't contains a valid drawing then a
-       <See Class=ETpX_FileNotValid>
-       exception will be raised. If the drawing was created with a
-       different version that the current one 
-       the event <See Property=TDrawing@OnInvalidFileVersion> will be fired.
-
-       The current drawing is abbandoned when this method is called. The
-       source blocks that are not library block will be also abbandoned.
-
-       See also <See Method=TDrawing@LoadFromFile>.
-    }
-    procedure LoadFromStream(const Stream: TStream);
-    {: This method saves a drawing into a stream.
-
-       <I=Stream> is the destination stream. Only the source blocks that
-       are no library blocks are saved with the drawing. Only the layers
-       modified will be saved with the drawing.
-
-       See also <See Method=TDrawing@SaveToFile>.
-    }
-    procedure SaveToStream(const Stream: TStream);
-    {: This method loads a drawing in the current one.
-
-       <I=FileName> is the file name that contains the drawing to merge. No
-       check is made to ensure that object's IDs are unique also in
-       the merged drawing nor duplicate source blocks. If the file
-       doesn't contains a valid drawing then a <See Class=ETpX_FileNotValid>
-       exception will be raised. If the drawing was created with a
-       different version that the current one
-       the event <See Property=TDrawing@OnInvalidFileVersion> will be fired.
-
-       Use this method to mix one or more drawing in one.
-
-       See also <See Method=TDrawing@MergeFromStream>.
-
-       <B=Note>: If the two drawings have different layer tables, then
-       the one in the draw to merge will be used.
-    }
-    procedure MergeFromFile(const FileName: string);
-    {: This method loads a drawing from a file.
-
-       <I=FileName> is the file name of the file that contains the drawing
-       to load. If the file doesn't contains a valid drawing then a
-       <See Class=ETpX_FileNotValid>
-       exception will be raised. If the drawing was created with a
-       different version that the current one
-       the event <See Property=TDrawing@OnInvalidFileVersion> will be fired.
-
-       The current drawing is abbandoned when this method is called. The
-       source blocks that are not library block will be also abbandoned.
-
-       See also <See Method=TDrawing@LoadFromStream>.
-    }
-    procedure LoadFromFile(const FileName: string);
-    {: This method saves a drawing into a file.
-
-       <I=Stream> is the destination file name of the file. Only the source
-       blocks that are no library blocks are saved with the drawing. Only
-       the layers modified will be saved with the drawing.
-
-       See also <See Method=TDrawing@SaveToStream>.
-    }
-    procedure SaveToFile(const FileName: string);
+    //TSY:
+    procedure InsertList(
+      const IDInsertPoint: Integer; const Lst: TGraphicObjList);
     {: This method deletes the source block with the specified ID.
 
       <I=ID> is the identification number of the source block. If no such
@@ -651,15 +534,6 @@ type
       will be raised.
     }
     procedure DeleteObject(const ID: Integer);
-    {: This method removes an object of the display list but doesn't free
-       its reference.
-
-       <I=ID> is the identification number of the object to be removed.
-
-      If the object is not found a <See Class=ETpX_ListObjNotFound> exception
-      will be raised.
-    }
-    procedure RemoveObject(const ID: Integer);
     {: This method removes all the objects of the display list.
     }
     procedure DeleteAllObjects;
@@ -689,69 +563,7 @@ type
     procedure DeleteSelected;
     function GetSelectionExtension: TRect2D;
     function GetSelectionCenter: TPoint2D;
-    // Change properties of a group of graphical objects
-    procedure ChangeSelected(ChangeProc: TChangeProc; PData:
-      Pointer);
-    procedure ChangeLineKind(const Obj: TGraphicObject; PData:
-      Pointer);
-    procedure ChangeLineColor(const Obj: TGraphicObject; PData:
-      Pointer);
-    procedure ChangeHatching(const Obj: TGraphicObject; PData:
-      Pointer);
-    procedure ChangeHatchColor(const Obj: TGraphicObject; PData:
-      Pointer);
-    procedure ChangeFillColor(const Obj: TGraphicObject; PData:
-      Pointer);
-    procedure ChangeLineWidth(const Obj: TGraphicObject; PData:
-      Pointer);
     procedure NotifyChanged;
-    {: This property must be used to obtain an iterator on the display list
-       of the objects.
-
-       The reference that will be obtained must be freed when you finish to
-       use it.
-
-       See also <See Class=TGraphicObjIterator>.
-    }
-    property ObjectsIterator: TGraphicObjIterator read
-      GetListOfObjects;
-    {: This property must be used to obtain an iterator on the list
-       of the source blocks.
-
-       The reference that will be obtained must be freed when you finish to
-       use it.
-
-       See also <See Class=TGraphicObjIterator>.
-    }
-    property SourceBlocksIterator: TGraphicObjIterator read
-      GetListOfBlocks;
-    {: This property must be used to obtain an exclusive iterator on the
-       display list of the objects.
-
-       The reference that will be obtained must be freed when you finish to
-       use it.
-
-       See also <See Class=TExclusiveGraphicObjIterator>.
-    }
-    property ObjectsExclusiveIterator:
-      TExclusiveGraphicObjIterator read
-      GetExclusiveListOfObjects;
-    {: This property must be used to obtain an exclusive iterator on the list
-       of the source blocks.
-
-       The reference that will be obtained must be freed when you finish to
-       use it.
-
-       See also <See Class=TExclusiveGraphicObjIterator>.
-    }
-    property SourceBlocksExclusiveIterator:
-      TExclusiveGraphicObjIterator read
-      GetExclusiveListOfBlocks;
-    {: This property contains the layer table of the control.
-       Use it to modify the visual aspect of the objects.
-
-       See also <See Class=TLayers>.
-    }
     property Layers: TLayers read fLayers;
     {: This property is the current layer on which any object added to the
        drawing resides.
@@ -763,11 +575,6 @@ type
     }
     property CurrentLayer: Word read fCurrentLayer write
       fCurrentLayer;
-    {: This property contains the current version of the library.
-
-       It is used to check the versions of the drawing files.
-    }
-    property Version: TFormatVersion read fVersion write fVersion;
     {: This property contains the number of objects present in the display list.
     }
     property ObjectsCount: Integer read GetObjectsCount;
@@ -775,22 +582,6 @@ type
     }
     property SourceBlocksCount: Integer read
       GetSourceBlocksCount;
-    {: This property is <B=True> when one of the lists (display list or
-       source blocks list) is blocked, that is it has an active exclusive
-       iterator on it.
-
-       When a list is blocked you cannot add or remove any items from it.
-       So check this property before asking for an iterator.
-    }
-    property IsBlocked: Boolean read GetIsBlocked;
-    {: This property is <B=True> when one of the lists (display list or
-       source blocks list) has an active iterator on it.
-
-       When a list has an active iterator, you can ask for another iterator
-       but not for an exclusive iterator.
-       So check this property before asking for an exclusive iterator.
-    }
-    property HasIterators: Boolean read GetHasIterators;
     {: This property contains all the viewports that are linked to the
        control.
 
@@ -852,42 +643,6 @@ type
 
     property OnAddObject: TAddObjectEvent read fOnAddObject write
       fOnAddObject;
-    {: This property may contain an event handler that is
-       called when a drawing created with an older version
-       of the library is loaded.
-
-       See also <See Type=TBadVersionEvent>.
-    }
-    property OnInvalidFileVersion: TBadVersionEvent read
-      fOnVerError write fOnVerError;
-    {: If this property is <B=True> then the snapping constraint is
-       enabled.
-
-       The snapping used is a 2D snapping on a plane.
-    }
-    property UseSnap: Boolean read fUseSnap write fUseSnap
-      default False;
-    {: If this property is <B=True> that the ortogonal constraint is
-       enabled.
-
-       The ortogonal constrain forces the drawing to be
-       parallel to the X and Y axis of a plane. Not all
-       interaction tasks uses this contraint that is any interaction
-       tasks must implement its ortogonal contraint.
-    }
-    property UseAngularSnap: Boolean read fUseAngularSnap
-      write fUseAngularSnap default False;
-    {: This property contains the color of the cursor.
-
-       The cursor is a visual feedback of the mouse position.
-    }
-//    property CursorColor: TColor read fCursorColor write
-//      SetCursorColor default clGray;
-    {: If this property is <B=True> then the cursor will be
-       showed.
-
-       The cursor is a visual feedback of the mouse position.
-    }
   end;
 
 {$IFDEF VER140}
@@ -934,6 +689,7 @@ type
     fStarsSize: TRealType;
     fFileName: string;
     function GetExtension: TRect2D;
+    procedure SetFileName(const NewFileName: string);
   public
     TeXFormat: TeXFormatKind;
     PdfTeXFormat: PdfTeXFormatKind;
@@ -962,15 +718,32 @@ type
     //FactorMM: TRealType; // for line width
     Border: TRealType;
     PicMagnif: TRealType;
+    FontSizeInTeX: Boolean;
     MetaPostTeXText: Boolean;
     IncludePath: string;
     DefaultSymbolSize: TRealType;
+    ApproximationPrecision: TRealType;
+    New_LineStyle: TLineStyle;
+    New_LineColor: TColor;
+    New_LineWidth: TRealType;
+    New_Hatching: THatching;
+    New_HatchColor: TColor;
+    New_FillColor: TColor;
+    New_Arr1: Byte;
+    New_Arr2: Byte;
+    New_ArrSizeFactor: TRealType;
+    New_FontHeight: TRealType;
+    New_HAlignment: Byte;
+    New_StarKind: Byte;
+    New_StarSizeFactor: TRealType;
     History: TDrawHistory;
     OptionsList: TOptionsList;
     OnPasteMetafileFromClipboard: TOnPasteMetafileFromClipboard;
-    procedure LoadObjectsFromStream(const Stream: TStream); override;
+    BitmapRegistry: TStringList;
+    procedure LoadObjectsFromStream(const Stream: TStream);
+      override;
     procedure SaveObjectsToStream0(const Stream: TStream;
-      const Iter: TGraphicObjIterator);
+      const ObjList: TGraphicObjList);
     procedure SaveObjectsToStream(const Stream: TStream);
       override;
     procedure SaveSelectionToStream(const Stream: TStream);
@@ -980,12 +753,15 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure SetDefaults; virtual;
+    procedure SetDefaultProperties;
     procedure Clear; virtual;
+    // Fills all object pieces, updates drawing extension and repaints viewports
+    procedure Update; virtual;
     {: This method loads the blocks definitions (see <See Class=TSourceBlock2D>) from a drawing.
        This is an abstract method that must be implemented in a concrete control.
 
        <I=Stream> is the stream that contains the blocks (and it must be
-       positioned on the first block present). 
+       positioned on the first block present).
        The blocks are created by reading the shape class registration index
        and creating the correct shape instance with the state present in the
        stream. Then this instance is saved in the list of objects of the
@@ -997,7 +773,7 @@ type
        source block, BUT this source block must be loaded before the
        source block that use it (this is automatically checked when you
        define a block). When the source block is loaded its
-       <See Method=TContainer2D@UpdateSourceReferences> is called to
+       <See Method=TSourceBlock2D@UpdateSourceReferences> is called to
        update the references.
 
        If there is a block that references to a not defined source block
@@ -1005,7 +781,8 @@ type
 
        See also <See=oObject's Persistance@PERSISTANCE>.
     }
-    procedure LoadBlocksFromStream(const Stream: TStream); override;
+    procedure LoadBlocksFromStream(const Stream: TStream);
+      override;
     {: This method saves the blocks definitions (see <See Class=TSourceBlock2D>) to a drawing.
        This is an abstract method that must be implemented in a concrete control.
 
@@ -1019,8 +796,8 @@ type
 
        See also <See=Object's Persistance@PERSISTANCE>.
     }
-    procedure SaveBlocksToStream(const Stream: TStream; const
-      AsLibrary: Boolean); override;
+    procedure SaveBlocksToStream(
+      const Stream: TStream; const AsLibrary: Boolean); override;
     {: This method adds a new source block.
 
        <I=ID> is the identifier number of the source block and Obj is the
@@ -1062,14 +839,12 @@ type
       TSourceBlock2D;
     {: This method creates a source block (and add it to the drawing) by
        grouping a list of objects.
-
-       <I=ScrName> will be the name of the source block; <I=Objs> is
-       an iterator on the list that contains the objects to be added.
-       That list must have the <See Property=TGraphicObjList@FreeOnClear>
-       property set to <B=False>.
+       ScrName will be the name of the source block; Objects is
+       the list that contains the objects to be added.
+       That list must have the FreeOnClear property set to False.
     }
-    function BlockObjects(const SrcName: TSourceBlockName; const
-      Objs: TGraphicObjIterator): TSourceBlock2D;
+    function BlockObjects(const SrcName: TSourceBlockName;
+      const Objects: TGraphicObjList): TSourceBlock2D;
     procedure DeleteLibrarySourceBlocks; override;
     procedure DeleteSavedSourceBlocks; override;
     function AddObject(const ID: Integer; const Obj: TObject2D):
@@ -1089,49 +864,9 @@ type
     function AddBlock(const ID: Integer; const SrcName:
       TSourceBlockName): TObject2D;
     function GetObject(const ID: Integer): TObject2D;
-    {: This method transforms a set of object or all the objects
-       present in the drawing.
-
-       The method applies the <I=T> transform matrix to the objects
-       with the <I=ID> that are present in <I=ListOfObj>. This
-       parameter is an array that may contains:
-
-       <LI=only one element equal to -1. In this case <I=T> will be
-       applied to all the objects present in the drawing.
-       <LI=a list of integers greater or equal to zero. In this case
-       <I=T> will be applied to the objects with the specified
-       <I=IDs>. The array must not have duplicated IDs.
-
-       If some ID in the array doesn't refer to an object in the drawing
-       an <See Class=ETpX_ListObjNotFound> exception will be raised
-       and the operation stopped.
-    }
-    procedure TransformObjects(
-      const ListOfObj: array of Integer; const T: TTransf2D;
-      const DoNotify: Boolean);
-    {: This method fill in a list with the objects that are contained
-       in a rectangular region of the view plane.
-
-       <I=ResultLst> is the list that will contain the objects found;
-       <I=Frm> is a rectangle in view plane coordinates.
-       <I=Mode> may be one of the following values:
-
-       <LI=if it is <I=gmAllInside> then only the objects that
-         are fully contained in the rectangle are inserted into the list.>
-       <LI=if it is <I=gmCrossFrame> then the objects that are
-         fully or partially contained in the rectangle are inserted
-         into the list.>
-
-       If <I=RemoveFromDrawing> is <B=True> then the objects added to
-       the list are also removed from the drawing.
-
-       This method is useful for create a pick-in-region function,
-       or to create a source block with the objects in a region
-       by removing the objects found from the drawing.
-    }
-    procedure GroupObjects(const ResultLst: TGraphicObjList;
+    procedure CollectObjects(const ResultLst: TGraphicObjList;
       Frm: TRect2D; const VisualRect: TRect2D;
-      const Mode: TGroupMode; const PickFilter: TObject2DClass;
+      const Mode: TCollectMode; const PickFilter: TObject2DClass;
       const RemoveFromDrawing: Boolean);
     function PickObject(const P: TPoint2D;
       const Aperture: TRealType;
@@ -1153,6 +888,10 @@ type
       const PickedObjects: TList; P: TPoint2D;
       const VisualRect: TRect2D; const PickFilter: TObject2DClass;
       Aperture: Word): Integer;
+    procedure ClearBitmapRegistry;
+    function RegisterBitmap(ImageLink: string): TBitmapEntry;
+    procedure PickUpProperties(Obj: TGraphicObject);
+    procedure ApplyProperties(Obj: TGraphicObject);
     {: This property contains the extension of the drawing.
 
        The drawing extension is the smallest axis aligned
@@ -1169,18 +908,11 @@ type
       fArrowsSize;
     property StarsSize: TRealType read fStarsSize write
       fStarsSize;
-    property FileName: string read fFileName write fFileName;
+    property FileName: string read fFileName write SetFileName;
   end;
 
-
-const
-  {: This constant contains the version number of the library
-     used as drawing file's header.
-  }
-  TpXVersion: TFormatVersion = '1.4a  ';
-
 function GetExtension0(Drawing2D: TDrawing2D;
-  Iter: TGraphicObjIterator): TRect2D;
+  Objects: TGraphicObjList): TRect2D;
 
 implementation
 
@@ -1241,64 +973,20 @@ begin
   Result := fListOfBlocks.Count;
 end;
 
-function TDrawing.GetListOfObjects: TGraphicObjIterator;
+procedure TDrawing.SetListOfObjects(Objects: TGraphicObjList);
 begin
-  Result := fListOfObjects.GetIterator;
+  if not Assigned(Objects) then Exit;
+  DeleteAllObjects;
+  fListOfObjects.Free;
+  fListOfObjects := Objects;
 end;
 
-function TDrawing.GetListOfBlocks: TGraphicObjIterator;
+procedure TDrawing.SetListOfBlocks(Objects: TGraphicObjList);
 begin
-  Result := fListOfBlocks.GetIterator;
-end;
-
-procedure TDrawing.SetListOfObjects(NL: TGraphicObjList);
-begin
-  if HasIterators then
-    raise
-      ETpX_SysException.Create('TDrawing.SetListOfObjects: Cannot change ObjectList when the current one has active iterators.');
-  if Assigned(NL) then
-  begin
-    DeleteAllObjects;
-    fListOfObjects.Free;
-    fListOfObjects := NL;
-  end;
-end;
-
-procedure TDrawing.SetListOfBlocks(NL: TGraphicObjList);
-begin
-  if HasIterators then
-    raise
-      ETpX_SysException.Create('TDrawing.SetListOfBlocks: Cannot change BlocksList when the current one has active iterators.');
-  if Assigned(NL) then
-  begin
-    DeleteAllSourceBlocks;
-    fListOfBlocks.Free;
-    fListOfBlocks := NL;
-  end;
-end;
-
-function TDrawing.GetExclusiveListOfObjects:
-  TExclusiveGraphicObjIterator;
-begin
-  Result := fListOfObjects.GetExclusiveIterator;
-end;
-
-function TDrawing.GetExclusiveListOfBlocks:
-  TExclusiveGraphicObjIterator;
-begin
-  Result := fListOfBlocks.GetExclusiveIterator;
-end;
-
-function TDrawing.GetIsBlocked: Boolean;
-begin
-  Result := fListOfObjects.HasExclusiveIterators or
-    fListOfBlocks.HasExclusiveIterators;
-end;
-
-function TDrawing.GetHasIterators: Boolean;
-begin
-  Result := fListOfObjects.HasIterators or
-    fListOfBlocks.HasIterators;
+  if not Assigned(Objects) then Exit;
+  DeleteAllSourceBlocks;
+  fListOfBlocks.Free;
+  fListOfBlocks := Objects;
 end;
 
 function TDrawing.GetViewport(IDX: Integer): TBaseViewport;
@@ -1316,18 +1004,17 @@ begin
   inherited Create(AOwner);
 
   fListOfObjects := TGraphicObjList.Create;
-  fListOfObjects.FreeOnClear := True;
+  fListOfObjects.FreeOnDelete := True;
   fListOfBlocks := TGraphicObjList.Create;
-  fListOfBlocks.FreeOnClear := True;
+  fListOfBlocks.FreeOnDelete := True;
 
   fListOfViewport := TList.Create;
   fLayers := TLayers.Create;
   fCurrentLayer := 0;
   fNextID := 0;
   fNextBlockID := 0;
-  fVersion := TpXVersion;
   fSelectedObjs := TGraphicObjList.Create;
-  fSelectedObjs.FreeOnClear := False;
+  fSelectedObjs.FreeOnDelete := False;
   fSelectionFilter := TObject2D;
 end;
 
@@ -1335,26 +1022,25 @@ end;
 
 procedure TDrawing.DeleteAllSourceBlocks;
 var
-  TmpObj: TGraphicObject;
+  Obj: TGraphicObject;
   Deleted: Integer;
-  TmpIter: TExclusiveGraphicObjIterator;
   OnChangeDrawing0: TOnChangeDrawing;
 begin
-  TmpIter := fListOfBlocks.GetExclusiveIterator;
+  fListOfBlocks.Lock;
   OnChangeDrawing0 := fOnChangeDrawing;
   fOnChangeDrawing := nil;
   try
     repeat
       Deleted := 0;
-      TmpObj := TmpIter.First;
-      while Assigned(TmpObj) do
+      Obj := fListOfBlocks.FirstObj;
+      while Assigned(Obj) do
       begin
         try
-          TmpIter.DeleteCurrent;
+          fListOfBlocks.DeleteCurrent;
           Inc(Deleted);
-          TmpObj := TmpIter.Current;
+          Obj := fListOfBlocks.CurrentObj;
         except
-          TmpObj := TmpIter.Next;
+          Obj := fListOfBlocks.NextObj;
         end;
       end;
       if (Deleted = 0) and (fListOfBlocks.Count > 0) then
@@ -1363,10 +1049,10 @@ begin
           ETpX_SourceBlockIsReferenced.Create('TDrawing.FreeSourceBlocks: TpX Severe error'#10#13'The drawing contains circular reference of source blocks. They will be not deleted !');
         Exit;
       end;
-    until TmpIter.Count = 0;
+    until fListOfBlocks.Count = 0;
   finally
     fOnChangeDrawing := OnChangeDrawing0;
-    TmpIter.Free;
+    fListOfBlocks.Unlock;
   end;
   NotifyChanged;
 end;
@@ -1407,109 +1093,6 @@ begin
   inherited Destroy;
 end;
 
-procedure TDrawing.SaveToStream(const Stream: TStream);
-var
-  TmpByte: Byte;
-begin
-  with Stream do
-  begin
-     { Write the signature for the version. }
-    Write(fVersion, SizeOf(fVersion));
-     { Save the layer informations. }
-    fLayers.SaveToStream(Stream);
-     { Save the source blocks. }
-    TmpByte := 2;
-    Write(TmpByte, SizeOf(TmpByte));
-    SaveBlocksToStream(Stream, False);
-     { Save the objects. }
-    TmpByte := 3;
-    Write(TmpByte, SizeOf(TmpByte));
-    SaveObjectsToStream(Stream);
-  end;
-end;
-
-procedure TDrawing.MergeFromStream(const Stream: TStream);
-var
-  TmpVersion: TFormatVersion;
-  TmpByte: Byte;
-  TmpBool: Boolean;
-begin
-  with Stream do
-  begin
-    Read(TmpVersion, SizeOf(TmpVersion));
-    TmpBool := TmpVersion = TpXVersion;
-    if (not TmpBool) and Assigned(fOnVerError) then
-      fOnVerError(Self, Stream, TmpBool);
-    if TmpBool then
-    begin
-        { Load the layer informations. }
-      fLayers.LoadFromStream(Stream);
-        { Load the source blocks. }
-      Read(TmpByte, SizeOf(TmpByte));
-      if TmpByte <> 2 then
-        raise
-          ETpX_FileNotValid.Create('TDrawing.MergeFromStream: no blocks found');
-      LoadBlocksFromStream(Stream);
-        { Load the objects. }
-      Read(TmpByte, SizeOf(TmpByte));
-      if TmpByte <> 3 then
-        raise
-          ETpX_FileNotValid.Create('TDrawing.MergeFromStream: no objects found');
-      LoadObjectsFromStream(Stream);
-    end
-    else
-      raise
-        ETpX_FileNotValid.Create('TDrawing.MergeFromStream: Invalid stream version.');
-  end;
-end;
-
-procedure TDrawing.LoadFromStream(const Stream: TStream);
-begin
-  { Delete all objects. }
-  DeleteAllObjects;
-  DeleteSavedSourceBlocks;
-  MergeFromStream(Stream);
-end;
-
-procedure TDrawing.MergeFromFile(const FileName: string);
-var
-  TmpStr: TFileStream;
-begin
-  TmpStr := TFileStream.Create(FileName, fmOpenRead);
-  try
-    MergeFromStream(TmpStr);
-    RepaintViewports;
-  finally
-    TmpStr.Free;
-  end;
-end;
-
-procedure TDrawing.LoadFromFile(const FileName: string);
-var
-  TmpStr: TFileStream;
-begin
-  TmpStr := TFileStream.Create(FileName, fmOpenRead);
-  try
-    LoadFromStream(TmpStr);
-    RepaintViewports;
-  finally
-    TmpStr.Free;
-  end;
-end;
-
-procedure TDrawing.SaveToFile(const FileName: string);
-var
-  TmpStr: TFileStream;
-begin
-  TmpStr := TFileStream.Create(FileName, fmOpenWrite or
-    fmCreate);
-  try
-    SaveToStream(TmpStr);
-  finally
-    TmpStr.Free;
-  end;
-end;
-
 function TDrawing.AddSourceBlock(ID: Integer; const Obj:
   TGraphicObject): TGraphicObject;
 begin
@@ -1529,15 +1112,8 @@ begin
 end;
 
 function TDrawing.GetSourceBlock(ID: Integer): TGraphicObject;
-var
-  TmpIter: TGraphicObjIterator;
 begin
-  TmpIter := GetListOfBlocks;
-  try
-    Result := TmpIter.Search(ID);
-  finally
-    TmpIter.Free;
-  end;
+  Result := fListOfBlocks.Find(ID);
 end;
 
 function TDrawing.FindSourceBlock(const SrcName:
@@ -1548,10 +1124,10 @@ end;
 
 procedure TDrawing.DeleteSourceBlockByID(const ID: Integer);
 var
-  TmpObj: TGraphicObject;
+  Obj: TGraphicObject;
 begin
-  TmpObj := GetSourceBlock(ID);
-  if TmpObj = nil then
+  Obj := GetSourceBlock(ID);
+  if Obj = nil then
     raise
       ETpX_ListObjNotFound.Create('TDrawing.DeleteSourceBlock: No source block found');
   try
@@ -1582,36 +1158,55 @@ begin
 end;
 
 procedure TDrawing.AddList(const Lst: TGraphicObjList);
+begin
+  InsertList(-1, Lst);
+end;
+
+procedure TDrawing.InsertList(
+  const IDInsertPoint: Integer; const Lst: TGraphicObjList);
 var
-//  ID: Integer;
-  Obj: TGraphicObject;
-  Iter: TGraphicObjIterator;
   OnChangeDrawing0: TOnChangeDrawing;
-  I: Integer;
+  procedure ProcessObjects(const ALst: TGraphicObjList);
+  var
+    Obj: TGraphicObject;
+    I: Integer;
+  begin
+    ALst.Lock;
+    I := 0;
+    try
+      Obj := ALst.FirstObj;
+      while Assigned(Obj) do
+      begin
+        if Obj is TGroup2D then
+          ProcessObjects((Obj as TGroup2D).Objects);
+        Obj.OwnerDrawing := Self;
+        if ALst = Lst then
+        begin
+          Obj.Layer := fCurrentLayer;
+          Obj.ID := fNextID;
+          Inc(fNextID);
+        end;
+        Obj.UpdateExtension(Self);
+        if ALst = Lst then
+          if Assigned(fOnAddObject) then
+            fOnAddObject(Self, Obj);
+        Inc(I);
+        if I mod 100 = 0 then ShowProgress(I / Lst.Count);
+        Obj := ALst.NextObj;
+      end;
+    finally
+      ALst.Unlock;
+    end;
+  end;
 begin
   OnChangeDrawing0 := fOnChangeDrawing;
   fOnChangeDrawing := nil;
   try
-    fListOfObjects.AddFromList(Lst);
-    Iter := Lst.GetIterator;
-    I := 0;
-    try
-      Obj := nil;
-      while Iter.GetNext(Obj) do
-      begin
-        Obj.OwnerDrawing := Self;
-        Obj.Layer := fCurrentLayer;
-        Obj.ID := fNextID;
-        Inc(fNextID);
-        Obj.UpdateExtension(Self);
-        if Assigned(fOnAddObject) then
-          fOnAddObject(Self, Obj);
-        Inc(I);
-        if I mod 100 = 0 then ShowProgress(I / Lst.Count);
-      end;
-    finally
-      Iter.Free;
-    end;
+    if IDInsertPoint = -1 then
+      fListOfObjects.AddFromList(Lst)
+    else
+      fListOfObjects.InsertFromList(IDInsertPoint, Lst);
+    ProcessObjects(Lst);
   finally
     fOnChangeDrawing := OnChangeDrawing0;
   end;
@@ -1646,25 +1241,12 @@ begin
   NotifyChanged;
 end;
 
-procedure TDrawing.RemoveObject(const ID: Integer);
-var
-  TmpObj: TGraphicObject;
-begin
-  TmpObj := GetObject(ID);
-  if TmpObj = nil then
-    raise
-      ETpX_ListObjNotFound.Create('TDrawing.RemoveObject: No object found');
-  TmpObj.OwnerDrawing := nil;
-  fListOfObjects.Remove(ID);
-  NotifyChanged;
-end;
-
 procedure TDrawing.DeleteObject(const ID: Integer);
 var
-  TmpObj: TGraphicObject;
+  Obj: TGraphicObject;
 begin
-  TmpObj := GetObject(ID);
-  if TmpObj = nil then
+  Obj := GetObject(ID);
+  if Obj = nil then
     raise
       ETpX_ListObjNotFound.Create('TDrawing.DeleteObject: No object found');
   fListOfObjects.Delete(ID);
@@ -1674,25 +1256,18 @@ end;
 procedure TDrawing.ChangeObjectLayer(const ID: Integer; const
   NewLayer: Byte);
 var
-  TmpObj: TGraphicObject;
+  Obj: TGraphicObject;
 begin
-  TmpObj := GetObject(ID);
-  if TmpObj = nil then
+  Obj := GetObject(ID);
+  if Obj = nil then
     raise
       ETpX_ListObjNotFound.Create('TDrawing.ChangeObjectLayer: No object found');
-  TmpObj.Layer := NewLayer;
+  Obj.Layer := NewLayer;
 end;
 
 function TDrawing.GetObject(ID: Integer): TGraphicObject;
-var
-  TmpIter: TGraphicObjIterator;
 begin
-  TmpIter := GetListOfObjects;
-  try
-    Result := TmpIter.Search(ID);
-  finally
-    TmpIter.Free;
-  end;
+  Result := fListOfObjects.Find(ID);
 end;
 
 procedure TDrawing.AddViewports(const VP: TBaseViewport);
@@ -1727,31 +1302,25 @@ begin
 end;
 
 function TDrawing.SelectionFirst: TGraphicObject;
-var
-  Iter: TGraphicObjIterator;
 begin
-  Iter :=
-    SelectedObjects.GetIterator;
-  try
-    Result := Iter.First;
-  finally
-    Iter.Free;
-  end;
+  Result := SelectedObjects.FirstObj;
 end;
 
 procedure TDrawing.SelectionClear;
 var
-  Iter: TGraphicObjIterator;
-  Current: TGraphicObject;
+  Obj: TGraphicObject;
 begin
-  Iter := fSelectedObjs.GetIterator;
+  fSelectedObjs.Lock;
   try
-    Current := nil;
-    while Iter.GetNext(Current) do
-      if Current is TObject2D then
-        (Current as TObject2D).HasControlPoints := False;
+    Obj := fSelectedObjs.FirstObj;
+    while Assigned(Obj) do
+    begin
+      if Obj is TObject2D then
+        (Obj as TObject2D).HasControlPoints := False;
+      Obj := fSelectedObjs.NextObj;
+    end;
   finally
-    Iter.Free;
+    fSelectedObjs.Unlock;
   end;
   fSelectedObjs.Clear;
 end;
@@ -1767,137 +1336,117 @@ end;
 procedure TDrawing.SelectionAddList(const List:
   TGraphicObjList);
 var
-  ExIter: TExclusiveGraphicObjIterator;
-  Current: TGraphicObject;
+  Obj: TGraphicObject;
 begin
-  ExIter := List.GetExclusiveIterator;
+  List.Lock;
   try
-    Current := nil;
-    while ExIter.GetNext(Current) do
-      if fSelectedObjs.Find(Current.ID) = nil then
+    Obj := List.FirstObj;
+    while Assigned(Obj) do
+    begin
+      if fSelectedObjs.Find(Obj.ID) = nil then
       begin
-        fSelectedObjs.Add(Current);
-        if Current is TObject2D then
-          (Current as TObject2D).HasControlPoints := True;
+        fSelectedObjs.Add(Obj);
+        if Obj is TObject2D then
+          (Obj as TObject2D).HasControlPoints := True;
       end;
+      Obj := List.NextObj;
+    end;
   finally
-    ExIter.Free;
+    List.Unlock;
   end;
 end;
 
 function TDrawing.SelectionRemove(const Obj:
   TGraphicObject): Boolean;
-var
-  ExIter: TExclusiveGraphicObjIterator;
 begin
   Result := False;
   if not Assigned(Obj) then Exit;
-  ExIter := fSelectedObjs.GetExclusiveIterator;
-  try
-    if ExIter.Search(Obj.ID) <> nil then
-    begin
-      if Obj is TObject2D then
-        (Obj as TObject2D).HasControlPoints := False;
-      ExIter.RemoveCurrent;
-      Result := True;
-    end;
-  finally
-    ExIter.Free;
+  if fSelectedObjs.Find(Obj.ID) <> nil then
+  begin
+    if Obj is TObject2D then
+      (Obj as TObject2D).HasControlPoints := False;
+    fSelectedObjs.RemoveCurrent;
+    Result := True;
   end;
 end;
 
 procedure TDrawing.SelectAll;
 var
-  ExIter: TExclusiveGraphicObjIterator;
-  Current: TGraphicObject;
+  Obj: TGraphicObject;
 begin
   SelectionClear;
-  ExIter := Self.GetExclusiveListOfObjects;
+  fListOfObjects.Lock;
   try
-    Current := nil;
-    while ExIter.GetNext(Current) do
+    Obj := fListOfObjects.FirstObj;
+    while Assigned(Obj) do
     begin
-      fSelectedObjs.Add(Current);
-      if Current is TObject2D then
-        (Current as TObject2D).HasControlPoints := True;
+      fSelectedObjs.Add(Obj);
+      if Obj is TObject2D then
+        (Obj as TObject2D).HasControlPoints := True;
+      Obj := fListOfObjects.NextObj;
     end;
   finally
-    ExIter.Free;
+    fListOfObjects.Unlock;
   end;
-  RepaintViewports;
 end;
 
 procedure TDrawing.SelectNext(Direction: Integer);
 var
-  TmpIter: TGraphicObjIterator;
-  TmpIter2: TGraphicObjIterator;
-  Current: TGraphicObject;
+  Obj: TGraphicObject;
 begin
-  TmpIter := fSelectedObjs.GetIterator;
-  TmpIter2 := ObjectsIterator;
-  try
+  if Direction > 0 then
+    Obj := fSelectedObjs.LastObj
+  else
+    Obj := fSelectedObjs.FirstObj;
+  if Obj = nil then
+    Obj := fListOfObjects.FirstObj
+  else
+  begin
+    fListOfObjects.FindObjByID(Obj.ID);
     if Direction > 0 then
-      Current := TmpIter.Last
-    else
-      Current := TmpIter.First;
-    if Current = nil then
-      Current := TmpIter2.First
+    begin
+      Obj := fListOfObjects.NextObj;
+      if Obj = nil then
+        Obj := fListOfObjects.FirstObj;
+    end
     else
     begin
-      TmpIter2.Search(Current.ID);
-      if Direction > 0 then
-      begin
-        Current := TmpIter2.Next;
-        if Current = nil then
-          Current := TmpIter2.First;
-      end
-      else
-      begin
-        Current := TmpIter2.Prev;
-        if Current = nil then
-          Current := TmpIter2.Last;
-      end
-    end;
-  finally
-    TmpIter2.Free;
-    TmpIter.Free;
+      Obj := fListOfObjects.PrevObj;
+      if Obj = nil then
+        Obj := fListOfObjects.LastObj;
+    end
   end;
-  if Assigned(Current) then
+  if Assigned(Obj) then
   begin
     SelectionClear;
-    SelectionAdd(Current);
+    SelectionAdd(Obj);
   end;
-  RepaintViewports;
 end;
 
 procedure TDrawing.DeleteSelected;
 var
-  ExIter: TExclusiveGraphicObjIterator;
-  Current: TGraphicObject;
+  Obj: TGraphicObject;
   OnChangeDrawing0: TOnChangeDrawing;
 begin
-  ExIter := fSelectedObjs.GetExclusiveIterator;
+  OnChangeDrawing0 := fOnChangeDrawing;
+  fOnChangeDrawing := nil;
+  fSelectedObjs.Lock;
   try
-    Current := nil;
-    OnChangeDrawing0 := fOnChangeDrawing;
-    fOnChangeDrawing := nil;
-    try
-      while ExIter.GetNext(Current) do
-        DeleteObject(Current.ID);
-    finally
-      fOnChangeDrawing := OnChangeDrawing0;
+    Obj := fSelectedObjs.FirstObj;
+    while Assigned(Obj) do
+    begin
+      DeleteObject(Obj.ID);
+      Obj := fSelectedObjs.NextObj;
     end;
   finally
-    ExIter.Free;
+    fSelectedObjs.Unlock;
+    fOnChangeDrawing := OnChangeDrawing0;
   end;
   fSelectedObjs.Clear;
-  RepaintViewports;
   NotifyChanged;
 end;
 
 function TDrawing.GetSelectionExtension: TRect2D;
-var
-  TmpIter: TGraphicObjIterator;
 begin
   if not (Self is TDrawing2D)
     or (fSelectedObjs.Count = 0) then
@@ -1910,12 +1459,7 @@ begin
       Result := Rect2D(0, 0, 0, 0);
     Exit;
   end;
-  TmpIter := fSelectedObjs.GetIterator;
-  try
-    Result := GetExtension0(Self as TDrawing2D, TmpIter);
-  finally
-    TmpIter.Free;
-  end;
+  Result := GetExtension0(Self as TDrawing2D, fSelectedObjs);
 end;
 
 function TDrawing.GetSelectionCenter: TPoint2D;
@@ -1924,70 +1468,6 @@ var
 begin
   E := GetSelectionExtension;
   Result := MidPoint(E.FirstEdge, E.SecondEdge);
-end;
-
-procedure TDrawing.ChangeSelected(ChangeProc: TChangeProc; PData:
-  Pointer);
-var
-  Obj: TGraphicObject;
-  Iter: TGraphicObjIterator;
-begin
-  Iter := fSelectedObjs.GetIterator;
-  try
-    Obj := nil;
-    while Iter.GetNext(Obj) do
-    begin
-      ChangeProc(Obj, PData);
-      Obj.UpdateExtension(Self);
-    end;
-  finally
-    Iter.Free;
-  end;
-  RepaintViewports;
-  NotifyChanged;
-end;
-
-procedure TDrawing.ChangeLineKind(const Obj: TGraphicObject; PData:
-  Pointer);
-begin
-  if Obj is TPrimitive2D then
-    (Obj as TPrimitive2D).LineStyle := TLineStyle(PData^);
-end;
-
-procedure TDrawing.ChangeLineColor(const Obj: TGraphicObject;
-  PData: Pointer);
-begin
-  if Obj is TPrimitive2D then
-    (Obj as TPrimitive2D).LineColor := TColor(PData^);
-end;
-
-procedure TDrawing.ChangeHatching(const Obj: TGraphicObject; PData:
-  Pointer);
-begin
-  if Obj is TPrimitive2D then
-    (Obj as TPrimitive2D).Hatching := THatching(PData^);
-end;
-
-
-procedure TDrawing.ChangeHatchColor(const Obj: TGraphicObject;
-  PData: Pointer);
-begin
-  if Obj is TPrimitive2D then
-    (Obj as TPrimitive2D).HatchColor := TColor(PData^);
-end;
-
-procedure TDrawing.ChangeFillColor(const Obj: TGraphicObject;
-  PData: Pointer);
-begin
-  if Obj is TPrimitive2D then
-    (Obj as TPrimitive2D).FillColor := TColor(PData^);
-end;
-
-procedure TDrawing.ChangeLineWidth(const Obj: TGraphicObject;
-  PData: Pointer);
-begin
-  if Obj is TPrimitive2D then
-    (Obj as TPrimitive2D).LineWidth := TRealType(PData^);
 end;
 
 procedure TDrawing.NotifyChanged;
@@ -2117,6 +1597,7 @@ begin
   History := nil;
   OnPasteMetafileFromClipboard := nil;
   OptionsList := TOptionsList.Create;
+  BitmapRegistry := TStringList.Create;
   FillOptionsList;
 end;
 
@@ -2183,6 +1664,9 @@ begin
   OptionsList.AddRealType('DefaultSymbolSize',
     @DefaultSymbolSize,
     'Default symbol size factor ("diameter", sp)');
+  OptionsList.AddRealType('ApproximationPrecision',
+    @ApproximationPrecision,
+    'Precision of various approximations like linearization of Bezier curves (mm)');
   OptionsList.AddRealType('MiterLimit',
     @(MiterLimit),
     'Miter limit. Used to cut off too long spike miter join'
@@ -2237,6 +1721,10 @@ begin
   OptionsList.AddString('TeXPicEpilogue',
     @(TeXPicEpilogue),
     'Text to put after picture/includegraphics');
+  OptionsList.AddBoolean('FontSizeInTeX', @(FontSizeInTeX),
+    'Put font size information into LaTeX/MetaPost output code.' +
+    ' Set FontSizeInTeX to 0 to use the default font size of the parent LaTeX document' +
+    ' (or default font size of MetaPost drawing)');
   OptionsList.AddBoolean('MetaPostTeXText',
     @(MetaPostTeXText), 'Use TeX text in MetaPost files');
   if not OutHelp then Exit;
@@ -2255,6 +1743,8 @@ destructor TDrawing2D.Destroy;
 begin
   History.Free;
   OptionsList.Free;
+  ClearBitmapRegistry;
+  BitmapRegistry.Free;
   inherited Destroy;
 end;
 
@@ -2287,9 +1777,12 @@ begin
   TeXPicEpilogue := '';
   LineWidthBase := LineWidthBase_Default;
   MiterLimit := 10;
+  FontSizeInTeX := FontSizeInTeX_Default;
   MetaPostTeXText := MetaPostTeXText_Default;
   IncludePath := IncludePath_Default;
   DefaultSymbolSize := DefaultSymbolSize_Default;
+  ApproximationPrecision := ApproximationPrecision_Default;
+  SetDefaultProperties;
 end;
 
 procedure TDrawing2D.Clear;
@@ -2298,76 +1791,82 @@ begin
   DeleteAllObjects;
   DeleteSavedSourceBlocks;
   SetDefaults;
+  ClearBitmapRegistry;
+end;
+
+procedure TDrawing2D.SetDefaultProperties;
+begin
+  New_LineStyle := New_LineStyle_Default;
+  New_LineColor := New_LineColor_Default;
+  New_LineWidth := New_LineWidth_Default;
+  New_Hatching := New_Hatching_Default;
+  New_HatchColor := New_HatchColor_Default;
+  New_FillColor := New_FillColor_Default;
+  New_Arr1 := New_Arr1_Default;
+  New_Arr2 := New_Arr2_Default;
+  New_ArrSizeFactor := New_ArrSizeFactor_Default;
+  New_FontHeight := DefaultFontHeight;
+  New_HAlignment := New_HAlignment_Default;
+  New_StarKind := New_StarKind_Default;
+  New_StarSizeFactor := New_StarSizeFactor_Default;
+end;
+
+procedure TDrawing2D.Update;
+begin
+  GetExtension;
   RepaintViewports;
 end;
 
-procedure TDrawing2D.SaveObjectsToStream0(const Stream:
-  TStream;
-  const Iter: TGraphicObjIterator);
+procedure TDrawing2D.SaveObjectsToStream0(const Stream: TStream;
+  const ObjList: TGraphicObjList);
 var
-  TmpObj: TObject2D;
+  Obj: TObject2D;
   TmpWord: Word;
-  TmpLong, TmpObjPerc: Integer;
+  TmpLong, ObjPerc: Integer;
 begin
-  with Stream do
-  begin
+  //with Stream do
      { Save the objects. }
-    TmpLong := Iter.Count;
-    if TmpLong > 0 then
-      TmpObjPerc := 100 div TmpLong
-    else
-      TmpObjPerc := 0;
-    Write(TmpLong, SizeOf(TmpLong));
-    TmpObj := Iter.First as TObject2D;
-    while TmpObj <> nil do
+  TmpLong := ObjList.Count;
+  if TmpLong > 0 then
+    ObjPerc := 100 div TmpLong
+  else
+    ObjPerc := 0;
+  Stream.Write(TmpLong, SizeOf(TmpLong));
+  Obj := ObjList.FirstObj as TObject2D;
+  while Obj <> nil do
+  begin
+    if Layers[Obj.Layer].Streamable and
+      Obj.ToBeSaved
+      then
     begin
-      if Layers[TmpObj.Layer].Streamable and
-        TmpObj.ToBeSaved
-        then
-      begin
-        TmpWord := TpXFindClassIndex(TmpObj.ClassName);
+      TmpWord := TpXFindClassIndex(Obj.ClassName);
            { Save the class index. }
-        Write(TmpWord, SizeOf(TmpWord));
-        TmpObj.SaveToStream(Stream);
-        if Assigned(OnSaveProgress) then
-          OnSaveProgress(Self, 100 - TmpObjPerc * TmpLong);
-        Dec(TmpLong);
-      end;
-      TmpObj := Iter.Next as TObject2D;
+      Stream.Write(TmpWord, SizeOf(TmpWord));
+      Obj.SaveToStream(Stream);
+      if Assigned(OnSaveProgress) then
+        OnSaveProgress(Self, 100 - ObjPerc * TmpLong);
+      Dec(TmpLong);
     end;
+    Obj := ObjList.NextObj as TObject2D;
+  end;
      { End the list of objects if not all objects were saved. }
-    if TmpLong > 0 then
-    begin
-      TmpWord := 65535;
-      Write(TmpWord, SizeOf(TmpWord));
-    end;
+  if TmpLong > 0 then
+  begin
+    TmpWord := 65535;
+    Stream.Write(TmpWord, SizeOf(TmpWord));
   end;
 end;
 
 procedure TDrawing2D.SaveObjectsToStream(const Stream:
   TStream);
-var
-  TmpIter: TGraphicObjIterator;
 begin
-  TmpIter := ObjectList.GetPrivilegedIterator;
-  try
-    SaveObjectsToStream0(Stream, TmpIter);
-  finally
-    TmpIter.Free;
-  end;
+  SaveObjectsToStream0(Stream, fListOfObjects);
 end;
 
 procedure TDrawing2D.SaveSelectionToStream(const Stream:
   TStream);
-var
-  TmpIter: TGraphicObjIterator;
 begin
-  TmpIter := Self.fSelectedObjs.GetPrivilegedIterator;
-  try
-    SaveObjectsToStream0(Stream, TmpIter);
-  finally
-    TmpIter.Free;
-  end;
+  SaveObjectsToStream0(Stream, fSelectedObjs);
 end;
 
 procedure TDrawing2D.CopySelectionToClipboard;
@@ -2397,7 +1896,6 @@ begin
       if Assigned(OnPasteMetafileFromClipboard) then
         OnPasteMetafileFromClipboard(Self);
     end;
-    RepaintViewports;
     Exit;
   end;
   Stream := TMemoryStream.Create;
@@ -2408,7 +1906,6 @@ begin
   finally
     Stream.Free;
   end;
-  RepaintViewports;
 end;
 
 {$WARNINGS OFF}
@@ -2417,23 +1914,22 @@ procedure TDrawing2D.LoadObjectsFromStream(const Stream:
   TStream);
 var
   TmpClass: TGraphicObjectClass;
-  TmpObj: TGraphicObject;
-  TmpLong, TmpObjPerc: Integer;
+  Obj: TGraphicObject;
+  TmpLong, ObjPerc: Integer;
   TmpWord: Word;
-  TmpBlocksIter: TExclusiveGraphicObjIterator;
   OnChangeDrawing0: TOnChangeDrawing;
 begin
   OnChangeDrawing0 := fOnChangeDrawing;
   fOnChangeDrawing := nil;
   try
-    TmpBlocksIter := SourceBlocksExclusiveIterator;
+    fListOfBlocks.Lock;
     with Stream do
     try
       Read(TmpLong, SizeOf(TmpLong));
       if TmpLong > 0 then
-        TmpObjPerc := 100 div TmpLong
+        ObjPerc := 100 div TmpLong
       else
-        TmpObjPerc := 0;
+        ObjPerc := 0;
       if TmpLong > 0 then SelectionClear;
       while TmpLong > 0 do
       begin
@@ -2453,43 +1949,43 @@ begin
             Break;
           end;
         end;
-        TmpObj := TmpClass.CreateFromStream(Stream);
+        Obj := TmpClass.CreateFromStream(Stream);
         if Assigned(OnLoadProgress) then
-          OnLoadProgress(Self, TmpObjPerc);
-        if not (TmpObj is TObject2D) then
+          OnLoadProgress(Self, ObjPerc);
+        if not (Obj is TObject2D) then
         begin
           MessageBoxError('Not 2D Object. Object discarded.');
-          TmpObj.Free;
+          Obj.Free;
           Continue;
         end;
-        if TmpObj is TContainer2D then
+        if Obj is TSourceBlock2D then
         try
-          TContainer2D(TmpObj).UpdateSourceReferences(TmpBlocksIter);
+          TSourceBlock2D(Obj).UpdateSourceReferences(fListOfBlocks);
         except
           on ETpX_ListObjNotFound do
           begin
             MessageBoxError('Source block not found. The block will not be loaded');
-            TmpObj.Free;
+            Obj.Free;
             Continue;
           end;
         end
-        else if TmpObj is TBlock2D then
+        else if Obj is TBlock2D then
         try
-          TBlock2D(TmpObj).UpdateReference(TmpBlocksIter);
+          TBlock2D(Obj).UpdateReference(fListOfBlocks);
         except
           on ETpX_ListObjNotFound do
           begin
             MessageBoxError('Source block not found. The block will not be loaded');
-            TmpObj.Free;
+            Obj.Free;
             Continue;
           end;
         end;
-        CurrentLayer := TmpObj.Layer;
-        inherited AddObject(-1, TGraphicObject(TmpObj));
-        SelectionAdd(TmpObj);
+        CurrentLayer := Obj.Layer;
+        inherited AddObject(-1, TGraphicObject(Obj));
+        SelectionAdd(Obj);
       end;
     finally
-      TmpBlocksIter.Free;
+      fListOfBlocks.Unlock;
     end;
   finally
     fOnChangeDrawing := OnChangeDrawing0;
@@ -2498,42 +1994,36 @@ begin
 end;
 {$WARNINGS ON}
 
-procedure TDrawing2D.SaveBlocksToStream(const Stream:
-  TStream;
-  const AsLibrary: Boolean);
+procedure TDrawing2D.SaveBlocksToStream(
+  const Stream: TStream; const AsLibrary: Boolean);
 var
-  TmpObj: TSourceBlock2D;
+  Obj: TSourceBlock2D;
   TmpWord: Word;
   TmpPos, TmpLong: Integer;
-  TmpIter: TGraphicObjIterator;
 begin
-  TmpIter := BlockList.GetPrivilegedIterator;
-  with Stream do
-  try
-    TmpLong := SourceBlocksCount;
-    TmpPos := Stream.Position;
-    Write(TmpLong, SizeOf(TmpLong));
-    TmpObj := TmpIter.First as TSourceBlock2D;
-    TmpLong := 0;
-    while TmpObj <> nil do
+  //BlockList.;
+//  with Stream do
+  TmpLong := SourceBlocksCount;
+  TmpPos := Stream.Position;
+  Stream.Write(TmpLong, SizeOf(TmpLong));
+  Obj := fListOfBlocks.FirstObj as TSourceBlock2D;
+  TmpLong := 0;
+  while Obj <> nil do
+  begin
+    if Obj.ToBeSaved and
+      not (Obj.IsLibraryBlock xor AsLibrary) then
     begin
-      if TmpObj.ToBeSaved and
-        not (TmpObj.IsLibraryBlock xor AsLibrary) then
-      begin
-        TmpWord := TpXFindClassIndex(TmpObj.ClassName);
+      TmpWord := TpXFindClassIndex(Obj.ClassName);
            { Save the class index. }
-        Write(TmpWord, SizeOf(TmpWord));
-        TmpObj.SaveToStream(Stream);
-        Inc(TmpLong);
-      end;
-      TmpObj := TmpIter.Next as TSourceBlock2D;
+      Stream.Write(TmpWord, SizeOf(TmpWord));
+      Obj.SaveToStream(Stream);
+      Inc(TmpLong);
     end;
-    Seek(TmpPos, soFromBeginning);
-    Write(TmpLong, SizeOf(TmpLong));
-    Seek(0, soFromEnd);
-  finally
-    TmpIter.Free;
+    Obj := fListOfBlocks.NextObj as TSourceBlock2D;
   end;
+  Stream.Seek(TmpPos, soFromBeginning);
+  Stream.Write(TmpLong, SizeOf(TmpLong));
+  Stream.Seek(0, soFromEnd);
 end;
 
 {$WARNINGS OFF}
@@ -2542,10 +2032,9 @@ procedure TDrawing2D.LoadBlocksFromStream(const Stream:
   TStream);
 var
   TmpClass: TGraphicObjectClass;
-  TmpObj: TGraphicObject;
+  Obj: TGraphicObject;
   TmpLong: Integer;
   TmpWord: Word;
-  TmpBlocksIter: TGraphicObjIterator;
 begin
   with Stream do
   begin
@@ -2566,21 +2055,18 @@ begin
           Continue;
         end;
       end;
-      TmpObj := TmpClass.CreateFromStream(Stream);
-      TmpBlocksIter := SourceBlocksIterator;
+      Obj := TmpClass.CreateFromStream(Stream);
       try
-        TSourceBlock2D(TmpObj).UpdateSourceReferences(TmpBlocksIter);
+        TSourceBlock2D(Obj).UpdateSourceReferences(fListOfBlocks);
       except
         on ETpX_ListObjNotFound do
         begin
           MessageBoxError('Source block not found. The block will not be loaded');
-          TmpObj.Free;
-          TmpBlocksIter.Free;
+          Obj.Free;
           Continue;
         end;
       end;
-      TmpBlocksIter.Free;
-      AddSourceBlock(TSourceBlock2D(TmpObj));
+      AddSourceBlock(TSourceBlock2D(Obj));
     end;
   end;
 end;
@@ -2614,38 +2100,31 @@ end;
 
 function TDrawing2D.FindSourceBlock(const SrcName:
   TSourceBlockName): TSourceBlock2D;
-var
-  TmpIter: TGraphicObjIterator;
 begin
-  TmpIter := SourceBlocksIterator;
-  try
-    Result := TmpIter.First as TSourceBlock2D;
-    while Result <> nil do
-    begin
-      if SrcName = Result.Name then
-        Exit;
-      Result := TmpIter.Next as TSourceBlock2D;
-    end;
-  finally
-    TmpIter.Free;
+  Result := fListOfBlocks.FirstObj as TSourceBlock2D;
+  while Result <> nil do
+  begin
+    if SrcName = Result.Name then
+      Exit;
+    Result := fListOfBlocks.NextObj as TSourceBlock2D;
   end;
   raise
     ETpX_ListObjNotFound.Create(Format('TDrawing2D.FindSourceBlock: Source block %s not found', [SrcName]));
 end;
 
-function TDrawing2D.BlockObjects(const SrcName:
-  TSourceBlockName;
-  const Objs: TGraphicObjIterator): TSourceBlock2D;
+function TDrawing2D.BlockObjects(
+  const SrcName: TSourceBlockName;
+  const Objects: TGraphicObjList): TSourceBlock2D;
 var
-  TmpObj: TObject2D;
+  Obj: TObject2D;
 begin
   Result := TSourceBlock2D.CreateSpec(0, SrcName, [nil]);
   try
-    TmpObj := Objs.First as TObject2D;
-    while TmpObj <> nil do
+    Obj := Objects.FirstObj as TObject2D;
+    while Obj <> nil do
     begin
-      Result.Objects.Add(TmpObj);
-      TmpObj := Objs.Next as TObject2D;
+      Result.Objects.Add(Obj);
+      Obj := Objects.NextObj as TObject2D;
     end;
     AddSourceBlock(Result);
   except
@@ -2656,48 +2135,46 @@ end;
 
 procedure TDrawing2D.DeleteSavedSourceBlocks;
 var
-  TmpObj: TGraphicObject;
-  TmpIter: TExclusiveGraphicObjIterator;
+  Obj: TGraphicObject;
 begin
-  TmpIter := SourceBlocksExclusiveIterator;
+  fListOfBlocks.Lock;
   try
-    TmpObj := TmpIter.First;
-    while Assigned(TmpObj) do
-      if TSourceBlock2D(TmpObj).ToBeSaved and not
-        TSourceBlock2D(TmpObj).IsLibraryBlock then
+    Obj := fListOfBlocks.FirstObj;
+    while Assigned(Obj) do
+      if TSourceBlock2D(Obj).ToBeSaved and not
+        TSourceBlock2D(Obj).IsLibraryBlock then
       try
-        TmpIter.DeleteCurrent;
-        TmpObj := TmpIter.Current;
+        fListOfBlocks.DeleteCurrent;
+        Obj := fListOfBlocks.CurrentObj;
       except
-        TmpObj := TmpIter.Next;
+        Obj := fListOfBlocks.NextObj;
       end
       else
-        TmpObj := TmpIter.Next;
+        Obj := fListOfBlocks.NextObj;
   finally
-    TmpIter.Free;
+    fListOfBlocks.Unlock;
   end;
 end;
 
 procedure TDrawing2D.DeleteLibrarySourceBlocks;
 var
-  TmpObj: TGraphicObject;
-  TmpIter: TExclusiveGraphicObjIterator;
+  Obj: TGraphicObject;
 begin
-  TmpIter := SourceBlocksExclusiveIterator;
+  fListOfBlocks.Lock;
   try
-    TmpObj := TmpIter.First;
-    while Assigned(TmpObj) do
-      if TSourceBlock2D(TmpObj).IsLibraryBlock then
+    Obj := fListOfBlocks.FirstObj;
+    while Assigned(Obj) do
+      if TSourceBlock2D(Obj).IsLibraryBlock then
       try
-        TmpIter.DeleteCurrent;
-        TmpObj := TmpIter.Current;
+        fListOfBlocks.DeleteCurrent;
+        Obj := fListOfBlocks.CurrentObj;
       except
-        TmpObj := TmpIter.Next;
+        Obj := fListOfBlocks.NextObj;
       end
       else
-        TmpObj := TmpIter.Next;
+        Obj := fListOfBlocks.NextObj;
   finally
-    TmpIter.Free;
+    fListOfBlocks.Unlock;
   end;
 end;
 
@@ -2739,102 +2216,55 @@ begin
   Result := inherited GetObject(ID) as TObject2D;
 end;
 
-procedure TDrawing2D.TransformObjects(
-  const ListOfObj: array of Integer; const T: TTransf2D;
-  const DoNotify: Boolean);
-var
-  Cont: Integer;
-  Tmp: TObject2D;
-  TmpIter: TExclusiveGraphicObjIterator;
-begin
-  if High(ListOfObj) < 0 then Exit;
-  TmpIter := ObjectsExclusiveIterator;
-  try
-    if ListOfObj[Low(ListOfObj)] < 0 then
-    begin
-       { Apply trasform to all objects. }
-      Tmp := TmpIter.First as TObject2D;
-      while Tmp <> nil do
-      begin
-        Tmp.TransForm(T);
-        Tmp := TmpIter.Next as TObject2D;
-      end;
-    end
-    else
-      for Cont := Low(ListOfObj) to High(ListOfObj) do
-      begin
-        try
-          Tmp := TObject2D(TmpIter.Search(ListOfObj[Cont]));
-        except
-          on Exception do
-            raise
-              ETpX_ListObjNotFound.Create('TDrawing2D.TransformObjects: Object not found');
-        end;
-        if Tmp <> nil then
-        begin
-          Tmp.TransForm(T);
-        end;
-      end;
-  finally
-    TmpIter.Free;
-  end;
-  if DoNotify then
-  begin
-    RepaintViewports;
-    NotifyChanged;
-  end;
-end;
-
-procedure TDrawing2D.GroupObjects(const ResultLst: TGraphicObjList;
+procedure TDrawing2D.CollectObjects(const ResultLst:
+  TGraphicObjList;
   Frm: TRect2D; const VisualRect: TRect2D;
-  const Mode: TGroupMode; const PickFilter: TObject2DClass;
+  const Mode: TCollectMode; const PickFilter: TObject2DClass;
   const RemoveFromDrawing: Boolean);
 var
-  Tmp: TObject2D;
-  TmpObjectsIter: TExclusiveGraphicObjIterator;
+  Obj: TObject2D;
 begin
-  if HasIterators then Exit;
   Frm := ReorderRect2D(Frm);
-  ResultLst.FreeOnClear := RemoveFromDrawing;
-  TmpObjectsIter := ObjectsExclusiveIterator;
+  ResultLst.FreeOnDelete := RemoveFromDrawing;
+  fListOfObjects.Lock;
   try
-    Tmp := TmpObjectsIter.First as TObject2D;
-    while Tmp <> nil do
-      with (Layers[Tmp.Layer]) do
+    Obj := fListOfObjects.FirstObj as TObject2D;
+    while Obj <> nil do
+      with (Layers[Obj.Layer]) do
       begin
-        if Active and Visible and (Tmp.Enabled)
-          and (Tmp is PickFilter)
-          and Tmp.IsVisible(VisualRect)
+        if Active and Visible and (Obj.Enabled)
+          and (Obj is PickFilter)
+          and Obj.IsVisible(VisualRect)
           then
         begin
           if (Mode = gmAllInside) and
-            IsBoxAllInBox2D(Tmp.BoundingBox, Frm) then
+            IsBoxAllInBox2D(Obj.BoundingBox, Frm) then
             { The object is in the frame. }
           begin
-            ResultLst.Add(Tmp);
+            ResultLst.Add(Obj);
             if RemoveFromDrawing then
             begin
-              TmpObjectsIter.RemoveCurrent;
-              Tmp := TObject2D(TmpObjectsIter.Current);
+              fListOfObjects.RemoveCurrent;
+              Obj := TObject2D(fListOfObjects.CurrentObj);
               Continue;
             end;
           end
           else if (Mode = gmCrossFrame) and
-            IsBoxInBox2D(Tmp.BoundingBox, Frm) then
+            IsBoxInBox2D(Obj.BoundingBox, Frm) then
           begin
-            ResultLst.Add(Tmp);
+            ResultLst.Add(Obj);
             if RemoveFromDrawing then
             begin
-              TmpObjectsIter.RemoveCurrent;
-              Tmp := TObject2D(TmpObjectsIter.Current);
+              fListOfObjects.RemoveCurrent;
+              Obj := TObject2D(fListOfObjects.CurrentObj);
               Continue;
             end;
           end;
         end;
-        Tmp := TmpObjectsIter.Next as TObject2D;
+        Obj := fListOfObjects.NextObj as TObject2D;
       end;
   finally
-    TmpObjectsIter.Free;
+    fListOfObjects.Unlock;
   end;
 end;
 
@@ -2852,22 +2282,22 @@ function TDrawing2D.PickObject_PreferSelected(const P: TPoint2D;
   const VisualRect: TRect2D; const PickFilter: TObject2DClass;
   const FirstFound: Boolean; var NPoint: Integer): TObject2D;
 var
-  TmpObj: TObject2D;
+  Obj: TObject2D;
   TmpNPoint: Integer;
 begin
   Result := fSelectedObjs.PickObject(P, fLayers, Aperture,
     VisualRect,
     PickFilter, FirstFound, NPoint);
   if NPoint >= 0 then Exit;
-  TmpObj := fListOfObjects.PickObject(P, fLayers, Aperture,
+  Obj := fListOfObjects.PickObject(P, fLayers, Aperture,
     VisualRect,
     PickFilter, FirstFound, TmpNPoint);
-  if TmpObj = nil then Exit;
+  if Obj = nil then Exit;
   if (Result = nil) or (NPoint < TmpNPoint)
-    //or ((NPoint = TmpNPoint) and (Result.ID < TmpObj.ID))
+    //or ((NPoint = TmpNPoint) and (Result.ID < Obj.ID))
   then
   begin
-    Result := TmpObj;
+    Result := Obj;
     NPoint := TmpNPoint;
   end;
 end;
@@ -2879,17 +2309,14 @@ function TDrawing2D.PickListOfObjects(
 var
   Tmp: TObject2D;
   Distance: TRealType;
-  TmpIter: TExclusiveGraphicObjIterator;
 begin
   Result := 0;
-  if HasIterators then
-    Exit;
-  TmpIter := ObjectsExclusiveIterator;
+  fListOfObjects.Lock;
 //  StopRepaint;
   try
     // Trasforma l'apertura in coordinate mondo.
 //    WAperture := GetPixelAperture.X * Aperture;
-    Tmp := TmpIter.Current as TObject2D;
+    Tmp := fListOfObjects.CurrentObj as TObject2D;
     while Tmp <> nil do
       with (Layers[Tmp.Layer]) do
       begin
@@ -2904,57 +2331,159 @@ begin
             Inc(Result);
           end;
         end;
-        Tmp := TmpIter.Next as TObject2D;
+        Tmp := fListOfObjects.NextObj as TObject2D;
       end;
   finally
-    TmpIter.Free;
+    fListOfObjects.Unlock;
   end;
 end;
 
 function GetExtension0(Drawing2D: TDrawing2D;
-  Iter: TGraphicObjIterator): TRect2D;
+  Objects: TGraphicObjList): TRect2D;
 var
-  Tmp: TObject2D;
+  Obj: TObject2D;
 begin
-  Result := Rect2D(MaxRealType, MaxRealType, -MaxRealType,
-    -MaxRealType);
-  Tmp := Iter.First as TObject2D;
-  while Tmp <> nil do
+  Result := Rect2D(
+    MaxRealType, MaxRealType, -MaxRealType, -MaxRealType);
+  Obj := Objects.FirstObj as TObject2D;
+  while Obj <> nil do
   begin
-    if Drawing2D.Layers[Tmp.Layer].Visible then
+    if Drawing2D.Layers[Obj.Layer].Visible then
     begin
       try
-        Tmp.UpdateExtension(Drawing2D);
+        Obj.UpdateExtension(Drawing2D);
       finally
       end;
           { Set the new extension if necessary. }
-      if Tmp.BoundingBox.Left < Result.Left then
-        Result.Left := Tmp.BoundingBox.Left;
-      if Tmp.BoundingBox.Right > Result.Right then
-        Result.Right := Tmp.BoundingBox.Right;
-      if Tmp.BoundingBox.Bottom < Result.Bottom then
-        Result.Bottom := Tmp.BoundingBox.Bottom;
-      if Tmp.BoundingBox.Top > Result.Top then
-        Result.Top := Tmp.BoundingBox.Top;
+      if Obj.BoundingBox.Left < Result.Left then
+        Result.Left := Obj.BoundingBox.Left;
+      if Obj.BoundingBox.Right > Result.Right then
+        Result.Right := Obj.BoundingBox.Right;
+      if Obj.BoundingBox.Bottom < Result.Bottom then
+        Result.Bottom := Obj.BoundingBox.Bottom;
+      if Obj.BoundingBox.Top > Result.Top then
+        Result.Top := Obj.BoundingBox.Top;
     end;
-    Tmp := Iter.Next as TObject2D;
+    Obj := Objects.NextObj as TObject2D;
   end;
 end;
 
 function TDrawing2D.GetExtension: TRect2D;
-var
-  TmpIter: TGraphicObjIterator;
 begin
   if ObjectsCount = 0 then
   begin
     Result := Rect2D(0, 0, 0, 0);
     Exit;
   end;
-  TmpIter := ObjectsIterator;
-  try
-    Result := GetExtension0(Self, TmpIter);
-  finally
-    TmpIter.Free;
+  Result := GetExtension0(Self, fListOfObjects);
+end;
+
+procedure TDrawing2D.SetFileName(const NewFileName: string);
+var
+  I: Integer;
+  BE: TBitmapEntry;
+begin
+  if NewFileName = fFileName then Exit;
+  if fFileName = Drawing_NewFileName then fFileName := '';
+  for I := 0 to BitmapRegistry.Count - 1 do
+  begin
+    BE := BitmapRegistry.Objects[I] as TBitmapEntry;
+    BE.RefreshParentFileName(NewFileName);
+  end;
+  fFileName := NewFileName;
+end;
+
+procedure TDrawing2D.ClearBitmapRegistry;
+var
+  I: Integer;
+begin
+  for I := 0 to BitmapRegistry.Count - 1 do
+    BitmapRegistry.Objects[I].Free;
+  BitmapRegistry.Clear;
+end;
+
+
+function TDrawing2D.RegisterBitmap(ImageLink: string):
+  TBitmapEntry;
+var
+  I: Integer;
+begin
+  if ExtractFileDrive(ImageLink) = '' then
+    ImageLink := ExtractFilePath(FileName) + ImageLink;
+  I := BitmapRegistry.IndexOf(ImageLink);
+  if I < 0 then
+  begin
+    if fFileName <> Drawing_NewFileName then
+      Result := TBitmapEntry.Create(ImageLink, fFileName)
+    else
+      Result := TBitmapEntry.Create(ImageLink, '');
+    BitmapRegistry.AddObject(ImageLink, Result);
+  end
+  else Result := BitmapRegistry.Objects[I] as TBitmapEntry;
+end;
+
+procedure TDrawing2D.PickUpProperties(Obj: TGraphicObject);
+var
+  Prim: TPrimitive2D;
+begin
+  if not Assigned(Obj) then Exit;
+  if Obj is TGroup2D then
+    Obj := (Obj as TGroup2D).Objects.FirstObj;
+  if not (Obj is TPrimitive2D) then Exit;
+  Prim := Obj as TPrimitive2D;
+  New_LineStyle := Prim.LineStyle;
+  New_LineColor := Prim.LineColor;
+  if New_LineColor = clNone then New_LineColor := clDefault;
+  New_LineWidth := Prim.LineWidth;
+  if New_LineWidth <= 0 then New_LineWidth := 1;
+  New_Hatching := Prim.Hatching;
+  New_HatchColor := Prim.HatchColor;
+  if New_HatchColor = clNone then New_HatchColor := clDefault;
+  New_FillColor := Prim.FillColor;
+  if New_FillColor = clNone then New_FillColor := clDefault;
+  New_Arr1 := Byte(Prim.BeginArrowKind);
+  New_Arr2 := Byte(Prim.EndArrowKind);
+  New_ArrSizeFactor := Prim.ArrowSizeFactor;
+  if New_ArrSizeFactor <= 0 then New_ArrSizeFactor := 1;
+  if Prim is TText2D then
+  begin
+    New_FontHeight := (Prim as TText2D).Height;
+    if New_FontHeight <= 0 then
+      New_FontHeight := DefaultFontHeight;
+    New_HAlignment := Byte((Prim as TText2D).HAlignment);
+  end
+  else if Prim is TStar2D then
+  begin
+    New_StarKind := Byte((Prim as TStar2D).StarKind);
+    New_StarSizeFactor := (Prim as TStar2D).StarSizeFactor;
+  end;
+end;
+
+procedure TDrawing2D.ApplyProperties(Obj: TGraphicObject);
+var
+  Prim: TPrimitive2D;
+begin
+  if not Assigned(Obj) then Exit;
+  Prim := Obj as TPrimitive2D;
+  Prim.LineStyle := New_LineStyle;
+  Prim.LineColor := New_LineColor;
+  Prim.LineWidth := New_LineWidth;
+  Prim.Hatching := New_Hatching;
+  Prim.HatchColor := New_HatchColor;
+  Prim.FillColor := New_FillColor;
+  Prim.BeginArrowKind := TArrowKind(New_Arr1);
+  Prim.EndArrowKind := TArrowKind(New_Arr2);
+  Prim.ArrowSizeFactor := New_ArrSizeFactor;
+  if Prim is TText2D then
+  begin
+    (Prim as TText2D).Height := New_FontHeight;
+    (Prim as TText2D).HAlignment
+      := THAlignment(New_HAlignment);
+  end
+  else if Prim is TStar2D then
+  begin
+    (Prim as TStar2D).StarKind := TStarKind(New_StarKind);
+    (Prim as TStar2D).StarSizeFactor := New_StarSizeFactor;
   end;
 end;
 

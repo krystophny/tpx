@@ -7,7 +7,7 @@ unit Output;
 
 interface
 
-uses SysUtils, Classes, Graphics, Drawings,
+uses SysUtils, Classes, Contnrs, Graphics, Drawings,
   GObjBase, GObjects,
 {$IFDEF VER140}
   Gr32, Gr32_Polygons, WinBasic,
@@ -50,7 +50,6 @@ type
     procedure WritePiece(Piece: TPiece; Obj: TPrimitive2D);
       virtual;
     procedure WritePieces(Obj: TPrimitive2D); virtual;
-    procedure WriteContainer2D(Obj: TContainer2D); virtual;
     procedure WriteLine2D(Obj: TLine2D); virtual;
     procedure WriteRectangle2D(Obj: TRectangle2D); virtual;
       abstract;
@@ -61,14 +60,20 @@ type
     procedure WriteCircular2D(Obj: TCircular2D); virtual;
       abstract;
     procedure WritePoly2D(Obj: TPolyline2D0); virtual;
+    procedure WriteSmooth2D(Obj: TSmoothPath2D0); virtual;
+    procedure WriteBezier2D(Obj: TBezierPath2D0); virtual;
     procedure WriteText2D(Obj: TText2D); virtual;
       abstract;
     procedure WriteStar2D(Obj: TStar2D); virtual;
     procedure WriteSymbol2D(Obj: TSymbol2D); virtual;
-    procedure WriteSmooth2D(Obj: TSmoothPath2D0); virtual;
-    procedure WriteBezier2D(Obj: TBezierPath2D0); virtual;
+    procedure WriteBitmap2D(Obj: TBitmap2D); virtual;
+    procedure WriteGroup2D(Obj: TGroup2D); virtual;
+    procedure StartGroup2D(Obj: TGroup2D); virtual;
+    procedure FinishGroup2D(Obj: TGroup2D); virtual;
+    procedure WriteCompound2D(Obj: TCompound2D); virtual;
     procedure WriteEntity(Obj: TObject2D);
     function GetFontDescent: TRealType; virtual;
+    procedure WriteEntities0(const ObjList: TGraphicObjList);
   public
     constructor Create(Drawing: TDrawing2D); virtual;
     procedure WriteEntities;
@@ -90,18 +95,24 @@ type
     function GetTransform: TTransf2D; virtual;
     procedure WritePiece(Piece: TPiece; Obj: TPrimitive2D);
       override;
-    procedure WriteContainer2D(Obj: TContainer2D); override;
 //    procedure WriteLine2D(Obj: TLine2D); override;
     procedure WriteRectangle2D(Obj: TRectangle2D); override;
     procedure WriteEllipse2D(Obj: TEllipse2D); override;
     procedure WriteCircle2D(Obj: TCircle2D); override;
     procedure WriteCircular2D(Obj: TCircular2D); override;
     procedure WriteText2D(Obj: TText2D); override;
+    procedure StartGroup2D(Obj: TGroup2D); override;
+    procedure FinishGroup2D(Obj: TGroup2D); override;
+    procedure WriteCompound2D(Obj: TCompound2D); override;
   public
     constructor Create(Drawing: TDrawing2D); override;
     procedure WriteHeader; override;
     procedure WriteFooter; override;
     procedure WriteAllToStream; override;
+    procedure WriteToTpX(Stream: TStream;
+      const FileName: string); override;
+    function StoreToFile(const FileName: string): Boolean;
+      override;
   end;
 
   T_SVG_Export = class(T_Device_Export)
@@ -274,13 +285,13 @@ procedure StoreToFile_Saver(const Drawing: TDrawing2D;
 // A hack to make dvips use a more correct bounding box
 function DvipsFixBB_RuleStr(const ExtRect: TRect2D;
   const FactorMM: TRealType): string;
-procedure StoreToFile_TpX0(const Drawing: TDrawing2D;
+function StoreToFile_TpX0(const Drawing: TDrawing2D;
   const FileName: string;
   AClass_TeX, AClass_PdfTeX: TDrawingSaverClass;
-  const DvipsFixBB: Boolean);
-procedure StoreToFile_TpX(const Drawing: TDrawing2D;
+  const DvipsFixBB: Boolean): Boolean;
+function StoreToFile_TpX(const Drawing: TDrawing2D;
   const FileName: string;
-  const DvipsFixBB: Boolean);
+  const DvipsFixBB: Boolean): Boolean;
 function StoreToFile_MPS(const Drawing: TDrawing2D;
   const FileName: string): Boolean;
 procedure StoreToFile_LaTeX_EPS(const Drawing: TDrawing2D;
@@ -300,18 +311,22 @@ procedure FindPicturePath(const TeXFileName: string;
   out PicturePath, IncludePath: string);
 function TeX_Replace_Special(const St: WideString): string;
 function GetTeXTextFontSize(
-  Height, UnitLength: TRealType): string;
+  Height, UnitLength: TRealType;
+  const FontSizeInTeX: Boolean): string;
 function GetTeXTextFontColor(LineColor: TColor): string;
 function Get_TeXText(
   const LineColor: TColor; const Style: TFontStyles;
   const WideText: WideString; const TeXText: AnsiString): string;
 function GetTeXTextMakebox0(
   const Height, ARot, UnitLength: TRealType;
-  const LineColor: TColor; const HJustification: THJustification;
-  const VJustification: TVJustification; const Style: TFontStyles;
-  const WideText: WideString; const TeXText: AnsiString): string;
+  const LineColor: TColor;
+  const HAlignment: THAlignment;
+  const Style: TFontStyles;
+  const WideText: WideString; const TeXText: AnsiString;
+  const FontSizeInTeX: Boolean):
+  string;
 procedure ShiftTeXTextPoint(var P: TPoint2D;
-  VJustification: TVJustification; Height, Rot: TRealType);
+  Height, Rot: TRealType);
 {$IFDEF VER140}
 function DrawingAsMetafile(Drawing: TDrawing2D): TMetaFile;
 {$ENDIF}
@@ -319,7 +334,8 @@ procedure StoreToFile_EMF(const Drawing: TDrawing2D;
   const FileName: string);
 
 var
-  MetaPostPath: string = 'mpost.exe';
+{$IFNDEF LINUX}MetaPostPath: string = 'mpost.exe';
+{$ELSE}MetaPostPath: string = 'mpost'; {$ENDIF}
   Font_pfb_Path: string = '';
   GhostscriptCustomKeys: string = '-r300 -sDEVICE=png256';
     //pdfwrite, bmp256
@@ -329,7 +345,7 @@ implementation
 uses Math, StrUtils, ColorEtc, PreView,
   Settings0, Input, SysBasic,
 {$IFDEF VER140}
-  pngimage, Gr32Add, DevGr32,
+  Gr32Add, DevGr32,
 {$ENDIF}
   MiscUtils, DevPGF, DevTeXPc, TpXSaver,
   DevCanvas, DevSVG, DevTikZ, DevPS, DevPDF, DevPSTr, DevMP;
@@ -391,7 +407,8 @@ begin
   fStream.Write(ValueSt[1], Length(ValueSt));
 end;
 
-procedure TDrawingSaver.WriteStreamPoint0(const X, Y: TRealType);
+procedure TDrawingSaver.WriteStreamPoint0(const X, Y:
+  TRealType);
 begin
   WriteStream('(');
   WriteStream(X);
@@ -400,7 +417,8 @@ begin
   WriteStream(')');
 end;
 
-procedure TDrawingSaver.WriteStreamPoint0Int(X, Y: Integer);
+procedure TDrawingSaver.WriteStreamPoint0Int(X, Y:
+  Integer);
 begin
   WriteStream('(');
   WriteStream(X);
@@ -455,17 +473,18 @@ var
   Circle: TCircle2D;
 begin
   if Piece.Count < 1 then Exit;
-  if Piece is TLinPath then
-    WritePoly0(Piece, Piece.GetLineColor(Obj), Obj.HatchColor,
+  if Piece is TPolyLinPiece then
+    WritePoly0(Piece, Piece.GetLineColor(Obj),
+      Obj.HatchColor,
       Piece.GetFillColor(Obj), Piece.GetLineStyle(Obj),
       Piece.GetLineWidth(Obj), Piece.GetHatching(Obj),
-      (Piece as TLinPath).Closed)
-  else if Piece is TBezierPath then
+      (Piece as TPolyLinPiece).Closed)
+  else if Piece is TBezierPiece then
     WritePolyBezier0(Piece, Piece.GetLineColor(Obj),
       Obj.HatchColor,
       Piece.GetFillColor(Obj), Piece.GetLineStyle(Obj),
       Piece.GetLineWidth(Obj), Piece.GetHatching(Obj),
-      (Piece as TBezierPath).Closed)
+      (Piece as TBezierPiece).Closed)
   else if Piece is TCirclePiece then
   begin
     Circle := TCircle2D.Create(-1);
@@ -491,40 +510,42 @@ begin
       WritePiece(Obj.Pieces[I], Obj);
 end;
 
-procedure TDrawingSaver.WriteEntities;
+procedure TDrawingSaver.WriteEntities0(const ObjList:
+  TGraphicObjList);
+//  Objects traversal
 var
-  TmpIter: TGraphicObjIterator;
-  TmpObj: TObject2D;
+  Obj: TGraphicObject;
   I: Integer;
-  HasError:Boolean;
+  HasError: Boolean;
 begin
-  TmpIter := fDrawing2D.ObjectsIterator;
   I := 0;
   HasError := False;
-  try
-    TmpObj := TmpIter.First as TObject2D;
-    while TmpObj <> nil do
-    begin
-      try
-        WriteEntity(TmpObj);
-        TmpObj := TmpIter.Next as TObject2D;
-        Inc(I);
-        if I mod 100 = 0 then ShowProgress(I / TmpIter.Count);
-      except
-        if not HasError then MessageBoxError(TmpObj.ClassName);
-        HasError := True;
-      end;
+  Obj := ObjList.FirstObj;
+  while Obj <> nil do
+  begin
+    if Obj is TObject2D then
+    try
+      WriteEntity(Obj as TObject2D);
+      Inc(I);
+      if I mod 100 = 0 then
+        ShowProgress(I / ObjList.Count);
+    except
+      if not HasError then
+        MessageBoxError(Obj.ClassName);
+      HasError := True;
     end;
-  finally
-    TmpIter.Free;
+    Obj := ObjList.NextObj;
   end;
+end;
+
+procedure TDrawingSaver.WriteEntities;
+begin
+  WriteEntities0(fDrawing2D.ObjectList);
 end;
 
 procedure TDrawingSaver.WriteEntity(Obj: TObject2D);
 begin
-  if Obj is TContainer2D then
-    WriteContainer2D(Obj as TContainer2D)
-  else if Obj is TLine2D then
+  if Obj is TLine2D then
   begin
     WriteLine2D(Obj as TLine2D);
   end
@@ -568,14 +589,22 @@ begin
   begin
     WriteText2D(Obj as TText2D);
   end
+  else if Obj is TBitmap2D then
+  begin
+    WriteBitmap2D(Obj as TBitmap2D);
+  end
+  else if Obj is TGroup2D then
+  begin
+    WriteGroup2D(Obj as TGroup2D);
+  end
+  else if Obj is TCompound2D then
+  begin
+    WriteCompound2D(Obj as TCompound2D);
+  end
     ;
  {except
  showmessage(Obj.ClassName);
  end;}
-end;
-
-procedure TDrawingSaver.WriteContainer2D(Obj: TContainer2D);
-begin
 end;
 
 procedure TDrawingSaver.WriteLine2D(Obj: TLine2D);
@@ -608,6 +637,32 @@ begin
   WritePieces(Obj);
 end;
 
+procedure TDrawingSaver.WriteBitmap2D(Obj: TBitmap2D);
+begin
+  WritePieces(Obj);
+end;
+
+procedure TDrawingSaver.WriteGroup2D(Obj: TGroup2D);
+// Use recursion for groups
+begin
+  StartGroup2D(Obj);
+  WriteEntities0(Obj.Objects);
+  FinishGroup2D(Obj);
+end;
+
+procedure TDrawingSaver.StartGroup2D(Obj: TGroup2D);
+begin
+end;
+
+procedure TDrawingSaver.FinishGroup2D(Obj: TGroup2D);
+begin
+end;
+
+procedure TDrawingSaver.WriteCompound2D(Obj: TCompound2D);
+begin
+  WritePieces(Obj);
+end;
+
 function FF(const X: TRealType): string;
 begin
   Result := Format('%.6g', [X]);
@@ -624,24 +679,31 @@ begin
   Result := AnsiReplaceStr(Result, '&', '\&');
   Result := AnsiReplaceStr(Result, '{', '\{');
   Result := AnsiReplaceStr(Result, '}', '\}');
-  Result := AnsiReplaceStr(Result, '~', '\symbol{126}'); //\~
+  Result := AnsiReplaceStr(Result, '~', '\symbol{126}');
+            //\~
   Result := AnsiReplaceStr(Result, '_', '\symbol{95}'); //\_
-  Result := AnsiReplaceStr(Result, '^', '\symbol{94}'); // \^
+  Result := AnsiReplaceStr(Result, '^', '\symbol{94}');
+            // \^
   Result := AnsiReplaceStr(Result, '\backs-lash',
     '$\backslash$');
   Result := AnsiReplaceStr(Result, '  ', ' ~');
 end;
 
 function GetTeXTextFontSize(
-  Height, UnitLength: TRealType): string;
+  Height, UnitLength: TRealType;
+  const FontSizeInTeX: Boolean): string;
 var
   H: TRealType;
 begin
-  H := Height * UnitLength * 2.84527559; //in pt // mm=2.84527559pt
+  H := Height * UnitLength * 2.84527559;
+            //in pt // mm=2.84527559pt
     // TeX uses small points (1 inch = 72.27pt),
     // not big points (1 inch = 72bp) as Adobe PS/PDF/SVG
-  Result := Format('\fontsize{%.2f}{%.2f}\selectfont ',
-    [H, H * 1.2]);
+  if FontSizeInTeX then
+    Result := Format('\fontsize{%.2f}{%.2f}\selectfont ',
+      [H, H * 1.2])
+  else
+    Result := '';
 end;
 
 function GetTeXTextFontColor(LineColor: TColor): string;
@@ -651,14 +713,16 @@ begin
   if LineColor <> clDefault then
   begin
     RGB := PS_RGB(LineColor);
-    Result := Result + Format('\textcolor[rgb]{%.5g, %.5g, %.5g}',
+    Result := Result +
+      Format('\textcolor[rgb]{%.5g, %.5g, %.5g}',
       [RGB.R, RGB.G, RGB.B]);
   end;
 end;
 
 function Get_TeXText(
   const LineColor: TColor; const Style: TFontStyles;
-  const WideText: WideString; const TeXText: AnsiString): string;
+  const WideText: WideString; const TeXText: AnsiString):
+  string;
 begin
   if TeXText <> '' then
     Result := TeXText
@@ -666,72 +730,58 @@ begin
     Result := TeX_Replace_Special(WideText);
   if LineColor <> clDefault then
     Result := GetTeXTextFontColor(LineColor) + '{' + Result + '}';
-  if fsBold in Style then Result := '\textbf{' + Result + '}';
-  if fsItalic in Style then Result := '\textit{' + Result + '}';
+      //\strut
+  if fsBold in Style then
+    Result := '\textbf{' + Result + '}';
+  if fsItalic in Style then
+    Result := '\textit{' + Result + '}';
+//  Result := '\fboxsep0pt\framebox{' + Result + '}';
 end;
 
 function GetTeXTextMakebox0(
   const Height, ARot, UnitLength: TRealType;
-  const LineColor: TColor; const HJustification: THJustification;
-  const VJustification: TVJustification; const Style: TFontStyles;
-  const WideText: WideString; const TeXText: AnsiString): string;
+  const LineColor: TColor;
+  const HAlignment: THAlignment;
+  const Style: TFontStyles;
+  const WideText: WideString; const TeXText: AnsiString;
+  const FontSizeInTeX: Boolean):
+  string;
 var
   St: string;
 begin
-  Result := GetTeXTextFontSize(Height, UnitLength);
+  Result := GetTeXTextFontSize(Height, UnitLength, FontSizeInTeX);
   St := Get_TeXText(LineColor, Style, WideText, TeXText);
-  if VJustification <> jvBaseline then
-  begin
-    Result := Result + '\makebox(0,0)[';
-    case HJustification of
-      jhLeft: Result := Result + 'l';
-      jhCenter: Result := Result + '';
-      jhRight: Result := Result + 'r';
-    end;
-    case VJustification of
-      jvBottom: Result := Result + 'b';
-      jvCenter: Result := Result + '';
-      jvTop: Result := Result + 't';
-    end;
-    Result := Result + ']{' + St + '\strut}';
-  end
-  else
-  begin
-    if ARot <> 0 then Result := Result + '\smash{';
-    case HJustification of
-      jhLeft:
-        if ARot = 0 then
-          Result := Result + St
-        else
-          Result := Result + '\makebox[0pt][l]{' + St + '}';
-      jhCenter: Result := Result + '\makebox[0pt]{' + St + '}';
-      jhRight: Result := Result + '\makebox[0pt][r]{' + St + '}';
-    end;
-    if ARot <> 0 then Result := Result + '}';
+  if ARot <> 0 then Result := Result + '\smash{';
+  case HAlignment of
+    ahLeft:
+      if ARot = 0 then
+        Result := Result + St
+      else
+        Result := Result + '\makebox[0pt][l]{' + St +
+          '}';
+    ahCenter: Result := Result + '\makebox[0pt]{' + St +
+      '}';
+    ahRight: Result := Result + '\makebox[0pt][r]{' + St +
+      '}';
   end;
+  if ARot <> 0 then Result := Result + '}';
   if ARot = 0 then
   else
   begin
     Result :=
-      Format('\rotatebox{%.2f}{%s}', //\frame{} (\fbox{}-adds space)
+      Format('\rotatebox{%.2f}{%s}',
+                // (\fbox{}-adds space \frame{}?)
+                //\fboxsep0pt\framebox{
       [RadToDeg(ARot), Result]);
   end;
 end;
 
 procedure ShiftTeXTextPoint(var P: TPoint2D;
-  VJustification: TVJustification; Height, Rot: TRealType);
+  Height, Rot: TRealType);
 var
   D: TVector2D;
-  R: TRealType;
 begin
-  case VJustification of
-    jvBottom: R := (-0.1);
-    jvCenter: R := (-0.0);
-    jvTop: R := (+0.1);
-    jvBaseline: R := 0;
-  end;
-  //R := R - 0.03;
-  D := PolarVector(Height * R, Rot + Pi / 2);
+  D := PolarVector(0, Rot + Pi / 2);
   P := ShiftPoint(P, D);
 end;
 
@@ -762,9 +812,10 @@ end;
 procedure TDrawingSaver.WriteAll;
 var
   Magnif, PicScale0, Border0, LineWidth0, HatchingStep0,
-    DottedSize0, DashSize0: TRealType;
+    DottedSize0, DashSize0, ApproximationPrecision0: TRealType;
 begin
   if fDrawing2D = nil then Exit;
+  DecimalSeparator := '.'; // Ensure that DecimalSeparator is .!
   //Changing meaning of millimeters for output picture
   Magnif := fDrawing2D.PicMagnif;
   if Magnif <> 1 then
@@ -775,13 +826,21 @@ begin
     HatchingStep0 := fDrawing2D.HatchingStep;
     DottedSize0 := fDrawing2D.DottedSize;
     DashSize0 := fDrawing2D.DashSize;
+    ApproximationPrecision0
+      := fDrawing2D.ApproximationPrecision;
     fDrawing2D.PicScale := fDrawing2D.PicScale * Magnif;
-    if fDrawing2D.PicScale <= 0 then fDrawing2D.PicScale := 1;
+    if fDrawing2D.PicScale <= 0 then
+      fDrawing2D.PicScale := 1;
     fDrawing2D.Border := fDrawing2D.Border * Magnif;
-    fDrawing2D.LineWidthBase := fDrawing2D.LineWidthBase * Magnif;
-    fDrawing2D.HatchingStep := fDrawing2D.HatchingStep * Magnif;
-    fDrawing2D.DottedSize := fDrawing2D.DottedSize * Magnif;
+    fDrawing2D.LineWidthBase := fDrawing2D.LineWidthBase *
+      Magnif;
+    fDrawing2D.HatchingStep := fDrawing2D.HatchingStep *
+      Magnif;
+    fDrawing2D.DottedSize := fDrawing2D.DottedSize *
+      Magnif;
     fDrawing2D.DashSize := fDrawing2D.DashSize * Magnif;
+    fDrawing2D.ApproximationPrecision
+      := fDrawing2D.ApproximationPrecision * Magnif;
   end;
   WriteAll0;
   if Magnif <> 1 then
@@ -792,6 +851,8 @@ begin
     fDrawing2D.HatchingStep := HatchingStep0;
     fDrawing2D.DottedSize := DottedSize0;
     fDrawing2D.DashSize := DashSize0;
+    fDrawing2D.ApproximationPrecision
+      := ApproximationPrecision0;
   end;
 end;
 
@@ -834,16 +895,12 @@ begin
 end;
 
 procedure ExportToFile(const Drawing: TDrawing2D;
-  const FileName: string; const ExportFormat: ExportFormatKind);
+  const FileName: string; const ExportFormat:
+  ExportFormatKind);
 begin
   case ExportFormat of
     export_SVG:
-      begin
-//        StartTimer;
-        StoreToFile_Saver(Drawing,
-          FileName, T_SVG_Export {T_TikZ_Export});
-//        MessageBoxInfo(FloatToStr(GetTimer));
-      end;
+      StoreToFile_Saver(Drawing, FileName, T_SVG_Export);
     export_EMF:
       StoreToFile_EMF(Drawing, FileName);
     export_EPS:
@@ -877,6 +934,10 @@ begin
       StoreToFile_LaTeX_PDF(Drawing, FileName);
     export_latexcustom:
       StoreToFile_LaTeX_Custom(Drawing, FileName);
+    export_latexsrc:
+      StoreToFile_PreviewSource(Drawing, FileName, ltxview_Dvi);
+    export_pdflatexsrc:
+      StoreToFile_PreviewSource(Drawing, FileName, ltxview_Pdf);
   end;
 end;
 
@@ -903,15 +964,16 @@ begin
     (ExtRect.Right - ExtRect.Left) / FactorMM]);
 end;
 
-procedure StoreToFile_TpX0(const Drawing: TDrawing2D;
+function StoreToFile_TpX0(const Drawing: TDrawing2D;
   const FileName: string;
   AClass_TeX, AClass_PdfTeX: TDrawingSaverClass;
-  const DvipsFixBB: Boolean);
+  const DvipsFixBB: Boolean): Boolean;
 var
   Stream: TFileStream;
   ARect: TRect2D;
   PicWidth: TRealType;
-  procedure WriteAsClass(AClass: TDrawingSaverClass);
+  procedure WriteAsClass(
+    const AClass: TDrawingSaverClass);
   var
     Saver: TDrawingSaver;
   begin
@@ -933,11 +995,13 @@ var
     Stream.Write(ValueSt[1], Length(ValueSt));
   end;
 begin
+  Result := False;
   if (Drawing.TeXFigure = fig_floating)
     or (Drawing.TeXFigure = fig_wrap) then
   begin
     ARect := Drawing.DrawingExtension;
-    PicWidth := (ARect.Right - ARect.Left) * Drawing.PicScale
+    PicWidth := (ARect.Right - ARect.Left) *
+      Drawing.PicScale
       + Drawing.Border * 2;
   end;
   Stream := TFileStream.Create(FileName, fmCreate);
@@ -983,7 +1047,6 @@ begin
       WriteLnStream(Drawing.TeXPicPrologue + '%');
     if AClass_PdfTeX <> AClass_TeX then
     begin
-      //WriteLnStream('\ifx\pdftexversion\undefined');
       WriteLnStream('\ifpdf');
       WriteAsClass(AClass_PdfTeX);
       WriteLnStream('\else');
@@ -994,7 +1057,8 @@ begin
       WriteAsClass(AClass_TeX);
     if Drawing.TeXPicEpilogue <> '' then
       WriteLnStream(Drawing.TeXPicEpilogue + '%');
-    if (Drawing.Caption <> '') or (Drawing.FigLabel <> '') then
+    if (Drawing.Caption <> '') or (Drawing.FigLabel <> '')
+      then
     begin
       if Drawing.FigLabel <> '' then
       begin
@@ -1002,7 +1066,8 @@ begin
           [Drawing.FigLabel, EOL, Drawing.Caption]))
       end
       else
-        WriteLnStream(Format('\caption{%s}', [Drawing.Caption]));
+        WriteLnStream(Format('\caption{%s}',
+          [Drawing.Caption]));
     end;
     //WriteLnStream('\clearpage');
     case Drawing.TeXFigure of
@@ -1017,18 +1082,19 @@ begin
       and ((Drawing.TeXFormat <> tex_none)
       or (Drawing.PdfTeXFormat <> pdftex_none))
       and (Drawing.TeXFigure = fig_none)
-      then ;//WriteLnStream('\hfil');
+      then ; //WriteLnStream('\hfil');
     if //(Drawing.TeXFigure <> fig_none)      and
       (Drawing.TeXFigureEpilogue <> '') then
       WriteLnStream(Drawing.TeXFigureEpilogue);
   finally
     Stream.Free;
   end;
+  Result := FileExists(FileName);
 end;
 
-procedure StoreToFile_TpX(const Drawing: TDrawing2D;
+function StoreToFile_TpX(const Drawing: TDrawing2D;
   const FileName: string;
-  const DvipsFixBB: Boolean);
+  const DvipsFixBB: Boolean): Boolean;
 var
   AClass_TeX, AClass_PdfTeX: TDrawingSaverClass;
 begin
@@ -1076,7 +1142,7 @@ begin
   else
     AClass_PdfTeX := T_TeX_Picture_Export;
   end;
-  StoreToFile_TpX0(Drawing, FileName,
+  Result := StoreToFile_TpX0(Drawing, FileName,
     AClass_TeX, AClass_PdfTeX, DvipsFixBB);
 end;
 
@@ -1105,13 +1171,17 @@ begin
   fDevice.DottedSize := fDrawing2D.DottedSize;
   fDevice.DashSize := fDrawing2D.DashSize;
   fDevice.MiterLimit := fDrawing2D.MiterLimit;
+  fDevice.ApproximationPrecision
+    := fDrawing2D.ApproximationPrecision;
   fDevice.HatchingStep := fDrawing2D.HatchingStep;
-  fDevice.HatchingLineWidth := fDrawing2D.HatchingLineWidth;
+  fDevice.HatchingLineWidth :=
+    fDrawing2D.HatchingLineWidth;
   MeasureDrawing;
   //fDevice.W_MM := fW_MM;
   //fDevice.H_MM := fH_MM;
   fDevice.HatchingStep := fDrawing2D.HatchingStep;
-  fDevice.HatchingLineWidth := fDrawing2D.HatchingLineWidth;
+  fDevice.HatchingLineWidth :=
+    fDrawing2D.HatchingLineWidth;
   fDevice.T := GetTransform;
   fDevice.FactorMM := fFactorMM;
   fDevice.WriteHeader(fExtRect);
@@ -1132,17 +1202,13 @@ end;
 procedure T_Device_Export.WritePiece(Piece: TPiece;
   Obj: TPrimitive2D);
 begin
-  Obj.DeviceDrawPiece(Piece, IdentityTransf2D, Self.fDevice,
+  Obj.DeviceDrawPiece(Piece, IdentityTransf2D,
+    Self.fDevice,
     Rect2D(0, 0, 0, 0));
 end;
 
-procedure T_Device_Export.WriteContainer2D(Obj: TContainer2D);
-begin
-  Obj.DeviceDraw(IdentityTransf2D, Self.fDevice,
-    Rect2D(0, 0, 0, 0));
-end;
-
-procedure T_Device_Export.WriteRectangle2D(Obj: TRectangle2D);
+procedure T_Device_Export.WriteRectangle2D(Obj:
+  TRectangle2D);
 begin
   Obj.DeviceDraw(IdentityTransf2D, Self.fDevice,
     Rect2D(0, 0, 0, 0));
@@ -1160,7 +1226,8 @@ begin
     Rect2D(0, 0, 0, 0));
 end;
 
-procedure T_Device_Export.WriteCircular2D(Obj: TCircular2D);
+procedure T_Device_Export.WriteCircular2D(Obj:
+  TCircular2D);
 begin
   Obj.DeviceDraw(IdentityTransf2D, Self.fDevice,
     Rect2D(0, 0, 0, 0));
@@ -1172,12 +1239,55 @@ begin
     Rect2D(0, 0, 0, 0));
 end;
 
+procedure T_Device_Export.StartGroup2D(Obj: TGroup2D);
+begin
+  if Assigned(fDevice.OnStartGroup) then fDevice.OnStartGroup;
+end;
+
+procedure T_Device_Export.FinishGroup2D(Obj: TGroup2D);
+begin
+  if Assigned(fDevice.OnFinishGroup) then fDevice.OnFinishGroup;
+end;
+
+procedure T_Device_Export.WriteCompound2D(Obj: TCompound2D);
+begin
+  WritePieces(Obj);
+end;
+
+function T_Device_Export.StoreToFile(const FileName: string):
+  Boolean;
+begin
+  if fDevice is TFileDevice then
+  begin
+    (fDevice as TFileDevice).FileName := FileName;
+    (fDevice as TFileDevice).IncludePath
+      := fDrawing2D.IncludePath;
+  end;
+  inherited StoreToFile(FileName);
+end;
+
+procedure T_Device_Export.WriteToTpX(Stream: TStream;
+  const FileName: string);
+begin
+  if fDevice is TFileDevice then
+  begin
+    (fDevice as TFileDevice).FileName := FileName;
+    (fDevice as TFileDevice).IncludePath
+      := fDrawing2D.IncludePath;
+  end;
+  inherited WriteToTpX(Stream, FileName);
+end;
+
+
 { --================ T_TeX_Picture_Export ==================-- }
 
-constructor T_TeX_Picture_Export.Create(Drawing: TDrawing2D);
+constructor T_TeX_Picture_Export.Create(Drawing:
+  TDrawing2D);
 begin
   inherited Create(Drawing);
   fDevice := T_TeX_Picture_Device.Create;
+  (fDevice as T_TeX_Picture_Device).FontSizeInTeX :=
+    Drawing.FontSizeInTeX;
 end;
 
 destructor T_TeX_Picture_Export.Destroy;
@@ -1195,7 +1305,8 @@ procedure T_TeX_Picture_Export.WriteHeader;
 begin
   if fDrawing2D.PicScale = 0 then fDrawing2D.PicScale := 1;
   fFactorMM := 1 / fDrawing2D.PicScale;
-  (fDevice as T_TeX_Picture_Device).DvipsFixBB := fDvipsFixBB;
+  (fDevice as T_TeX_Picture_Device).DvipsFixBB :=
+    fDvipsFixBB;
   inherited WriteHeader;
 end;
 
@@ -1205,6 +1316,8 @@ constructor T_TikZ_Export.Create(Drawing: TDrawing2D);
 begin
   inherited Create(Drawing);
   fDevice := T_TikZ_Device.Create;
+  (fDevice as T_TikZ_Device).FontSizeInTeX :=
+    Drawing.FontSizeInTeX;
 end;
 
 destructor T_TikZ_Export.Destroy;
@@ -1232,6 +1345,8 @@ constructor T_PGF_Export.Create(Drawing: TDrawing2D);
 begin
   inherited Create(Drawing);
   fDevice := T_PGF_Device.Create;
+  (fDevice as T_PGF_Device).FontSizeInTeX :=
+    Drawing.FontSizeInTeX;
 end;
 
 destructor T_PGF_Export.Destroy;
@@ -1299,11 +1414,14 @@ end;
 
 { --================ T_PostScript_Export ==================-- }
 
-constructor T_PostScript_Export.Create(Drawing: TDrawing2D);
+constructor T_PostScript_Export.Create(Drawing:
+  TDrawing2D);
 begin
   inherited Create(Drawing);
   fDevice := TPostScriptDevice.Create(Drawing);
   // 2.83464567 pt per mm (Adobe pt = LaTeX bp)
+  (fDevice as TPostScriptDevice).FontSizeInTeX :=
+    Drawing.FontSizeInTeX;
 end;
 
 destructor T_PostScript_Export.Destroy;
@@ -1320,7 +1438,8 @@ begin
   Result[3, 1] := -fExtLeft * fFactorT;
   Result[1, 2] := 0;
   Result[2, 2] := fFactorT;
-  Result[3, 2] := -fExtBottom * fFactorT {fExtTop * fFactorT};
+  Result[3, 2] := -fExtBottom * fFactorT
+            {fExtTop * fFactorT};
 //  Result := inherited GetTransform;
 end;
 
@@ -1353,7 +1472,8 @@ begin
       [//fDrawing2D.PicWidth, fDrawing2D.PicHeight,
       fDrawing2D.IncludePath,
         ChangeFileExt(ExtractFileName(FileName), '')]));
-    for I := 0 to (fDevice as TPostScriptDevice).TextLabels.Count -
+    for I := 0 to (fDevice as
+      TPostScriptDevice).TextLabels.Count -
       1 do
       WriteLnStream('  ' + (fDevice as
         TPostScriptDevice).TextLabels[I]);
@@ -1365,7 +1485,8 @@ end;
 
 { --================ T_PostScript_Light_Export ==================-- }
 
-constructor T_PostScript_Light_Export.Create(Drawing: TDrawing2D);
+constructor T_PostScript_Light_Export.Create(Drawing:
+  TDrawing2D);
 begin
   inherited Create(Drawing);
   (fDevice as TPostScriptDevice).Light := True;
@@ -1382,17 +1503,14 @@ begin
       MessageBoxError('Can not delete PDF file')
     else
     begin
-// EpsToPdf script is no more used
-//      Result := FileExec(Format('%s "%s" --outfile="%s"',
-//        [EpsToPdfPath, EpsFileName, PdfFileName]), '', '',
-//        '' {GetTempDir}, True, True);
       // Use ghostscript directly to convert eps to pdf.
       // Eps should be prepared accordingly (page size, page origin)
       Result := FileExec(Format(
         '%s -dSAFER -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite' +
         ' -dAutoRotatePages=/None -sOutputFile="%s" "%s"',
-        [GhostscriptPath, PdfFileName, EpsFileName]), '', '',
-        GetTempDir, True, True);
+        [PrepareFilePath(GhostscriptPath),
+        PdfFileName, EpsFileName]), '', '',
+          GetTempDir, True, True);
 
       if not FileExists(PdfFileName) then
       begin
@@ -1407,10 +1525,11 @@ end;
 constructor T_EpsToPdf_Export.Create(Drawing: TDrawing2D);
 begin
   inherited Create(Drawing);
-  (fDevice as TPostScriptDevice).ForPdf := True;
+  (fDevice as TPostScriptDevice).ForPDF := True;
 end;
 
-function T_EpsToPdf_Export.StoreToFile(const FileName: string):
+function T_EpsToPdf_Export.StoreToFile(
+  const FileName: string):
   Boolean;
 var
   TempEPS: string;
@@ -1420,7 +1539,8 @@ begin
   Result := False;
   try
     Result := inherited StoreToFile(TempEPS);
-    if Result then Result := Run_EpsToPdf(TempEPS, FileName);
+    if Result then
+      Result := Run_EpsToPdf(TempEPS, FileName);
   finally
     Result := True;
     if Result then TryDeleteFile(TempEPS);
@@ -1429,11 +1549,12 @@ end;
 
 { --================ T_EpsToPdf_Light_Export ==================-- }
 
-constructor T_EpsToPdf_Light_Export.Create(Drawing: TDrawing2D);
+constructor T_EpsToPdf_Light_Export.Create(Drawing:
+  TDrawing2D);
 begin
   inherited Create(Drawing);
   (fDevice as TPostScriptDevice).Light := True;
-  (fDevice as TPostScriptDevice).ForPdf := True;
+  (fDevice as TPostScriptDevice).ForPDF := True;
 end;
 
 { --================ T_PSTricks_Export ==================-- }
@@ -1442,6 +1563,8 @@ constructor T_PSTricks_Export.Create(Drawing: TDrawing2D);
 begin
   inherited Create(Drawing);
   fDevice := T_PSTricks_Device.Create;
+  (fDevice as T_PSTricks_Device).FontSizeInTeX :=
+    Drawing.FontSizeInTeX;
 end;
 
 destructor T_PSTricks_Export.Destroy;
@@ -1471,6 +1594,7 @@ var
   TempDir, TempMP, TempMPS, TempMPLog: string;
 begin
   Result := False;
+  if not CheckFilePath(MetaPostPath, 'MetaPost') then Exit;
   TempDir := GetTempDir;
   TempMP := TempDir + '(pic)TpX.mp';
   TempMPS := ChangeFileExt(TempMP, '.0');
@@ -1483,8 +1607,8 @@ begin
     //if FileExists(FileName) then DeleteFile(PChar(FileName));
     //WinExec(PChar(MetaPostPath + ' "' + TempMP + '"'), 0);
     //Res := FileExec(MetaPostPath + ' "' + TempMP + '"',      '', '', '', False, True);
-    Result := FileExec(MetaPostPath +
-      ' -tex=latex -quiet "(pic)TpX.mp"', '', '',
+    Result := FileExec(PrepareFilePath(MetaPostPath) +
+      ' -tex=latex -interaction=batchmode "(pic)TpX.mp"', '', '',//-quiet
       TempDir, True, True);
 //    Result := FileExec(MetaPostPath + ' -tex=latex "' + TempMP + '"', '', '',
 //      '', True, True);
@@ -1520,6 +1644,8 @@ constructor T_MetaPost_Export.Create(Drawing: TDrawing2D);
 begin
   inherited Create(Drawing);
   fDevice := T_MetaPost_Device.Create(Drawing);
+  (fDevice as T_MetaPost_Device).FontSizeInTeX :=
+    Drawing.FontSizeInTeX;
 end;
 
 destructor T_MetaPost_Export.Destroy;
@@ -1544,7 +1670,8 @@ procedure T_MetaPost_Export.WriteToTpX(Stream: TStream;
   const FileName: string);
 begin
   fStream := nil;
-  if not StoreToFile_MPS(fDrawing2D, ChangeFileExt(FileName,
+  if not StoreToFile_MPS(fDrawing2D,
+    ChangeFileExt(FileName,
     '.mps'))
     then Exit;
   fStream := Stream;
@@ -1563,6 +1690,8 @@ constructor T_PDF_Export.Create(Drawing: TDrawing2D);
 begin
   inherited Create(Drawing);
   fDevice := TPdfDevice.Create(Drawing);
+  (fDevice as TPdfDevice).FontSizeInTeX :=
+    Drawing.FontSizeInTeX;
 end;
 
 destructor T_PDF_Export.Destroy;
@@ -1611,8 +1740,10 @@ begin
       [//fDrawing2D.PicWidth / 10, fDrawing2D.PicHeight / 10,
       fDrawing2D.IncludePath,
         ChangeFileExt(ExtractFileName(FileName), '')]));
-    for I := 0 to (fDevice as TPdfDevice).TextLabels.Count - 1 do
-      WriteLnStream('  ' + (fDevice as TPdfDevice).TextLabels[I]);
+    for I := 0 to (fDevice as TPdfDevice).TextLabels.Count
+      - 1 do
+      WriteLnStream('  ' + (fDevice as
+        TPdfDevice).TextLabels[I]);
     WriteLnStream('  \end{picture}%');
   finally
     fStream := nil;
@@ -1661,7 +1792,8 @@ begin
   inherited WriteHeader;
 end;
 
-function T_Bitmap0_Export.StoreToFile(const FileName: string):
+function T_Bitmap0_Export.StoreToFile(const FileName:
+  string):
   Boolean;
 begin
   WriteAll;
@@ -1859,7 +1991,8 @@ procedure T_EMF_Export.WriteToTpX(Stream: TStream;
 begin
   fStream := nil;
   //Drawing2D.SaveToFile_EMF(ChangeFileExt(FileName, '.emf'), 1);
-  StoreToFile_EMF(fDrawing2D, ChangeFileExt(FileName, '.emf'));
+  StoreToFile_EMF(fDrawing2D, ChangeFileExt(FileName,
+    '.emf'));
   fStream := Stream;
   try
     fFactorMM := 1;
@@ -1884,19 +2017,23 @@ end;
 function StoreToFile_LaTeX_EPS0(const Drawing: TDrawing2D;
   out TempEPS: string): Boolean;
 var
-  TempDvi: string;
+  TempDvi, EKey: string;
 begin
   Result := False;
-  Run_LaTeX_Temp(Drawing, ltxview_Dvi, TempDvi, True, True);
+  if not CheckFilePath(DviPsPath, 'DviPs') then Exit;
+  if not Run_LaTeX_Temp(Drawing, ltxview_Dvi, TempDvi, True,
+    True) then Exit;
   TempEPS := ChangeFileExt(TempDvi, '.eps');
   if not TryDeleteFile(TempEPS) then
   begin
     MessageBoxError('Can not delete EPS file');
     Exit;
   end;
-  FileExec(Format('%s -E "%s" -o "%s"',
-    [DviPsPath, ExtractFileName(TempDvi),
-    ExtractFileName(TempEPS)]),
+  if Drawing.TeXFormat in [tex_pgf, tex_tikz] then EKey := ''
+  else EKey := ' -E';
+  FileExec(Format('%s%s -o "%s" "%s"',
+    [PrepareFilePath(DviPsPath), EKey,
+    ExtractFileName(TempEPS), ExtractFileName(TempDvi)]),
       '', '', GetTempDir, True, True);
   if not FileExists(TempEPS) then
   begin
@@ -1911,7 +2048,8 @@ procedure StoreToFile_LaTeX_EPS(const Drawing: TDrawing2D;
 var
   TempEPS: string;
 begin
-  if not StoreToFile_LaTeX_EPS0(Drawing, TempEPS) then Exit;
+  if not StoreToFile_LaTeX_EPS0(Drawing, TempEPS) then
+    Exit;
   SysBasic.RenameFile(TempEPS, FileName);
 end;
 
@@ -1941,7 +2079,8 @@ var
           Bottom := StrToInt(CSV_Item(BB_St, 2));
           Right := StrToInt(CSV_Item(BB_St, 3));
           Top := StrToInt(CSV_Item(BB_St, 4));
-          Lines[I] := '%%' + Format('BoundingBox: 0 0 %d %d',
+          Lines[I] := '%%' +
+            Format('BoundingBox: 0 0 %d %d',
             [Right - Left, Top - Bottom]);
           Lines.Insert(I + 1, Format('%d %d translate',
             [-Left, -Bottom]));
@@ -1957,26 +2096,33 @@ var
     end;
   end;
 begin
-  if not StoreToFile_LaTeX_EPS0(Drawing, TempEPS) then Exit;
-//  Prepare Eps created by dvips with -E key for conversion with Ghostscript
+  if not StoreToFile_LaTeX_EPS0(Drawing, TempEPS) then
+    Exit;
+//  Prepare Eps created by dvips for conversion with Ghostscript
   Eps_Prepare(TempEPS);
   Run_EpsToPdf(TempEPS, FileName);
   TryDeleteFile(TempEPS);
 end;
 
-procedure LaTeX_Custom_Parse(var Device, Ext, Ext2: string);
+procedure LaTeX_Custom_Parse(var Device, Ext, Ext2:
+  string);
 const
   Devices: array[1..47] of string[8] =
-  ('bmp16', 'bmp16m', 'bmp256', 'bmp32b', 'bmpgray', 'bmpmono',
+  ('bmp16', 'bmp16m', 'bmp256', 'bmp32b', 'bmpgray',
+    'bmpmono',
     'bmpsep1', 'bmpsep8', 'psdcmyk', 'psdrgb',
     'epswrite', 'jpeggray', 'jpeg', 'pbmraw', 'pbm',
-    'pcx16', 'pcx24b', 'pcx256', 'pcxcmyk', 'pcxgray', 'pcxmono',
+    'pcx16', 'pcx24b', 'pcx256', 'pcxcmyk', 'pcxgray',
+    'pcxmono',
     'pdfwrite', 'pgmraw', 'pgm', 'pgnmraw', 'pgnm',
-    'png16', 'png16m', 'png256', 'pngalpha', 'pnggray', 'pngmono',
+    'png16', 'png16m', 'png256', 'pngalpha', 'pnggray',
+    'pngmono',
     'pnmraw', 'pnm', 'psmono', 'pswrite',
-    'tiff12nc', 'tiff24nc', 'tiff32nc', 'tiffcrle', 'tiffg32d',
+    'tiff12nc', 'tiff24nc', 'tiff32nc', 'tiffcrle',
+    'tiffg32d',
     'tiffg3',
-    'tiffg4', 'tiffgray', 'tifflzw', 'tiffpack', 'tiffsep');
+    'tiffg4', 'tiffgray', 'tifflzw', 'tiffpack',
+    'tiffsep');
   Extensions: array[1..13] of string[4] =
   ('bmp', 'psd', 'eps', 'jpeg', 'pbm', 'pcx',
     'pdf', 'pgm', 'pgnm', 'png', 'pnm', 'ps', 'tiff');
@@ -2005,13 +2151,15 @@ begin
   end;
 end;
 
-procedure StoreToFile_LaTeX_Custom(const Drawing: TDrawing2D;
-  const FileName: string);
+procedure StoreToFile_LaTeX_Custom(
+  const Drawing: TDrawing2D; const FileName: string);
 var
   TempEPS: string;
 begin
-  if not StoreToFile_LaTeX_EPS0(Drawing, TempEPS) then Exit;
-  GhostScriptConvert(TempEPS, GhostscriptCustomKeys, FileName);
+  if not StoreToFile_LaTeX_EPS0(Drawing, TempEPS) then
+    Exit;
+  GhostScriptConvert(TempEPS, GhostscriptCustomKeys,
+    FileName);
   //TryDeleteFile(TempEPS);
 end;
 
@@ -2027,7 +2175,8 @@ const
   ShortOpt: array[1..6] of Char =
   ('f', 'i', 'l', 'o', 'm', 'x');
   LongOpt: array[1..6] of ShortString =
-  ('file', 'texinput', 'texline', 'output', 'format', 'export');
+  ('file', 'texinput', 'texline', 'output', 'format',
+    'export');
 begin
   LineNumber := 1;
   FileName := '';
@@ -2044,7 +2193,8 @@ begin
         OptList[I] := ShortOpt[I] + '=' +
           OptList.Values[LongOpt[I]];
     FileName := OptList.Values['f'];
-    if FileName = '' then FileName := OptList.Values['$FileName'];
+    if FileName = '' then
+      FileName := OptList.Values['$FileName'];
     FileName := ExpandFileName(FileName);
     if OptList.IndexOfName('i') >= 0 then
       TeXFileName := OptList.Values['i'];
@@ -2053,7 +2203,8 @@ begin
       try
         LineNumber := StrToInt(OptList.Values['l']);
       except
-        MessageBoxError('Line number: ' + OptList.Values['l']);
+        MessageBoxError('Line number: ' +
+          OptList.Values['l']);
       end
     end;
     if OptList.IndexOfName('o') >= 0 then
@@ -2086,7 +2237,8 @@ begin
   OutputFormat1 := CSV_Item(OutputFormats, 1);
   OutputFormat2 := CSV_Item(OutputFormats, 2);
   if OutputFormat1 = '' then OutputFormat1 := 'none';
-  if OutputFormat2 = '' then OutputFormat2 := OutputFormat1;
+  if OutputFormat2 = '' then
+    OutputFormat2 := OutputFormat1;
   I := CSV_Find(TeXFormat_Choice, OutputFormat1);
   if I > 0 then
     ADrawing.TeXFormat := TeXFormatKind(I - 1);
@@ -2131,7 +2283,8 @@ begin
       Import_Metafile(ADrawing, FileName, nil)
     else if (Ext = '.svg') then
       Import_SVG(ADrawing, FileName)
-    else if (Ext = '.eps') or (Ext = '.ps') or (Ext = '.pdf') then
+    else if (Ext = '.eps') or (Ext = '.ps') or (Ext =
+      '.pdf') then
       Import_Eps(ADrawing, FileName)
     else
     begin
@@ -2149,8 +2302,10 @@ begin
     end;
     if ExportFormats <> '' then
     begin
-      if (OutputFile = '') or (OutputFile = '$Default') then
-        OutputFile := ChangeFileExt(FileName, '') + '-export';
+      if (OutputFile = '') or (OutputFile = '$Default')
+        then
+        OutputFile := ChangeFileExt(FileName, '') +
+          '-export';
       I := 1;
       repeat
         Ext := Trim(CSV_Item(ExportFormats, I));
@@ -2169,9 +2324,10 @@ begin
     else
     begin
       SetOutputFormats(OutputFormats, ADrawing);
-      if (OutputFile = '') or (OutputFile = '$Default') or (Ext =
-        '') then
+      if (OutputFile = '') or (OutputFile = '$Default') or
+        (Ext = '') then
         OutputFile := ChangeFileExt(FileName, '.TpX');
+      ADrawing.FileName := OutputFile;
       StoreToFile_TpX(ADrawing, OutputFile, False);
     end;
   finally
@@ -2204,15 +2360,17 @@ var
     if J > 0 then
       Delete(St, J, Length(St));
     J := Pos('\input{', St);
+    if J = 0 then J := Pos('\input ', St);
     if J <= 0 then Exit;
     Delete(St, 1, J + 6);
-    J := Pos('}', St);
+    J := Pos('.tpx', LowerCase(St));
     if J <= 0 then Exit;
-    Delete(St, J, Length(St));
-    if not AnsiContainsText(St, '.tpx') then Exit;
-    St := Trim(StringReplace(St, '/', '\', [rfReplaceAll]));
+    Delete(St, J + 4, Length(St));
+    St := Trim(StringReplace(St, '/', '\',
+      [rfReplaceAll]));
     IncludePath :=
-      StringReplace(ExtractFilePath(St), '\', '/', [rfReplaceAll]);
+      StringReplace(ExtractFilePath(St), '\', '/',
+      [rfReplaceAll]);
     if ExtractFileDrive(St) = '' then
       PicturePath := ExtractFilePath(TeXFileName) + St
     else
@@ -2243,5 +2401,7 @@ begin
   Lines.Free;
 end;
 
+initialization
+finalization
 end.
 

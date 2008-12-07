@@ -22,15 +22,18 @@ procedure DuplicateSelected(const ADrawing: TDrawing2D;
   const Shift: TVector2D);
 procedure GroupSelected(const ADrawing: TDrawing2D);
 procedure UngroupSelected(const ADrawing: TDrawing2D);
+procedure CompoundFromSelected(const ADrawing: TDrawing2D);
+procedure UncompoundSelected(const ADrawing: TDrawing2D);
 function ScaleStandard(const ADrawing: TDrawing2D;
   const ScaleStandardMaxWidth,
-  ScaleStandardMaxHeight: TRealType;
-  const DoNotify: Boolean): TTransf2D;
+  ScaleStandardMaxHeight: TRealType): TTransf2D;
 procedure ScalePhysical(const ADrawing: TDrawing2D;
   const S: TRealType; const DoNotify: Boolean);
 procedure ConvertSelected(const ADrawing: TDrawing2D;
   const DestClass: TPrimitive2DClass);
 procedure SimplifyPoly(const ADrawing: TDrawing2D;
+  const Aperture: TRealType);
+procedure SimplifyBezierPaths(const ADrawing: TDrawing2D;
   const Aperture: TRealType);
 procedure ConnectPaths(const ADrawing: TDrawing2D);
 procedure SelectedReversePoints(const ADrawing: TDrawing2D);
@@ -38,83 +41,111 @@ procedure MakeGrayscale(const ADrawing: TDrawing2D);
 procedure BreakPath(const ADrawing: TDrawing2D;
   const Obj0: TPrimitive2D;
   const P: TPoint2D; const Aperture, Precision: TRealType);
+procedure DeleteSmallObjects(const ADrawing: TDrawing2D;
+  const D: TRealType);
+
+type
+  // Type for procedures which change properties of a group of graphical objects
+  TChangeProc = procedure(
+    const Obj: TGraphicObject; PData: Pointer);
+
+    // Change properties of a group of graphical objects
+procedure ChangeObjects(const Objects: TGraphicObjList;
+  const ChangeProc: TChangeProc; const PData: Pointer);
+procedure ChangeSelected(const ADrawing: TDrawing2D;
+  const ChangeProc: TChangeProc; const PData: Pointer);
+procedure ChangeLineStyle(
+  const Obj: TGraphicObject; PData: Pointer);
+procedure ChangeLineColor(
+  const Obj: TGraphicObject; PData: Pointer);
+procedure ChangeHatching(
+  const Obj: TGraphicObject; PData: Pointer);
+procedure ChangeHatchColor(
+  const Obj: TGraphicObject; PData: Pointer);
+procedure ChangeFillColor(
+  const Obj: TGraphicObject; PData: Pointer);
+procedure ChangeLineWidth(
+  const Obj: TGraphicObject; PData: Pointer);
+procedure ChangeBeginArrowKind(
+  const Obj: TGraphicObject; PData: Pointer);
+procedure ChangeEndArrowKind(
+  const Obj: TGraphicObject; PData: Pointer);
+procedure ChangeArrowSizeFactor(
+  const Obj: TGraphicObject; PData: Pointer);
+
+type
+  TChangePropertiesKind = (chpLS, chpLC, chpLW,
+    chpHa, chpHC, chpFC, chpArr1, chpArr2, chpArrS,
+    chpFH, chpHJ, chpSK, chpSS);
+  TChangePropertiesSet = set of TChangePropertiesKind;
+
+procedure ChangeSelectedProperties(const ADrawing: TDrawing2D;
+  const ChangePropertiesSet: TChangePropertiesSet);
 
 implementation
 
-uses Math, ColorEtc;
+uses Math, ColorEtc, Devices;
 
 procedure BackwardForward(const ADrawing: TDrawing2D;
   const Mv: TMvBackwardForward);
 var
-  TmpIter: TGraphicObjIterator;
-  TmpIter2: TGraphicObjIterator;
   Position: TGraphicObject;
-  Current: TGraphicObject;
+  CurrentObj: TGraphicObject;
   MoveMore: Boolean;
 begin
   if ADrawing.SelectedObjects.Count = 0 then Exit;
   MoveMore := False;
-  TmpIter := ADrawing.SelectedObjects.GetIterator;
-  try
-    TmpIter2 :=
-      ADrawing.ObjectsIterator;
-    try
-      case Mv of
-        mv_Forward:
-          begin
-            TmpIter2.Search(TmpIter.Last.ID);
-            Position := TmpIter2.Next;
-            if Position = nil then
-              Position := TmpIter2.Last;
-            MoveMore := True;
-          end;
-        mv_Backward:
-          begin
-            TmpIter2.Search(TmpIter.Last.ID);
-            Position := TmpIter2.Prev;
-            if Position = nil then
-              Position := TmpIter2.First;
-          end;
-        mv_ToFront:
-          begin
-            MoveMore := True;
-            Position := TmpIter2.Last
-          end;
-        mv_ToBack: Position := TmpIter2.First;
-      end;
-    finally
-      TmpIter2.Free;
-    end;
-    Current := TmpIter.Last;
-    while Current <> nil do
-    begin
-      if Current.ID <> Position.ID then
+  case Mv of
+    mv_Forward:
       begin
-        ADrawing.MoveObject(Current.ID,
-          Position.ID);
-        if MoveMore then
-          ADrawing.MoveObject(Position.ID,
-            Current.ID);
+        ADrawing.ObjectList.FindObjByID(
+          ADrawing.SelectedObjects.LastObj.ID);
+        Position := ADrawing.ObjectList.NextObj;
+        if Position = nil then
+          Position := ADrawing.ObjectList.LastObj;
+        MoveMore := True;
       end;
-      Current := TmpIter.Prev;
+    mv_Backward:
+      begin
+        ADrawing.ObjectList.FindObjByID(
+          ADrawing.SelectedObjects.LastObj.ID);
+        Position := ADrawing.ObjectList.PrevObj;
+        if Position = nil then
+          Position := ADrawing.ObjectList.FirstObj;
+      end;
+    mv_ToFront:
+      begin
+        MoveMore := True;
+        Position := ADrawing.ObjectList.LastObj;
+      end;
+    mv_ToBack: Position := ADrawing.ObjectList.FirstObj;
+  end;
+  CurrentObj := ADrawing.SelectedObjects.LastObj;
+  while CurrentObj <> nil do
+  begin
+    if CurrentObj.ID <> Position.ID then
+    begin
+      ADrawing.MoveObject(CurrentObj.ID,
+        Position.ID);
+      if MoveMore then
+        ADrawing.MoveObject(Position.ID,
+          CurrentObj.ID);
     end;
-  finally
-    TmpIter.Free;
+    CurrentObj := ADrawing.SelectedObjects.PrevObj;
   end;
 end;
 
 procedure AlignSelected(const ADrawing: TDrawing2D;
   const Alignment: TObjectsAlignment);
 var
-  TmpIter: TGraphicObjIterator;
   Obj: TObject2D;
   R: TRect2D;
   A, TX, TY: TRealType;
 begin
   if ADrawing.SelectedObjects.Count = 0 then Exit;
-  TmpIter := ADrawing.SelectedObjects.GetIterator;
+  ADrawing.SelectedObjects.Lock;
   try
-    R := GetExtension0(ADrawing, TmpIter);
+    R := GetExtension0(ADrawing, ADrawing.SelectedObjects);
     case Alignment of
       align_Left: A := R.Left;
       align_HCenter: A := (R.Left + R.Right) / 2;
@@ -125,7 +156,7 @@ begin
     end;
     TX := 0;
     TY := 0;
-    Obj := TmpIter.First as TObject2D;
+    Obj := ADrawing.SelectedObjects.FirstObj as TObject2D;
     while Obj <> nil do
     begin
       R := Obj.BoundingBox;
@@ -138,10 +169,10 @@ begin
         align_Top: TY := A - R.Top;
       end;
       Obj.TransForm(Translate2D(TX, TY));
-      Obj := TmpIter.Next as TObject2D;
+      Obj := ADrawing.SelectedObjects.NextObj as TObject2D;
     end;
   finally
-    TmpIter.Free;
+    ADrawing.SelectedObjects.Unlock;
     ADrawing.NotifyChanged;
   end;
 end;
@@ -149,37 +180,35 @@ end;
 procedure DuplicateSelected(const ADrawing: TDrawing2D;
   const Shift: TVector2D);
 var
-  ExIter: TExclusiveGraphicObjIterator;
-  Current, NewObj: TGraphicObject;
+  Obj, NewObj: TGraphicObject;
   NewObjs: TGraphicObjList;
   T: TTransf2D;
   OnChangeDrawing0: TOnChangeDrawing;
 begin
   NewObjs := TGraphicObjList.Create;
-  NewObjs.FreeOnClear := False;
+  NewObjs.FreeOnDelete := False;
   OnChangeDrawing0 := ADrawing.OnChangeDrawing;
   ADrawing.OnChangeDrawing := nil;
   try
-    ExIter := ADrawing.SelectedObjects.GetExclusiveIterator;
+    ADrawing.SelectedObjects.Lock;
     try
-      Current := nil;
-      while ExIter.GetNext(Current) do
+      Obj := ADrawing.SelectedObjects.FirstObj;
+      while Obj <> nil do
       begin
         NewObj :=
-          TpXFindClassByName(Current.ClassName).CreateDupe(Current);
+          TpXFindClassByName(Obj.ClassName).CreateDupe(Obj);
         NewObjs.Add(NewObj);
+        Obj := ADrawing.SelectedObjects.NextObj;
+      end;
+      T := Translate2D(Shift.X * 5, Shift.Y * 5);
+      Obj := ADrawing.SelectedObjects.FirstObj;
+      while Obj <> nil do
+      begin
+        (Obj as TObject2D).TransForm(T);
+        Obj := ADrawing.SelectedObjects.NextObj;
       end;
     finally
-      ExIter.Free;
-    end;
-    T := Translate2D(Shift.X * 5, Shift.Y * 5);
-    ExIter := NewObjs.GetExclusiveIterator;
-    try
-      Current := nil;
-      while ExIter.GetNext(Current) do
-        (Current as TObject2D).TransForm(T);
-    finally
-      ExIter.Free;
+      ADrawing.SelectedObjects.Unlock;
     end;
     ADrawing.AddList(NewObjs);
     ADrawing.SelectionClear;
@@ -192,32 +221,24 @@ end;
 
 procedure GroupSelected(const ADrawing: TDrawing2D);
 var
-  Group: TContainer2D;
-  Iter: TGraphicObjIterator;
+  Group: TGroup2D;
   Obj: TGraphicObject;
-  ExIter: TExclusiveGraphicObjIterator;
   OnChangeDrawing0: TOnChangeDrawing;
 begin
   if ADrawing.SelectedObjects.Count <= 1 then Exit;
   OnChangeDrawing0 := ADrawing.OnChangeDrawing;
   ADrawing.OnChangeDrawing := nil;
   try
-    Group := TContainer2D.Create(-1);
+    Group := TGroup2D.Create(-1);
     try
-      ExIter := ADrawing.SelectedObjects.GetExclusiveIterator;
-      try
-        Obj := nil;
-        while ExIter.GetNext(Obj) do
-          Group.Objects.Add(
-            TpXFindClassByName(Obj.ClassName).CreateDupe(Obj));
-      finally
-        ExIter.Free;
+      Obj := ADrawing.SelectedObjects.FirstObj;
+      while Obj <> nil do
+      begin
+        Group.Objects.Add(TpXFindClassByName(
+          Obj.ClassName).CreateDupe(Obj));
+        Obj := ADrawing.SelectedObjects.NextObj;
       end;
-//    Group.Objects.AddFromList(ADrawing.SelectedObjects);
-      Iter := ADrawing.SelectedObjects.GetIterator;
-      Obj := Iter.Last;
-      Iter.Free;
-      ADrawing.SelectionRemove(Obj);
+      Obj := ADrawing.SelectedObjects.Pop;
       ADrawing.DeleteSelected;
       ADrawing.AddObject(-1, Group);
       ADrawing.MoveObject(Group.ID, Obj.ID);
@@ -233,14 +254,153 @@ begin
 end;
 
 procedure UngroupSelected(const ADrawing: TDrawing2D);
+var
+  Group: TGroup2D;
+  LastObj: TGraphicObject;
+  OnChangeDrawing0: TOnChangeDrawing;
+  TmpLst: TGraphicObjList;
 begin
+  OnChangeDrawing0 := ADrawing.OnChangeDrawing;
+  ADrawing.OnChangeDrawing := nil;
+  TmpLst := TGraphicObjList.Create;
+  TmpLst.FreeOnDelete := False;
+  try
+    ADrawing.SelectedObjects.Lock;
+    try
+      ADrawing.SelectedObjects.FirstObj;
+      while ADrawing.SelectedObjects.CurrentObj <> nil do
+      begin
+        if ADrawing.SelectedObjects.CurrentObj is TGroup2D then
+        begin
+          Group := ADrawing.SelectedObjects.CurrentObj as TGroup2D;
+          ADrawing.SelectedObjects.RemoveCurrent;
+          ADrawing.InsertList(Group.ID, Group.Objects);
+          TmpLst.AddFromList(Group.Objects);
+          Group.Objects.FreeOnDelete := False;
+          Group.Objects.Clear;
+          ADrawing.DeleteObject(Group.ID);
+        end
+        else
+          ADrawing.SelectedObjects.NextObj;
+      end;
+    finally
+      ADrawing.SelectedObjects.Unlock;
+    end;
+    ADrawing.SelectionAddList(TmpLst);
+  finally
+    TmpLst.Free;
+    ADrawing.OnChangeDrawing := OnChangeDrawing0;
+  end;
+  ADrawing.NotifyChanged;
+end;
 
+procedure CompoundFromSelected(const ADrawing: TDrawing2D);
+var
+  Compound: TCompound2D;
+  OnChangeDrawing0: TOnChangeDrawing;
+  Obj: TGraphicObject;
+  procedure ProcessList(ObjList: TGraphicObjList);
+  var
+    I: Integer;
+    Obj: TGraphicObject;
+    Prim: TPrimitive2D;
+    Group: TGroup2D;
+  begin
+    Obj := ObjList.FirstObj;
+    while Obj <> nil do
+    begin
+      if Obj is TPrimitive2D then
+      begin
+        Prim := Obj as TPrimitive2D;
+        Prim.Pieces.Clear;
+        Prim.FillPieces;
+        for I := 0 to Prim.Pieces.Count - 1 do
+          Compound.AddPiece(Prim.Pieces[I]);
+      end
+      else if Obj is TGroup2D then
+      begin
+        Group := Obj as TGroup2D;
+        // Recursion
+        ProcessList(Group.Objects);
+      end;
+      Obj := ObjList.NextObj;
+    end;
+  end;
+begin
+  if ADrawing.SelectedObjects.Count < 1 then Exit;
+  OnChangeDrawing0 := ADrawing.OnChangeDrawing;
+  ADrawing.OnChangeDrawing := nil;
+  try
+    Compound := TCompound2D.Create(-1);
+    Compound.Points.DisableEvents := True;
+    try
+      Compound.AssignProperties(
+        ADrawing.SelectedObjects.Peek);
+      Compound.Points.Clear;
+      ProcessList(ADrawing.SelectedObjects);
+      Obj := ADrawing.SelectedObjects.Pop;
+      ADrawing.DeleteSelected;
+      ADrawing.AddObject(-1, Compound);
+      ADrawing.MoveObject(Compound.ID, Obj.ID);
+      ADrawing.DeleteObject(Obj.ID);
+      ADrawing.SelectionAdd(Compound);
+    except
+      Compound.Free;
+    end;
+    Compound.Points.DisableEvents := False;
+  finally
+    ADrawing.OnChangeDrawing := OnChangeDrawing0;
+  end;
+  ADrawing.NotifyChanged;
+end;
+
+procedure UncompoundSelected(const ADrawing: TDrawing2D);
+var
+  Compound: TCompound2D;
+  LastObj: TGraphicObject;
+  OnChangeDrawing0: TOnChangeDrawing;
+  SelLst, CmpdLst: TGraphicObjList;
+begin
+  OnChangeDrawing0 := ADrawing.OnChangeDrawing;
+  ADrawing.OnChangeDrawing := nil;
+  SelLst := TGraphicObjList.Create;
+  SelLst.FreeOnDelete := False;
+  CmpdLst := TGraphicObjList.Create;
+  CmpdLst.FreeOnDelete := False;
+  try
+    ADrawing.SelectedObjects.Lock;
+    try
+      ADrawing.SelectedObjects.FirstObj;
+      while ADrawing.SelectedObjects.CurrentObj <> nil do
+      begin
+        if ADrawing.SelectedObjects.CurrentObj is TCompound2D then
+        begin
+          Compound := ADrawing.SelectedObjects.CurrentObj as
+            TCompound2D;
+          ADrawing.SelectedObjects.RemoveCurrent;
+          UncompoundCompound(Compound, CmpdLst);
+          ADrawing.InsertList(Compound.ID, CmpdLst);
+          SelLst.AddFromList(CmpdLst);
+          ADrawing.DeleteObject(Compound.ID);
+        end
+        else
+          ADrawing.SelectedObjects.NextObj;
+      end;
+    finally
+      ADrawing.SelectedObjects.Unlock;
+    end;
+    ADrawing.SelectionAddList(SelLst);
+  finally
+    SelLst.Free;
+    CmpdLst.Free;
+    ADrawing.OnChangeDrawing := OnChangeDrawing0;
+  end;
+  ADrawing.NotifyChanged;
 end;
 
 function ScaleStandard(const ADrawing: TDrawing2D;
   const ScaleStandardMaxWidth,
-  ScaleStandardMaxHeight: TRealType;
-  const DoNotify: Boolean): TTransf2D;
+  ScaleStandardMaxHeight: TRealType): TTransf2D;
 var
   Rect: TRect2D;
   ScaleX, ScaleY, Scale: TRealType;
@@ -254,7 +414,7 @@ begin
   ScaleY := ScaleStandardMaxHeight / (Rect.Top - Rect.Bottom);
   Scale := Min(ScaleX, ScaleY) / ADrawing.PicScale;
   Result := MultiplyTransform2D(Result, Scale2D(Scale, Scale));
-  ADrawing.TransformObjects([-1], Result, DoNotify);
+  ADrawing.ObjectList.TransForm(Result);
 end;
 
 procedure ScalePhysical(const ADrawing: TDrawing2D;
@@ -274,32 +434,30 @@ end;
 procedure ConvertSelected(const ADrawing: TDrawing2D;
   const DestClass: TPrimitive2DClass);
 var
-  ExIter, ExIter2: TExclusiveGraphicObjIterator;
   Current, NewObj: TGraphicObject;
   NewObjs: TGraphicObjList;
 begin
   NewObjs := TGraphicObjList.Create;
-  NewObjs.FreeOnClear := False;
+  NewObjs.FreeOnDelete := False;
   try
-    ExIter :=
-      ADrawing.SelectedObjects.GetExclusiveIterator;
-    ExIter2 :=
-      ADrawing.ObjectsExclusiveIterator;
+    ADrawing.SelectedObjects.Lock;
+    ADrawing.ObjectList.Lock;
     try
-      Current := nil;
-      while ExIter.GetNext(Current) do
+      Current := ADrawing.SelectedObjects.FirstObj;
+      while Current <> nil do
       begin
         NewObj := DestClass.Create(Current.ID);
         NewObj.Assign(Current);
-        ExIter.ReplaceDeleteCurrent(NewObj);
-        ExIter2.Search(Current.ID);
-        ExIter2.ReplaceDeleteCurrent(NewObj);
+        ADrawing.SelectedObjects.ReplaceDeleteCurrent(NewObj);
+        ADrawing.ObjectList.FindObjByID(Current.ID);
+        ADrawing.ObjectList.ReplaceDeleteCurrent(NewObj);
         NewObjs.Add(NewObj);
           //NewObj.ID := Current.ID;
+        Current := ADrawing.SelectedObjects.NextObj;
       end;
     finally
-      ExIter.Free;
-      ExIter2.Free;
+      ADrawing.SelectedObjects.Unlock;
+      ADrawing.ObjectList.Unlock;
     end;
   finally
     ADrawing.SelectionClear;
@@ -312,20 +470,17 @@ end;
 procedure SimplifyPoly(const ADrawing: TDrawing2D;
   const Aperture: TRealType);
 var
-  ExIter, ExIter2: TExclusiveGraphicObjIterator;
   Current, NewObj: TGraphicObject;
   NewObjs: TGraphicObjList;
 begin
   NewObjs := TGraphicObjList.Create;
-  NewObjs.FreeOnClear := False;
+  NewObjs.FreeOnDelete := False;
   try
-    ExIter :=
-      ADrawing.SelectedObjects.GetExclusiveIterator;
-    ExIter2 :=
-      ADrawing.ObjectsExclusiveIterator;
+    ADrawing.SelectedObjects.Lock;
+    ADrawing.ObjectList.Lock;
     try
-      Current := nil;
-      while ExIter.GetNext(Current) do
+      Current := ADrawing.SelectedObjects.FirstObj;
+      while Current <> nil do
       begin
         if Current is TPolyline2D0 then
         begin
@@ -337,16 +492,51 @@ begin
           Geometry.SimplifyPoly((Current as TPrimitive2D).Points,
             (NewObj as TPrimitive2D).Points,
             Aperture, Current is TPolygon2D);
-          ExIter.ReplaceDeleteCurrent(NewObj);
-          ExIter2.Search(Current.ID);
-          ExIter2.ReplaceDeleteCurrent(NewObj);
+          ADrawing.SelectedObjects.ReplaceDeleteCurrent(NewObj);
+          ADrawing.ObjectList.FindObjByID(Current.ID);
+          ADrawing.ObjectList.ReplaceDeleteCurrent(NewObj);
           NewObjs.Add(NewObj);
         end;
           //NewObj.ID := Current.ID;
+        Current := ADrawing.SelectedObjects.NextObj;
       end;
     finally
-      ExIter.Free;
-      ExIter2.Free;
+      ADrawing.SelectedObjects.Unlock;
+      ADrawing.ObjectList.Unlock;
+    end;
+  finally
+    ADrawing.SelectionClear;
+    ADrawing.SelectionAddList(NewObjs);
+    NewObjs.Free;
+    ADrawing.NotifyChanged;
+  end;
+end;
+
+procedure SimplifyBezierPaths(const ADrawing: TDrawing2D;
+  const Aperture: TRealType);
+var
+  Current: TGraphicObject;
+  NewObjs: TGraphicObjList;
+begin
+  NewObjs := TGraphicObjList.Create;
+  NewObjs.FreeOnDelete := False;
+  try
+    ADrawing.SelectedObjects.Lock;
+    try
+      Current := ADrawing.SelectedObjects.FirstObj;
+      while Current <> nil do
+      begin
+        if Current is TBezierPath2D0 then
+        begin
+          Geometry.SimplifyBezierPath(
+            (Current as TPrimitive2D).Points,
+            Aperture, Current is TClosedBezierPath2D);
+          NewObjs.Add(Current);
+        end;
+        Current := ADrawing.SelectedObjects.NextObj;
+      end;
+    finally
+      ADrawing.SelectedObjects.Unlock;
     end;
   finally
     ADrawing.SelectionClear;
@@ -358,9 +548,7 @@ end;
 
 procedure ConnectPaths(const ADrawing: TDrawing2D);
 var
-  Obj: TGraphicObject;
   Prim, Prim2: TPrimitive2D;
-  Iter: TGraphicObjIterator;
   TempList: TGraphicObjList;
   OnChangeDrawing: TOnChangeDrawing;
   TmpPP, PPP: TPointsSet2D;
@@ -377,6 +565,71 @@ var
     if Min(L10, L11) > Min(L00, L01) then PPP.ReversePoints;
     if Min(L00, L10) > Min(L01, L11) then TmpPP.ReversePoints;
   end;
+  procedure ProcessObj(const Obj: TGraphicObject);
+  begin
+    IsLinearObj := (Obj is TLine2D) or (Obj is TPolyline2D);
+    IsBezierObj := (Obj is TBezierPath2D)
+      or (Obj is TSmoothPath2D) or (Obj is TArc2D);
+    if not (IsLinearObj or IsBezierObj) then Exit;
+    if (Obj as TPrimitive2D).Points.Count = 0 then Exit;
+    if Prim = nil then // Initiate path
+    begin
+      if IsLinearObj then
+      begin
+        Prim := TPolyline2D.Create(-1);
+        Prim.Assign(Obj);
+        ADrawing.AddObject(-1, Prim);
+        ADrawing.MoveObject(Prim.ID, Obj.ID);
+        ADrawing.DeleteObject(Obj.ID);
+      end
+      else if IsBezierObj then
+      begin
+        Prim := TBezierPath2D.Create(Obj.ID);
+        Prim.Assign(Obj);
+        if not (Obj is TBezierPath2D) then
+          (Obj as TPrimitive2D).BezierPoints(Prim.Points);
+        ADrawing.AddObject(-1, Prim);
+        ADrawing.MoveObject(Prim.ID, Obj.ID);
+        ADrawing.DeleteObject(Obj.ID);
+      end;
+      Exit;
+    end;
+    // Change path type if necessary
+    if (Prim is TPolyline2D) and IsBezierObj then
+    begin
+      Prim2 := TBezierPath2D.Create(-1);
+      Prim2.Assign(Prim);
+      ADrawing.AddObject(-1, Prim2);
+      ADrawing.MoveObject(Prim2.ID, Prim.ID);
+      ADrawing.DeleteObject(Prim.ID);
+      Prim := Prim2;
+    end;
+    // Add to path
+    TmpPP.Clear;
+    PPP := Prim.Points;
+    if Prim is TBezierPath2D then
+    begin
+      (Obj as TPrimitive2D).BezierPoints(TmpPP);
+      CheckLengths;
+      if IsSamePoint2D(PPP[PPP.Count - 1], TmpPP[0])
+        then TmpPP.Delete(0)
+      else
+        PPP.AddPoints([
+          MixPoint(PPP[PPP.Count - 1], TmpPP[0], 0.25),
+            MixPoint(PPP[PPP.Count - 1], TmpPP[0], 0.75)]);
+      PPP.AppendPoints(TmpPP);
+      ADrawing.DeleteObject(Obj.ID);
+    end
+    else
+    begin
+      TmpPP.AppendPoints((Obj as TPrimitive2D).Points);
+      CheckLengths;
+      if IsSamePoint2D(PPP[PPP.Count - 1], TmpPP[0])
+        then TmpPP.Delete(0);
+      PPP.AppendPoints(TmpPP);
+      ADrawing.DeleteObject(Obj.ID);
+    end;
+  end;
 begin
   if ADrawing.SelectedObjects.Count = 0 then Exit;
   OnChangeDrawing := ADrawing.OnChangeDrawing;
@@ -384,78 +637,21 @@ begin
   TmpPP := TPointsSet2D.Create(0);
   try
     TempList := TGraphicObjList.Create;
-    TempList.FreeOnClear := False;
+    TempList.FreeOnDelete := False;
     TempList.AddFromList(ADrawing.SelectedObjects);
     ADrawing.SelectionClear;
-    Iter := TempList.GetExclusiveIterator;
+    TempList.Lock;
     try
       Prim := nil;
-      Obj := nil;
-      while Iter.GetNext(Obj) do
+      TempList.FirstObj;
+      while TempList.CurrentObj <> nil do
       begin
-        IsLinearObj := (Obj is TLine2D) or (Obj is TPolyline2D);
-        IsBezierObj := (Obj is TBezierPath2D) or (Obj is
-          TSmoothPath2D)
-          or (Obj is TArc2D);
-        if not (IsLinearObj or IsBezierObj) then Continue;
-        if (Obj as TPrimitive2D).Points.Count = 0 then Continue;
-        if Prim = nil then // Initiate path
-        begin
-          if IsLinearObj then
-          begin
-            Prim := TPolyline2D.Create(-1);
-            Prim.Assign(Obj);
-            ADrawing.AddObject(-1, Prim);
-            ADrawing.MoveObject(Prim.ID, Obj.ID);
-            ADrawing.DeleteObject(Obj.ID);
-          end
-          else if IsBezierObj then
-          begin
-            Prim := TBezierPath2D.Create(Obj.ID);
-            Prim.Assign(Obj);
-            if not (Obj is TBezierPath2D) then
-              (Obj as TPrimitive2D).BezierPoints(Prim.Points);
-            ADrawing.AddObject(-1, Prim);
-            ADrawing.MoveObject(Prim.ID, Obj.ID);
-            ADrawing.DeleteObject(Obj.ID);
-          end;
-          Continue;
-        end;
-    // Change path type if necessary
-        if (Prim is TPolyline2D) and IsBezierObj then
-        begin
-          Prim2 := TBezierPath2D.Create(-1);
-          Prim2.Assign(Prim);
-          ADrawing.AddObject(-1, Prim2);
-          ADrawing.MoveObject(Prim2.ID, Prim.ID);
-          ADrawing.DeleteObject(Prim.ID);
-          Prim := Prim2;
-        end;
-    // Add to path
-        TmpPP.Clear;
-        PPP := Prim.Points;
-        if Prim is TBezierPath2D then
-        begin
-          (Obj as TPrimitive2D).BezierPoints(TmpPP);
-          CheckLengths;
-          TmpPP.Delete(0);
-          PPP.AppendPoints(TmpPP);
-          ADrawing.DeleteObject(Obj.ID);
-        end
-        else
-        begin
-          TmpPP.AppendPoints((Obj as TPrimitive2D).Points);
-          if (TmpPP.Count > 0) and IsSamePoint2D(
-            PPP[PPP.Count - 1], TmpPP[0])
-            then TmpPP.Delete(0);
-          CheckLengths;
-          PPP.AppendPoints(TmpPP);
-          ADrawing.DeleteObject(Obj.ID);
-        end;
+        ProcessObj(TempList.CurrentObj);
+        TempList.NextObj;
       end;
       ADrawing.SelectionClear;
     finally
-      Iter.Free;
+      TempList.Unlock;
       TempList.Free;
       TmpPP.Free;
     end;
@@ -470,35 +666,28 @@ end;
 procedure SelectedReversePoints(const ADrawing: TDrawing2D);
 var
   Obj: TGraphicObject;
-  Iter: TGraphicObjIterator;
 begin
   if ADrawing.SelectedObjects.Count = 0 then Exit;
-  Iter := ADrawing.SelectedObjects.GetIterator;
-  try
-    Obj := nil;
-    while Iter.GetNext(Obj) do
-    begin
-      if Obj is TPrimitive2D then
-        (Obj as TPrimitive2D).ReversePoints;
-    end;
-  finally
-    Iter.Free;
-    ADrawing.NotifyChanged;
+  Obj := ADrawing.SelectedObjects.FirstObj;
+  while Obj <> nil do
+  begin
+    if Obj is TPrimitive2D then
+      (Obj as TPrimitive2D).ReversePoints;
+    Obj := ADrawing.SelectedObjects.NextObj;
   end;
+  ADrawing.NotifyChanged;
 end;
 
 procedure MakeGrayscale(const ADrawing: TDrawing2D);
 var
-  Obj: TGraphicObject;
-  Iter: TGraphicObjIterator;
-begin
-  if ADrawing.SelectedObjects.Count = 0 then
-    Iter := ADrawing.ObjectsIterator
-  else
-    Iter := ADrawing.SelectedObjects.GetIterator;
-  try
-    Obj := nil;
-    while Iter.GetNext(Obj) do
+  Objects: TGraphicObjList;
+  procedure Convert(const Objects: TGraphicObjList);
+  var
+    Obj: TGraphicObject;
+  begin
+    Obj := Objects.FirstObj;
+    while Obj <> nil do
+    begin
       if Obj is TPrimitive2D then
         with Obj as TPrimitive2D do
         begin
@@ -508,9 +697,22 @@ begin
             HatchColor := GrayScale(HatchColor);
           if FillColor <> clDefault then
             FillColor := GrayScale(FillColor);
-        end;
+        end
+      else if Obj is TGroup2D then
+        Convert((Obj as TGroup2D).Objects);
+      Obj := Objects.NextObj;
+    end;
+  end;
+begin
+  if ADrawing.SelectedObjects.Count = 0 then
+    Objects := ADrawing.ObjectList
+  else
+    Objects := ADrawing.SelectedObjects;
+  Objects.Lock;
+  try
+    Convert(Objects);
   finally
-    Iter.Free;
+    Objects.Unlock;
     ADrawing.NotifyChanged;
   end;
 end;
@@ -546,6 +748,237 @@ begin
     ADrawing.OnChangeDrawing := OnChangeDrawing;
     ADrawing.NotifyChanged;
   end;
+end;
+
+procedure DeleteSmallObjects(const ADrawing: TDrawing2D;
+  const D: TRealType);
+var
+  Current: TGraphicObject;
+  R: TRect2D;
+  LeftObjs: TGraphicObjList;
+  OnChangeDrawing0: TOnChangeDrawing;
+  N: Integer;
+begin
+  if D <= 0 then Exit;
+  LeftObjs := TGraphicObjList.Create;
+  LeftObjs.FreeOnDelete := False;
+  OnChangeDrawing0 := ADrawing.OnChangeDrawing;
+  ADrawing.OnChangeDrawing := nil;
+  N := 0;
+  try
+    ADrawing.SelectedObjects.Lock;
+    try
+      Current := ADrawing.SelectedObjects.FirstObj;
+      while Current <> nil do
+      begin
+        if Current is TObject2D then
+        begin
+          R := (Current as TObject2D).BoundingBox;
+          if ((R.Right - R.Left) < D)
+            and ((R.Top - R.Bottom) < D) then
+          begin
+            Inc(N);
+            ADrawing.DeleteObject(Current.ID)
+          end
+          else LeftObjs.Add(Current);
+        end
+        else LeftObjs.Add(Current);
+        Current := ADrawing.SelectedObjects.NextObj;
+      end;
+    finally
+      ADrawing.SelectedObjects.Unlock;
+    end;
+  finally
+    if N > 0 then
+    begin
+      ADrawing.SelectedObjects.Clear;
+      ADrawing.SelectionAddList(LeftObjs);
+    end;
+    LeftObjs.Free;
+    ADrawing.OnChangeDrawing := OnChangeDrawing0;
+    if N > 0 then
+      ADrawing.NotifyChanged;
+  end;
+end;
+
+// ============ ChangeObjects procedures
+
+procedure ChangeObjects(const Objects: TGraphicObjList;
+  const ChangeProc: TChangeProc; const PData: Pointer);
+  procedure ProcessList(const Objects: TGraphicObjList);
+  var
+    Obj: TGraphicObject;
+  begin
+    Obj := Objects.FirstObj;
+    while Assigned(Obj) do
+    begin
+      if Obj is TGroup2D
+        then ProcessList((Obj as TGroup2D).Objects)
+      else ChangeProc(Obj, PData);
+      Obj := Objects.NextObj;
+    end;
+  end;
+begin
+  Objects.Lock;
+  try
+    ProcessList(Objects);
+  finally
+    Objects.Unlock;
+  end;
+end;
+
+procedure ChangeSelected(const ADrawing: TDrawing2D;
+  const ChangeProc: TChangeProc; const PData: Pointer);
+begin
+  ChangeObjects(ADrawing.SelectedObjects, ChangeProc, PData);
+      //Obj.UpdateExtension(Self);
+  ADrawing.NotifyChanged;
+end;
+
+procedure UpdateExtension(const Obj: TGraphicObject; PData:
+  Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).UpdateExtension(nil);
+end;
+
+procedure ChangeLineStyle(const Obj: TGraphicObject; PData:
+  Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).LineStyle := TLineStyle(PData^);
+end;
+
+procedure ChangeLineColor(const Obj: TGraphicObject;
+  PData: Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).LineColor := TColor(PData^);
+end;
+
+procedure ChangeHatching(const Obj: TGraphicObject; PData:
+  Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).Hatching := THatching(PData^);
+end;
+
+
+procedure ChangeHatchColor(const Obj: TGraphicObject;
+  PData: Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).HatchColor := TColor(PData^);
+end;
+
+procedure ChangeFillColor(const Obj: TGraphicObject;
+  PData: Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).FillColor := TColor(PData^);
+end;
+
+procedure ChangeLineWidth(const Obj: TGraphicObject;
+  PData: Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).LineWidth := TRealType(PData^);
+end;
+
+procedure ChangeBeginArrowKind(const Obj: TGraphicObject;
+  PData: Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).BeginArrowKind := TArrowKind(PData^);
+end;
+
+procedure ChangeEndArrowKind(const Obj: TGraphicObject;
+  PData: Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).EndArrowKind := TArrowKind(PData^);
+end;
+
+procedure ChangeArrowSizeFactor(
+  const Obj: TGraphicObject; PData: Pointer);
+begin
+  if Obj is TPrimitive2D then
+    (Obj as TPrimitive2D).ArrowSizeFactor := TRealType(PData^);
+end;
+
+procedure ChangeFontHeight(const Obj: TGraphicObject;
+  PData: Pointer);
+begin
+  if Obj is TText2D then
+    (Obj as TText2D).Height := TRealType(PData^);
+end;
+
+procedure ChangeHAlignment(const Obj: TGraphicObject;
+  PData: Pointer);
+begin
+  if Obj is TText2D then
+    (Obj as TText2D).HAlignment := THAlignment(PData^);
+end;
+
+procedure ChangeStarKind(const Obj: TGraphicObject;
+  PData: Pointer);
+begin
+  if Obj is TStar2D then
+    (Obj as TStar2D).StarKind := TStarKind(PData^);
+end;
+
+procedure ChangeStarSizeFactor(const Obj: TGraphicObject;
+  PData: Pointer);
+begin
+  if Obj is TStar2D then
+    (Obj as TStar2D).StarSizeFactor := TRealType(PData^);
+end;
+
+procedure ChangeSelectedProperties(const ADrawing: TDrawing2D;
+  const ChangePropertiesSet: TChangePropertiesSet);
+begin
+  if chpLS in ChangePropertiesSet then
+    ChangeObjects(ADrawing.SelectedObjects,
+      ChangeLineStyle, @ADrawing.New_LineStyle);
+  if chpLC in ChangePropertiesSet then
+    ChangeObjects(ADrawing.SelectedObjects,
+      ChangeLineColor, @ADrawing.New_LineColor);
+  if chpLW in ChangePropertiesSet then
+    ChangeObjects(ADrawing.SelectedObjects,
+      ChangeLineWidth, @ADrawing.New_LineWidth);
+  if chpHa in ChangePropertiesSet then
+    ChangeObjects(ADrawing.SelectedObjects,
+      ChangeHatching, @ADrawing.New_Hatching);
+  if chpHC in ChangePropertiesSet then
+    ChangeObjects(ADrawing.SelectedObjects,
+      ChangeHatchColor, @ADrawing.New_HatchColor);
+  if chpFC in ChangePropertiesSet then
+    ChangeObjects(ADrawing.SelectedObjects,
+      ChangeFillColor, @ADrawing.New_FillColor);
+  if chpArr1 in ChangePropertiesSet then
+    ChangeObjects(ADrawing.SelectedObjects,
+      ChangeBeginArrowKind, @ADrawing.New_Arr1);
+  if chpArr2 in ChangePropertiesSet then
+    ChangeObjects(ADrawing.SelectedObjects,
+      ChangeEndArrowKind, @ADrawing.New_Arr2);
+  if chpArrS in ChangePropertiesSet then
+    ChangeObjects(ADrawing.SelectedObjects,
+      ChangeArrowSizeFactor, @ADrawing.New_ArrSizeFactor);
+  if chpFH in ChangePropertiesSet then
+    ChangeObjects(ADrawing.SelectedObjects,
+      ChangeFontHeight, @ADrawing.New_FontHeight);
+  if chpHJ in ChangePropertiesSet then
+    ChangeObjects(ADrawing.SelectedObjects,
+      ChangeHAlignment, @ADrawing.New_HAlignment);
+  if chpSK in ChangePropertiesSet then
+    ChangeObjects(ADrawing.SelectedObjects,
+      ChangeStarKind, @ADrawing.New_StarKind);
+  if chpSS in ChangePropertiesSet then
+    ChangeObjects(ADrawing.SelectedObjects,
+      ChangeStarSizeFactor, @ADrawing.New_StarSizeFactor);
+  ChangeObjects(ADrawing.SelectedObjects,
+    UpdateExtension, nil);
+  ADrawing.NotifyChanged;
 end;
 
 end.

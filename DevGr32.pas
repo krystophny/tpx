@@ -33,11 +33,16 @@ type
       override;
     procedure RotText(P: TPoint2D; H, ARot: TRealType;
       WideText: WideString; TeXText: AnsiString;
-      const HJustification: THJustification;
-      const VJustification: TVJustification;
+      const HAlignment: THAlignment;
       const LineColor: TColor;
       const FaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
+    procedure Bitmap(P: TPoint2D; W, H: TRealType;
+      const KeepAspectRatio: Boolean; BitmapEntry: TObject);
+    procedure GenPath(const GP: TGenericPath;
+      const LineColor, HatchColor, FillColor: TColor;
+      const LineStyle: TLineStyle; const LineWidth: TRealType;
+      const Hatching: THatching; const Transf: TTransf2D);
   public
     DevEOL: string;
     constructor Create(Drawing: TDrawing2D);
@@ -59,7 +64,7 @@ uses ColorEtc, SysBasic,
 {$IFDEF VER140}
   pngimage, Gr32Add,
 {$ENDIF}
-  Math, DateUtils;
+  Math, DateUtils, Types, Bitmaps;
 
 function DashedOutline(const SD1, SD2: Single;
   const Polygon: TPolygon32): TPolygon32;
@@ -143,6 +148,8 @@ begin
   fDrawing2D := Drawing;
   fDisjointFill := True;
   OnRotText := RotText;
+  OnBitmap := Bitmap;
+  OnGenPath := GenPath;
   fHasNativeHatching := False;
   fBitmap := TBitmap32.Create;
   fPolygon := TPolygon32.Create;
@@ -268,7 +275,8 @@ begin
         TmpPoly := DashedOutline(fDashSize * 2 * fFactorMM,
           fDashSize * fFactorMM, fPolygon);
       liDotted:
-        TmpPoly := DashedOutline(fLineWidthBase * 2 * fFactorMM,
+        TmpPoly := DashedOutline(fLineWidthBase * LineWidth *
+          fFactorMM,
           fDottedSize * fFactorMM, fPolygon)
     end;
     W := fLineWidthBase * LineWidth * fFactorMM;
@@ -289,8 +297,7 @@ end;
 procedure TGr32Device.RotText(
   P: TPoint2D; H, ARot: TRealType;
   WideText: WideString; TeXText: AnsiString;
-  const HJustification: THJustification;
-  const VJustification: TVJustification;
+  const HAlignment: THAlignment;
   const LineColor: TColor;
   const FaceName: AnsiString;
   const Charset: TFontCharSet; const Style: TFontStyles);
@@ -308,8 +315,66 @@ begin
     Round(P.X), Round(P.Y), WideText, 2 {0-4},
     Color32(fBitmap.Font.Color), FaceName, Round(FontH),
     fsBold in Style, fsItalic in Style, Charset,
-    Ord(HJustification), Ord(VJustification),
+    Ord(HAlignment), 
     Round(RadToDeg(ARot) * 10));
+end;
+
+procedure TGr32Device.Bitmap(P: TPoint2D; W, H: TRealType;
+  const KeepAspectRatio: Boolean; BitmapEntry: TObject);
+var
+  DstRect, SrcRect: TRect;
+  Src: TBitmap32;
+begin
+  Src := TBitmap32.Create;
+  try
+    Src.Assign((BitmapEntry as TBitmapEntry).Bitmap);
+    SrcRect := Rect(0, 0, Src.Width, Src.Height);
+    DstRect := Rect(Round(P.X), Round(P.Y - H),
+      Round(P.X + W), Round(P.Y));
+    fBitmap.Draw(DstRect, SrcRect, Src);
+  finally
+    Src.Free;
+  end;
+end;
+
+procedure TGr32Device.GenPath(const GP: TGenericPath;
+  const LineColor, HatchColor, FillColor: TColor;
+  const LineStyle: TLineStyle; const LineWidth: TRealType;
+  const Hatching: THatching; const Transf: TTransf2D);
+var
+  PP: TPointsSet2D;
+  LinGP: TGenericPath;
+  Kind: TPathItemKind;
+  StartP, CurrP, P1, P2, P3: TPoint2D;
+begin
+  PP := TPointsSet2D.Create(0);
+  LinGP := TGenericPath.Create(PP);
+  try
+    GP.Linearize(LinGP, fApproximationPrecision);
+    LinGP.StartIterations;
+    while LinGP.GetNext(Kind, P1, P2, P3) do
+      case Kind of
+        pik_MoveTo:
+          begin
+
+            StartP := P1;
+            CurrP := P1;
+          end;
+        pik_LineTo:
+          begin
+
+            CurrP := P1;
+          end;
+        pik_Close:
+          begin
+
+            CurrP := StartP;
+          end;
+      end;
+  finally
+    PP.Free;
+    LinGP.Free;
+  end;
 end;
 
 function TGr32Device.StoreToFileBMP(const FileName: string):

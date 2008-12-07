@@ -31,7 +31,6 @@ type
     ComboBox1: TComboBox;
     ComboBox2: TComboBox;
     RadioGroup1: TRadioGroup;
-    RadioGroup2: TRadioGroup;
     VoidSheet: TTabSheet;
     LabeledEdit3: TLabeledEdit;
     ComboBox3: TComboBox;
@@ -80,6 +79,10 @@ type
     ComboBox9: TComboBox;
     Label5: TLabel;
     Edit1: TEdit;
+    BitmapSheet: TTabSheet;
+    ImageLinkEdit: TEdit;
+    ImageLinkLabel: TLabel;
+    KeepAspectCheck: TCheckBox;
     procedure FormShow(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure ColorBox_DrawItem(Control: TWinControl; Index:
@@ -109,7 +112,7 @@ var
 
 implementation
 
-uses ColorEtc, Table, Geometry, Devices;
+uses ColorEtc, Table, Geometry, Devices, Modify;
 
 {$IFDEF VER140}
 {$R *.dfm}
@@ -129,47 +132,78 @@ end;
 procedure TPropertiesForm.FormShow(Sender: TObject);
 var
   I: Integer;
+  procedure SetBasicProperties(Prim: TPrimitive2D);
+  begin
+    with Prim do
+    begin
+      ComboBox1.ItemIndex := Ord(LineStyle);
+      ComboBox2.ItemIndex := Ord(Hatching);
+      ColorBoxSet(ComboBox3, LineColor);
+      ColorBoxSet(ComboBox4, HatchColor);
+      ColorBoxSet(ComboBox5, FillColor);
+      ComboBox6.Text := Format('%.5g', [LineWidth]);
+      ComboBox8.ItemIndex := Ord(BeginArrowKind);
+      ComboBox9.ItemIndex := Ord(EndArrowKind);
+      Edit1.Text := FloatToStr(ArrowSizeFactor);
+    end;
+  end;
 begin
-  if not (PObject is TPrimitive2D) then Exit;
-  Caption := (PObject as TPrimitive2D).Name;
-  ComboBox1.ItemIndex := Ord((PObject as TPrimitive2D).LineStyle);
-  ComboBox2.ItemIndex := Ord((PObject as TPrimitive2D).Hatching);
-  ColorBoxSet(ComboBox3, (PObject as TPrimitive2D).LineColor);
-  ColorBoxSet(ComboBox4, (PObject as TPrimitive2D).HatchColor);
-  ColorBoxSet(ComboBox5, (PObject as TPrimitive2D).FillColor);
-  ComboBox6.Text := Format('%.5g',
-    [(PObject as TPrimitive2D).LineWidth]);
+  if PObject is TPrimitive2D then
+    with PObject as TPrimitive2D do
+    begin
+      Caption := (PObject as TPrimitive2D).Name;
+      SetBasicProperties(PObject as TPrimitive2D);
+    end;
   //PropPages.TabHeight := 1;
 {$IFDEF VER140}
   for I := 0 to PropPages.PageCount - 1 do
     PropPages.Pages[I].TabVisible := False;
 {$ENDIF}
   Panel3.Visible := False;
-  if PObject is TText2D then
+  if PObject is TGroup2D then
+  begin
+    Caption := 'Group';
+    if (PObject as TGroup2D).Objects.FirstObj
+      is TPrimitive2D then
+      SetBasicProperties(
+        (PObject as TGroup2D).Objects.CurrentObj as TPrimitive2D)
+    else
+    begin
+      ComboBox1.ItemIndex := Ord(liSolid);
+      ComboBox2.ItemIndex := Ord(haNone);
+      ColorBoxSet(ComboBox3, clDefault);
+      ColorBoxSet(ComboBox4, clDefault);
+      ColorBoxSet(ComboBox5, clDefault);
+      ComboBox6.Text := '1';
+      ArrowsPanel.Visible := True;
+      ComboBox8.ItemIndex := Ord(arrNone);
+      ComboBox9.ItemIndex := Ord(arrNone);
+      Edit1.Text := '1';
+    end;
+    PropPages.ActivePage := VoidSheet;
+    Panel3.Visible := True;
+    Exit;
+  end
+  else if PObject is TText2D then
     with PObject as TText2D do
     begin
       LabeledEdit1.Text := Text;
       LabeledEdit3.Text := TeXText;
       LabeledEdit2.Text := Format('%.5g', [Height]);
       LabeledEdit4.Text := Format('%.6g', [RadToDeg(Rot)]);
-      RadioGroup1.ItemIndex := Ord(HJustification);
-      RadioGroup2.ItemIndex := Ord(VJustification);
+      RadioGroup1.ItemIndex := Ord(HAlignment);
       PropPages.ActivePage := TextSheet;
       FontCheckBox.Checked := Font.Name <> ' ';
       Button4.Enabled := FontCheckBox.Checked;
     end
   else if (PObject is TLine2D) or (PObject is TArc2D)
     or (PObject is TPolyline2D) or (PObject is TSmoothPath2D)
-    or (PObject is TBezierPath2D) then
-    with PObject as TPrimitive2D do
-    begin
-      ArrowsPanel.Visible := True;
-      ComboBox8.ItemIndex := Ord(BeginArrowKind);
-      ComboBox9.ItemIndex := Ord(EndArrowKind);
-      Edit1.Text := FloatToStr(ArrowSizeFactor);
-      Panel3.Visible := True;
-      PropPages.ActivePage := VoidSheet;
-    end
+    or (PObject is TBezierPath2D) or (PObject is TCompound2D) then
+  begin
+    ArrowsPanel.Visible := True;
+    Panel3.Visible := True;
+    PropPages.ActivePage := VoidSheet;
+  end
   else if PObject is TStar2D then
     with PObject as TStar2D do
     begin
@@ -192,8 +226,40 @@ begin
       LabeledEdit8.Text := Format('%.5g', [RY]);
       PropPages.ActivePage := RectSheet;
     end
+  else if PObject is TBitmap2D then
+    with PObject as TBitmap2D do
+    begin
+      ImageLinkEdit.Text := BitmapEntry.ImageLink;
+      KeepAspectCheck.Checked := KeepAspectRatio;
+      PropPages.ActivePage := BitmapSheet;
+    end
   else
     PropPages.ActivePage := VoidSheet;
+end;
+
+procedure ChangeGroupProperties(
+  const Group: TGroup2D;
+  LineStyle: TLineStyle; LineColor: TColor;
+  LineWidth: TRealType;
+  Hatching: THatching; HatchColor: TColor;
+  FillColor: TColor;
+  BeginArrowKind, EndArrowKind: TArrowKind;
+  ArrowSizeFactor: TRealType);
+var
+  Drawing: TDrawing2D;
+begin
+  Drawing := Group.ParentDrawing as TDrawing2D;
+  ChangeObjects(Group.Objects, ChangeLineStyle, @LineStyle);
+  ChangeObjects(Group.Objects, ChangeLineColor, @LineColor);
+  ChangeObjects(Group.Objects, ChangeLineWidth, @LineWidth);
+  ChangeObjects(Group.Objects, ChangeHatching, @Hatching);
+  ChangeObjects(Group.Objects, ChangeHatchColor, @HatchColor);
+  ChangeObjects(Group.Objects, ChangeFillColor, @FillColor);
+  ChangeObjects(Group.Objects, ChangeBeginArrowKind,
+    @BeginArrowKind);
+  ChangeObjects(Group.Objects, ChangeEndArrowKind, @EndArrowKind);
+  ChangeObjects(Group.Objects, ChangeArrowSizeFactor,
+    @ArrowSizeFactor);
 end;
 
 procedure TPropertiesForm.FormCloseQuery(Sender: TObject;
@@ -201,7 +267,20 @@ procedure TPropertiesForm.FormCloseQuery(Sender: TObject;
 var
   I: Integer;
 begin
+  if not (PObject is TPrimitive2D) then Panel2.Enabled := True;
   if ModalResult <> mrOK then Exit;
+  if PObject is TGroup2D then
+  begin
+    ChangeGroupProperties(PObject as TGroup2D,
+      TLineStyle(ComboBox1.ItemIndex), ColorBoxGet(ComboBox3),
+      StrToFloat(ComboBox6.Text),
+      THatching(ComboBox2.ItemIndex), ColorBoxGet(ComboBox4),
+      ColorBoxGet(ComboBox5),
+      TArrowKind(ComboBox8.ItemIndex),
+      TArrowKind(ComboBox9.ItemIndex),
+      StrToRealType(Edit1.Text, 1));
+    Exit;
+  end;
   (PObject as TPrimitive2D).LineStyle :=
     TLineStyle(ComboBox1.ItemIndex);
   (PObject as TPrimitive2D).Hatching :=
@@ -218,13 +297,12 @@ begin
       TeXText := LabeledEdit3.Text;
       Height := StrToFloat(LabeledEdit2.Text);
       Rot := DegToRad(StrToRealType(LabeledEdit4.Text, 0));
-      HJustification := THJustification(RadioGroup1.ItemIndex);
-      VJustification := TVJustification(RadioGroup2.ItemIndex);
+      HAlignment := THAlignment(RadioGroup1.ItemIndex);
       if not FontCheckBox.Checked then Font.Name := ' ';
     end
   else if (PObject is TLine2D) or (PObject is TArc2D)
     or (PObject is TPolyline2D) or (PObject is TSmoothPath2D)
-    or (PObject is TBezierPath2D) then
+    or (PObject is TBezierPath2D) or (PObject is TCompound2D) then
     with PObject as TPrimitive2D do
     begin
       BeginArrowKind := TArrowKind(ComboBox8.ItemIndex);
@@ -256,6 +334,13 @@ begin
       RX := StrToRealType(LabeledEdit7.Text, 0);
       RY := StrToRealType(LabeledEdit8.Text, 0);
     end
+  else if PObject is TBitmap2D then
+    with PObject as TBitmap2D do
+    begin
+      BitmapEntry := ((PObject as TBitmap2D).ParentDrawing
+        as TDrawing2D).RegisterBitmap(ImageLinkEdit.Text);
+      KeepAspectRatio := KeepAspectCheck.Checked;
+    end
       ;
 end;
 
@@ -272,6 +357,7 @@ end;
 
 procedure TPropertiesForm.Button3Click(Sender: TObject);
 begin
+  if not (PObject is TPrimitive2D) then Exit;
   TableForm.PPrimitive := PObject as TPrimitive2D;
   TableForm.ShowModal;
 end;
@@ -306,15 +392,18 @@ end;
 procedure TPropertiesForm.ArrComboBoxDrawItem(Control: TWinControl;
   Index: Integer; Rect: TRect; State: TOwnerDrawState);
 begin
+  if not (Control is TComboBox) then Exit;
   with (Control as TComboBox).Canvas do
   begin
     FillRect(Rect);
-    TextOut(Rect.Left + 50, Rect.Top, ComboBox8.Items[Index]);
+    TextOut(Rect.Left + 47, Rect.Top,
+      (Control as TComboBox).Items[Index]);
     Rect.Right := Rect.Left + 46;
     Brush.Color := clWhite;
     FillRect(Rect);
-    ArrImageList.Draw((Control as TComboBox).Canvas, Rect.Left,
-      Rect.Top + 2, Index);
+    PropertiesForm.ArrImageList.Draw(
+      (Control as TComboBox).Canvas,
+      Rect.Left, Rect.Top + 2, Index);
   end;
 end;
 

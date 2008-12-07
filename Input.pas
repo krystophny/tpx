@@ -51,7 +51,12 @@ type
     function ReadPolyline(XMLNode: TXMLDElement): TPrimitive2D;
     function ReadStar(XMLNode: TXMLDElement): TStar2D;
     function ReadSymbol(XMLNode: TXMLDElement): TSymbol2D;
-    function ReadEntity(XMLNode: TXMLDElement): TPrimitive2D;
+    function ReadBitmap(XMLNode: TXMLDElement): TBitmap2D;
+    function ReadGroup(XMLNode: TXMLDElement): TGroup2D;
+    function ReadCompound(XMLNode: TXMLDElement): TCompound2D;
+    function ReadEntity(XMLNode: TXMLDElement): TObject2D;
+    procedure CollectEntities(Elem: TXMLDElement;
+      Objects: TGraphicObjList);
   public
     constructor Create(Drawing: TDrawing2D);
     destructor Destroy; override;
@@ -66,29 +71,33 @@ type
 
   T_Import = class(T_Loader)
   protected
-    fCurrPrimitive: TPrimitive2D;
+    fCurrObj: TObject2D;
     fStream: TStream;
-    fLst: TGraphicObjList;
-    procedure GetObj(var Obj: TPrimitive2D);
+    fMainList, fCurrentList: TGraphicObjList;
+    fObjLists: TObjectStack;
+    function GetPrim(var Obj: TObject2D): Boolean;
+    function GetGroup(var Obj: TObject2D): Boolean;
+    function AddObj(
+      const Obj: TObject2D): TObject2D; virtual;
     function AddPrimitive(
       const Obj: TPrimitive2D): TPrimitive2D; virtual;
   public
     constructor Create(Drawing: TDrawing2D);
     destructor Destroy; override;
     //set line color
-    procedure LC(const Cl: TColor; Obj: TPrimitive2D = nil);
+    procedure LC(const Cl: TColor; Obj: TObject2D = nil);
     //set line width
-    procedure LW(const W: TRealType; Obj: TPrimitive2D = nil);
+    procedure LW(const W: TRealType; Obj: TObject2D = nil);
     //set line style: none, dot, dash or solid (default)
-    procedure LI(const LineStyle: TLineStyle; Obj: TPrimitive2D =
-      nil);
+    procedure LI(
+      const LineStyle: TLineStyle; Obj: TObject2D = nil);
     //set hatching: 1,...,6
-    procedure Ha(const Hatching: THatching; Obj: TPrimitive2D =
-      nil);
+    procedure Ha(
+      const Hatching: THatching; Obj: TObject2D = nil);
     //set hatching color
-    procedure HC(const Cl: TColor; Obj: TPrimitive2D = nil);
+    procedure HC(const Cl: TColor; Obj: TObject2D = nil);
     //set fill color
-    procedure Fill(const Cl: TColor; Obj: TPrimitive2D = nil);
+    procedure Fill(const Cl: TColor; Obj: TObject2D = nil);
     function AddLine(
       const X1, Y1, X2, Y2: TRealType): TPrimitive2D; overload;
     function AddLine(
@@ -129,10 +138,15 @@ type
     function AddPolyline: TPrimitive2D;
     function AddBezier: TPrimitive2D;
     function AddClosedBezier: TPrimitive2D;
+    function AddCompound: TPrimitive2D;
+    procedure NewCurrentList(NewList: TGraphicObjList);
+    procedure RestoreList;
+    function StartGroup: TObject2D;
+    procedure FinishGroup;
     procedure Scale_LineWidth(const Scale: TRealType);
   end;
 
-procedure FillPoints(var Primitive: TPrimitive2D;
+procedure FillPoints(Primitive: TPrimitive2D;
   const Text: string; Pnts: TPointsSet2D);
 procedure Import_Metafile(const Drawing: TDrawing2D;
   const MF_FileName: string;
@@ -145,13 +159,14 @@ procedure Import_SVG(const Drawing: TDrawing2D;
   const SvgFileName: string);
 
 var
-  PsToEditPath: string = 'pstoedit.exe';
+{$IFNDEF LINUX}PsToEditPath: string = 'pstoedit.exe';
+{$ELSE}PsToEditPath: string = 'pstoedit'; {$ENDIF}
   PsToEditFormat: string = 'plot-svg';
 
 implementation
 
 uses Math, Forms, StrUtils, ColorEtc, Output, SysBasic,
-  ClpbrdOp, MiscUtils, MprtSVG, MprtEMF;
+  ClpbrdOp, MiscUtils, MprtSVG, MprtEMF, Modify;
 
 { --================ T_TpX_Loader ==================-- }
 
@@ -160,8 +175,6 @@ begin
   inherited Create;
   fDrawing2D := Drawing;
 end;
-
-{ --================ T_TpX_Loader ==================-- }
 
 procedure T_TpX_Loader.ReadPrimitiveAttr(Obj: TPrimitive2D;
   XMLNode: TXMLDElement);
@@ -191,6 +204,9 @@ begin
   end;
   if XMLNode.AttributeNode['lw'] <> nil then
     Obj.LineWidth := XMLNode.AttributeValue['lw'];
+  if (fVersion <= 4) and (Obj.LineStyle = liDotted) then
+    Obj.LineWidth := RoundTo(Sqrt(Sqrt(
+      Obj.LineWidth * Sqr(Obj.LineWidth) * 2)), -1);
   if XMLNode.AttributeNode['ha'] <> nil then
     Obj.Hatching := XMLNode.AttributeValue['ha']
   else Obj.Hatching := haNone;
@@ -241,7 +257,7 @@ end;
 function T_TpX_Loader.ReadLine(XMLNode: TXMLDElement):
   TPrimitive2D;
 begin
-  Result := TLine2D.CreateSpec(0,
+  Result := TLine2D.CreateSpec(-1,
     Point2D(XMLNode.AttributeValue['x1'],
     XMLNode.AttributeValue['y1']),
     Point2D(XMLNode.AttributeValue['x2'],
@@ -281,7 +297,7 @@ var
   P0, P1, P2: TPoint2D;
   ARot, W, H, C, S: TRealType;
 begin
-  Result := TRectangle2D.Create(0);
+  Result := TRectangle2D.Create(-1);
   if fVersion <= 2 then ReadRectOld(XMLNode, P0, P1, P2)
   else
   begin
@@ -314,11 +330,31 @@ begin
   ReadPrimitiveAttr(Result, XMLNode);
 end;
 
+procedure FixVAlignment(Obj: TText2D; Ch: char);
+// For compatibitlity with older versions
+var
+  D: TVector2D;
+  Descent: TRealType;
+begin
+  if Ch = '0' then Exit; // Baseline
+  Descent := GetFontDescent(Obj.FaceName, Obj.Style, Obj.Charset);
+  D.X := 0;
+  case Ch of
+    'b': D.Y := Descent;
+    'c': D.Y := Descent - 0.5;
+    't': D.Y := Descent - 1;
+  end;
+  D.Y := D.Y * Obj.Height;
+  if Obj.Rot <> 0 then
+    D := TransformVector2D(D, Rotate2D(Obj.Rot));
+  Obj.Points[0] := ShiftPoint(Obj.Points[0], D);
+end;
+
 function T_TpX_Loader.ReadText(XMLNode: TXMLDElement):
   TPrimitive2D;
 var
   X, Y, H: Single;
-  Ch: Char;
+  Ch: char;
   procedure ReadFont;
   var
     Data: TStringList;
@@ -359,22 +395,19 @@ begin
   if fVersion <= 1 then H := H / 1.2;
   X := XMLNode.AttributeValue['x'];
   Y := XMLNode.AttributeValue['y'];
-  Result := TText2D.CreateSpec(0,
+  Result := TText2D.CreateSpec(-1,
     Point2D(X, Y), H, XMLNode.AttributeValueSt['t']);
   with Result as TText2D do
   begin
-    Ch := string(XMLNode.AttributeValue['jh'])[1];
+    if XMLNode.AttributeNode['halign'] <> nil then
+      Ch := string(XMLNode.AttributeValue['halign'])[1]
+    else if XMLNode.AttributeNode['jh'] <> nil then
+      Ch := string(XMLNode.AttributeValue['jh'])[1]
+    else Ch := 'l';
     case Ch of
-      'l': HJustification := jhLeft;
-      'r': HJustification := jhRight;
-      'c': HJustification := jhCenter;
-    end;
-    Ch := string(XMLNode.AttributeValue['jv'])[1];
-    case Ch of
-      't': VJustification := jvTop;
-      'b': VJustification := jvBottom;
-      'c': VJustification := jvCenter;
-      '0': VJustification := jvBaseline;
+      'l': HAlignment := ahLeft;
+      'r': HAlignment := ahRight;
+      'c': HAlignment := ahCenter;
     end;
     if XMLNode.AttributeNode['tex'] <> nil then
       TeXText := XMLNode.AttributeValueSt['tex']
@@ -387,6 +420,11 @@ begin
   end;
   ReadPrimitiveAttr(Result, XMLNode);
   ReadFont;
+  if XMLNode.AttributeNode['jv'] <> nil then
+  begin
+    Ch := string(XMLNode.AttributeValue['jv'])[1];
+    FixVAlignment(Result as TText2D, Ch);
+  end;
 end;
 
 function T_TpX_Loader.ReadEllipse(XMLNode: TXMLDElement):
@@ -400,7 +438,7 @@ begin
     XMLNode.AttributeValue['y']);
   DX := XMLNode.AttributeValue['dx'];
   DY := XMLNode.AttributeValue['dy'];
-  Result := TEllipse2D.Create(0);
+  Result := TEllipse2D.Create(-1);
   with Result as TEllipse2D do
   begin
     if XMLNode.AttributeNode['rotdeg'] <> nil then
@@ -430,7 +468,7 @@ begin
   CP := Point2D(XMLNode.AttributeValue['x'],
     XMLNode.AttributeValue['y']);
   D := XMLNode.AttributeValue['d'];
-  Result := TCircle2D.Create(0);
+  Result := TCircle2D.Create(-1);
   with Result as TCircle2D do
   begin
     Points[0] := CP;
@@ -449,7 +487,7 @@ begin
   D := XMLNode.AttributeValue['dx'];
   SA := XMLNode.AttributeValue['a1'];
   EA := XMLNode.AttributeValue['a2'];
-  Result := TArc2D.CreateSpec(0, Point2D(X, Y), D / 2, SA, EA);
+  Result := TArc2D.CreateSpec(-1, Point2D(X, Y), D / 2, SA, EA);
   (Result as TArc2D).StartAngle := SA;
   (Result as TArc2D).EndAngle := EA;
   ReadPrimitiveAttr(Result, XMLNode);
@@ -477,26 +515,26 @@ begin
   ReadPrimitiveAttr(Result, XMLNode);
 end;
 
-procedure FillPoints(var Primitive: TPrimitive2D;
+procedure FillPoints(Primitive: TPrimitive2D;
   const Text: string; Pnts: TPointsSet2D);
 var
-  I, LenText, Len: Integer;
+  Pos, LenText, Len: Integer;
   X, Y: TRealType;
   PP: TPointsSet2D;
   procedure GetSpace;
   begin
-    while (I <= LenText) and
-      (Text[I] in [' ', ',', #9, #10, #13]) do Inc(I);
+    while (Pos <= LenText) and
+      (Text[Pos] in [' ', ',', #9, #10, #13]) do Inc(Pos);
   end;
   function GetNum: TRealType;
   var
     Pos0: Integer;
   begin
-    Pos0 := I;
-    while (I <= LenText) and
-      not (Text[I] in [' ', ',', #9, #10, #13]) do Inc(I);
+    Pos0 := Pos;
+    while (Pos <= LenText) and
+      not (Text[Pos] in [' ', ',', #9, #10, #13]) do Inc(Pos);
     try
-      Result := StrToRealType(Copy(Text, Pos0, I - Pos0), 0);
+      Result := StrToRealType(Copy(Text, Pos0, Pos - Pos0), 0);
     except
       Result := 0;
     end;
@@ -505,13 +543,13 @@ begin
   Pnts.Clear;
   LenText := Length(Text);
   Len := 0;
-  for I := 1 to LenText do
-    if Text[I] = ',' then Inc(Len);
+  for Pos := 1 to LenText do
+    if Text[Pos] = ',' then Inc(Len);
   PP := TPointsSet2D.Create(Len);
   try
-    I := 1;
+    Pos := 1;
     GetSpace;
-    while I <= LenText do
+    while Pos <= LenText do
     begin
       X := GetNum;
       GetSpace;
@@ -535,8 +573,8 @@ begin
     then IsClosed := XMLNode.AttributeValue['closed'] <> 0
   else IsClosed := False;
   if IsClosed then
-    Result := TClosedSmoothPath2D.CreateSpec(0, [Point2D(0, 0)])
-  else Result := TSmoothPath2D.CreateSpec(0, [Point2D(0, 0)]);
+    Result := TClosedSmoothPath2D.CreateSpec(-1, [Point2D(0, 0)])
+  else Result := TSmoothPath2D.CreateSpec(-1, [Point2D(0, 0)]);
   ReadArrows(XMLNode, Result);
   FillPoints(Result, XMLNode.Text, (Result as
     TSmoothPath2D0).Points);
@@ -552,8 +590,8 @@ begin
     then IsClosed := XMLNode.AttributeValue['closed'] <> 0
   else IsClosed := False;
   if IsClosed then
-    Result := TClosedBezierPath2D.CreateSpec(0, [Point2D(0, 0)])
-  else Result := TBezierPath2D.CreateSpec(0, [Point2D(0, 0)]);
+    Result := TClosedBezierPath2D.CreateSpec(-1, [Point2D(0, 0)])
+  else Result := TBezierPath2D.CreateSpec(-1, [Point2D(0, 0)]);
   ReadArrows(XMLNode, Result);
   FillPoints(Result, XMLNode.Text, (Result as
     TBezierPath2D0).Points);
@@ -563,7 +601,7 @@ end;
 function T_TpX_Loader.ReadPolygon(XMLNode: TXMLDElement):
   TPrimitive2D;
 begin
-  Result := TPolygon2D.CreateSpec(0, [Point2D(0, 0)]);
+  Result := TPolygon2D.CreateSpec(-1, [Point2D(0, 0)]);
   FillPoints(Result, XMLNode.Text, (Result as TPolygon2D).Points);
   ReadPrimitiveAttr(Result, XMLNode);
 end;
@@ -571,7 +609,7 @@ end;
 function T_TpX_Loader.ReadPolyline(XMLNode: TXMLDElement):
   TPrimitive2D;
 begin
-  Result := TPolyline2D.CreateSpec(0, [Point2D(0, 0)]);
+  Result := TPolyline2D.CreateSpec(-1, [Point2D(0, 0)]);
   ReadArrows(XMLNode, Result);
   FillPoints(Result, XMLNode.Text, (Result as TPolyline2D).Points);
   ReadPrimitiveAttr(Result, XMLNode);
@@ -586,7 +624,7 @@ var
 begin
   CP := Point2D(XMLNode.AttributeValue['x'],
     XMLNode.AttributeValue['y']);
-  Result := TStar2D.CreateSpec(0, CP);
+  Result := TStar2D.CreateSpec(-1, CP);
   if XMLNode.AttributeNode['s'] <> nil then
   begin
     StarID := XMLNode.AttributeValue['s'];
@@ -616,7 +654,7 @@ begin
   if XMLNode.AttributeNode['d'] <> nil then
     D := XMLNode.AttributeValue['d']
   else D := 30;
-  Result := TSymbol2D.CreateSpec(0, CP, D);
+  Result := TSymbol2D.CreateSpec(-1, CP, D);
   if XMLNode.AttributeNode['rotdeg'] <> nil then
     Result.Rot := DegToRad(XMLNode.AttributeValue['rotdeg'])
   else if XMLNode.AttributeNode['rot'] <> nil then
@@ -636,8 +674,42 @@ begin
   ReadPrimitiveAttr(Result, XMLNode);
 end;
 
+function T_TpX_Loader.ReadBitmap(XMLNode: TXMLDElement): TBitmap2D;
+var
+  X, Y, W, H: Single;
+begin
+  X := XMLNode.AttributeValue['x'];
+  Y := XMLNode.AttributeValue['y'];
+  W := XMLNode.AttributeValue['w'];
+  H := XMLNode.AttributeValue['h'];
+  Result := TBitmap2D.CreateSpec(-1,
+    Point2D(X, Y), Point2D(X + W, Y + H),
+    fDrawing2D.RegisterBitmap(
+    XMLNode.AttributeValueSt['link']));
+  if XMLNode.AttributeNode['keepaspectratio'] <> nil then
+  begin
+    Result.KeepAspectRatio :=
+      XMLNode.AttributeValue['keepaspectratio'] <> '0';
+  end
+end;
+
+function T_TpX_Loader.ReadGroup(XMLNode: TXMLDElement): TGroup2D;
+begin
+  Result := TGroup2D.Create(-1);
+  CollectEntities(XMLNode, Result.Objects);
+end;
+
+function T_TpX_Loader.ReadCompound(XMLNode: TXMLDElement):
+  TCompound2D;
+begin
+  Result := TCompound2D.Create(-1);
+  ReadPrimitiveAttr(Result, XMLNode);
+  FillPoints(Result, XMLNode.Text, Result.Points);
+  ReadPrimitiveAttr(Result, XMLNode);
+end;
+
 function T_TpX_Loader.ReadEntity(XMLNode: TXMLDElement):
-  TPrimitive2D;
+  TObject2D;
 var
   ID: string;
 begin
@@ -662,6 +734,9 @@ begin
     then Result := ReadPolyline(XMLNode)
   else if ID = 'star' then Result := ReadStar(XMLNode)
   else if ID = 'symbol' then Result := ReadSymbol(XMLNode)
+  else if ID = 'bitmap' then Result := ReadBitmap(XMLNode)
+  else if ID = 'group' then Result := ReadGroup(XMLNode)
+  else if ID = 'compound' then Result := ReadCompound(XMLNode)
   else Result := nil;
 end;
 
@@ -756,6 +831,9 @@ begin
     if AttributeNode['DefaultSymbolSize'] <> nil then
       fDrawing2D.DefaultSymbolSize :=
         AttributeValue['DefaultSymbolSize'];
+    if AttributeNode['ApproximationPrecision'] <> nil then
+      fDrawing2D.ApproximationPrecision :=
+        AttributeValue['ApproximationPrecision'];
     if AttributeNode['PicWidth'] <> nil then
       PicWidth := AttributeValue['PicWidth']
     else PicWidth := 0;
@@ -812,6 +890,8 @@ begin
       GetString('TeXPicEpilogue', '');
     fDrawing2D.PicMagnif :=
       GetRealType('PicMagnif', 1);
+    fDrawing2D.FontSizeInTeX :=
+      GetBoolean('FontSizeInTeX', True);
     fDrawing2D.MetaPostTeXText :=
       GetBoolean('MetaPostTeXText', True);
     fDrawing2D.IncludePath :=
@@ -847,33 +927,37 @@ end;
     with fXML.DocumentElement.AddElement('comment') do
       Text := fDrawing2D.Comment;}
 
-procedure T_TpX_Loader.ReadEntities;
+procedure T_TpX_Loader.CollectEntities(Elem: TXMLDElement;
+  Objects: TGraphicObjList);
 var
   Tmp: TObject2D;
   I: Integer;
   Child: TXMLDNode;
-  Lst: TGraphicObjList;
 begin
-  Lst := TGraphicObjList.Create;
-  Lst.FreeOnClear := False;
+  for I := 0 to
+    Elem.ChildNodes.Count - 1 do
+  begin
+    Child := Elem.ChildNodes[I];
+    if Child is TXMLDElement then
+      Tmp := ReadEntity(Child as TXMLDElement);
+    if Assigned(Tmp) then
+      Objects.Add(Tmp);
+    if I mod 100 = 0 then
+      ShowProgress(I / fXML.DocumentElement.ChildNodes.Count);
+  end;
+end;
+
+procedure T_TpX_Loader.ReadEntities;
+var
+  Objects: TGraphicObjList;
+begin
+  Objects := TGraphicObjList.Create;
+  Objects.FreeOnDelete := False;
   try
-    for I := 0 to
-      fXML.DocumentElement.ChildNodes.Count - 1 do
-    begin
-      Child := fXML.DocumentElement.ChildNodes[I];
-      if Child is TXMLDElement then
-        Tmp := ReadEntity(Child as TXMLDElement);
-      if Assigned(Tmp) then
-      begin
-      //Tmp.Transform(Scale2D(fScale, fScale));
-        Lst.Add(Tmp);
-      end;
-      if I mod 100 = 0 then
-        ShowProgress(I / fXML.DocumentElement.ChildNodes.Count);
-    end;
-    fDrawing2D.AddList(Lst);
+    CollectEntities(fXML.DocumentElement, Objects);
+    fDrawing2D.AddList(Objects);
   finally
-    Lst.Free;
+    Objects.Free;
   end;
 end;
 
@@ -958,9 +1042,9 @@ begin
   try
     fStream.Position := 0;
     LoadFromStream;
-    ReadAll;
     if Assigned(fDrawing2D) then
       fDrawing2D.FileName := FileName;
+    ReadAll;
   finally
     fStream.Free;
     fStream := nil;
@@ -972,103 +1056,166 @@ end;
 constructor T_Import.Create(Drawing: TDrawing2D);
 begin
   inherited Create(Drawing);
-  fCurrPrimitive := nil;
+  fCurrObj := nil;
   fStream := nil;
-  fLst := TGraphicObjList.Create;
-  fLst.FreeOnClear := False;
+  fMainList := TGraphicObjList.Create;
+  fMainList.FreeOnDelete := False;
+  fCurrentList := fMainList;
+  fObjLists := TObjectStack.Create;
 end;
 
 destructor T_Import.Destroy;
 begin
-  fLst.Free;
+  fMainList.Free;
+  fObjLists.Free;
   inherited Destroy;
 end;
 
-procedure T_Import.GetObj(var Obj: TPrimitive2D);
+function T_Import.GetPrim(var Obj: TObject2D): Boolean;
 begin
-  if Obj = nil then Obj := fCurrPrimitive;
+  Result := False;
+  if Obj = nil then
+    if fCurrObj is TPrimitive2D then
+    begin
+      Obj := fCurrObj;
+      Result := True;
+    end;
 end;
 
-procedure T_Import.LC(const Cl: TColor; Obj: TPrimitive2D = nil);
+function T_Import.GetGroup(var Obj: TObject2D): Boolean;
 begin
-  GetObj(Obj);
-  Obj.LineColor := Cl;
+  Result := False;
+  if Obj = nil then
+    if fCurrObj is TGroup2D then
+    begin
+      Obj := fCurrObj;
+      Result := True;
+    end;
 end;
 
-procedure T_Import.LW(const W: TRealType; Obj: TPrimitive2D = nil);
+procedure T_Import.LC(const Cl: TColor; Obj: TObject2D = nil);
 begin
-  GetObj(Obj);
-  Obj.LineWidth := W;
+  if GetPrim(Obj) then
+    (Obj as TPrimitive2D).LineColor := Cl;
 end;
 
-procedure T_Import.LI(const LineStyle: TLineStyle; Obj: TPrimitive2D
-  = nil);
+procedure T_Import.LW(
+  const W: TRealType; Obj: TObject2D = nil);
 begin
-  GetObj(Obj);
-  Obj.LineStyle := LineStyle;
+  if GetPrim(Obj) then
+    (Obj as TPrimitive2D).LineWidth := W;
 end;
 
-procedure T_Import.Ha(const Hatching: THatching; Obj: TPrimitive2D
-  = nil);
+procedure T_Import.LI(
+  const LineStyle: TLineStyle; Obj: TObject2D = nil);
 begin
-  GetObj(Obj);
-  Obj.Hatching := Hatching;
+  if GetPrim(Obj) then
+  begin
+    (Obj as TPrimitive2D).LineStyle := LineStyle;
+    Exit;
+  end;
+  if GetGroup(Obj) then
+  begin
+    ChangeObjects(
+      (Obj as TGroup2D).Objects, ChangeLineStyle, @LineStyle);
+    Exit;
+  end;
 end;
 
-procedure T_Import.HC(const Cl: TColor; Obj: TPrimitive2D = nil);
+procedure T_Import.Ha(
+  const Hatching: THatching; Obj: TObject2D = nil);
 begin
-  GetObj(Obj);
-  Obj.HatchColor := Cl;
+  if GetPrim(Obj) then
+  begin
+    (Obj as TPrimitive2D).Hatching := Hatching;
+    Exit;
+  end;
+  if GetGroup(Obj) then
+  begin
+    ChangeObjects(
+      (Obj as TGroup2D).Objects, ChangeHatching, @Hatching);
+    Exit;
+  end;
 end;
 
-procedure T_Import.Fill(const Cl: TColor; Obj: TPrimitive2D = nil);
+procedure T_Import.HC(const Cl: TColor; Obj: TObject2D = nil);
 begin
-  GetObj(Obj);
-  Obj.FillColor := Cl;
+  if Cl = clNone then Exit;
+  if GetPrim(Obj) then
+  begin
+    (Obj as TPrimitive2D).HatchColor := Cl;
+    Exit;
+  end;
+  if GetGroup(Obj) then
+  begin
+    ChangeObjects(
+      (Obj as TGroup2D).Objects, ChangeHatchColor, @Cl);
+    Exit;
+  end;
+end;
+
+procedure ChangeUndefinedFillColor(const Obj: TGraphicObject;
+  PData: Pointer);
+begin
+  if Obj is TPrimitive2D then
+    if (Obj as TPrimitive2D).FillColor = clNone then
+      (Obj as TPrimitive2D).FillColor := TColor(PData^);
+end;
+
+procedure T_Import.Fill(
+  const Cl: TColor; Obj: TObject2D = nil);
+begin
+  if GetPrim(Obj) then
+    (Obj as TPrimitive2D).FillColor := Cl;
+end;
+
+function T_Import.AddObj(const Obj: TObject2D): TObject2D;
+begin
+  if Assigned(Obj) then
+  //fDrawing2D.AddObject(0, Obj);
+    fCurrentList.Add(Obj);
+  fCurrObj := Obj;
+  Result := Obj;
 end;
 
 function T_Import.AddPrimitive(
   const Obj: TPrimitive2D): TPrimitive2D;
 begin
-  if Assigned(Obj) then
-  //fDrawing2D.AddObject(0, Obj);
-    fLst.Add(Obj);
-  fCurrPrimitive := Obj;
-  Result := Obj;
+  Result := AddObj(Obj) as TPrimitive2D;
 end;
 
 function T_Import.AddLine(
   const X1, Y1, X2, Y2: TRealType): TPrimitive2D;
 begin
   Result := AddPrimitive(
-    TLine2D.CreateSpec(0, Point2D(X1, Y1), Point2D(X2, Y2)));
+    TLine2D.CreateSpec(-1, Point2D(X1, Y1), Point2D(X2, Y2)));
 end;
 
 function T_Import.AddLine(
   const P1, P2: TPoint2D): TPrimitive2D;
 begin
   Result := AddPrimitive(
-    TLine2D.CreateSpec(0, P1, P2));
+    TLine2D.CreateSpec(-1, P1, P2));
 end;
 
 function T_Import.AddText(
   const X, Y, H: TRealType; const Txt: string): TPrimitive2D;
 begin
   Result := AddPrimitive(
-    TText2D.CreateSpec(0, Point2D(X, Y), H, Txt));
+    TText2D.CreateSpec(-1, Point2D(X, Y), H, Txt));
 end;
 
 function T_Import.AddText(const P: TPoint2D;
   const H: TRealType; const Txt: string): TPrimitive2D;
 begin
   Result := AddPrimitive(
-    TText2D.CreateSpec(0, P, H, Txt));
+    TText2D.CreateSpec(-1, P, H, Txt));
 end;
 
 function T_Import.AddRect(
   const X, Y, W, H: TRealType): TPrimitive2D;
 begin
-  Result := AddPrimitive(TRectangle2D.Create(0));
+  Result := AddPrimitive(TRectangle2D.Create(-1));
   with Result do
   begin
     Points[0] := Point2D(X, Y);
@@ -1129,7 +1276,7 @@ end;
 function T_Import.AddCircle(const X, Y, R: TRealType):
   TPrimitive2D;
 begin
-  Result := AddPrimitive(TCircle2D.Create(0));
+  Result := AddPrimitive(TCircle2D.Create(-1));
   with Result do
   begin
     Points[0] := Point2D(X, Y);
@@ -1140,7 +1287,7 @@ end;
 function T_Import.AddEllipse(
   const X, Y, RX, RY: TRealType): TPrimitive2D;
 begin
-  Result := AddPrimitive(TEllipse2D.Create(0));
+  Result := AddPrimitive(TEllipse2D.Create(-1));
   with Result do
   begin
     Points[0] := Point2D(X + RX, Y + RY);
@@ -1153,13 +1300,6 @@ function T_Import.AddEllipse(const P: TPoint2D;
   const RX, RY: TRealType): TPrimitive2D;
 begin
   Result := AddEllipse(P.X, P.Y, RX, RY);
-  {Result := AddPrimitive(TEllipse2D.Create(0));
-  with Result do
-  begin
-    Points[0] := Point2D(X + RX, Y + RY);
-    Points[1] := Point2D(X - RX, Y - RY);
-    Points[2] := Point2D(X + RX, Y + RY - 1);
-  end;}
 end;
 
 function T_Import.AddEllipseAsBezier(
@@ -1187,44 +1327,87 @@ end;
 function T_Import.AddPolygon: TPrimitive2D;
 begin
   Result := AddPrimitive(
-    TPolygon2D.CreateSpec(0, []));
+    TPolygon2D.CreateSpec(-1, []));
 end;
 
 function T_Import.AddPolyline: TPrimitive2D;
 begin
-  Result := AddPrimitive(TPolyline2D.Create(0));
+  Result := AddPrimitive(TPolyline2D.Create(-1));
 end;
 
 function T_Import.AddBezier: TPrimitive2D;
 begin
-  Result := AddPrimitive(TBezierPath2D.Create(0));
+  Result := AddPrimitive(TBezierPath2D.Create(-1));
 end;
 
 function T_Import.AddClosedBezier: TPrimitive2D;
 begin
-  Result := AddPrimitive(TClosedBezierPath2D.Create(0));
+  Result := AddPrimitive(TClosedBezierPath2D.Create(-1));
+end;
+
+function T_Import.AddCompound: TPrimitive2D;
+begin
+  Result := AddPrimitive(TCompound2D.Create(-1));
+end;
+
+procedure T_Import.NewCurrentList(NewList: TGraphicObjList);
+begin
+  fObjLists.Push(fCurrentList);
+  fCurrentList := NewList;
+end;
+
+procedure T_Import.RestoreList;
+begin
+  fCurrentList := fObjLists.Pop as TGraphicObjList;
+end;
+
+function T_Import.StartGroup: TObject2D;
+begin
+  Result := AddObj(TGroup2D.Create(-1));
+  NewCurrentList((Result as TGroup2D).Objects);
+end;
+
+procedure T_Import.FinishGroup;
+var
+  Group: TGroup2D;
+begin
+  if fCurrentList <> fMainList then
+    if fCurrentList.Count <= 1 then
+    // Ensure that group contains at least 2 objects
+    begin
+      RestoreList;
+      Group := fCurrentList.Pop as TGroup2D;
+      fCurrObj := nil;
+      if Group.Objects.Count = 1 then
+      begin
+        fCurrentList.Add(Group.Objects.Pop as TGraphicObject);
+        fCurrObj := fCurrentList.LastObj as TObject2D;
+      end;
+      Group.Free;
+      Exit;
+    end;
+  RestoreList;
+  fCurrObj := fCurrentList.Peek as TGroup2D;
 end;
 
 procedure T_Import.Scale_LineWidth(const Scale: TRealType);
-var
-  Tmp: TObject2D;
-  TmpIter: TExclusiveGraphicObjIterator;
-begin
-  TmpIter := fLst.GetExclusiveIterator;
-  try
-    Tmp := TmpIter.First as TObject2D;
-    while Tmp <> nil do
+  procedure _Scale_LineWidth(Lst: TGraphicObjList);
+  var
+    Obj: TGraphicObject;
+  begin
+    Obj := Lst.FirstObj;
+    while Obj <> nil do
     begin
-      if Tmp is TPrimitive2D then
-      begin
-        (Tmp as TPrimitive2D).LineWidth :=
-          (Tmp as TPrimitive2D).LineWidth * Scale;
-        Tmp := TmpIter.Next as TObject2D;
-      end;
+      if Obj is TPrimitive2D then
+        (Obj as TPrimitive2D).LineWidth :=
+          (Obj as TPrimitive2D).LineWidth * Scale
+      else if Obj is TGroup2D then
+        _Scale_LineWidth((Obj as TGroup2D).Objects);
+      Obj := Lst.NextObj;
     end;
-  finally
-    TmpIter.Free;
   end;
+begin
+  _Scale_LineWidth(fMainList);
 end;
 
 {===================== Import functions ===}
@@ -1287,10 +1470,10 @@ begin
   TempFile := TempDir + '(pic)TpX.' + Ext;
   TryDeleteFile(TempFile);
   try
-    Res := FileExec(Format('"%s" "%s" "%s" -f %s',
-      [PsToEditPath, InputFileName, TempFile, PsToEditFormat]), '',
-      '',
-      TempDir, True, True);
+    Res := FileExec(Format('%s "%s" "%s" -f %s',
+      [PrepareFilePath(PsToEditPath), InputFileName,
+      TempFile, PsToEditFormat]), '', '',
+        TempDir, True, True);
     if not FileExists(TempFile) then
       MessageBoxError('PsToEdit file not created')
     else

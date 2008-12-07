@@ -181,18 +181,33 @@ begin
   OptList.Add('$FileName=' + FileName);
 end;
 
-function XmlReplaceChars(const St: string): string;
-//?? Slow
+function ReplaceChars(const St: string; const Chars: string;
+  const ReplArr: array of string): string;
+var
+  I, Prev, Pos, LenChars: Integer;
 begin
-  Result := St;
-  Result := AnsiReplaceStr(Result, '&', '&amp;');
-  Result := AnsiReplaceStr(Result, '<', '&lt;');
-  Result := AnsiReplaceStr(Result, '>', '&gt;');
-  Result := AnsiReplaceStr(Result, '"', '&quot;');
-  Result := AnsiReplaceStr(Result, '''', '&apos;');
-  Result := AnsiReplaceStr(Result, #9, '&#9;');
-//  Result := AnsiReplaceStr(Result, #10, '&#10;');
-//  Result := AnsiReplaceStr(Result, #13, '&#13;');
+  Result := '';
+  LenChars := Length(Chars);
+  Prev := 1;
+  for Pos := 1 to Length(St) do
+  begin
+    for I := 1 to LenChars do if St[Pos] = Chars[I] then Break;
+    if I <= LenChars then
+    begin
+      Result := Result
+        + Copy(St, Prev, Pos - Prev) + ReplArr[I - 1];
+      Prev := Pos + 1;
+    end;
+  end;
+  Result := Result + Copy(St, Prev, Pos - Prev);
+end;
+
+function XmlReplaceChars(const St: string): string;
+const
+  ReplArr: array[1..6] of string =
+  ('&amp;', '&lt;', '&gt;', '&quot;', '&apos;', '&#9;');
+begin
+  Result := ReplaceChars(St, '&<>"'''#9, ReplArr);
 end;
 
 function XmlUnReplaceChars(const St: string): string;

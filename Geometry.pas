@@ -26,10 +26,15 @@ type
 // The maximum value for coordinates.
 const
   MaxRealType = 3.4E+38; // MaxSingle;
+  gp_MoveTo: TRealType = -2.4E+38;
+  gp_LineTo: TRealType = -2.3E+38;
+  gp_BezierTo: TRealType = -2.2E+38;
+  gp_Close: TRealType = -2.1E+38;
 
-//TSY:
+// Conversion functions
 function StrToRealType(const St: string;
   const DefaultVal: TRealType): TRealType;
+function RealTypeToStr(const X: TRealType): string;
 
 type
 
@@ -926,7 +931,7 @@ type
        Setting <I=_Capacity> to the real number of points in the set
        will speed up the insertion of the point in the set.
     }
-    constructor Create(const _Capacity: Integer); virtual;
+    constructor Create(const _Capacity: Integer);
     {: Free the memory used by the instance of the class.
 
        Remember to call the <I=Free> method of the class when done
@@ -1030,16 +1035,8 @@ type
     }
     procedure Insert(const Index: Integer; const Item: TPoint2D);
       virtual;
-    {: This property contains the bounding box of the set, that is
-       the smaller axis-alligned rectangle that fully contains the
-       points in the set.
-
-       <B=Note>: Because this method compute the bounding box every
-       time it is called you may want to store it in a temporary
-       variable if you want to use it in different part of your
-       function (obviously if you don't change the set between
-       uses of the bounding box).
-    }
+// Bounding box of the set the smaller axis-alligned rectangle
+//       that fully contains the points in the set.
     procedure GetBoundingBox0(var Rect: TRect2D); virtual;
     function GetBoundingBox: TRect2D; virtual;
 // Is given point P lies on a polyline defined by the points?
@@ -1117,7 +1114,7 @@ type
     procedure SetDisableEvents(B: Boolean);
     procedure CallOnChange;
   public
-    constructor Create(const _Capacity: Integer); override;
+    constructor Create(const _Capacity: Integer);
     procedure AddPoints(const Items: array of TPoint2D); override;
     procedure AppendPoints(PP: TPointsSet2D); override;
     procedure Delete(const Index: Integer); override;
@@ -1143,6 +1140,47 @@ type
       SetDisableEvents;
     property OnChange: TOnChangePointsSet read fOnChange write
       fOnChange;
+  end;
+
+// Path similar to Postscript or SVG
+
+  TPathItemKind =
+    (pik_MoveTo, pik_LineTo, pik_BezierTo, pik_Close);
+
+  PPathItem = ^TPathItem;
+  TPathItem = record
+    Kind: TPathItemKind;
+    Next: PPathItem;
+    Data: Pointer;
+  end;
+
+  TGenericPath = class(TObject)
+  protected
+    fCurrent: Integer;
+    PPoints: TPointsSet2D;
+    PVect: PVectPoints2D;
+  public
+    constructor Create(const _Points: TPointsSet2D);
+    destructor Destroy; override;
+    function IsCommand(const I: Integer): Boolean;
+    procedure AddMoveTo(const P: TPoint2D);
+    procedure AddLineTo(const P: TPoint2D);
+    procedure AddBezierTo(const P1, P2, P3: TPoint2D);
+    procedure AddClose;
+    procedure StartIterations;
+    function GetNext(var Kind: TPathItemKind;
+      var P1, P2, P3: TPoint2D): Boolean;
+    procedure GetBoundingBox0(var Rect: TRect2D);
+    function GetBoundingBox: TRect2D;
+    function IsPointOnStroke(
+      const P: TPoint2D; const Precision: TRealType;
+      var Distance: TRealType;
+      out Pos: Integer): Boolean;
+    function IsPointInside(
+      const P: TPoint2D; const WRule: TWinding;
+      const Precision: TRealType): Boolean;
+    procedure Linearize(const LinPath: TGenericPath;
+      Precision: TRealType);
   end;
 
   TCircularKind = (ci_Arc, ci_Sector, ci_Segment);
@@ -1211,6 +1249,9 @@ function EllipseBoundingBox(
   const CP: TPoint2D;
   const RX, RY, ARot: TRealType): TRect2D;
 
+// Length of a polyline/polygon
+function PolyLength(const PP: TPointsSet2D;
+  const Closed: Boolean): TRealType;
 // Bezier path approximation for an ellipse, 8 arcs
 procedure EllipseBezierPoints8(CP: TPoint2D;
   RX, RY, ARot: TRealType; PP: TPointsSet2D);
@@ -1224,12 +1265,12 @@ procedure RoundRectBezierPoints(P: TPoint2D;
 // Polygon approximation for a circle
 procedure LinearizeCircle(PP: TPointsSet2D;
   const CP: TPoint2D; const R: TRealType;
-  const CurvePrecision: Integer);
+  Precision: TRealType);
 // Polygon approximation for a cicualar object
 procedure LinearizeCircular(PP: TPointsSet2D;
   const CP: TPoint2D; const R, SA, EA: TRealType;
   const Kind: TCircularKind;
-  const CurvePrecision: Integer);
+  Precision: TRealType);
 procedure RectanglePoints(const P: TPoint2D;
   const W, H, ARot: TRealType;
   out P0, P1, P2, P3: TPoint2D);
@@ -1237,12 +1278,18 @@ procedure LinearizeRectangle(PP: TPointsSet2D;
   const P: TPoint2D; const W, H, ARot: TRealType);
 procedure LinearizeEllipse(PP: TPointsSet2D;
   const CP: TPoint2D; const RX, RY, ARot: TRealType;
-  const CurvePrecision: Integer);
-procedure LinearizeBezier_X(const BezierPP: TPointsSet2D;
-  Precision: Double; const Closed: Boolean;
-  const LinPP: TPointsSet2D);
+  Precision: TRealType);
 procedure LinearizeBezier(const BezierPP: TPointsSet2D;
-  const Precision: Integer; const Closed: Boolean;
+  const Precision: TRealType; const Closed: Boolean;
+  const LinPP: TPointsSet2D);
+procedure LinearizeBezier_RecSub(const BezierPP: TPointsSet2D;
+  Precision: TRealType; const Closed: Boolean;
+  const LinPP: TPointsSet2D);
+procedure LinearizeBezier_Direct(const BezierPP: TPointsSet2D;
+  Precision: TRealType; const Closed: Boolean;
+  const LinPP: TPointsSet2D);
+procedure DiscretizeBezier(const BezierPP: TPointsSet2D;
+  const D: TRealType; const Closed: Boolean;
   const LinPP: TPointsSet2D);
 procedure LinPolyToBezier(const LinPP: TPointsSet2D;
   const Closed: Boolean; const BezierPP: TPointsSet2D);
@@ -1253,6 +1300,8 @@ procedure GetClosedHobbyBezier(var PP: TPointsSet2D;
 procedure DeleteBezierPointSmoothly(
   const P0, P1, P2, P3, P4, P5, P6: TPoint2D;
   var Q1, Q2: TPoint2D);
+procedure SimplifyBezierPath(const BezierPP: TPointsSet2D;
+  const Precision: TRealType; const Closed: Boolean);
 
 procedure SimplifyPoly(PP: TPointsSet2D; OutPP: TPointsSet2D;
   const Delta: TRealType; const Closed: Boolean);
@@ -1278,14 +1327,22 @@ type
     OnClosePath: T_SVG_Path_ClosePathMethod;
     OnMoveTo, OnLineTo: T_SVG_Path_LineToMethod;
     OnBezierTo: T_SVG_Path_BezierToMethod;
+    PGenPath: TGenericPath;
+    procedure GenPath_Close(const X, Y: TRealType);
+    procedure GenPath_MoveTo(const X, Y: TRealType);
+    procedure GenPath_LineTo(const X, Y: TRealType);
+    procedure GenPath_BezierTo(const X1, Y1, X2, Y2, X3, Y3:
+      TRealType);
   public
-    AllAsBezier: Boolean;
     constructor Create(const OnClosePath:
       T_SVG_Path_ClosePathMethod;
       const OnMoveTo, OnLineTo: T_SVG_Path_LineToMethod;
       const OnBezierTo: T_SVG_Path_BezierToMethod);
     destructor Destroy; override;
-    procedure Parse(const Source: string);
+    // Returns the number of disjoint subpaths
+    function Parse(const Source: string): Integer;
+    function FillGenPath(
+      const Source: string; const _Path: TGenericPath): Integer;
   end;
 
 function SVG_Transform_Parse(const Source: string): TTransf2D;
@@ -1306,7 +1363,7 @@ procedure CalculateHatching(const P: TPointsSet2D;
   const Lines: TPointsSet2D; const FillRule: TFillRule);
 
 implementation
-uses SysUtils, Math, SysBasic;
+uses SysUtils, Math, SysBasic, Numeric;
 
 function StrToRealType(const St: string;
   const DefaultVal: TRealType): TRealType;
@@ -1314,7 +1371,22 @@ var
   J: Integer;
 begin
   Val(St, Result, J);
-  if J > 0 then Result := DefaultVal;
+  if J > 0 then
+    if St = 'M' then Result := gp_MoveTo
+    else if St = 'L' then Result := gp_LineTo
+    else if St = 'C' then Result := gp_BezierTo
+    else if St = 'Z' then Result := gp_Close
+    else Result := DefaultVal;
+end;
+
+function RealTypeToStr(const X: TRealType): string;
+begin
+  if X > -1E+38 then Result := FloatToStr(X)
+  else if X = gp_MoveTo then Result := 'M'
+  else if X = gp_LineTo then Result := 'L'
+  else if X = gp_BezierTo then Result := 'C'
+  else if X = gp_Close then Result := 'Z'
+  else Result := FloatToStr(X);
 end;
 
 // 2D Clipping functions.
@@ -2881,6 +2953,19 @@ begin
   end;
 end;
 
+procedure ExtendBoundingBox(
+  P: TPoint2D; var Rect: TRect2D);
+begin
+  P := CartesianPoint2D(P);
+  if P.X > Rect.Right then
+    Rect.Right := P.X;
+  if P.X < Rect.Left then
+    Rect.Left := P.X;
+  if P.Y > Rect.Top then
+    Rect.Top := P.Y;
+  if P.Y < Rect.Bottom then
+    Rect.Bottom := P.Y;
+end;
 
 procedure PointsBoundingBox0(
   const PVect: PVectPoints2D; const Count: Integer;
@@ -2892,17 +2977,7 @@ begin
   if Count = 0 then
     Exit;
   for I := 0 to Count - 1 do
-  begin
-    P := CartesianPoint2D(PVect^[I]);
-    if P.X > Rect.Right then
-      Rect.Right := P.X;
-    if P.X < Rect.Left then
-      Rect.Left := P.X;
-    if P.Y > Rect.Top then
-      Rect.Top := P.Y;
-    if P.Y < Rect.Bottom then
-      Rect.Bottom := P.Y;
-  end;
+    ExtendBoundingBox(PVect^[I], Rect);
 end;
 
 function PointsBoundingBox(
@@ -3067,6 +3142,21 @@ begin
       ShiftPoint(CP, V2D(-RR1, -AA / RR1)),
       ShiftPoint(CP, V2D(AA / RR2, RR2)),
       ShiftPoint(CP, V2D(-AA / RR2, -RR2))]);
+end;
+
+function PolyLength(const PP: TPointsSet2D;
+  const Closed: Boolean): TRealType;
+// Length of a polyline/polygon
+var
+  I, N: Integer;
+begin
+  N := PP.Count;
+  if N < 2 then Exit;
+  if Closed then
+    Result := PointDistance2D(PP[0], PP[N - 1])
+  else Result := 0;
+  for I := 0 to N - 2 do
+    Result := Result + PointDistance2D(PP[I], PP[I + 1]);
 end;
 
 function BezierBasic(
@@ -3468,16 +3558,18 @@ end;
 
 procedure LinearizeCircle(PP: TPointsSet2D;
   const CP: TPoint2D; const R: TRealType;
-  const CurvePrecision: Integer);
+  Precision: TRealType);
 var
-  I: Integer;
+  I, N: Integer;
   Delta, CurrAngle: TRealType;
 begin
-  Delta := TWOPI / CurvePrecision;
+  if Precision <= 0 then Precision := 1;
+  N := Max(Ceil(Pi * Sqrt(3 * R / Precision)), 4);
+  Delta := TWOPI / N;
   CurrAngle := 0;
   PP.Clear;
-  PP.Expand(CurvePrecision);
-  for I := 0 to CurvePrecision - 1 do
+  PP.Expand(N);
+  for I := 0 to N - 1 do
   begin
     PP[I] := Point2D(CP.X + R * Cos(CurrAngle),
       CP.Y + R * Sin(CurrAngle));
@@ -3488,29 +3580,28 @@ end;
 procedure LinearizeCircular(PP: TPointsSet2D;
   const CP: TPoint2D; const R, SA, EA: TRealType;
   const Kind: TCircularKind;
-  const CurvePrecision: Integer);
+  Precision: TRealType);
 var
-  I: Integer;
-  Delta, CurrAngle: TRealType;
+  I, N: Integer;
+  Angle, Delta, CurrAngle: TRealType;
 begin
+  if Precision <= 0 then Precision := 1;
   PP.Clear;
+  if SA < EA then Angle := EA - SA else Angle := TWOPI - SA + EA;
+  N := Ceil(Angle * Sqrt(0.75 * R / Precision)) + 2;
   if Kind = ci_Sector then
-    PP.Expand(CurvePrecision + 1)
+    PP.Expand(N + 1)
   else
-    PP.Expand(CurvePrecision);
-  if SA < EA then
-    Delta := (EA - SA) / (CurvePrecision - 1)
-  else
-    Delta := (TWOPI - SA + EA) / (CurvePrecision - 1);
+    PP.Expand(N);
+  Delta := Angle / (N - 1);
   CurrAngle := SA;
-  for I := 0 to CurvePrecision - 1 do
+  for I := 0 to N - 1 do
   begin
     PP[I] := Point2D(CP.X + R * Cos(CurrAngle),
       CP.Y + R * Sin(CurrAngle));
     CurrAngle := CurrAngle + Delta
   end;
-  if Kind = ci_Sector then
-    PP[CurvePrecision] := CP;
+  if Kind = ci_Sector then PP[N] := CP;
 end;
 
 procedure RectanglePoints(const P: TPoint2D;
@@ -3542,19 +3633,21 @@ end;
 
 procedure LinearizeEllipse(PP: TPointsSet2D;
   const CP: TPoint2D; const RX, RY, ARot: TRealType;
-  const CurvePrecision: Integer);
+  Precision: TRealType);
 var
-  I: Integer;
+  I, N: Integer;
   Delta, CurrAngle: TRealType;
   T: TTransf2D;
 begin
-  Delta := TWOPI / CurvePrecision;
+  if Precision <= 0 then Precision := 1;
+  N := Max(Ceil(Pi * Sqrt(3 * Max(RX, RY) / Precision)), 4);
+  Delta := TWOPI / N;
   CurrAngle := 0;
   PP.Clear;
-  PP.Expand(CurvePrecision);
+  PP.Expand(N);
   if ARot <> 0 then
     T := RotateCenter2D(ARot, CP);
-  for I := 0 to CurvePrecision - 1 do
+  for I := 0 to N - 1 do
   begin
     PP[I] := Point2D(CP.X + RX * Cos(CurrAngle),
       CP.Y + RY * Sin(CurrAngle));
@@ -3563,15 +3656,24 @@ begin
   end;
 end;
 
-procedure LinearizeBezier_X(const BezierPP: TPointsSet2D;
-  Precision: Double; const Closed: Boolean;
+procedure LinearizeBezier(const BezierPP: TPointsSet2D;
+  const Precision: TRealType; const Closed: Boolean;
+  const LinPP: TPointsSet2D);
+begin
+  LinearizeBezier_RecSub(BezierPP, Precision, Closed, LinPP);
+//  LinearizeBezier_Direct(BezierPP, Precision, Closed, LinPP);
+//  DiscretizeBezier(BezierPP, Precision, Closed, LinPP);
+end;
+
+procedure LinearizeBezier_RecSub(const BezierPP: TPointsSet2D;
+  Precision: TRealType; const Closed: Boolean;
   const LinPP: TPointsSet2D);
 // Recursive subdivision algorithm
 var
   I: Integer;
-  function IsApproxLine(const P0, P1, P2, P3: TPoint2D): Boolean;
+  function IsApproxStraight(const P0, P1, P2, P3: TPoint2D):
+      Boolean;
   begin
-// function PointDistance2D(const P1, P2: TPoint2D): TRealType;
     Result :=
       (PointDistance2D(P1, MidPoint(P0, P2)) < Precision) and
       (PointDistance2D(P2, MidPoint(P1, P3)) < Precision);
@@ -3580,7 +3682,7 @@ var
   var
     Q1, Q2, Q3, Q4, Q5: TPoint2D;
   begin
-    if IsApproxLine(P0, P1, P2, P3) then
+    if IsApproxStraight(P0, P1, P2, P3) then
     begin
       LinPP.Add(P0);
       Exit;
@@ -3596,6 +3698,7 @@ var
   end;
 begin
   if BezierPP.Count = 0 then Exit;
+  if Precision <= 0 then Precision := 1;
   Precision := Precision / 3;
   LinPP.Expand(BezierPP.Count);
   LinPP.Clear;
@@ -3608,33 +3711,150 @@ begin
     LinPP.Add(BezierPP[BezierPP.Count - 1]);
 end;
 
-procedure LinearizeBezier(const BezierPP: TPointsSet2D;
-  const Precision: Integer; const Closed: Boolean;
+procedure LinearizeBezier_Direct(const BezierPP: TPointsSet2D;
+  Precision: TRealType; const Closed: Boolean;
   const LinPP: TPointsSet2D);
 // Direct evaluation algorithm
 var
   I: Integer;
+  N: Integer;
   procedure AddBezierArc(const PP: TPointsSet2D;
-    const Precision: Integer;
     const P0, P1, P2, P3: TPoint2D);
   var
     I: Integer;
   begin
-    for I := 0 to Precision - 1 do
-      PP.Add(BezierPoint(P0, P1, P2, P3, I / Precision));
+    N := Ceil(0.02 * (PointDistance2D(P0, P1)
+      + PointDistance2D(P1, P2)
+      + PointDistance2D(P2, P3)) / Precision);
+    LinPP.Expand(LinPP.Count + N);
+    for I := 0 to N - 1 do
+      PP.Add(BezierPoint(P0, P1, P2, P3, I / N));
   end;
 begin
   if BezierPP.Count = 0 then Exit;
+  if Precision <= 0 then Precision := 1;
   LinPP.Clear;
-  LinPP.Expand(Precision * (BezierPP.Count div 3));
+  LinPP.Expand(BezierPP.Count);
   for I := 0 to BezierPP.Count div 3 - 1 do
-    AddBezierArc(LinPP, Precision,
+    AddBezierArc(LinPP,
       BezierPP[I * 3], BezierPP[I * 3 + 1],
       BezierPP[I * 3 + 2], BezierPP[I * 3 + 3]);
   if Closed or (BezierPP.Count = 1) then
     LinPP.Add(BezierPP[0])
   else
     LinPP.Add(BezierPP[BezierPP.Count - 1]);
+end;
+
+procedure DiscretizeBezier_ProcessSegment(
+  const P0, P1, P2, P3: TPoint2D;
+  const LinPP: TPointsSet2D;
+  const D: TRealType; var S: TRealType;
+  const ULeft, URight: TRealType; const Index: Integer;
+  var UVect, SVect: array of TRealType;
+  var IVect: array of Integer);
+var
+  Q0, Q1, Q2, Q3, Q4, Q5, Q6: TPoint2D;
+  V03, V01, V32: TVector2D;
+  L1, L2, LA, L12, U: TRealType;
+begin
+  V03 := Vector2D(P0, P3);
+  V01 := Vector2D(P0, P1);
+  V32 := Vector2D(P3, P2);
+  L1 := VectorLength2D(V03); // lower bound
+  L12 := PointDistance2D(P1, P2);
+  L2 := VectorLength2D(V01) + L12 +
+    VectorLength2D(V32); // upper bound
+  if L2 = 0 then Exit;
+    // Approximation to arc length
+  LA := 0.17 * L2 + 1.33 * L1 - 0.5 * L12
+    + 0.5 * (DotProduct2D(V03, V32)
+    - DotProduct2D(V03, V01)) / L2;
+  if LA < L1 then LA := L1
+  else if LA > L2 then LA := L2;
+  if L2 < 0.01 * D then // Very small segment
+  begin
+    S := S + LA;
+    if S > 0.95 * D then
+    begin
+      LinPP.Add(P3);
+      if Length(UVect) > 0 then UVect[LinPP.Count - 1] := URight;
+      if Length(SVect) > 0 then
+        if LinPP.Count > 1 then
+          SVect[LinPP.Count - 1] := SVect[LinPP.Count - 2] + S
+        else SVect[LinPP.Count - 1] := S;
+      if Length(IVect) > 0 then IVect[LinPP.Count - 1] := Index;
+      S := 0;
+    end;
+    Exit;
+  end;
+  if (L1 / L2 > 0.8) and (S + LA < 1.05 * D) then
+  begin
+    if S + LA > 0.95 * D then
+    begin // point found
+      LinPP.Add(P3);
+      if Length(UVect) > 0 then UVect[LinPP.Count - 1] := URight;
+      if Length(SVect) > 0 then
+        if LinPP.Count > 1 then
+          SVect[LinPP.Count - 1] := SVect[LinPP.Count - 2] + S + LA
+        else SVect[LinPP.Count - 1] := S + LA;
+      if Length(IVect) > 0 then IVect[LinPP.Count - 1] := Index;
+      S := 0;
+    end
+    else S := S + LA; // cumulative length is too small
+    Exit;
+  end;
+  if LA > 0 then U := (D - S) / LA else U := 0.5;
+  if U < 0.1 then U := 0.1 else if U > 0.9 then U := 0.9;
+    // Subdivision
+  Q0 := P0; Q1 := P1; Q2 := P2; Q3 := P3;
+  BreakBezier(Q0, Q1, Q2, Q3, Q4, Q5, Q6, U);
+  DiscretizeBezier_ProcessSegment(Q0, Q1, Q2, Q3,
+    LinPP, D, S,
+    ULeft, (1 - U) * ULeft + U * URight, Index, UVect, SVect,
+    IVect);
+  DiscretizeBezier_ProcessSegment(Q3, Q4, Q5, Q6,
+    LinPP, D, S,
+    (1 - U) * ULeft + U * URight, URight, Index, UVect, SVect,
+    IVect);
+end;
+
+procedure DiscretizeBezier(const BezierPP: TPointsSet2D;
+  const D: TRealType; const Closed: Boolean;
+  const LinPP: TPointsSet2D);
+  // Equal step linearization
+  // Discretizes Bezier path with approximate step D
+var
+  S: TRealType; // cumulative arc length
+  P0, P3: TPoint2D;
+  I, N: Integer;
+  UVect, SVect: array of TRealType;
+  IVect: array of Integer;
+begin
+  LinPP.Clear;
+  if BezierPP.Count < 3 then Exit;
+  if D <= 0 then Exit;
+  // PolyLength gives the upper bound for the Bezier path length
+  LinPP.Expand(Round(PolyLength(BezierPP, Closed) / D) + 2);
+  N := BezierPP.Count div 3;
+  P0 := BezierPP[0];
+  LinPP.Add(P0);
+  S := 0;
+  SetLength(UVect, 0);
+  SetLength(SVect, 0);
+  SetLength(IVect, 0);
+  for I := 1 to N do
+  begin
+    if Closed and (I = N) then P3 := BezierPP[0]
+    else P3 := BezierPP[I * 3];
+    DiscretizeBezier_ProcessSegment(
+      P0, BezierPP[I * 3 - 2], BezierPP[I * 3 - 1], P3,
+      LinPP, D, S, 0, 1, I - 1, UVect, SVect, IVect);
+    P0 := P3;
+  end;
+  P0 := BezierPP[BezierPP.Count - 1];
+  if PointDistance2D(P0, LinPP[LinPP.Count - 1])
+    > 0.03 * D then LinPP.Add(P0)
+  else LinPP[LinPP.Count - 1] := P0;
 end;
 
 procedure LinPolyToBezier(const LinPP: TPointsSet2D;
@@ -3952,6 +4172,298 @@ begin
   CallOnChange;
 end;
 
+// =====================================================================
+// TGenericPath
+// =====================================================================
+
+const
+  gpp_MoveTo: TPoint2D = (X: - 2.4E+38; Y: 0; W: 0);
+  gpp_LineTo: TPoint2D = (X: - 2.3E+38; Y: 0; W: 0);
+  gpp_BezierTo: TPoint2D = (X: - 2.2E+38; Y: 0; W: 0);
+  gpp_Close: TPoint2D = (X: - 2.1E+38; Y: 0; W: 0);
+
+constructor TGenericPath.Create(const _Points: TPointsSet2D);
+begin
+  inherited Create;
+  PPoints := _Points;
+end;
+
+destructor TGenericPath.Destroy;
+begin
+  inherited Destroy;
+end;
+
+function TGenericPath.IsCommand(const I: Integer): Boolean;
+var
+  P: TPoint2D;
+begin
+  P := PPoints[I];
+  Result :=
+    (P.X = gp_MoveTo) or (P.X = gp_LineTo) or
+    (P.X = gp_BezierTo) or (P.X = gp_Close);
+end;
+
+procedure TGenericPath.AddMoveTo(const P: TPoint2D);
+begin
+  PPoints.Add(gpp_MoveTo);
+  PPoints.Add(P);
+end;
+
+procedure TGenericPath.AddLineTo(const P: TPoint2D);
+begin
+  PPoints.Add(gpp_LineTo);
+  PPoints.Add(P);
+end;
+
+procedure TGenericPath.AddBezierTo(const P1, P2, P3: TPoint2D);
+begin
+  PPoints.Add(gpp_BezierTo);
+  PPoints.Add(P1);
+  PPoints.Add(P2);
+  PPoints.Add(P3);
+end;
+
+procedure TGenericPath.AddClose;
+begin
+  PPoints.Add(gpp_Close);
+end;
+
+procedure TGenericPath.StartIterations;
+begin
+  fCurrent := 0;
+  PVect := PPoints.fPoints;
+end;
+
+function TGenericPath.GetNext(var Kind: TPathItemKind;
+  var P1, P2, P3: TPoint2D): Boolean;
+var
+  PCurr: TPoint2D;
+begin
+  if fCurrent >= PPoints.Count then
+  begin
+    Result := False;
+    Exit;
+  end;
+  PCurr := PVect^[fCurrent];
+  Inc(fCurrent);
+  if PCurr.X = gp_MoveTo then Kind := pik_MoveTo
+  else if PCurr.X = gp_LineTo then Kind := pik_LineTo
+  else if PCurr.X = gp_BezierTo then Kind := pik_BezierTo
+  else if PCurr.X = gp_Close then Kind := pik_Close;
+  case Kind of
+    pik_MoveTo, pik_LineTo:
+      begin
+        P1 := PVect^[fCurrent];
+        Inc(fCurrent);
+      end;
+    pik_BezierTo:
+      begin
+        P1 := PVect^[fCurrent];
+        Inc(fCurrent);
+        P2 := PVect^[fCurrent];
+        Inc(fCurrent);
+        P3 := PVect^[fCurrent];
+        Inc(fCurrent);
+      end;
+  end;
+  Result := True;
+end;
+
+procedure TGenericPath.GetBoundingBox0(var Rect: TRect2D);
+var
+  Kind: TPathItemKind;
+  CurrP, P1, P2, P3: TPoint2D;
+begin
+  StartIterations;
+  CurrP := Point2D(0, 0);
+  while GetNext(Kind, P1, P2, P3) do
+    case Kind of
+      pik_MoveTo, pik_LineTo:
+        begin
+          ExtendBoundingBox(P1, Rect);
+          CurrP := P1;
+        end;
+      pik_BezierTo:
+        begin
+          BezierSegmentBoundingBox(CurrP, P1, P2, P3, Rect);
+          CurrP := P3;
+        end;
+    end;
+end;
+
+function TGenericPath.GetBoundingBox: TRect2D;
+begin
+  Result := Rect2D(
+    MaxRealType, MaxRealType, -MaxRealType, -MaxRealType);
+  GetBoundingBox0(Result);
+end;
+
+function TGenericPath.IsPointOnStroke(
+  const P: TPoint2D; const Precision: TRealType;
+  var Distance: TRealType;
+  out Pos: Integer): Boolean;
+var
+  Kind: TPathItemKind;
+  D: TRealType;
+  StartP, CurrP, P1, P2, P3: TPoint2D;
+  procedure CheckDist;
+  begin
+    if D < Distance then
+    begin
+      Distance := D;
+      Result := True;
+    end;
+  end;
+begin
+  Pos := -1;
+  Result := False;
+  CurrP := Point2D(0, 0);
+  StartIterations;
+  while GetNext(Kind, P1, P2, P3) do
+    case Kind of
+      pik_MoveTo:
+        begin
+          StartP := P1;
+          CurrP := P1;
+        end;
+      pik_LineTo:
+        begin
+          D := PointSegmentDistance2D(P, CurrP, P1);
+          CheckDist;
+          CurrP := P1;
+        end;
+      pik_BezierTo:
+        begin
+          D := Distance;
+          SubdivClosestBezierPoint0(
+            P, CurrP, P1, P2, P3, Precision, D);
+          CheckDist;
+          CurrP := P3;
+        end;
+      pik_Close:
+        begin
+          D := PointSegmentDistance2D(P, CurrP, StartP);
+          CheckDist;
+          CurrP := StartP;
+        end;
+    end;
+end;
+
+function TGenericPath.IsPointInside(
+  const P: TPoint2D; const WRule: TWinding;
+  const Precision: TRealType): Boolean;
+var
+  Kind: TPathItemKind;
+  CrossingNumber: Integer;
+  StartP, CurrP, P1, P2, P3: TPoint2D;
+  Closed: Boolean;
+begin
+  Result := False;
+  CrossingNumber := 0;
+  CurrP := Point2D(0, 0);
+  Closed := True;
+  StartIterations;
+  while GetNext(Kind, P1, P2, P3) do
+    case Kind of
+      pik_MoveTo:
+        begin
+          if not Closed then
+            Inc(CrossingNumber, CrossingInc(P, CurrP, StartP));
+          StartP := P1;
+          CurrP := P1;
+          Closed := False;
+        end;
+      pik_LineTo:
+        begin
+          Inc(CrossingNumber, CrossingInc(P, CurrP, P1));
+          CurrP := P1;
+        end;
+      pik_BezierTo:
+        begin
+          Inc(CrossingNumber,
+            SubdivBezierCrossingInc(
+            P, CurrP, P1, P2, P3, Precision));
+          CurrP := P3;
+        end;
+      pik_Close:
+        begin
+          Inc(CrossingNumber, CrossingInc(P, CurrP, StartP));
+          CurrP := StartP;
+          Closed := True;
+        end;
+    end;
+  // non-zero winding rule or even/odd
+  case WRule of
+    wn_NonZero: if CrossingNumber <> 0 then Result := True;
+    wn_EvenOdd: if Odd(CrossingNumber) then Result := True;
+  end;
+end;
+
+procedure TGenericPath.Linearize(const LinPath: TGenericPath;
+  Precision: TRealType);
+// Recursive subdivision algorithm
+var
+  I: Integer;
+  Kind: TPathItemKind;
+  StartP, CurrP, P1, P2, P3: TPoint2D;
+  function IsApproxStraight(const P0, P1, P2, P3: TPoint2D):
+      Boolean;
+  begin
+    Result :=
+      (PointDistance2D(P1, MidPoint(P0, P2)) < Precision) and
+      (PointDistance2D(P2, MidPoint(P1, P3)) < Precision);
+  end;
+  procedure AddArc(const P0, P1, P2, P3: TPoint2D);
+  var
+    Q1, Q2, Q3, Q4, Q5: TPoint2D;
+  begin
+    if IsApproxStraight(P0, P1, P2, P3) then
+    begin
+      LinPath.AddLineTo(P3);
+      Exit;
+    end;
+    Q1 := MidPoint(P0, P1);
+    Q3 := MidPoint(P1, P2);
+    Q5 := MidPoint(P2, P3);
+    Q2 := MidPoint(Q1, Q3);
+    Q4 := MidPoint(Q3, Q5);
+    Q3 := MidPoint(Q2, Q4);
+    AddArc(P0, Q1, Q2, Q3);
+    AddArc(Q3, Q4, Q5, P3);
+  end;
+begin
+  if Precision <= 0 then Precision := 1;
+  Precision := Precision / 3;
+  LinPath.PPoints.Expand(PPoints.Count);
+  LinPath.PPoints.Clear;
+  CurrP := Point2D(0, 0);
+  StartIterations;
+  while GetNext(Kind, P1, P2, P3) do
+    case Kind of
+      pik_MoveTo:
+        begin
+          LinPath.AddMoveTo(P1);
+          StartP := P1;
+          CurrP := P1;
+        end;
+      pik_LineTo:
+        begin
+          LinPath.AddLineTo(P1);
+          CurrP := P1;
+        end;
+      pik_BezierTo:
+        begin
+          AddArc(CurrP, P1, P2, P3);
+          CurrP := P3;
+        end;
+      pik_Close:
+        begin
+          LinPath.AddClose;
+          CurrP := StartP;
+        end;
+    end;
+end;
+
      {*---- Hobby spline functions ----*}
 
 function GetHobbyBezierAngle(const P0, P1, Q0, Q1: TPoint2D):
@@ -4264,7 +4776,6 @@ begin
   Self.OnMoveTo := OnMoveTo;
   Self.OnLineTo := OnLineTo;
   Self.OnBezierTo := OnBezierTo;
-  AllAsBezier := False;
   fParser := TSimpleParser.Create;
 end;
 
@@ -4274,7 +4785,7 @@ begin
   inherited Destroy;
 end;
 
-procedure T_SVG_Path_Parser.Parse(const Source: string);
+function T_SVG_Path_Parser.Parse(const Source: string): Integer;
 var
   CurrPathCharIndex: Integer;
   Data: array[1..7] of TRealType;
@@ -4301,15 +4812,11 @@ const
       OnMoveTo(X, Y);
       PCurr := Point2D(X, Y);
       PInit := PCurr;
+      Inc(Result);
     end;
     procedure LineTo(X, Y: TRealType);
     begin
-      if not AllAsBezier then
-        OnLineTo(X, Y)
-      else
-        OnBezierTo(
-          (2 * PCurr.X + X) / 3, (2 * PCurr.Y + Y) / 3,
-          (PCurr.X + 2 * X) / 3, (PCurr.Y + 2 * Y) / 3, X, Y);
+      OnLineTo(X, Y);
       PCurr := Point2D(X, Y);
     end;
     procedure BezierTo(X1, Y1, X2, Y2, X3, Y3: TRealType);
@@ -4382,7 +4889,6 @@ const
       else if FS and (EA < SA) then
         EA := EA + 2 * Pi;
     end;
-
     procedure ArcTo(RX, RY, Rot, FA, FS, X, Y: TRealType);
     //rx ry x-axis-rotation large-arc-flag sweep-flag x y
     var
@@ -4390,43 +4896,26 @@ const
       SA, EA, DA: TRealType;
       I, N: Integer;
     begin
-      if not AllAsBezier then
-        OnLineTo(X, Y)
-      else
+      Rot := DegToRad(Rot);
+      EllipticArcEndpointToCenter(
+        PCurr, Point2D(X, Y), RX, RY, Rot, FA <> 0, FS <> 0,
+        CP,
+        SA, EA);
+      N := Ceil(2 * Abs(EA - SA) / Pi);
+      if N > 0 then DA := (EA - SA) / N;
+      for I := 0 to N - 1 do
       begin
-        Rot := DegToRad(Rot);
-        EllipticArcEndpointToCenter(
-          PCurr, Point2D(X, Y), RX, RY, Rot, FA <> 0, FS <> 0,
-          CP,
-          SA, EA);
-        N := Ceil(2 * Abs(EA - SA) / Pi);
-        if N > 0 then DA := (EA - SA) / N;
-        for I := 0 to N - 1 do
-        begin
-          SmallEllipticArcBezier(CP, RX, RY, Rot,
-            SA + DA * I, SA + DA * (I + 1), P0, P1, P2, P3);
-          OnBezierTo(P1.X, P1.Y, P2.X, P2.Y, P3.X, P3.Y);
-        end;
+        SmallEllipticArcBezier(CP, RX, RY, Rot,
+          SA + DA * I, SA + DA * (I + 1), P0, P1, P2, P3);
+        OnBezierTo(P1.X, P1.Y, P2.X, P2.Y, P3.X, P3.Y);
       end;
       PCurr := Point2D(X, Y);
     end;
     procedure Closepath;
     begin
-      if not AllAsBezier then
-        OnClosePath(PInit.X, PInit.Y)
-      else
-      begin
-        if not IsSamePoint2D(PInit, PCurr) then
-          OnBezierTo((2 * PCurr.X + PInit.X) / 3,
-            (2 * PCurr.Y + PInit.Y) / 3,
-            (PCurr.X + 2 * PInit.X) / 3,
-            (PCurr.Y + 2 * PInit.Y) / 3,
-            PInit.X, PInit.Y);
-        OnClosePath(PInit.X, PInit.Y)
-      end;
+      OnClosePath(PInit.X, PInit.Y);
       PCurr := PInit;
     end;
-    //PInit, PCurr
   begin
     TakeSpace;
     if fParser.Finished then Exit;
@@ -4449,9 +4938,8 @@ const
       2 {L}: LineTo(Data[1], Data[2]);
       3 {H}: LineTo(Data[1], PCurr.Y);
       4 {V}: LineTo(PCurr.X, Data[1]);
-      5 {C}: BezierTo(Data[1], Data[2], Data[3], Data[4],
-          Data[5],
-          Data[6]);
+      5 {C}: BezierTo(
+          Data[1], Data[2], Data[3], Data[4], Data[5], Data[6]);
       6 {S}: BezierTo(PCurr.X + VCurr.X, PCurr.Y + VCurr.Y,
           Data[1], Data[2], Data[3], Data[4]);
       7 {Q}: QBezierTo(Data[1], Data[2], Data[3], Data[4]);
@@ -4481,11 +4969,45 @@ const
     end;
   end;
 begin
+  Result := 0;
   fParser.SetSource(@Source);
   CurrPathCharIndex := 2;
   PCurr := Point2D(0, 0);
   repeat GetPathCommand;
   until fParser.Finished;
+end;
+
+procedure T_SVG_Path_Parser.GenPath_Close(const X, Y: TRealType);
+begin
+  PGenPath.AddClose;
+end;
+
+procedure T_SVG_Path_Parser.GenPath_MoveTo(const X, Y: TRealType);
+begin
+  PGenPath.AddMoveTo(Point2D(X, Y));
+end;
+
+procedure T_SVG_Path_Parser.GenPath_LineTo(const X, Y: TRealType);
+begin
+  PGenPath.AddLineTo(Point2D(X, Y));
+end;
+
+procedure T_SVG_Path_Parser.GenPath_BezierTo(
+  const X1, Y1, X2, Y2, X3, Y3: TRealType);
+begin
+  PGenPath.AddBezierTo(
+    Point2D(X1, Y1), Point2D(X2, Y2), Point2D(X3, Y3));
+end;
+
+function T_SVG_Path_Parser.FillGenPath(
+  const Source: string; const _Path: TGenericPath): Integer;
+begin
+  PGenPath := _Path;
+  OnClosePath := GenPath_Close;
+  OnMoveTo := GenPath_MoveTo;
+  OnLineTo := GenPath_LineTo;
+  OnBezierTo := GenPath_BezierTo;
+  Result := Parse(Source);
 end;
 
      {*---- SVG_Transform_Parse ----*}
@@ -4559,7 +5081,7 @@ var
       2: //translate
         begin
           if NNum = 1 then
-            Result := Translate2D(Data[1], Data[1])
+            Result := Translate2D(Data[1], 0)
           else
             Result := Translate2D(Data[1], Data[2]);
         end;
@@ -4792,5 +5314,368 @@ begin
   PP.Free;
 end;
 
+procedure SimplifyBezierPath(const BezierPP: TPointsSet2D;
+  const Precision: TRealType; const Closed: Boolean);
+var
+  LinPP, TmpPP: TPointsSet2D;
+  S: TRealType; // cumulative arc length
+  D: TRealType;
+  P0, P1, P2, P3, P4, P5, P6: TPoint2D;
+  IB, N, Start0, Start1, N0, N1: Integer;
+  Success: Boolean;
+  UVect, SVect, SVectXY: array of TRealType;
+  IVect: array of Integer;
+  VVectLeft, VVectRight: array of TVector2D;
+//  L: TStringList;
+  V0, V1: TVector2D;
+
+  procedure FillDirections;
+//  Use linear filter -1.2, 1, 0.5, -0.3 to calculate left and right
+//  directions. Detect line jogs and smooth nodes
+  var
+    LinN, IB, I: Integer;
+    A: TRealType;
+    PB, P0, P1, P2, P3: TPoint2D;
+    V0, V1, V2: TVector2D;
+  begin
+    LinN := LinPP.Count;
+    I := 0;
+    for IB := 0 to N - 1 do
+    begin
+      if Closed and (IB = N) then PB := BezierPP[0]
+      else PB := BezierPP[IB * 3];
+      while (I < LinN) and (IVect[I] <= IB - 1) do Inc(I);
+      A := (SVect[I] - SVectXY[IB - 1]) / D;
+      if {not Closed and}(I < 4)
+        then VVectLeft[IB] := V2D(0, 0) else
+      begin
+        P0 := LinPP[I - 1];
+        P1 := LinPP[I - 2];
+        P2 := LinPP[I - 3];
+        P3 := LinPP[I - 4];
+        V0 := Vector2D(PB, MixPoint(P0, P1, A));
+        V1 := Vector2D(PB, MixPoint(P1, P2, A));
+        V2 := Vector2D(PB, MixPoint(P2, P3, A));
+        VVectLeft[IB].X := V0.X + 0.5 * V1.X - 0.3 * V2.X;
+        VVectLeft[IB].Y := V0.Y + 0.5 * V1.Y - 0.3 * V2.Y;
+      end;
+      A := 1 - A;
+      if {not Closed and}(I > LinN - 4)
+        then VVectRight[IB] := V2D(0, 0) else
+      begin
+        P0 := LinPP[I];
+        P1 := LinPP[I + 1];
+        P2 := LinPP[I + 2];
+        P3 := LinPP[I + 3];
+        V0 := Vector2D(PB, MixPoint(P0, P1, A));
+        V1 := Vector2D(PB, MixPoint(P1, P2, A));
+        V2 := Vector2D(PB, MixPoint(P2, P3, A));
+        VVectRight[IB].X := V0.X + 0.5 * V1.X - 0.3 * V2.X;
+        VVectRight[IB].Y := V0.Y + 0.5 * V1.Y - 0.3 * V2.Y;
+      end;
+      if (VVectLeft[IB].X = 0) or (VVectLeft[IB].Y = 0) or
+        (VVectRight[IB].X = 0) or (VVectRight[IB].Y = 0) then
+        Continue;
+      A := -DotProduct2D(NormalizeVector2D(VVectLeft[IB]),
+        NormalizeVector2D(VVectRight[IB]));
+      if A > 0.5 then // Smooth joint - the same direction
+      begin
+        VVectLeft[IB].X
+          := (VVectLeft[IB].X - VVectRight[IB].X) / 2;
+        VVectLeft[IB].Y
+          := (VVectLeft[IB].Y - VVectRight[IB].Y) / 2;
+        VVectRight[IB] := ScaleVector2D(VVectLeft[IB], -1);
+      end;
+    end;
+  end;
+
+  procedure CountPoints(const Index, Start: Integer;
+    var N: Integer);
+  begin
+    N := 0;
+    while (Start + N < LinPP.Count) and
+      (IVect[Start + N] = Index) do Inc(N);
+  end;
+
+  function ProcessSegment(const P0, P1, P2: TPoint2D;
+    var P3, P4, P5, P6: TPoint2D;
+    VX0, VX1: TVector2D): Boolean;
+  var
+    Y, X, B, E: TMatrix;
+    RSS: Double;
+    NObs, NRegs: Integer;
+    WB, WS, W2: TRealType;
+    FreeEnd0, FreeEnd1: Boolean;
+    Q1B, Q2B, Q1S, Q2S: TPoint2D;
+    DistB, DistS: TRealType;
+
+    procedure FillRegrLine(var I: Integer; const P: TPoint2D;
+      const U: TRealType);
+//  Fill regression matrices
+    var
+      P1T, P5T: TPoint2D;
+      VY: TVector2D;
+    begin
+      if FreeEnd0 then P1T := Point2D(0, 0) else P1T := P0;
+      if FreeEnd1 then P5T := Point2D(0, 0) else P5T := P6;
+      VY := Vector2D(BezierPoint(P0, P1T, P5T, P6, U), P);
+      if (VY.X = 0) and (VY.Y = 0) and ((U = 0) or (U = 1)) then
+      begin
+        Dec(NObs, 2);
+        Exit;
+      end;
+      Y[I * 2, 0] := VY.X;
+      Y[I * 2 + 1, 0] := VY.Y;
+      if FreeEnd0 then
+      begin
+        X[I * 2, 0] := 3 * U * Sqr(1 - U);
+        X[I * 2, 1] := 0;
+        X[I * 2 + 1, 0] := 0;
+        X[I * 2 + 1, 1] := 3 * U * Sqr(1 - U);
+      end
+      else
+      begin
+        X[I * 2, 0] := 3 * U * Sqr(1 - U) * VX0.X;
+        X[I * 2 + 1, 0] := 3 * U * Sqr(1 - U) * VX0.Y;
+      end;
+      if FreeEnd1 then
+      begin
+        X[I * 2, Integer(FreeEnd0) + 1]
+          := 3 * Sqr(U) * (1 - U);
+        X[I * 2, Integer(FreeEnd0) + 2] := 0;
+        X[I * 2 + 1, Integer(FreeEnd0) + 1] := 0;
+        X[I * 2 + 1, Integer(FreeEnd0) + 2]
+          := 3 * Sqr(U) * (1 - U);
+      end
+      else
+      begin
+        X[I * 2, Integer(FreeEnd0) + 1]
+          := 3 * Sqr(U) * (1 - U) * VX1.X;
+        X[I * 2 + 1, Integer(FreeEnd0) + 1]
+          := 3 * Sqr(U) * (1 - U) * VX1.Y;
+      end;
+      Inc(I);
+    end;
+
+    procedure JoinBez(const W: TRealType);
+//  Join two Bezier segments. Recalculate parametrization UVect
+    var
+      I: Integer;
+    begin
+      if IB = N - 1 then Exit;
+      for I := 0 to N0 - 1 do
+        UVect[Start0 + I] := UVect[Start0 + I] * W;
+      for I := 0 to N1 - 1 do
+        UVect[Start1 + I] := (1 - W) * UVect[Start1 + I] + W;
+      N0 := N0 + N1;
+    end;
+
+    procedure JoinBezSimple(const W: TRealType);
+//  Join two short Bezier segments using Hobby spline
+    var
+      Q1, Q2: TPoint2D;
+    begin
+      DeleteBezierPointSmoothly(
+        P0, P1, P2, P3, P4, P5, P6, Q1, Q2);
+      P3 := P0; P4 := Q1; P5 := Q2;
+      JoinBez(W);
+    end;
+
+    procedure RunRegression(var Q1, Q2: TPoint2D;
+      var W, Dist: TRealType);
+//  Use least squares to approximate several Bezier segments
+//  by a single segment
+    var
+      I, II: Integer;
+      TmpDist: TRealType;
+    begin
+      if (W < 0) or (W > 1) then
+        W := 0.5;
+      SetLength(Y, NObs, 1);
+      SetLength(X, NObs, NRegs);
+      SetLength(B, NRegs, 1);
+      SetLength(E, NObs, 1);
+      II := 0;
+      for I := 0 to N0 - 1 do
+      begin
+        FillRegrLine(II, LinPP[Start0 + I],
+          UVect[Start0 + I] * W);
+      end;
+      for I := 0 to N1 - 1 do
+      begin
+        FillRegrLine(II, LinPP[Start1 + I],
+          (1 - W) * UVect[Start1 + I] + W);
+      end;
+      if (NObs < NRegs) or (NObs < 8) then
+      begin
+        Dist := -1;
+        Exit;
+      end;
+      Dist := Precision;
+      if not OLS_Householder(Y, X, NObs, 1, NRegs, RSS, B, E)
+        then Exit;
+      Dist := 0;
+      for I := 0 to NObs - 1 do
+      begin
+        TmpDist := Abs(E[I, 0]);
+        if TmpDist > Dist then Dist := TmpDist;
+        if Dist >= Precision then Exit;
+      end;
+//  Calculate control points for approximating segment
+      if FreeEnd0 then Q1 := Point2D(B[0, 0], B[1, 0])
+      else Q1 := ShiftPoint(P0,
+          ScaleVector2D(VX0, B[0, 0]));
+      if FreeEnd1 then
+        Q2 := Point2D(B[Integer(FreeEnd0) + 1, 0],
+          B[Integer(FreeEnd0) + 2, 0])
+      else Q2 := ShiftPoint(P6,
+          ScaleVector2D(VX1, B[Integer(FreeEnd0) + 1, 0]));
+    end;
+  begin
+    FreeEnd0 := False;
+    if (VX0.X = 0) and (VX0.Y = 0) then
+    begin
+      FreeEnd0 := True;
+      VX0 := Vector2D(P0, P1);
+    end;
+    FreeEnd1 := False;
+    if (VX1.X = 0) and (VX1.Y = 0) then
+    begin
+      FreeEnd1 := True;
+      VX1 := Vector2D(P6, P5);
+    end;
+    NObs := (N0 + N1) * 2;
+    NRegs := 2 + Integer(FreeEnd0) + Integer(FreeEnd1);
+//  Concatenate parametrizations of two Bezier segments
+//  using their lengths as weights
+    if SVectXY[IB] > S then
+      WS := (SVectXY[IB - 1] - S) / (SVectXY[IB] - S)
+    else WS := 0.5;
+    RunRegression(Q1S, Q2S, WS, DistS);
+    Result := True;
+    if DistS < 0 then
+    begin
+      JoinBezSimple(WS);
+      Exit;
+    end;
+//  Concatenate parametrizations of two Bezier segments
+//  using their "speeds" at the joining node as weights
+    WB := PointDistance2D(P2, P3);
+    W2 := WB + PointDistance2D(P3, P4);
+    if W2 > 0 then WB := WB / W2;
+    RunRegression(Q1B, Q2B, WB, DistB);
+    if DistB < 0 then
+      DistB := Precision;
+//  If both approximations are poor report failure
+    if (DistB >= Precision) and (DistS >= Precision) then
+    begin
+      Result := False;
+      Exit;
+    end;
+//  Choose the best of two weights with a preference towards
+//  arc length weighting
+    if (DistB < DistS * 0.7) or (DistS >= Precision) then
+    begin
+      P3 := P0; P4 := Q1B; P5 := Q2B;
+      JoinBez(WB);
+    end
+    else
+    begin
+      P3 := P0; P4 := Q1S; P5 := Q2S;
+      JoinBez(WS);
+    end;
+  end;
+begin
+  if BezierPP.Count < 6 then Exit;
+  if Precision <= 0 then Exit;
+//  L := TStringList.Create;
+  D := Precision;
+  // PolyLength gives the upper bound for the Bezier path length
+  LinPP := TPointsSet2D.Create(
+    Ceil(PolyLength(BezierPP, Closed) / D) + BezierPP.Count + 2);
+  TmpPP := TPointsSet2D.Create(BezierPP.Count);
+  N := BezierPP.Count div 3;
+  P0 := BezierPP[0];
+  LinPP.Add(P0);
+  S := 0;
+  SetLength(UVect, LinPP.Capacity);
+  SetLength(SVect, LinPP.Capacity);
+  SetLength(IVect, LinPP.Capacity);
+  SetLength(SVectXY, N);
+  // Calculate discretization of the Bezier path
+  for IB := 1 to N do
+  begin
+    if Closed and (IB = N) then P3 := BezierPP[0]
+    else P3 := BezierPP[IB * 3];
+    DiscretizeBezier_ProcessSegment(
+      P0, BezierPP[IB * 3 - 2], BezierPP[IB * 3 - 1], P3,
+      LinPP, D, S, 0, 1, IB - 1, UVect, SVect, IVect);
+    SVectXY[IB - 1] := S + SVect[LinPP.Count - 1];
+    P0 := P3;
+  end;
+  SetLength(VVectLeft, N);
+  SetLength(VVectRight, N);
+  FillDirections;
+  P0 := BezierPP[0];
+  P1 := BezierPP[1];
+  P2 := BezierPP[2];
+  P3 := BezierPP[3];
+  TmpPP.Add(P0);
+  Start0 := 0;
+  CountPoints(0, Start0, N0);
+  V0 := VVectRight[0];
+  S := 0;
+  // Loop over Bezier segments
+  for IB := 1 to N - 1 do
+  begin
+    Start1 := Start0 + N0;
+    CountPoints(IB, Start1, N1);
+    P4 := BezierPP[IB * 3 + 1];
+    P5 := BezierPP[IB * 3 + 2];
+    if Closed and (IB = N - 1) then P6 := BezierPP[0]
+    else P6 := BezierPP[IB * 3 + 3];
+    if IB + 1 < N then V1 := VVectLeft[IB + 1]
+    else V1 := V2D(0, 0);
+    try
+      Success := ProcessSegment(P0, P1, P2, P3, P4, P5, P6,
+        V0, V1);
+    except
+      Success := False;
+    end;
+    if not Success then
+    begin
+      TmpPP.AddPoints([P1, P2, P3]);
+      Start0 := Start1;
+      N0 := N1;
+      V0 := VVectRight[IB];
+      S := SVectXY[IB - 1];
+    end;
+    P0 := P3;
+    P1 := P4;
+    P2 := P5;
+    P3 := P6;
+  end;
+  TmpPP.AddPoints([P4, P5]);
+  if not Closed then TmpPP.Add(P6);
+  // Replace Bezier path by the approximation
+  BezierPP.Clear;
+  BezierPP.AppendPoints(TmpPP);
+  for IB := 0 to LinPP.Count - 1 do
+  begin
+//{==    L.Add(Format('%8.5f' + #9 + '%8.5f' + #9 + '%8.5f' + #9 +      '%8.5f' + #9 + '%d', [LinPP[IB].X, LinPP[IB].Y, UVect[IB],      SVect[IB], IVect[IB]])); //}
+  end;
+//{==  L.Add('====================='); //}
+  for IB := 0 to BezierPP.Count - 1 do
+  begin
+//{==    L.Add(FloatToStr(BezierPP[IB].X) + ', ' +      FloatToStr(BezierPP[IB].Y)); //}
+  end;
+//{==  for IB := 0 to N - 1 do    L.Add(Format('%8.5f' + #9 + '%8.5f' + #9 + '%8.5f' + #9 +      '%8.5f'      + #9 + '%8.5f',      [SVectXY[IB], VVectLeft[IB].X, VVectLeft[IB].Y,      VVectRight[IB].X, VVectRight[IB].Y])); //}
+//{==  L.SaveToFile('C:\WRK\Delphi\TpX\#'); //}
+//  L.Free;
+  LinPP.Free;
+  TmpPP.Free;
+end;
+
+initialization
 end.
 

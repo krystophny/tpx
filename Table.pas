@@ -14,7 +14,7 @@ uses
 {$ENDIF}
   Messages, SysUtils, Classes, Graphics, Controls, Forms,
   Dialogs, Grids, StdCtrls, Spin, GObjects, ExtCtrls, ActnList,
-    Menus,
+  Menus,
   Clipbrd, StrUtils, ComCtrls;
 
 {$IFDEF VER140}
@@ -75,6 +75,9 @@ type
     procedure GridClick(Sender: TObject);
     procedure AddFromClipboardExecute(Sender: TObject);
     procedure Button4Click(Sender: TObject);
+    procedure GridKeyPress(Sender: TObject; var Key: Char);
+    procedure Edit1KeyUp(Sender: TObject; var Key: Word;
+      Shift: TShiftState);
   private
     { Private declarations }
     function AddPoints0(N: Integer): Integer;
@@ -108,8 +111,8 @@ begin
   for I := 0 to PPrimitive.Points.Count - 1 do
   begin
     Grid.Cells[0, I + 1] := IntToStr(I + 1);
-    Grid.Cells[1, I + 1] := FloatToStr(PPrimitive.Points[I].X);
-    Grid.Cells[2, I + 1] := FloatToStr(PPrimitive.Points[I].Y);
+    Grid.Cells[1, I + 1] := RealTypeToStr(PPrimitive.Points[I].X);
+    Grid.Cells[2, I + 1] := RealTypeToStr(PPrimitive.Points[I].Y);
   end;
   Panel1.Visible := PPrimitive.Points.GrowingEnabled;
   DeletePoints.Enabled := PPrimitive.Points.GrowingEnabled;
@@ -127,8 +130,8 @@ begin
   if ModalResult <> mrOK then Exit;
   SetLength(Pts, Grid.RowCount - 1);
   for I := 0 to Grid.RowCount - 2 do
-    Pts[I] := Point2D(StrToFloat(Trim(Grid.Cells[1, I + 1])),
-      StrToFloat(Trim(Grid.Cells[2, I + 1])));
+    Pts[I] := Point2D(StrToRealType(Trim(Grid.Cells[1, I + 1]), 0),
+      StrToRealType(Trim(Grid.Cells[2, I + 1]), 0));
   PPrimitive.Points.Clear;
   PPrimitive.Points.AddPoints(Pts);
 end;
@@ -360,7 +363,16 @@ end;
 procedure TTableForm.GridKeyUp(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
-  if Key = VK_DELETE then DeletePoints.Execute;
+  if Key = VK_DELETE then
+  begin
+    DeletePoints.Execute;
+    Exit;
+  end;
+  if not CheckBox1.Checked and (Key = VK_F2) then
+  begin
+    Edit1.SetFocus;
+    Exit;
+  end;
 end;
 
 procedure TTableForm.GridClick(Sender: TObject);
@@ -384,9 +396,40 @@ begin
     end;
 end;
 
+procedure TTableForm.GridKeyPress(Sender: TObject; var Key: Char);
+begin
+  if CheckBox1.Checked then Exit;
+  if Key in ['-', '0'..'9', '.', 'e', 'E'] then
+  begin
+//   Edit1.OnChange := nil;
+    Edit1.Text := Key;
+//  Edit1.OnChange := Edit1Change;
+    Edit1.SetFocus;
+    Edit1.SelLength := 0;
+    Edit1.SelStart := 1;
+  end;
+end;
+
+procedure TTableForm.Edit1KeyUp(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  if Key = VK_RETURN then
+  begin
+    Grid.SetFocus;
+    Exit;
+  end;
+{  if (Key = VK_DOWN) or (Key = VK_Up) then
+  begin
+    Grid.SetFocus;
+    Grid.OnKeyUp(Sender, Key, Shift);
+    Exit;
+  end;}
+end;
+
 initialization
 {$IFDEF VER140}
 {$ELSE}
 {$I Table.lrs}
 {$ENDIF}
 end.
+

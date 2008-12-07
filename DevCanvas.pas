@@ -20,36 +20,45 @@ uses Types, Classes,
 
 type
 
+  TArrayOfPoint = array of TPoint;
+
   TDrawPathProc = procedure(const Canvas: TCanvas;
-    const IsClosed: Boolean; const Pnts: array of TPoint);
+    const IsClosed: Boolean; const Pnts: array of TPoint;
+    const GP: TGenericPath; const Transf: TTransf2D);
 
   TCanvasDevice = class(TDevice)
   protected
     fCnv: TCanvas;
     fFaceName: string;
+    procedure Poly(PP: TPointsSet2D;
+      const LineColor, HatchColor, FillColor: TColor;
+      const LineStyle: TLineStyle; const LineWidth: TRealType;
+      const Hatching: THatching; const Transf: TTransf2D;
+      const Closed: Boolean); override;
     procedure Bezier(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
       const LineStyle: TLineStyle; const LineWidth: TRealType;
       const Hatching: THatching; const Transf: TTransf2D;
       const Closed: Boolean); virtual;
     procedure RotText(P: TPoint2D; H, ARot: TRealType;
-      WideText: Widestring; TeXText: AnsiString;
-      const HJustification: THJustification;
-      const VJustification: TVJustification;
+      WideText: WideString; TeXText: AnsiString;
+      const HAlignment: THAlignment;
       const LineColor: TColor;
       const AFaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
+    procedure Bitmap(P: TPoint2D; W, H: TRealType;
+      const KeepAspectRatio: Boolean;
+      BitmapEntry: TObject);
+    procedure GenPath(const GP: TGenericPath;
+      const LineColor, HatchColor, FillColor: TColor;
+      const LineStyle: TLineStyle; const LineWidth: TRealType;
+      const Hatching: THatching; const Transf: TTransf2D);
     procedure HatchingLine(P0, P1: TPoint2D;
       const LineColor: TColor; const LineStyle: TLineStyle;
       const LineWidth: TRealType); override;
   public
     constructor Create;
     destructor Destroy; override;
-    procedure Poly(PP: TPointsSet2D;
-      const LineColor, HatchColor, FillColor: TColor;
-      const LineStyle: TLineStyle; const LineWidth: TRealType;
-      const Hatching: THatching; const Transf: TTransf2D;
-      const Closed: Boolean); override;
     procedure BoundingBox2D(const Box, Clip: TRect2D;
       const S: TTransf2D);
     property Cnv: TCanvas read fCnv write fCnv;
@@ -63,13 +72,17 @@ type
       const LineStyle: TLineStyle; const LineWidth: TRealType;
       const Hatching: THatching; const Transf: TTransf2D;
       const Closed: Boolean); override;
-  public
-    constructor Create;
     procedure Poly(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
       const LineStyle: TLineStyle; const LineWidth: TRealType;
       const Hatching: THatching; const Transf: TTransf2D;
       const Closed: Boolean); override;
+    procedure GenPath(const GP: TGenericPath;
+      const LineColor, HatchColor, FillColor: TColor;
+      const LineStyle: TLineStyle; const LineWidth: TRealType;
+      const Hatching: THatching; const Transf: TTransf2D);
+  public
+    constructor Create;
   end;
 
   { Drawing functions}
@@ -77,13 +90,18 @@ type
 procedure CnvDrawLine(const Cnv: TCanvas;
   const P0, P1: TPoint2D);
 procedure CnvDrawPolyline(const Cnv: TCanvas;
-  Pnts: array of TPoint; const N: Integer);
+  const Pnts: array of TPoint; const N: Integer);
 procedure CnvDrawPolygon(const Cnv: TCanvas;
-  Pnts: array of TPoint; const N: Integer);
+  const Pnts: array of TPoint; const N: Integer);
+procedure CnvDrawPolylinePath(const Cnv: TCanvas;
+  const IsClosed: Boolean; const Pnts: array of TPoint;
+  const GP: TGenericPath; const Transf: TTransf2D);
 procedure CnvDrawBezierPath(const Cnv: TCanvas;
-  const Closed: Boolean; const Pnts: array of TPoint);
-procedure CnvDrawPolylinePath(const Canvas: TCanvas;
-  const IsClosed: Boolean; const Pnts: array of TPoint);
+  const IsClosed: Boolean; const Pnts: array of TPoint;
+  const GP: TGenericPath; const Transf: TTransf2D);
+procedure CnvDrawGenPath(const Cnv: TCanvas;
+  const IsClosed: Boolean; const Pnts: array of TPoint;
+  const GP: TGenericPath; const Transf: TTransf2D);
 
 {    Vect should be of type PVectPoints2D, Count is the number of points. }
 procedure Draw2DSubSetAsPolygon(const Vect: Pointer; Count:
@@ -112,6 +130,9 @@ procedure CnvDrawRoundControlPoint(const Cnv: TCanvas;
   const P: TPoint2D; const Wdt: Integer);
 procedure CnvDrawControlPoint3(const Cnv: TCanvas;
   const P: TPoint2D; const Wdt: Integer);
+procedure CnvDrawControlPoint4(const Cnv: TCanvas;
+  const P: TPoint2D; const Wdt: Integer);
+
   {: This function can be used to draw a rectangle onto a
      canvas.
 
@@ -247,7 +268,7 @@ procedure DrawAsPolyline(PP: TPointsSet2D; const Cnv: TCanvas; const
 
 implementation
 
-uses Math, Drawings, SysBasic;
+uses Math, Drawings, SysBasic, Bitmaps;
 
 procedure CnvDrawLine(const Cnv: TCanvas;
   const P0, P1: TPoint2D);
@@ -257,7 +278,7 @@ begin
 end;
 
 procedure CnvDrawPolyline(const Cnv: TCanvas;
-  Pnts: array of TPoint; const N: Integer);
+  const Pnts: array of TPoint; const N: Integer);
 begin
   if N < 2 then Exit;
 {$IFDEF VER140}
@@ -271,7 +292,7 @@ begin
 end;
 
 procedure CnvDrawPolygon(const Cnv: TCanvas;
-  Pnts: array of TPoint; const N: Integer);
+  const Pnts: array of TPoint; const N: Integer);
 begin
   if N < 2 then Exit;
 {$IFDEF VER140}
@@ -285,24 +306,26 @@ begin
 {$ENDIF}
 end;
 
-procedure CnvDrawPolylinePath(const Canvas: TCanvas;
-  const IsClosed: Boolean; const Pnts: array of TPoint);
+procedure CnvDrawPolylinePath(const Cnv: TCanvas;
+  const IsClosed: Boolean; const Pnts: array of TPoint;
+  const GP: TGenericPath; const Transf: TTransf2D);
 begin
   if IsClosed then
-    CnvDrawPolygon(Canvas, Pnts, Length(Pnts))
+    CnvDrawPolygon(Cnv, Pnts, Length(Pnts))
   else
-    CnvDrawPolyline(Canvas, Pnts, Length(Pnts));
+    CnvDrawPolyline(Cnv, Pnts, Length(Pnts));
 end;
 
 procedure CnvDrawBezierPath(const Cnv: TCanvas;
-  const Closed: Boolean; const Pnts: array of TPoint);
+  const IsClosed: Boolean; const Pnts: array of TPoint;
+  const GP: TGenericPath; const Transf: TTransf2D);
 begin
   if Length(Pnts) < 2 then Exit;
 {$IFDEF VER140}
   BeginPath(Cnv.Handle);
   MoveToEx(Cnv.Handle, Pnts[0].X, Pnts[0].Y, nil);
   PolyBezierTo(Cnv.Handle, Pnts[1], Length(Pnts) - 1);
-  if Closed then CloseFigure(Cnv.Handle);
+  if IsClosed then CloseFigure(Cnv.Handle);
   EndPath(Cnv.Handle);
 {$ELSE}
   if Length(Pnts) = 4 then
@@ -314,6 +337,42 @@ begin
   else
     Cnv.PolyBezier(Pnts, Length(Pnts), False, True)
       ;
+{$ENDIF}
+end;
+
+procedure CnvDrawGenPath(const Cnv: TCanvas;
+  const IsClosed: Boolean; const Pnts: array of TPoint;
+  const GP: TGenericPath; const Transf: TTransf2D);
+var
+  Kind: TPathItemKind;
+  P1, P2, P3: TPoint2D;
+  Pnts3: array[0..2] of TPoint;
+begin
+{$IFDEF VER140}
+  BeginPath(Cnv.Handle);
+  GP.StartIterations;
+  while GP.GetNext(Kind, P1, P2, P3) do
+    case Kind of
+      pik_MoveTo:
+        begin
+          P1 := TransformPoint2D(P1, Transf);
+          MoveToEx(Cnv.Handle, Round(P1.X), Round(P1.Y), nil); //??
+        end;
+      pik_LineTo:
+        begin
+          P1 := TransformPoint2D(P1, Transf);
+          LineTo(Cnv.Handle, Round(P1.X), Round(P1.Y));
+        end;
+      pik_BezierTo:
+        begin
+          Pnts3[0] := Point2DToPoint(TransformPoint2D(P1, Transf));
+          Pnts3[1] := Point2DToPoint(TransformPoint2D(P2, Transf));
+          Pnts3[2] := Point2DToPoint(TransformPoint2D(P3, Transf));
+          PolyBezierTo(Cnv.Handle, Pnts3, 3);
+        end;
+      pik_Close: CloseFigure(Cnv.Handle);
+    end;
+  EndPath(Cnv.Handle);
 {$ENDIF}
 end;
 
@@ -525,6 +584,7 @@ begin
     Brush.Style := bsSolid;
     Brush.Color := clSilver;
     Pen.Style := psSolid;
+    Pen.Color := clBlack;
     TmpWdt := Wdt div 2;
     X := Round(P.X);
     Y := Round(P.Y);
@@ -542,6 +602,7 @@ begin
     Brush.Style := bsSolid;
     Brush.Color := clSkyBlue;
     Pen.Style := psSolid;
+    Pen.Color := clBlack;
     TmpWdt := Wdt div 2;
     X := Round(P.X);
     Y := Round(P.Y);
@@ -556,16 +617,42 @@ var
 begin
   with Cnv do
   begin
+    Brush.Style := bsSolid;
+    Brush.Color := clDkGray;
     Pen.Style := psSolid;
+    Pen.Color := clGreen;
     TmpWdt := Wdt div 2;
     X := Round(P.X);
     Y := Round(P.Y);
-    Brush.Style := bsSolid;
-    Brush.Color := clBlack;
     Cnv.Rectangle(X - TmpWdt, Y - TmpWdt, X + TmpWdt, Y + TmpWdt);
     Brush.Style := bsSolid;
     Brush.Color := clWhite;
-    Cnv.Ellipse(X - TmpWdt, Y - TmpWdt, X + TmpWdt, Y + TmpWdt);
+    Pen.Color := clDkGray;
+    Cnv.Ellipse(X - TmpWdt + 1, Y - TmpWdt + 1, X + TmpWdt - 1,
+      Y + TmpWdt - 1);
+  end;
+end;
+
+procedure CnvDrawControlPoint4(const Cnv: TCanvas;
+  const P: TPoint2D; const Wdt: Integer);
+var
+  TmpWdt, X, Y: Integer;
+begin
+  with Cnv do
+  begin
+    Brush.Style := bsSolid;
+    Brush.Color := clDkGray;
+    Pen.Style := psSolid;
+    Pen.Color := clBlue;
+    TmpWdt := Wdt div 2;
+    X := Round(P.X);
+    Y := Round(P.Y);
+    Cnv.Rectangle(X - TmpWdt, Y - TmpWdt, X + TmpWdt, Y + TmpWdt);
+    Brush.Style := bsSolid;
+    Brush.Color := clWhite;
+    Pen.Color := clDkGray;
+    Cnv.Ellipse(X - TmpWdt + 1, Y - TmpWdt + 1, X + TmpWdt - 1,
+      Y + TmpWdt - 1);
   end;
 end;
 
@@ -823,6 +910,7 @@ procedure DrawNative0(const Cnv: TCanvas;
   const ClipRect2D: TRect2D;
   const IsClosed: Boolean;
   const Pnts: array of TPoint;
+  const GP: TGenericPath; const Transf: TTransf2D;
   const LineStyle: TLineStyle;
   const Line_Width: TRealType;
   const Hatching: THatching;
@@ -895,7 +983,7 @@ begin
     SetBkColor(Cnv.Handle, FillColor);
     Windows.SetBkMode(Cnv.Handle, 1);
   end;
-  PathProc(Cnv, IsClosed, Pnts);
+  PathProc(Cnv, IsClosed, Pnts, GP, Transf);
   if LineStyle = liNone then
     SetPen(psClear, clRed)
   else
@@ -927,7 +1015,7 @@ begin
         //StrokeAndFillPath is not suitable for opened figures,
         // because it closes all such figures!
         FillPath(Cnv.Handle);
-        PathProc(Cnv, IsClosed, Pnts);
+        PathProc(Cnv, IsClosed, Pnts, GP, Transf);
         StrokePath(Cnv.Handle);
       end
       else
@@ -947,6 +1035,7 @@ procedure DrawNative0(const Cnv: TCanvas;
   const ClipRect2D: TRect2D;
   const IsClosed: Boolean;
   const Pnts: array of TPoint;
+  const GP: TGenericPath; const Transf: TTransf2D;
   const LineStyle: TLineStyle;
   const Line_Width: TRealType;
   const Hatching: THatching;
@@ -1021,6 +1110,8 @@ begin
   inherited Create;
   fCnv := nil;
   OnRotText := RotText;
+  OnBitmap := Bitmap;
+  OnGenPath := GenPath;
 {$IFNDEF LINUX}
   OnBezier := Bezier;
 //  OnCircle := Circle;
@@ -1068,7 +1159,8 @@ begin
       MultTransf(Transf)));
   DrawNative0(fCnv,
     CnvDrawPolylinePath, Rect2D(0, 0, 0, 0),
-    Closed, Pnts, LineStyle, LineWidth, Hatching,
+    Closed, Pnts, nil, IdentityTransf2D, LineStyle, LineWidth,
+    Hatching,
     LineColor, FillColor, HatchColor,
     fLineWidthBase, fFactorMM, fMiterLimit);
 end;
@@ -1090,16 +1182,16 @@ begin
       MultTransf(Transf)));
   DrawNative0(fCnv,
     CnvDrawBezierPath, Rect2D(0, 0, 0, 0),
-    Closed, Pnts, LineStyle, LineWidth, Hatching,
+    Closed, Pnts, nil, IdentityTransf2D, LineStyle, LineWidth,
+    Hatching,
     LineColor, FillColor, HatchColor,
     fLineWidthBase, fFactorMM, fMiterLimit);
 end;
 
 procedure TCanvasDevice.RotText(
   P: TPoint2D; H, ARot: TRealType;
-  WideText: Widestring; TeXText: AnsiString;
-  const HJustification: THJustification;
-  const VJustification: TVJustification;
+  WideText: WideString; TeXText: AnsiString;
+  const HAlignment: THAlignment;
   const LineColor: TColor;
   const AFaceName: AnsiString;
   const Charset: TFontCharSet; const Style: TFontStyles);
@@ -1120,7 +1212,6 @@ var
   TmpTransf: TTransf2D;
   AlignFlags: Word;
   AExtFont: TExtendedFont;
-  InternalLeading: Single;
   S: Types.TSize;
 //  Text_Metric: tagTEXTMETRIC;
 begin
@@ -1131,11 +1222,6 @@ begin
     AExtFont.FaceName := fFaceName
   else
     AExtFont.FaceName := 'Times New Roman';
-{$IFDEF VER140}
-  if VJustification = jvTop then
-    InternalLeading := GetFontInternalLeading(
-      AExtFont.FaceName, Style, Charset);
-{$ENDIF}
   fCnv.Brush.Style := bsClear;
   { Build up the DrawText rect. }
   AExtFont.Canvas := fCnv;
@@ -1157,28 +1243,23 @@ begin
 //  InternalLeading := Text_Metric.tmInternalLeading / Round(H);
   D.X := 0;
 {$IFDEF VER140}
-  case VJustification of
-    jvBottom: D.Y := 0;
-    jvCenter: D.Y := 0.5 * H;
-    jvTop: D.Y := -InternalLeading * H;
-    jvBaseline: D.Y := 0;
-  end;
+  D.Y := 0;
 {$ELSE}
   S := fCnv.TextExtent(WideText);
   //fCnv.TextStyle.Alignment;
   TmpP := PointToPoint2D(Types.Point(S.CX, S.CY));
-  case HJustification of
-    jhLeft: D.X := 0;
-    jhCenter: D.X := TmpP.X / 2;
-    jhRight: D.X := TmpP.X;
+  case HAlignment of
+    ahLeft: D.X := 0;
+    ahCenter: D.X := TmpP.X / 2;
+    ahRight: D.X := TmpP.X;
   end;
   {D.X := 0;
-  case HJustification of
-    jhLeft: fCnv.TextStyle.Alignment := taLeftJustify;
-    jhCenter: fCnv.TextStyle.Alignment := taCenter;
-    jhRight: fCnv.TextStyle.Alignment := taRightJustify;
+  case HAlignment of
+    ahLeft: fCnv.TextStyle.Alignment := taLeftJustify;
+    ahCenter: fCnv.TextStyle.Alignment := taCenter;
+    ahRight: fCnv.TextStyle.Alignment := taRightJustify;
   end;}
-  case VJustification of
+  case VAlignment of
     jvBottom: D.Y := -1.2 * H;
     jvCenter: D.Y := -0.7 * H;
     jvTop: D.Y := -0.2;
@@ -1192,17 +1273,11 @@ begin
   Pnt.X := Pnt.X - Round(D.X);
   Pnt.Y := Pnt.Y + Round(D.Y);
 {$IFDEF VER140}
-  AlignFlags := 0;
-  case HJustification of
-    jhLeft: AlignFlags := AlignFlags + TA_LEFT;
-    jhCenter: AlignFlags := AlignFlags + TA_CENTER;
-    jhRight: AlignFlags := AlignFlags + TA_RIGHT;
-  end;
-  case VJustification of
-    jvTop: AlignFlags := AlignFlags + TA_TOP;
-    jvCenter: AlignFlags := AlignFlags + TA_BOTTOM;
-    jvBottom: AlignFlags := AlignFlags + TA_BOTTOM;
-    jvBaseline: AlignFlags := AlignFlags + TA_BASELINE;
+  AlignFlags := TA_BASELINE;
+  case HAlignment of
+    ahLeft: AlignFlags := AlignFlags + TA_LEFT;
+    ahCenter: AlignFlags := AlignFlags + TA_CENTER;
+    ahRight: AlignFlags := AlignFlags + TA_RIGHT;
   end;
   Windows.SetTextAlign(fCnv.Handle, AlignFlags);
   Windows.TextOutW(fCnv.Handle, Pnt.X, Pnt.Y,
@@ -1211,6 +1286,47 @@ begin
   fCnv.TextOut(Pnt.X, Pnt.Y, WideText);
 {$ENDIF}
   AExtFont.Free;
+end;
+
+procedure TCanvasDevice.Bitmap(P: TPoint2D; W, H: TRealType;
+  const KeepAspectRatio: Boolean;
+  BitmapEntry: TObject);
+var
+  R: TRect;
+  OldMode: TCopyMode;
+begin
+  R := Rect(Round(P.X), Round(P.Y - H), Round(P.X + W),
+    Round(P.Y));
+  if (BitmapEntry as TBitmapEntry).Kind = bek_None then
+  begin
+    // If image is absent draw a black rectangle with red cross
+    fCnv.Brush.Color := clBlack;
+    fCnv.FillRect(R);
+    fCnv.Pen.Color := clRed;
+    fCnv.Pen.Width := 3;
+    fCnv.MoveTo(R.Left + 2, R.Top + 2);
+    fCnv.LineTo(R.Right - 2, R.Bottom - 2);
+    fCnv.MoveTo(R.Left + 2, R.Bottom - 2);
+    fCnv.LineTo(R.Right - 2, R.Top + 2);
+    Exit;
+  end;
+  OldMode := fCnv.CopyMode;
+  fCnv.CopyMode := cmSrcCopy;
+  fCnv.StretchDraw(R, (BitmapEntry as TBitmapEntry).Bitmap);
+  fCnv.CopyMode := OldMode;
+end;
+
+procedure TCanvasDevice.GenPath(const GP: TGenericPath;
+  const LineColor, HatchColor, FillColor: TColor;
+  const LineStyle: TLineStyle; const LineWidth: TRealType;
+  const Hatching: THatching; const Transf: TTransf2D);
+begin
+  DrawNative0(fCnv,
+    CnvDrawGenPath, Rect2D(0, 0, 0, 0),
+    True, [], GP, MultTransf(Transf),
+    LineStyle, LineWidth, Hatching,
+    LineColor, FillColor, HatchColor,
+    fLineWidthBase, fFactorMM, fMiterLimit);
 end;
 
 procedure TCanvasDevice.HatchingLine(P0, P1: TPoint2D;
@@ -1252,7 +1368,8 @@ procedure DrawOutlineNative0(const Cnv: TCanvas;
   const PathProc: TDrawPathProc;
   const ClipRect2D: TRect2D;
   const IsClosed: Boolean;
-  const Pnts: array of TPoint);
+  const Pnts: array of TPoint;
+  const GP: TGenericPath; const Transf: TTransf2D);
 begin
   //BrushStyle0 := Cnv.Brush.Style;
   //BrushColor0 := Cnv.Brush.Color;
@@ -1260,7 +1377,7 @@ begin
   Cnv.Pen.Mode := pmNot;
   Cnv.Pen.Style := psDash;
   Cnv.Pen.Width := 1;
-  PathProc(Cnv, IsClosed, Pnts);
+  PathProc(Cnv, IsClosed, Pnts, GP, Transf);
 {$IFDEF VER140}
   StrokePath(Cnv.Handle);
 {$ELSE}
@@ -1275,6 +1392,8 @@ begin
   fHasNativeHatching := True;
   fDisjointFill := False;
   fTextAsRect := True;
+  OnBitmap := nil;
+  OnGenPath := GenPath;
 end;
 
 procedure TRubberCanvasDevice.Bezier(PP: TPointsSet2D;
@@ -1294,7 +1413,7 @@ begin
       MultTransf(Transf)));
   DrawOutlineNative0(fCnv,
     CnvDrawBezierPath, Rect2D(0, 0, 0, 0),
-    Closed, Pnts);
+    Closed, Pnts, nil, IdentityTransf2D);
 end;
 
 procedure TRubberCanvasDevice.Poly(PP: TPointsSet2D;
@@ -1314,7 +1433,17 @@ begin
       MultTransf(Transf)));
   DrawOutlineNative0(fCnv,
     CnvDrawPolylinePath, Rect2D(0, 0, 0, 0),
-    Closed, Pnts);
+    Closed, Pnts, nil, IdentityTransf2D);
+end;
+
+procedure TRubberCanvasDevice.GenPath(const GP: TGenericPath;
+  const LineColor, HatchColor, FillColor: TColor;
+  const LineStyle: TLineStyle; const LineWidth: TRealType;
+  const Hatching: THatching; const Transf: TTransf2D);
+begin
+  DrawOutlineNative0(fCnv,
+    CnvDrawGenPath, Rect2D(0, 0, 0, 0),
+    True, [], GP, MultTransf(Transf));
 end;
 
 end.

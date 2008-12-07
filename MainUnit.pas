@@ -38,7 +38,6 @@ type
     Exit1: TMenuItem;
     Copytoclipboard1: TMenuItem;
     Test1: TMenuItem;
-    OpenDialog1: TOpenDialog;
     EMFOpenDialog: TOpenPictureDialog;
     ActionList1: TActionList;
     DeleteSelected: TAction;
@@ -293,15 +292,12 @@ type
     none2: TMenuItem;
     InsertSymbol: TAction;
     Insertsymbol1: TMenuItem;
-    ToolBar3: TToolBar;
-    Panel4: TPanel;
+    PropertiesToolbar1: TToolBar;
     ComboBox1: TComboBox;
     ComboBox3: TComboBox;
     ComboBox6: TComboBox;
-    Panel5: TPanel;
     ComboBox2: TComboBox;
     ComboBox4: TComboBox;
-    Panel6: TPanel;
     ComboBox5: TComboBox;
     SimplifyPoly: TAction;
     RotateTextAction: TAction;
@@ -393,6 +389,64 @@ type
     HScrollBar: TScrollBar;
     Panel1: TPanel;
     VScrollBar: TScrollBar;
+    SimplifyBezier: TAction;
+    SimplifyBezier1: TMenuItem;
+    DeleteSmallObjects: TAction;
+    Deletesmallobjects1: TMenuItem;
+    FreehandBezierBtn: TToolButton;
+    FreehandBezier: TAction;
+    FreehandBeziercurve1: TMenuItem;
+    InsertBitmap: TAction;
+    InsertBitmapBtn: TToolButton;
+    Insertbitmap1: TMenuItem;
+    OpenBitmapDlg: TOpenPictureDialog;
+    Ungroup: TAction;
+    Ungroup1: TMenuItem;
+    MakeCompound: TAction;
+    Makecompound1: TMenuItem;
+    ToolButton16: TToolButton;
+    Uncompound: TAction;
+    Uncompound1: TMenuItem;
+    ShowCrossHair: TAction;
+    Showcrosshair1: TMenuItem;
+    GridOnTop: TAction;
+    Gridontop1: TMenuItem;
+    ToolButton22: TToolButton;
+    Image1: TImage;
+    ToolButton23: TToolButton;
+    ToolButton24: TToolButton;
+    ToolButton25: TToolButton;
+    ToolButton26: TToolButton;
+    PickUpProperties: TAction;
+    DefaultProperties: TAction;
+    Panel4: TPanel;
+    Image3: TImage;
+    Panel5: TPanel;
+    Panel6: TPanel;
+    Image4: TImage;
+    Image2: TImage;
+    ApplyProperties: TAction;
+    ToolButton27: TToolButton;
+    PropertiesToolbar2: TToolBar;
+    ComboBox8: TComboBox;
+    ComboBox9: TComboBox;
+    Edit3: TEdit;
+    Panel7: TPanel;
+    Image5: TImage;
+    ToolButton28: TToolButton;
+    Panel8: TPanel;
+    Image6: TImage;
+    ComboBox7: TComboBox;
+    Edit4: TEdit;
+    Panel9: TPanel;
+    Image7: TImage;
+    ToolButton29: TToolButton;
+    ComboBox10: TComboBox;
+    Edit5: TEdit;
+    ShowPropertiesToolbar11: TMenuItem;
+    ShowPropertiesToolbar21: TMenuItem;
+    ShowPropertiesToolbar2: TAction;
+    ShowPropertiesToolbar1: TAction;
     procedure AreaSelectExecute(Sender: TObject);
     procedure HandToolExecute(Sender: TObject);
     procedure InsertLineExecute(Sender: TObject);
@@ -441,12 +495,7 @@ type
     procedure ColorBox_DrawItem(Control: TWinControl; Index:
       Integer;
       Rect: TRect; State: TOwnerDrawState);
-    procedure ComboBox3Select(Sender: TObject);
-    procedure ComboBox1Select(Sender: TObject);
-    procedure ComboBox4Select(Sender: TObject);
-    procedure ComboBox2Select(Sender: TObject);
-    procedure ComboBox5Select(Sender: TObject);
-    procedure ComboBox6Change(Sender: TObject);
+    procedure ChangeProperties(Sender: TObject);
     procedure ScalePhysicalExecute(Sender: TObject);
     procedure InsertBezierPathExecute(Sender: TObject);
     procedure InsertClosedBezierPathExecute(Sender: TObject);
@@ -465,9 +514,24 @@ type
     procedure ScaleTextActionExecute(Sender: TObject);
     procedure TeXFormatExecute(Sender: TObject);
     procedure PdfTeXFormatExecute(Sender: TObject);
+    procedure FreehandBezierExecute(Sender: TObject);
+    procedure InsertBitmapExecute(Sender: TObject);
+    procedure ToolButton16Click(Sender: TObject);
+    procedure ShowCrossHairExecute(Sender: TObject);
+    procedure GridOnTopExecute(Sender: TObject);
+    procedure DefaultPropertiesExecute(Sender: TObject);
+    procedure PickUpPropertiesExecute(Sender: TObject);
+    procedure ApplyPropertiesExecute(Sender: TObject);
+    procedure ComboBox10DrawItem(Control: TWinControl; Index:
+      Integer;
+      Rect: TRect; State: TOwnerDrawState);
+    procedure ShowPropertiesToolbar1Execute(Sender: TObject);
+    procedure ShowPropertiesToolbar2Execute(Sender: TObject);
   private
     { Private declarations }
     ScrollPos0: Integer;
+    procedure SetFormPosition;
+    procedure GetFormPosition;
   public
     { Public declarations }
     TheDrawing: TDrawing2D;
@@ -475,6 +539,9 @@ type
     LocalView: TViewport2D;
     Ruler1: TRuler;
     Ruler2: TRuler;
+    FormPos_Left, FormPos_Top, FormPos_Width, FormPos_Height:
+    Integer;
+    FormPos_Maximized: Boolean;
     procedure OnExit(Sender: TObject);
     procedure LocalViewDblClick(Sender: TObject);
     procedure LocalViewMouseWheel(Sender: TObject; Shift:
@@ -492,6 +559,7 @@ type
     procedure FillLocalPopUp(
       const HasObject, HasSelection, IsOnObject,
       IsOnPoint, CanDeletePoints: Boolean);
+    procedure SetCurrentProperties;
   end;
 
 var
@@ -509,15 +577,52 @@ const
 implementation
 
 uses Output, Input, Settings0, ColorEtc, Geometry, Options,
-  Preview,
-  SysBasic;
+  PreView,
+  SysBasic, Modify, Propert;
 
 {$IFDEF VER140}
 {$R *.DFM}
 {$ENDIF}
 
+procedure TMainForm.SetFormPosition;
+var
+  WindowPlacement: TWindowPlacement;
+  R: TRect;
+begin
+  FillChar(WindowPlacement, SizeOf(WindowPlacement), #0);
+  WindowPlacement.length := SizeOf(WindowPlacement);
+  if FormPos_Maximized
+    then WindowPlacement.showcmd := SW_SHOWMAXIMIZED
+  else WindowPlacement.showcmd := SW_SHOWNORMAL;
+  R.Left := FormPos_Left;
+  R.Top := FormPos_Top;
+  R.Right := R.Left + FormPos_Width;
+  R.Bottom := R.Top + FormPos_Height;
+  WindowPlacement.rcNormalPosition := R;
+  SetWindowPlacement(handle, @WindowPlacement);
+end;
+
+procedure TMainForm.GetFormPosition;
+var
+  WindowPlacement: TWindowPlacement;
+  R: TRect;
+begin
+  WindowPlacement.length := SizeOf(WindowPlacement);
+  GetWindowPlacement(handle, @WindowPlacement);
+  R := WindowPlacement.rcNormalPosition;
+  FormPos_Maximized := WindowState = wsMaximized;
+  FormPos_Left := R.Left;
+  FormPos_Top := R.Top;
+  FormPos_Width := R.Right - R.Left;
+  FormPos_Height := R.Bottom - R.Top;
+end;
+
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
+  FormPos_Left := MainForm.Left;
+  FormPos_Top := MainForm.Top;
+  FormPos_Width := MainForm.Width;
+  FormPos_Height := MainForm.Height;
   TheDrawing := TDrawing2D.Create(Self);
   LocalView := TViewport2D.Create(Panel1);
   EventManager := TTpXManager.Create(TheDrawing, LocalView);
@@ -534,6 +639,8 @@ begin
   LocalView.ControlPointsWidth := 8;
   LocalView.ShowControlPoints := True;
   LocalView.ShowGrid := True;
+  LocalView.ShowCrossHair := True;
+  LocalView.GridOnTop := False;
   LocalView.OnEndRedraw := LocalViewEndRedraw;
   LocalView.OnDblClick := LocalViewDblClick;
   LocalView.OnKeyDown := LocalViewKeyDown;
@@ -562,13 +669,9 @@ begin
   Caption := Drawing_NewFileName;
   ScrollPos0 := -1;
   ShowScrollBars.Checked := True;
-  with LocalView do
-  begin
-    UsePaintingThread := False;
-    ZoomWindow(Rect2D(0, 0, 100, 100));
-  end;
-  SnapToGrid.Checked := TheDrawing.UseSnap;
-  AngularSnap.Checked := TheDrawing.UseAngularSnap;
+  ShowPropertiesToolbar1.Checked := True;
+  ShowPropertiesToolbar2.Checked := True;
+  LocalView.VisualRect := Rect2D(0, 0, 100, 100);
   SmoothBezierNodes := SmoothBezierNodesAction.Checked;
   ScaleLineWidthAction.Checked := ScaleLineWidth;
   NewDoc.Tag := Msg_New;
@@ -600,9 +703,14 @@ begin
 
   ConvertTo.Tag := Msg_ConvertTo;
   SimplifyPoly.Tag := Msg_SimplifyPoly;
+  SimplifyBezier.Tag := Msg_SimplifyBezierPaths;
   ConnectPaths.Tag := Msg_ConnectPaths;
   ReversePoints.Tag := Msg_ReversePoints;
+  DeleteSmallObjects.Tag := Msg_DeleteSmall;
   Group.Tag := Msg_Group;
+  Ungroup.Tag := Msg_Ungroup;
+  MakeCompound.Tag := Msg_MakeCompound;
+  Uncompound.Tag := Msg_Uncompound;
   BreakPath.Tag := Msg_BreakPath;
   DeletePoint.Tag := Msg_DeletePoint;
   AddPoint.Tag := Msg_AddPoint;
@@ -670,10 +778,28 @@ begin
   MakeColorBox(ComboBox3);
   MakeColorBox(ComboBox4);
   MakeColorBox(ComboBox5);
-  ComboBox1.ItemIndex := 0;
+  ComboBox1.ItemIndex := 1;
   ComboBox2.ItemIndex := 0;
+  ComboBox6.ItemIndex := 1;
+  ComboBox10.ItemIndex := 0;
 
-  Group.Visible := False;
+  ComboBox8.OnDrawItem := PropertiesForm.ArrComboBoxDrawItem;
+  ComboBox9.OnDrawItem := PropertiesForm.ArrComboBoxDrawItem;
+
+  ComboBox1.Tag := Byte(chpLS) + 1;
+  ComboBox3.Tag := Byte(chpLC) + 1;
+  ComboBox6.Tag := Byte(chpLW) + 1;
+  ComboBox2.Tag := Byte(chpHa) + 1;
+  ComboBox4.Tag := Byte(chpHC) + 1;
+  ComboBox5.Tag := Byte(chpFC) + 1;
+  ComboBox8.Tag := Byte(chpArr1) + 1;
+  ComboBox9.Tag := Byte(chpArr2) + 1;
+  Edit3.Tag := Byte(chpArrS) + 1;
+  Edit4.Tag := Byte(chpFH) + 1;
+  ComboBox7.Tag := Byte(chpHJ) + 1;
+  ComboBox10.Tag := Byte(chpSK) + 1;
+  Edit5.Tag := Byte(chpSS) + 1;
+
 {$IFDEF VER140}
 {$ELSE}
   CopyPictureToClipboard.Visible := False;
@@ -682,6 +808,7 @@ begin
 {$ENDIF}
 
   EventManager.SendMessage(Msg_StartProgram, Self);
+  SetFormPosition;
 end;
 
 procedure TMainForm.AreaSelectExecute(Sender: TObject);
@@ -809,6 +936,7 @@ end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
+  GetFormPosition;
   EventManager.SendMessage(Msg_Stop, Sender);
   //TpXExtAssoc.Free;
 {$IFDEF VER140}
@@ -889,11 +1017,29 @@ begin
   VScrollBar.Visible := ShowScrollBars.Checked;
 end;
 
+procedure TMainForm.ShowPropertiesToolbar1Execute(Sender: TObject);
+begin
+  ShowPropertiesToolbar1.Checked :=
+    not ShowPropertiesToolbar1.Checked;
+  PropertiesToolbar1.Visible := ShowPropertiesToolbar1.Checked;
+end;
+
+procedure TMainForm.ShowPropertiesToolbar2Execute(Sender: TObject);
+begin
+  ShowPropertiesToolbar2.Checked :=
+    not ShowPropertiesToolbar2.Checked;
+  PropertiesToolbar2.Visible := ShowPropertiesToolbar2.Checked;
+end;
+
 procedure TMainForm.FormShow(Sender: TObject);
 begin
   ShowGrid.Checked := LocalView.ShowGrid;
+  ShowCrossHair.Checked := LocalView.ShowCrossHair;
+  GridOnTop.Checked := LocalView.GridOnTop;
   ShowRulers.Checked := LocalView.ShowRulers;
   AreaSelectInsideAction.Checked := AreaSelectInside;
+  SnapToGrid.Checked := UseSnap;
+  AngularSnap.Checked := UseAngularSnap;
   Panel2.Visible := ShowRulers.Checked;
   Panel3.Visible := ShowRulers.Checked;
   HScrollBar.Visible := ShowScrollBars.Checked;
@@ -979,69 +1125,110 @@ begin
   EventManager.PushMode(OpenRecentMode);
 end;
 
-procedure TMainForm.ColorBox_DrawItem(Control: TWinControl; Index:
-  Integer;
+procedure TMainForm.ColorBox_DrawItem(Control: TWinControl;
+  Index: Integer;
   Rect: TRect; State: TOwnerDrawState);
 begin
   ColorBoxDrawItem(Control as TComboBox, Index, Rect, State);
 end;
 
-procedure TMainForm.ComboBox1Select(Sender: TObject);
+procedure TMainForm.ChangeProperties(Sender: TObject);
 var
-  NewLineStyle: TLineStyle;
+  Kind: TChangePropertiesKind;
 begin
-  NewLineStyle := TLineStyle((Sender as TComboBox).ItemIndex);
-  TheDrawing.ChangeSelected(TheDrawing.ChangeLineKind,
-    @NewLineStyle);
+  if not (Sender is TComponent) then Exit;
+  if (Sender as TComponent).Tag <= 0 then Exit;
+  Kind := TChangePropertiesKind((Sender as TComponent).Tag - 1);
+  case Kind of
+    chpLS: TheDrawing.New_LineStyle
+      := TLineStyle((Sender as TComboBox).ItemIndex);
+    chpLC:
+      begin
+        ColorBoxSelect(Sender as TComboBox);
+        TheDrawing.New_LineColor
+          := ColorBoxGet(Sender as TComboBox);
+      end;
+    chpLW:
+      begin
+        TheDrawing.New_LineWidth
+          := StrToFloat((Sender as TComboBox).Text);
+        if TheDrawing.New_LineWidth <= 0 then
+        begin
+          TheDrawing.New_LineWidth := 1;
+          Exit;
+        end;
+      end;
+    chpHa: TheDrawing.New_Hatching
+      := THatching((Sender as TComboBox).ItemIndex);
+    chpHC:
+      begin
+        ColorBoxSelect(Sender as TComboBox);
+        TheDrawing.New_HatchColor
+          := ColorBoxGet(Sender as TComboBox);
+      end;
+    chpFC:
+      begin
+        ColorBoxSelect(Sender as TComboBox);
+        TheDrawing.New_FillColor
+          := ColorBoxGet(Sender as TComboBox);
+      end;
+    chpArr1: TheDrawing.New_Arr1
+      := (Sender as TComboBox).ItemIndex;
+    chpArr2: TheDrawing.New_Arr2
+      := (Sender as TComboBox).ItemIndex;
+    chpArrS: TheDrawing.New_ArrSizeFactor
+      := StrToRealType((Sender as TEdit).Text, 1);
+    chpFH: TheDrawing.New_FontHeight
+      := StrToRealType((Sender as TEdit).Text,
+        TheDrawing.DefaultFontHeight);
+    chpHJ: TheDrawing.New_HAlignment
+      := (Sender as TComboBox).ItemIndex;
+    chpSK: TheDrawing.New_StarKind
+      := (Sender as TComboBox).ItemIndex;
+    chpSS: TheDrawing.New_StarSizeFactor
+      := StrToRealType((Sender as TEdit).Text, 1);
+  else Exit;
+  end;
+  ChangeSelectedProperties(TheDrawing, [Kind]);
+  TheDrawing.RepaintViewports;
 end;
 
-procedure TMainForm.ComboBox3Select(Sender: TObject);
-var
-  NewLineColor: TColor;
+procedure TMainForm.SetCurrentProperties;
 begin
-  ColorBoxSelect(Sender as TComboBox);
-  NewLineColor := ColorBoxGet(Sender as TComboBox);
-  TheDrawing.ChangeSelected(TheDrawing.ChangeLineColor,
-    @NewLineColor);
+  ComboBox1.ItemIndex := Ord(TheDrawing.New_LineStyle);
+  ComboBox2.ItemIndex := Ord(TheDrawing.New_Hatching);
+  ColorBoxSet(ComboBox3, TheDrawing.New_LineColor);
+  ColorBoxSet(ComboBox4, TheDrawing.New_HatchColor);
+  ColorBoxSet(ComboBox5, TheDrawing.New_FillColor);
+  ComboBox6.Text := RealTypeToStr(TheDrawing.New_LineWidth);
+  ComboBox8.ItemIndex := TheDrawing.New_Arr1;
+  ComboBox9.ItemIndex := TheDrawing.New_Arr2;
+  Edit3.Text := RealTypeToStr(TheDrawing.New_ArrSizeFactor);
+  Edit4.Text := RealTypeToStr(TheDrawing.New_FontHeight);
+  ComboBox7.ItemIndex := TheDrawing.New_HAlignment;
+  ComboBox10.ItemIndex := TheDrawing.New_StarKind;
+  Edit5.Text := RealTypeToStr(TheDrawing.New_StarSizeFactor);
 end;
 
-procedure TMainForm.ComboBox2Select(Sender: TObject);
-var
-  NewHatching: THatching;
+procedure TMainForm.DefaultPropertiesExecute(Sender: TObject);
 begin
-  NewHatching := THatching((Sender as TComboBox).ItemIndex);
-  TheDrawing.ChangeSelected(TheDrawing.ChangeHatching,
-    @NewHatching);
+  TheDrawing.SetDefaultProperties;
+  SetCurrentProperties;
+  ApplyPropertiesExecute(Sender);
 end;
 
-procedure TMainForm.ComboBox4Select(Sender: TObject);
-var
-  NewHatchColor: TColor;
+procedure TMainForm.PickUpPropertiesExecute(Sender: TObject);
 begin
-  ColorBoxSelect(Sender as TComboBox);
-  NewHatchColor := ColorBoxGet(Sender as TComboBox);
-  TheDrawing.ChangeSelected(TheDrawing.ChangeHatchColor,
-    @NewHatchColor);
+  TheDrawing.PickUpProperties(TheDrawing.SelectedObjects.FirstObj);
+  SetCurrentProperties;
 end;
 
-procedure TMainForm.ComboBox5Select(Sender: TObject);
-var
-  NewFillColor: TColor;
+procedure TMainForm.ApplyPropertiesExecute(Sender: TObject);
 begin
-  ColorBoxSelect(Sender as TComboBox);
-  NewFillColor := ColorBoxGet(Sender as TComboBox);
-  TheDrawing.ChangeSelected(TheDrawing.ChangeFillColor,
-    @NewFillColor);
-end;
-
-procedure TMainForm.ComboBox6Change(Sender: TObject);
-var
-  NewLineWidth: TRealType;
-begin
-  NewLineWidth := StrToFloat((Sender as TComboBox).Text);
-  if NewLineWidth <= 0 then Exit;
-  TheDrawing.ChangeSelected(TheDrawing.ChangeLineWidth,
-    @NewLineWidth);
+  ChangeSelectedProperties(TheDrawing,
+    [TChangePropertiesKind(0)..
+    TChangePropertiesKind(High(TChangePropertiesKind))]);
+  TheDrawing.RepaintViewports;
 end;
 
 procedure TMainForm.ScalePhysicalExecute(Sender: TObject);
@@ -1260,11 +1447,24 @@ begin
   EventManager.SendMessage(Msg_InsertSymbol, InsertSymbolBtn);
 end;
 
+procedure TMainForm.InsertBitmapExecute(Sender: TObject);
+begin
+  EventManager.SendMessage(Msg_Escape, Self);
+  EventManager.SendMessage(Msg_InsertBitmap, InsertBitmapBtn);
+end;
+
 procedure TMainForm.FreehandPolylineExecute(Sender: TObject);
 begin
   EventManager.SendMessage(Msg_Escape, Self);
   EventManager.SendMessage(Msg_FreehandPolyline,
     FreehandPolylineBtn);
+end;
+
+procedure TMainForm.FreehandBezierExecute(Sender: TObject);
+begin
+  EventManager.SendMessage(Msg_Escape, Self);
+  EventManager.SendMessage(Msg_FreehandBezier,
+    FreehandBezierBtn);
 end;
 
 procedure TMainForm.PressModeButton(
@@ -1297,6 +1497,75 @@ begin
   P := (Sender as TControl).ClientToScreen(
     Point((Sender as TControl).Left, (Sender as TControl).Top));
   PopupMenuPdf.Popup(P.X, P.Y);
+end;
+
+
+procedure TMainForm.ToolButton16Click(Sender: TObject);
+var
+  I, J: Integer;
+  GP: TGenericPath;
+  PP: TPointsSet2D;
+  P: TPoint2D;
+  StartTime: Cardinal;
+  procedure StartTimer;
+  begin
+    StartTime := GetTickCount;
+  end;
+  function GetTimer: Extended;
+  begin
+    GetTimer := (GetTickCount - StartTime) / 1000;
+  //(Time - StartTime) * 24 * 60 * 60;
+  end;
+begin
+  StartTimer;
+  for J := 1 to 10000 do
+  begin
+    PP := TPointsSet2D.Create(0);
+    GP := TGenericPath.Create(PP);
+    for I := 1 to 1000 do
+    begin
+      GP.AddMoveTo(P);
+      GP.AddBezierTo(P, P, P);
+    end;
+    PP.Free;
+    GP.Free;
+  end;
+{  for J := 1 to 10000 do
+  begin
+    PP := TPointsSet2D.Create(0);
+    for I := 1 to 6000 do
+    begin
+      PP.Add(P);
+    end;
+    PP.Free;
+  end;   }
+  MessageBoxInfo(Format('%8.3f', [GetTimer]));
+end;
+
+procedure TMainForm.ShowCrossHairExecute(Sender: TObject);
+begin
+  ShowCrossHair.Checked := not ShowCrossHair.Checked;
+  LocalView.ShowCrossHair := ShowCrossHair.Checked;
+end;
+
+procedure TMainForm.GridOnTopExecute(Sender: TObject);
+begin
+  GridOnTop.Checked := not GridOnTop.Checked;
+  LocalView.GridOnTop := GridOnTop.Checked;
+end;
+
+procedure TMainForm.ComboBox10DrawItem(Control: TWinControl;
+  Index: Integer; Rect: TRect; State: TOwnerDrawState);
+begin
+  if not (Control is TComboBox) then Exit;
+  with (Control as TComboBox).Canvas do
+  begin
+    Brush.Color := clWhite;
+    FillRect(Rect);
+    PropertiesForm.StarsImageList.Draw(
+      (Control as TComboBox).Canvas,
+      Rect.Left, Rect.Top + 1, Index);
+  end;
 end;
 
 initialization

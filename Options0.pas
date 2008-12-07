@@ -72,6 +72,7 @@ type
     Filter: string;
     constructor Create(Key0: string; PData0: Pointer;
       Filter0: string; Hint0: string);
+    procedure SetAsString(St: string); override;
   end;
 
   TFontNameOption = class(TStringOption0)
@@ -124,7 +125,7 @@ type
     procedure SaveToStream(const AStream: TStream);
     procedure LoadFromStream(const AStream: TStream);
     // HintsText is used to store hints information to a file
-    // for subsequent use in TpX help 
+    // for subsequent use in TpX help
     function HintsText: string;
   end;
 
@@ -301,6 +302,11 @@ begin
   Filter := Filter0;
 end;
 
+procedure TFilePathOption.SetAsString(St: string);
+begin
+  inherited SetAsString(AnsiDequotedStr(Trim(St), '"'));
+end;
+
 procedure TStringListOption.SetAsString(St: string);
 begin
   TStrings(PData).DelimitedText := St;
@@ -394,6 +400,10 @@ end;
 procedure TOptionsList.AddFilePath(Key0: string;
   PData0: Pointer; Filter0: string; Hint0: string);
 begin
+{$IFDEF LINUX}
+  Filter0 := AnsiReplaceStr(Filter0, '*.exe|*.exe', '*.*|*.*');
+  Hint0 := AnsiReplaceStr(Hint0, '.exe', '');
+{$ENDIF}
   Add(TFilePathOption.Create(Key0, PData0, Filter0, Hint0));
 end;
 

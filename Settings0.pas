@@ -9,6 +9,7 @@ interface
 uses
   SysUtils, Classes, Options0, MainUnit;
 
+procedure Initialize;
 procedure LoadSettings_Ex(MainForm: TMainForm);
 procedure LoadSettings;
 procedure SaveSettings;
@@ -20,7 +21,7 @@ implementation
 
 uses Output, Input, Drawings, Preview
 {$IFDEF VER140}
-  , EMF_Unit, Modes
+  , EMF_Unit, Modes, Bitmaps, SysBasic
 {$ENDIF}
   ;
 
@@ -43,6 +44,13 @@ begin
     for I := 0 to SettingsList.Count - 1 do
     begin
       St := Strings.Values[(SettingsList[I] as TOptionData).Key];
+      // Temporary fix against saving of bad settings
+      if (SettingsList[I] as TOptionData).Key = 'LineWidth_Default'
+        then
+      begin
+        if StrToFloat(St) <= 0
+          then St := FloatToStr(LineWidthBase_Default);
+      end;
       if St <> '' then
         (SettingsList[I] as TOptionData).AsString := St;
     end;
@@ -51,19 +59,28 @@ begin
   end;
 end;
 
-procedure FillSettings(Strings: TStrings);
+function FillSettings(Strings: TStrings): Boolean;
 var
   Data: TOptionData;
   I: Integer;
 begin
+  Result := False;
   Strings.Clear;
   for I := 0 to SettingsList.Count - 1 do
   begin
     Data := SettingsList.Items[I] as TOptionData;
+    // Temporary fix against saving of bad settings
+    if Data.Key = 'LineWidth_Default' then
+      if StrToFloat(Data.AsString) <= 0 then
+        Break
+      else
+        Result := True;
     Strings.Add(Data.Key + '=' + Data.AsString);
     //Strings.Values[Data.Key] := Data.AsString;
     //Application.MessageBox(PChar(IntToStr(Strings.Count) + ' >>' + Data.AsString + '<<'), nil);
   end;
+  if not Result then
+    MessageBoxError('Bad settings were not saved to ini file');
 end;
 
 procedure SaveSettings;
@@ -72,8 +89,8 @@ var
 begin
   Strings := TStringList.Create;
   try
-    FillSettings(Strings);
-    Strings.SaveToFile(IniFileName);
+    if FillSettings(Strings)
+      then Strings.SaveToFile(IniFileName);
   finally
     Strings.Free;
   end;
@@ -134,12 +151,18 @@ begin
   SettingsList.AddRealType('DefaultSymbolSize_Default',
     @DefaultSymbolSize_Default,
     'Default value of DefaultSymbolSize');
+  SettingsList.AddRealType('ApproximationPrecision_Default',
+    @ApproximationPrecision_Default,
+    'Default value of ApproximationPrecision');
   SettingsList.AddBoolean('TeXCenterFigure_Default',
     @TeXCenterFigure_Default,
     'Default value of TeXCenterFigure');
   SettingsList.AddChoice('TeXFigure_Default',
     @TeXFigure_Default, TeXFigure_Choice,
     'Default value of TeXFigure');
+  SettingsList.AddBoolean('FontSizeInTeX_Default',
+    @(FontSizeInTeX_Default),
+    'Default value of FontSizeInTeX');
   SettingsList.AddBoolean('MetaPostTeXText_Default',
     @(MetaPostTeXText_Default),
     'Default value of MetaPostTeXText');
@@ -147,9 +170,6 @@ begin
   {SettingsList.AddBoolean('ScalePhysicalUnits',
     @(MainForm.ScalePhysical.Checked),
     'Scale physical units when transforming the whole picture');}
-  SettingsList.AddInteger('BezierPrecision', @BezierPrecision, 2,
-    10000,
-    'Number of lines used to approximate a single Bezier curve or arc by polyline');
   SettingsList.AddFilePath('LatexPath', @(LatexPath),
     '*.exe|*.exe', 'Path to LaTeX (latex.exe)');
   SettingsList.AddFilePath('PdfLatexPath', @(PdfLatexPath),
@@ -226,6 +246,11 @@ begin
     ' pswrite pxlcolor pxlmono r4081 spotcmyk st800 stcolor t4693d2 t4693d4' +
     ' t4693d8 tek4696 tiff12nc tiff24nc tiff32nc tiffcrle tiffg3 tiffg32d' +
     ' tiffg4 tiffgray tifflzw tiffpack tiffsep uniprint');
+  SettingsList.AddFilePath('Bitmap2EpsPath', @(Bitmap2EpsPath),
+    '*.exe|*.exe',
+    'Path to a program (like sam2p or bmeps)' +
+    ' which converts bitmaps to EPS files.' +
+    ' (It is used for including bitmaps into output graphics).');
 end;
 
 procedure LoadSettings_Ex(MainForm: TMainForm);
@@ -239,25 +264,44 @@ begin
 {$ENDIF}
   SettingsList.AddBoolean('ShowGrid',
     @(MainForm.LocalView.ShowGrid), 'Show grid');
-  //SettingsList.AddInteger('GridDeltaX',    @(MainForm.LocalView.GridDeltaX), 1, 2000,    'Grid delta, X axis');
-  //SettingsList.AddInteger('GridDeltaY',    @(MainForm.LocalView.GridDeltaY), 1, 2000,    'Grid delta, Y axis');
+  SettingsList.AddBoolean('GridOnTop',
+    @(MainForm.LocalView.GridOnTop), 'Grid on top');
+  SettingsList.AddBoolean('ShowCrossHair',
+    @(MainForm.LocalView.ShowCrossHair), 'Show crosshair');
   SettingsList.AddBoolean('ShowRulers',
     @(MainForm.LocalView.ShowRulers), 'Show rulers');
   SettingsList.AddBoolean('ShowScrollBars',
     @(MainForm.ShowScrollBars.Checked), 'Show scroll bars');
+//  SettingsList.AddBoolean('ShowPropertiesToolbar1',
+//    @(MainForm.ShowPropertiesToolbar1.Checked),
+//      'Show the first properties toolbar');
+//  SettingsList.AddBoolean('ShowPropertiesToolbar2',
+//    @(MainForm.ShowPropertiesToolbar2.Checked),
+//      'Show the second properties toolbar');
   SettingsList.AddBoolean('AreaSelectInside',
-    @(AreaSelectInside),
-    'Area select inside only');
+    @(AreaSelectInside), 'Area select inside only');
+  SettingsList.AddBoolean('UseSnap',
+    @(UseSnap), 'Snap to grid');
+  SettingsList.AddBoolean('UseAngularSnap',
+    @(UseAngularSnap), 'Angular snap (45 degrees)');
+  SettingsList.AddInteger('Mainform.Left',
+    @(MainForm.FormPos_Left), 1, 2000,
+    'Main window left side position');
+  SettingsList.AddInteger('Mainform.Top',
+    @(MainForm.FormPos_Top), 1, 2000,
+    'Main window top side position');
   SettingsList.AddInteger('Mainform.Width',
-    @(MainForm.Width), 1, 2000, 'Main window width');
+    @(MainForm.FormPos_Width), 1, 2000, 'Main window width');
   SettingsList.AddInteger('Mainform.Height',
-    @(MainForm.Height), 1, 2000, 'Main window height');
+    @(MainForm.FormPos_Height), 1, 2000, 'Main window height');
+  SettingsList.AddBoolean('Mainform.Maximized',
+    @(MainForm.FormPos_Maximized), 'Main window state');
 
   LoadSettings;
 end;
 
 initialization
-  Initialize;
+  Settings0.Initialize;
 finalization
   SettingsList.Free;
 end.

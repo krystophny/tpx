@@ -12,9 +12,7 @@ uses Messages, SysUtils, Classes, Graphics, Controls, Forms,
 {$ELSE}
   LCLIntf, Buttons, LResources,
 {$ENDIF}
-  Dialogs, ExtCtrls, StdCtrls;
-
-{$I tpx.inc}
+  Dialogs, ExtCtrls, StdCtrls, SysBasic, PreView;
 
 {$IFDEF VER140}
 {$ELSE}
@@ -50,6 +48,8 @@ implementation
 {$IFDEF VER140}
 {$R *.dfm}
 {$ENDIF}
+
+{$I tpx.inc}
 
 procedure TAboutForm.Button2Click(Sender: TObject);
 begin

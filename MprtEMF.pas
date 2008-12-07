@@ -13,7 +13,7 @@ uses Types, SysUtils, Classes, Graphics, ComCtrls,
 {$ELSE}
   LCLIntf,
 {$ENDIF}
-  EMF_Add, Devices, Geometry, GObjects, Drawings, Input;
+  EMF_Add, Devices, Geometry, GObjBase, GObjects, Drawings, Input;
 
 //Integer	–2147483648..2147483647	signed 32-bit
 //Cardinal	0..4294967295	unsigned 32-bit
@@ -95,7 +95,7 @@ type
     procedure RestoreDC_Info;
     procedure AddPathAttributes(
       const ARecord: TEMF_Record;
-      const Prim: TPrimitive2D);
+      const Obj: TObject2D);
     procedure WriteRecordToLog(const ARecord: TEMF_Record);
     procedure WriteToLog(const aName: string;
       const aValue: Variant);
@@ -900,8 +900,12 @@ procedure WritePrimitiveAttr(LineStyle: TLineStyle;
   LineColor: TColor; Hatching: THatching;
   HatchColor: TColor;
   const BrushColor: TColor; const Pattern: Boolean;
-  Prim: TPrimitive2D);
+  Obj: TObject2D);
+var
+  Prim: TPrimitive2D;
 begin
+  if not (Obj is TPrimitive2D) then Exit;
+  Prim := Obj as TPrimitive2D;
   if {(LineStyle = liNone) and }(Hatching = haNone)
     and (BrushColor = clNone) then
   begin
@@ -935,8 +939,12 @@ end;
 
 procedure T_EMF_Import.AddPathAttributes(
   const ARecord: TEMF_Record;
-  const Prim: TPrimitive2D);
+  const Obj: TObject2D);
+var
+  Prim: TPrimitive2D;
 begin
+  if not (Obj is TPrimitive2D) then Exit;
+  Prim := Obj as TPrimitive2D;
   if ARecord is TEMF_FillPath then
     WritePrimitiveAttr(liNone, clDefault, 1,
       CurrHatching, CurrHatchColor, CurrBrushColor,
@@ -983,8 +991,8 @@ begin
   begin
     IsPolygon := IsSamePoint2D(LineToPP[0],
       LineToPP[LineToPP.Count - 1]);
-    if IsPolygon then Result := AddPolygon
-    else Result := AddPolyline;
+    if IsPolygon then Result := AddPolygon as TPrimitive2D
+    else Result := AddPolyline as TPrimitive2D;
     Result.Points.Expand(LineToPP.Count - Byte(IsPolygon));
     for I := 0 to LineToPP.Count - Byte(IsPolygon) - 1 do
       Result.Points.Add(GetXY(LineToPP[I]));
@@ -999,7 +1007,7 @@ begin
 end;
 
 {function T_EMF_Import.AddPrimitive(
-  const Obj: TPrimitive2D): TPrimitive2D;
+  const Obj: TObject2D): TObject2D;
 begin
   Add_LineToPP;
   inherited AddPrimitive(Obj);
@@ -1020,7 +1028,7 @@ begin
         GetXY(rclBox.Right, rclBox.Bottom));
   WritePrimitiveAttr(CurrLineStyle, CurrPenWidth, CurrPenColor,
     CurrHatching, CurrHatchColor, CurrBrushColor,
-    CurrBrush.lbStyle = BS_PATTERN, fCurrPrimitive);
+    CurrBrush.lbStyle = BS_PATTERN, fCurrObj);
 end;
 
 procedure T_EMF_Import.RoundRect_Execute(
@@ -1041,7 +1049,7 @@ begin
   AddRoundRect(P1, V1.X, V1.Y, V2.X, V2.Y);
   WritePrimitiveAttr(CurrLineStyle, CurrPenWidth, CurrPenColor,
     CurrHatching, CurrHatchColor, CurrBrushColor,
-    CurrBrush.lbStyle = BS_PATTERN, fCurrPrimitive);
+    CurrBrush.lbStyle = BS_PATTERN, fCurrObj);
 end;
 
 var
@@ -1078,7 +1086,7 @@ begin
   end;
   WritePrimitiveAttr(CurrLineStyle, CurrPenWidth, CurrPenColor,
     CurrHatching, CurrHatchColor, CurrBrushColor,
-    CurrBrush.lbStyle = BS_PATTERN, fCurrPrimitive);
+    CurrBrush.lbStyle = BS_PATTERN, fCurrObj);
 end;
 
 procedure T_EMF_Import.StretchDIBits_Execute(
@@ -1088,7 +1096,7 @@ begin
     AddRect(GetXY(rclBounds.Left, rclBounds.Top),
       GetXY(rclBounds.Right, rclBounds.Bottom));
   WritePrimitiveAttr(liNone, 1, clNone,
-    haNone, clNone, CurrBrushColor, True, fCurrPrimitive);
+    haNone, clNone, CurrBrushColor, True, fCurrObj);
 end;
 
 procedure T_EMF_Import.BitBlt_Execute(
@@ -1101,7 +1109,7 @@ begin
       GetXY(xDest + cxDest, yDest + cyDest));
   end;
   WritePrimitiveAttr(liNone, 1, clNone,
-    haNone, clNone, CurrBrushColor, True, fCurrPrimitive);
+    haNone, clNone, CurrBrushColor, True, fCurrObj);
 end;
 
 procedure T_EMF_Import.PolyBezier_Execute(
@@ -1113,7 +1121,7 @@ var
   PP: TPointsSet2D;
 begin
   AddBezier; //? Closed
-  PP := fCurrPrimitive.Points;
+  PP := (fCurrObj as TPrimitive2D).Points;
   with ARecord as TEMF_PolyGen do
   begin
     BezMod := 0;
@@ -1145,7 +1153,7 @@ begin
   end;
   WritePrimitiveAttr(CurrLineStyle, CurrPenWidth, CurrPenColor,
     CurrHatching, CurrHatchColor, CurrBrushColor,
-    CurrBrush.lbStyle = BS_PATTERN, fCurrPrimitive);
+    CurrBrush.lbStyle = BS_PATTERN, fCurrObj);
 end;
 
 procedure T_EMF_Import.Poly_Execute(
@@ -1162,7 +1170,7 @@ begin
     or (ARecord is TEMF_PolylineTo16)
     or (ARecord is TEMF_PolylineTo32)
     then AddPolyline;
-  PP := fCurrPrimitive.Points;
+  PP := (fCurrObj as TPrimitive2D).Points;
   with ARecord as TEMF_PolyGen do
   begin
     for I := 0 to High(PointsArray) do
@@ -1179,12 +1187,12 @@ begin
       WritePrimitiveAttr(CurrLineStyle, CurrPenWidth,
         CurrPenColor,
         CurrHatching, CurrHatchColor, CurrBrushColor,
-        CurrBrush.lbStyle = BS_PATTERN, fCurrPrimitive)
+        CurrBrush.lbStyle = BS_PATTERN, fCurrObj)
     else
       WritePrimitiveAttr(CurrLineStyle, CurrPenWidth,
         CurrPenColor,
         haNone, clNone, clNone,
-        CurrBrush.lbStyle = BS_PATTERN, fCurrPrimitive);
+        CurrBrush.lbStyle = BS_PATTERN, fCurrObj);
   end;
 end;
 
@@ -1201,7 +1209,7 @@ begin
         AddPolygon
       else if ARecord is TEMF_PolyPolyline16 then
         AddPolyline;
-      PP := fCurrPrimitive.Points;
+      PP := (fCurrObj as TPrimitive2D).Points;
       for I := 0 to GetLen(J) - 1 do
         PP.Add(
           GetXY(GetPnt(J, I).X, GetPnt(J, I).Y));
@@ -1209,12 +1217,12 @@ begin
         WritePrimitiveAttr(CurrLineStyle, CurrPenWidth,
           CurrPenColor,
           CurrHatching, CurrHatchColor, CurrBrushColor,
-          CurrBrush.lbStyle = BS_PATTERN, fCurrPrimitive)
+          CurrBrush.lbStyle = BS_PATTERN, fCurrObj)
       else
         WritePrimitiveAttr(CurrLineStyle, CurrPenWidth,
           CurrPenColor,
           haNone, clNone, clNone,
-          CurrBrush.lbStyle = BS_PATTERN, fCurrPrimitive);
+          CurrBrush.lbStyle = BS_PATTERN, fCurrObj);
     end;
 end;
 
@@ -1233,6 +1241,26 @@ begin
   ReleaseDC(0, h_DC);
 end;
 {$ENDIF}
+
+procedure FixVAlignment(Obj: TText2D; Ch: char);
+// For compatibitlity with older versions
+var
+  D: TVector2D;
+  Descent: TRealType;
+begin
+  if Ch = '0' then Exit; // Baseline
+  Descent := GetFontDescent(Obj.FaceName, Obj.Style, Obj.Charset);
+  D.X := 0;
+  case Ch of
+    'b': D.Y := Descent;
+    'c': D.Y := Descent - 0.5;
+    't': D.Y := Descent - 1;
+  end;
+  D.Y := D.Y * Obj.Height;
+  if Obj.Rot <> 0 then
+    D := TransformVector2D(D, Rotate2D(Obj.Rot));
+  Obj.Points[0] := ShiftPoint(Obj.Points[0], D);
+end;
 
 procedure T_EMF_Import.ExtTextOut_Execute(
   const ARecord: TEMF_Record);
@@ -1255,7 +1283,7 @@ begin
       if iGraphicsMode = GM_COMPATIBLE then ;
       WritePrimitiveAttr(liNone, 1, clNone,
         haNone, clNone, CurrBkColor,
-        CurrBrush.lbStyle = BS_PATTERN, fCurrPrimitive);
+        CurrBrush.lbStyle = BS_PATTERN, fCurrObj);
     end;
     if (emrtext.FOptions and 2) = ETO_OPAQUE then
     begin
@@ -1263,7 +1291,7 @@ begin
         GetXY(emrtext.rcl.Right, emrtext.rcl.Bottom));
       WritePrimitiveAttr(liNone, 1, clNone,
         haNone, clNone, CurrBkColor,
-        CurrBrush.lbStyle = BS_PATTERN, fCurrPrimitive);
+        CurrBrush.lbStyle = BS_PATTERN, fCurrObj);
     end;
       //NodeAddXY('x', 'y', Point2D(CurrX + rclBox.Left, CurrY - rclBox.Bottom, Prim);
 {$IFDEF VER140}
@@ -1343,20 +1371,14 @@ begin
     WriteToLog('Offset_to_string', emrtext.offString);
         //if Trim((ARecord as TEMF_ExtTextOut).Str) <> '' then
     AddText(P, H, (ARecord as TEMF_ExtTextOut).Str);
-    Prim := fCurrPrimitive as TText2D;
+    Prim := fCurrObj as TText2D;
     Prim.Rot := ARot;
   //TA_LEFT = 0;  TA_RIGHT = 2;  TA_CENTER = 6;
   //TA_TOP = 0;  TA_BOTTOM = 8;  TA_BASELINE = 24;
     case CurrTextAlignment and 6 of
-      TA_RIGHT: Prim.HJustification := jhRight;
-      TA_CENTER: Prim.HJustification := jhCenter;
-    else Prim.HJustification := jhLeft;
-    end;
-    case CurrTextAlignment and 24 of
-          //TA_BASELINE: Prim.VJustification := jvCenter;
-      TA_BASELINE: ;
-      TA_BOTTOM: Prim.VJustification := jvBottom;
-    else Prim.VJustification := jvTop;
+      TA_RIGHT: Prim.HAlignment := ahRight;
+      TA_CENTER: Prim.HAlignment := ahCenter;
+    else Prim.HAlignment := ahLeft;
     end;
     if CurrTextColor <> clBlack then
       Prim.LineColor := CurrTextColor;
@@ -1399,6 +1421,11 @@ begin
     lfQuality: Byte;
     lfPitchAndFamily: Byte;
     lfFaceName: array[0..LF_FACESIZE - 1] of WideChar;}
+    case CurrTextAlignment and 24 of
+      TA_BASELINE: ;
+      TA_BOTTOM: FixVAlignment(Prim, 'b');
+    else FixVAlignment(Prim, 't');
+    end;
   end
 end;
 
@@ -1425,9 +1452,9 @@ begin
             then AddPolygon
           else AddPolyline;
           if I < PathArrPos then CurrXY := PathArr[I + 1];
-          fCurrPrimitive.Points.AppendPoints(PP);
+          (fCurrObj as TPrimitive2D).Points.AppendPoints(PP);
           PP.Clear;
-          AddPathAttributes(ARecord, fCurrPrimitive);
+          AddPathAttributes(ARecord, fCurrObj);
         end;
         FirstMoveTo := False;
       end;
@@ -1480,9 +1507,9 @@ begin
             then AddClosedBezier
           else AddBezier;
           if I < PathArrPos then CurrXY := PathArr[I + 1];
-          fCurrPrimitive.Points.AppendPoints(PP);
+          (fCurrObj as TPrimitive2D).Points.AppendPoints(PP);
           PP.Clear;
-          AddPathAttributes(ARecord, fCurrPrimitive);
+          AddPathAttributes(ARecord, fCurrObj);
         end;
         FirstMoveTo := False;
         BezMod := 0;
@@ -2166,8 +2193,8 @@ Window origin	(0,0).}
   LineToPP.Free;
   Handles.Free;
   DC_InfoList.Free;
-  fDrawing2D.AddList(fLst);
-  fLst.Clear;
+  fDrawing2D.AddList(fMainList);
+  fMainList.Clear;
 end;
 
 end.

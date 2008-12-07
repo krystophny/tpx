@@ -1,10 +1,10 @@
 object TableForm: TTableForm
-  Left = 335
-  Top = 130
+  Left = 486
+  Top = 208
   BorderStyle = bsDialog
   Caption = 'Edit coordinates'
   ClientHeight = 473
-  ClientWidth = 453
+  ClientWidth = 530
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -19,7 +19,7 @@ object TableForm: TTableForm
   PixelsPerInch = 120
   TextHeight = 16
   object Button1: TButton
-    Left = 340
+    Left = 420
     Top = 8
     Width = 75
     Height = 25
@@ -28,7 +28,7 @@ object TableForm: TTableForm
     TabOrder = 0
   end
   object Button2: TButton
-    Left = 340
+    Left = 420
     Top = 36
     Width = 75
     Height = 25
@@ -38,7 +38,7 @@ object TableForm: TTableForm
     TabOrder = 1
   end
   object Panel1: TPanel
-    Left = 335
+    Left = 415
     Top = 92
     Width = 106
     Height = 117
@@ -93,7 +93,7 @@ object TableForm: TTableForm
     end
   end
   object CheckBox1: TCheckBox
-    Left = 340
+    Left = 420
     Top = 216
     Width = 105
     Height = 17
@@ -106,7 +106,7 @@ object TableForm: TTableForm
   object Panel2: TPanel
     Left = 0
     Top = 0
-    Width = 333
+    Width = 401
     Height = 473
     Align = alLeft
     Caption = 'Panel2'
@@ -114,27 +114,31 @@ object TableForm: TTableForm
     object Grid: TStringGrid
       Left = 1
       Top = 25
-      Width = 331
+      Width = 399
       Height = 447
       Align = alClient
       ColCount = 3
       DefaultColWidth = 100
       DefaultRowHeight = 20
       RowCount = 2
-      Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goDrawFocusSelected, goRowMoving, goEditing]
+      Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goDrawFocusSelected, goColSizing, goRowMoving, goEditing]
       PopupMenu = PopupMenu1
-      ScrollBars = ssVertical
       TabOrder = 0
       OnClick = GridClick
+      OnKeyPress = GridKeyPress
       OnKeyUp = GridKeyUp
       OnRowMoved = GridRowMoved
       OnSelectCell = GridSelectCell
       OnSetEditText = GridSetEditText
+      ColWidths = (
+        100
+        112
+        110)
     end
     object Panel3: TPanel
       Left = 1
       Top = 1
-      Width = 331
+      Width = 399
       Height = 24
       Align = alTop
       BevelOuter = bvNone
@@ -143,16 +147,17 @@ object TableForm: TTableForm
       object Edit1: TEdit
         Left = 0
         Top = 0
-        Width = 329
+        Width = 398
         Height = 24
         TabOrder = 0
         OnChange = Edit1Change
         OnEnter = Edit1Enter
+        OnKeyUp = Edit1KeyUp
       end
     end
   end
   object Button4: TButton
-    Left = 340
+    Left = 420
     Top = 264
     Width = 75
     Height = 25

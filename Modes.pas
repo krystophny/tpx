@@ -7,9 +7,9 @@ unit Modes;
 interface
 
 uses SysUtils, StrUtils, Classes, Controls, ExtCtrls, Graphics,
-  Manage,
-  Forms, Dialogs, ExtDlgs, Registry, Math, Options0,
-  Geometry, Drawings, ViewPort, GObjBase, GObjects,
+  Forms, Dialogs, ExtDlgs, Registry, Math,
+  Manage, Options0, Geometry, Drawings, ViewPort, GObjBase,
+  GObjects,
 {$IFDEF VER140}
   Windows
 {$ELSE}
@@ -66,8 +66,7 @@ type
     procedure ChangeSelectedProperties;
     procedure PictureProperties;
     procedure TpXSettings;
-    procedure TransformSelected(
-      const Transf: TTransf2D; const DoNotify: Boolean);
+    procedure TransformSelected(const Transf: TTransf2D);
     procedure DoSaveDrawing(FileName: string);
     procedure DrawingSaveDlgTypeChange(Sender: TObject);
     function DlgSaveDrawing(FileName: string): Word;
@@ -181,8 +180,9 @@ type
       override;
   end;
 
-  TFreehandPolylineMode = class(TInsertGrObjMode)
+  TFreehandMode = class(TInsertGrObjMode)
   public
+    IsPolyline: Boolean;
     procedure OnPush; override;
     procedure OnPop; override;
     procedure FinishDraw;
@@ -245,6 +245,12 @@ type
       override;
     procedure OnMouseMove(Sender: TObject;
       Shift: TShiftState; X, Y: Integer); override;
+    procedure OnMouseUp(Sender: TObject;
+      Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+      override;
+  end;
+
+  TPanningAltMode = class(TPanningMode)
     procedure OnMouseUp(Sender: TObject;
       Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
       override;
@@ -324,10 +330,11 @@ var
   InsertSimpleGrObjMode: TInsertSimpleGrObjMode;
   InsertUnsizedGrObjMode: TInsertUnsizedGrObjMode;
   InsertSizedGrObjMode: TInsertSizedGrObjMode;
-  FreehandPolylineMode: TFreehandPolylineMode;
+  FreehandMode: TFreehandMode;
   SelectObjectsInAreaMode: TSelectObjectsInAreaMode;
   ZoomAreaMode: TZoomAreaMode;
   PanningMode: TPanningMode;
+  PanningAltMode: TPanningAltMode;
   DragMode: TDragMode;
   DragCopyMode: TDragCopyMode;
   MoveMode: TMoveMode;
@@ -379,14 +386,19 @@ const
   Msg_InsertText = Msg_InsertClosedBezier + 1;
   Msg_InsertStar = Msg_InsertText + 1;
   Msg_InsertSymbol = Msg_InsertStar + 1;
-  Msg_FreehandPolyline = Msg_InsertSymbol + 1;
-
-  Msg_SimplifyPoly = Msg_FreehandPolyline + 1;
-  Msg_ConnectPaths = Msg_SimplifyPoly + 1;
+  Msg_InsertBitmap = Msg_InsertSymbol + 1;
+  Msg_FreehandPolyline = Msg_InsertBitmap + 1;
+  Msg_FreehandBezier = Msg_FreehandPolyline + 1;
+  Msg_SimplifyPoly = Msg_FreehandBezier + 1;
+  Msg_SimplifyBezierPaths = Msg_SimplifyPoly + 1;
+  Msg_ConnectPaths = Msg_SimplifyBezierPaths + 1;
   Msg_ReversePoints = Msg_ConnectPaths + 1;
-  Msg_Group = Msg_ReversePoints + 1;
-  Msg_Unroup = Msg_Group + 1;
-  Msg_BreakPath = Msg_Unroup + 1;
+  Msg_DeleteSmall = Msg_ReversePoints + 1;
+  Msg_Group = Msg_DeleteSmall + 1;
+  Msg_Ungroup = Msg_Group + 1;
+  Msg_MakeCompound = Msg_Ungroup + 1;
+  Msg_Uncompound = Msg_MakeCompound + 1;
+  Msg_BreakPath = Msg_Uncompound + 1;
   Msg_DeletePoint = Msg_BreakPath + 1;
   Msg_AddPoint = Msg_DeletePoint + 1;
 
@@ -459,7 +471,8 @@ uses MainUnit, SysBasic, Propert, Options, TransForm, PreView,
   EMF_Unit, WinBasic, ClpbrdOp,
 {$ELSE}
 {$ENDIF}
-  Settings0, AboutUnit, Input, Output, ScaleStandardUnit, Modify;
+  Settings0, AboutUnit, Input, Output, ScaleStandardUnit, Modify,
+  InfoForm, Devices;
 
 { --================ TTpXManager ==================-- }
 
@@ -521,6 +534,7 @@ begin
   ValidPicture := FileExists(FileName) and ValidFile(FileName)
     and ((Ext = 'emf') or (Ext = 'wmf')
     or (Ext = 'eps') or (Ext = 'ps') or (Ext = 'pdf'));
+  (ImageCtrl.Parent as TPanel).Caption := '';
   if ValidPicture then
   try
     if (Ext = 'emf') or (Ext = 'wmf') then
@@ -542,7 +556,8 @@ begin
       end
       else
       begin
-        SetCaption('*no preview*');
+        SetCaption('');
+        (ImageCtrl.Parent as TPanel).Caption := '*no preview*';
         ImageCtrl.Picture := nil;
       end;
     end;
@@ -553,7 +568,8 @@ begin
   end;
   if not ValidPicture then
   begin
-    SetCaption({SPictureLabel}'*no preview*');
+    SetCaption({SPictureLabel}'');
+    (ImageCtrl.Parent as TPanel).Caption := '*no preview*';
     //FPreviewButton.Enabled := False;
     ImageCtrl.Picture := nil;
     //FPaintPanel.Caption := srNone;
@@ -721,26 +737,20 @@ end;
 
 procedure TTpXMode.EditUndo;
 begin
-  with Drawing do
-  begin
-    History.Undo;
-    RepaintViewports;
-    MainForm.Undo.Enabled := History.CanUndo;
-    MainForm.Redo.Enabled := History.CanRedo;
+  Drawing.History.Undo;
+  Drawing.Update;
+  MainForm.Undo.Enabled := Drawing.History.CanUndo;
+  MainForm.Redo.Enabled := Drawing.History.CanRedo;
     //SaveDoc.Enabled := History.IsChanged;
-  end;
 end;
 
 procedure TTpXMode.EditRedo;
 begin
-  with Drawing do
-  begin
-    History.Redo;
-    RepaintViewports;
-    MainForm.Undo.Enabled := History.CanUndo;
-    MainForm.Redo.Enabled := History.CanRedo;
+  Drawing.History.Redo;
+  Drawing.Update;
+  MainForm.Undo.Enabled := Drawing.History.CanUndo;
+  MainForm.Redo.Enabled := Drawing.History.CanRedo;
     //SaveDoc.Enabled := History.IsChanged;
-  end;
 end;
 
 procedure TTpXMode.OnChangeDrawing(ADrawing: TDrawing);
@@ -797,10 +807,9 @@ begin
       if Drawing.PicScale <= 0 then Drawing.PicScale := 1;
       Drawing.History.SetPropertiesChanged;
       //MainForm.SaveDoc.Enabled := TheDrawing.History.IsChanged;
+      Drawing.Update;
     end;
-    Drawing.RepaintViewports;
   end;
-  //ViewPort.SetFocus;
 end;
 
 procedure TTpXMode.TpXSettings;
@@ -808,32 +817,14 @@ begin
   OptionsForm.POptList := SettingsList;
   OptionsForm.Caption := 'TpX settings';
   if OptionsForm.ShowModal = mrOK then
-    if OptionsForm.HasChanged then Drawing.RepaintViewports;
+    if OptionsForm.HasChanged then Drawing.Update;
 end;
 
-procedure TTpXMode.TransformSelected(
-  const Transf: TTransf2D; const DoNotify: Boolean);
-var
-  ListOfObj: array of Integer;
-  Iter: TGraphicObjIterator;
-  Current: TGraphicObject;
-  I: Integer;
+procedure TTpXMode.TransformSelected(const Transf: TTransf2D);
 begin
-    //SelectedObjs.Transform(Transf);
-  SetLength(ListOfObj, Drawing.SelectedObjects.Count);
-  Iter := Drawing.SelectedObjects.GetIterator;
-  try
-    Current := nil;
-    I := 0;
-    while Iter.GetNext(Current) do
-    begin
-      ListOfObj[I] := Current.ID;
-      Inc(I);
-    end;
-  finally
-    Iter.Free;
-  end;
-  Drawing.TransformObjects(ListOfObj, Transf, DoNotify);
+  Drawing.SelectedObjects.TransForm(Transf);
+  Drawing.NotifyChanged;
+  Drawing.RepaintViewports;
 end;
 
 procedure TTpXMode.DlgOpenDrawing;
@@ -886,8 +877,8 @@ procedure TTpXMode.DoSaveDrawing(FileName: string);
 begin
   if not SameText(ExtractFileExt(FileName), '.TpX') then
     FileName := ChangeFileExt(FileName, '.TpX');
-  StoreToFile_TpX(Drawing, FileName, False);
   Drawing.FileName := FileName;
+  StoreToFile_TpX(Drawing, FileName, False);
   MainForm.Caption := ExtractFileName(Drawing.FileName);
   TpX_Manager.RecentFiles.Update(Drawing.FileName);
   Drawing.History.SaveCheckSum;
@@ -907,7 +898,10 @@ const
     + '|PDF from EPS|*.pdf'
     + '|LaTeX EPS (latex-dvips)|*.eps'
     + '|PDF from LaTeX EPS (latex-dvips-gs-pdf)|*.pdf'
-    + '|LaTeX custom (latex-dvips-gs)|*.*';
+    + '|LaTeX custom (latex-dvips-gs)|*.*'
+    + '|LaTeX preview source|*.tex'
+    + '|PdfLaTeX preview source|*.tex'
+    ;
 
 procedure TTpXMode.DrawingSaveDlgTypeChange(Sender: TObject);
 var
@@ -931,7 +925,7 @@ end;
 function TTpXMode.DlgSaveDrawing(FileName: string): Word;
 var
   Path: string;
-  Filter: string;
+//  Filter: string;
   ExecuteResult: Boolean;
   Device, Ext, Ext2: string;
   //LaTeX custom (latex-dvips-gs) |LaTeX custom (latex-dvips-gs)|*.*
@@ -1008,14 +1002,13 @@ begin
   case Msg of
     Msg_SnapToGrid:
       begin
-        Drawing.UseSnap := not Drawing.UseSnap;
-        MainForm.SnapToGrid.Checked := Drawing.UseSnap;
+        UseSnap := not UseSnap;
+        MainForm.SnapToGrid.Checked := UseSnap;
       end;
     Msg_AngularSnap:
       begin
-        Drawing.UseAngularSnap :=
-          not Drawing.UseAngularSnap;
-        MainForm.AngularSnap.Checked := Drawing.UseAngularSnap;
+        UseAngularSnap := not UseAngularSnap;
+        MainForm.AngularSnap.Checked := UseAngularSnap;
       end;
     Msg_SmoothBezierNodes:
       begin
@@ -1089,6 +1082,7 @@ end;
 procedure TTpXMode.NewDrawing(const FileName: string);
 begin
   Drawing.Clear;
+  Drawing.RepaintViewports;
   Drawing.FileName := FileName;
   MainForm.Caption := FileName;
   if FileName <> Drawing_NewFileName then
@@ -1110,19 +1104,16 @@ begin
     //SaveDoc.Enabled := History.IsChanged;
   end;
   LoadSettings_Ex(MainForm);
-
   ParseParameters(FileName, IncludePath, OutputFormats);
-  if FileName <> '' then
-  begin
     //ShowMessage(FileName);
-    if FileExists(FileName) then
-      DoOpenDrawing(FileName)
-    else
-      NewDrawing(FileName);
-    if IncludePath <> '' then
-      Drawing.IncludePath := IncludePath;
-    SetOutputFormats(OutputFormats, Drawing);
-  end;
+  if FileExists(FileName) then
+    DoOpenDrawing(FileName)
+  else if FileName <> '' then
+    NewDrawing(FileName)
+  else NewDrawing(Drawing_NewFileName);
+  if IncludePath <> '' then
+    Drawing.IncludePath := IncludePath;
+  SetOutputFormats(OutputFormats, Drawing);
 end;
 
 procedure TTpXMode.ShowPictureInfo;
@@ -1137,6 +1128,14 @@ begin
   List := TStringList.Create;
   R := Drawing.DrawingExtension;
   try
+    List.Add(Drawing.FileName);
+    List.Add('');
+    if Trim(Drawing.Comment) <> '' then
+    begin
+      List.Add('Comment:');
+      List.Add(Trim(Drawing.Comment));
+      List.Add('');
+    end;
     List.Add('Picture bounds (left, bottom, right, top):');
     List.Add(Format('   %.5g, %.5g, %.5g, %.5g',
       [R.Left, R.Bottom, R.Right, R.Top]));
@@ -1181,7 +1180,11 @@ begin
     List.Add(Format(' available virtual = %d k',
       [MS.dwAvailVirtual div 1024]));
 {$ENDIF}
-    MessageBoxInfo(List.GetText);
+//    MessageBoxInfo(List.GetText);
+    InfoBox.InfoEdit.Lines.Clear;
+    InfoBox.InfoEdit.Lines.AddStrings(List);
+    InfoBox.Caption := 'Picture info';
+    InfoBox.ShowModal;
   finally
     List.Free;
   end;
@@ -1204,7 +1207,7 @@ procedure TTpXMode.ShiftSelected(Shift: TVector2D);
     Result := Round(Sh / A) * Del * A;
   end;
 begin
-  if Drawing.UseSnap then
+  if UseSnap then
     if ViewPort.GridStep > 0 then
     begin
       Shift.X := RoundShift(Shift.X, ViewPort.GridStep);
@@ -1215,27 +1218,27 @@ begin
       Shift.X := RoundShift(Shift.X, 1);
       Shift.Y := RoundShift(Shift.Y, 1);
     end;
-  if Drawing.UseAngularSnap then
+  if UseAngularSnap then
     Make45_2D_V(Shift);
-  TransformSelected(Translate2D(Shift.X, Shift.Y), True);
+  TransformSelected(Translate2D(Shift.X, Shift.Y));
 end;
 
 procedure TTpXMode.FlipSelected(DX, DY: TRealType);
 begin
   TransformSelected(
-    Flip2D(Drawing.GetSelectionCenter, V2D(DX, DY)), True);
+    Flip2D(Drawing.GetSelectionCenter, V2D(DX, DY)));
 end;
 
 procedure TTpXMode.RotateSelected(R: TRealType);
 begin
   TransformSelected(RotateCenter2D(R,
-    Drawing.GetSelectionCenter), True);
+    Drawing.GetSelectionCenter));
 end;
 
 procedure TTpXMode.ScaleSelected(Scale: TRealType);
 begin
   TransformSelected(ScaleCenter2D(Scale, Scale,
-    Drawing.GetSelectionCenter), True);
+    Drawing.GetSelectionCenter));
 end;
 
 procedure TTpXMode.CustomTransform;
@@ -1246,7 +1249,7 @@ begin
     Drawing.GetSelectionExtension;
   if TransfForm.ShowModal = mrOK then
   begin
-    TransformSelected(TransfForm.T, True);
+    TransformSelected(TransfForm.T);
   end;
 end;
 
@@ -1260,13 +1263,12 @@ begin
     T :=
       Modify.ScaleStandard(Drawing,
       ScaleStandardForm.ScaleStandardMaxWidth,
-      ScaleStandardForm.ScaleStandardMaxHeight,
-      False)
+      ScaleStandardForm.ScaleStandardMaxHeight)
   else
   begin
     T := Scale2D(Drawing.PicScale / ScaleStandardForm.PicScale,
       Drawing.PicScale / ScaleStandardForm.PicScale);
-    Drawing.TransformObjects([-1], T, False);
+    Drawing.ObjectList.TransForm(T);
   end;
   if ScaleStandardForm.ScalePhysical.Checked
     then ScalePhysical(Drawing, IsotropicScale(T), False);
@@ -1285,8 +1287,8 @@ begin
   TmpObj := Drawing.SelectionFirst as TPrimitive2D;
   if TmpObj = nil then Exit;
   TmpObj.InsertControlPoint(P,
-    ViewPort.GetAperture({fApertureSize} Drag_Aperture),
-    ViewPort.GetPixelAperture.X);
+    ViewPort.PixelSize * Drag_Aperture,
+    ViewPort.PixelSize);
 end;
 
 procedure TTpXMode.Delete_Point(P: TPoint2D);
@@ -1298,7 +1300,7 @@ begin
   if not (Drawing.SelectionFirst is TPrimitive2D) then Exit;
   TmpObj := Drawing.SelectionFirst as TPrimitive2D;
   if TmpObj = nil then Exit;
-  Distance := ViewPort.GetAperture(Drag_Aperture);
+  Distance := ViewPort.PixelSize * Drag_Aperture;
   I := TmpObj.OnMe(P, Distance, Distance);
   if I < 0 then Exit;
   TmpObj.DeleteControlPoint(I);
@@ -1312,8 +1314,8 @@ begin
   TmpObj := Drawing.SelectionFirst as TPrimitive2D;
   if TmpObj = nil then Exit;
   BreakPath(Drawing, TmpObj, P,
-    ViewPort.GetAperture({fApertureSize} Drag_Aperture),
-    ViewPort.GetPixelAperture.X);
+    ViewPort.PixelSize * Drag_Aperture,
+    ViewPort.PixelSize);
 end;
 
 {* --------- TBaseMode --------- *}
@@ -1325,6 +1327,9 @@ end;
 
 procedure TBaseMode.OnInsertGrObj(Msg: TEventMessage;
   Sender: TObject);
+var
+  IMode: TInsertGrObjMode;
+  NPoints: Integer;
   function InsertText: Boolean;
   var
     TmpText: TText2D;
@@ -1340,109 +1345,135 @@ procedure TBaseMode.OnInsertGrObj(Msg: TEventMessage;
     end;
     TmpText := TText2D.CreateSpec(-1, Point2D(1, 1),
       Drawing.DefaultFontHeight, TmpStr);
-    InsertSimpleGrObjMode.Obj := TmpText;
+    IMode.Obj := TmpText;
+    Result := True;
+  end;
+  function InsertBitmap: Boolean;
+  begin
+    Result := False;
+    MainForm.OpenBitmapDlg.FileName := '';
+    if not MainForm.OpenBitmapDlg.Execute then
+    begin
+      MainForm.PressModeButton(Sender, False);
+      Exit;
+    end;
+    IMode.Obj :=
+      TBitmap2D.CreateSpec(-1, Point2D(0, 0), Point2D(0, 0),
+      Drawing.RegisterBitmap(
+      MainForm.OpenBitmapDlg.FileName));
+    NPoints := 2;
     Result := True;
   end;
 begin
   case Msg of
+    Msg_InsertLine, Msg_InsertRectangle, Msg_InsertCircle,
+      Msg_InsertEllipse,
+      Msg_InsertArc, Msg_InsertSector, Msg_InsertSegment,
+      Msg_InsertBitmap:
+      IMode := InsertSizedGrObjMode;
+    Msg_InsertPolyline, Msg_InsertPolygon, Msg_InsertCurve,
+      Msg_InsertClosedCurve, Msg_InsertBezier,
+      Msg_InsertClosedBezier:
+      IMode := InsertUnsizedGrObjMode;
+    Msg_InsertText, Msg_InsertStar, Msg_InsertSymbol:
+      IMode := InsertSimpleGrObjMode;
+  end;
+  case Msg of
     Msg_InsertLine:
       begin
-        InsertSizedGrObjMode.Obj :=
+        IMode.Obj :=
           TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(0, 0));
-        InsertSizedGrObjMode.NPoints := 2;
+        NPoints := 2;
       end;
     Msg_InsertRectangle:
       begin
-        InsertSizedGrObjMode.Obj := TRectangle2D.Create(-1);
-        InsertSizedGrObjMode.NPoints := 2;
+        IMode.Obj := TRectangle2D.Create(-1);
+        NPoints := 2;
       end;
     Msg_InsertCircle:
       begin
-        InsertSizedGrObjMode.Obj := TCircle2D.Create(-1);
-        InsertSizedGrObjMode.NPoints := 2;
+        IMode.Obj := TCircle2D.Create(-1);
+        NPoints := 2;
       end;
     Msg_InsertEllipse:
       begin
-        InsertSizedGrObjMode.Obj := TEllipse2D.Create(-1);
-        InsertSizedGrObjMode.NPoints := 2;
+        IMode.Obj := TEllipse2D.Create(-1);
+        NPoints := 2;
       end;
     Msg_InsertArc:
       begin
-        InsertSizedGrObjMode.Obj :=
-          TArc2D.CreateSpec(-1, Point2D(0, 0), 0, 0, 0);
-        InsertSizedGrObjMode.NPoints := 3;
+        IMode.Obj := TArc2D.CreateSpec(-1, Point2D(0, 0), 0, 0, 0);
+        NPoints := 3;
       end;
     Msg_InsertSector:
       begin
-        InsertSizedGrObjMode.Obj :=
-          TSector2D.CreateSpec(-1, Point2D(0, 0), 0, 0, 0);
-        InsertSizedGrObjMode.NPoints := 3;
+        IMode.Obj
+          := TSector2D.CreateSpec(-1, Point2D(0, 0), 0, 0, 0);
+        NPoints := 3;
       end;
     Msg_InsertSegment:
       begin
-        InsertSizedGrObjMode.Obj :=
-          TSegment2D.CreateSpec(-1, Point2D(0, 0), 0, 0, 0);
-        InsertSizedGrObjMode.NPoints := 3;
+        IMode.Obj
+          := TSegment2D.CreateSpec(-1, Point2D(0, 0), 0, 0, 0);
+        NPoints := 3;
       end;
     Msg_InsertPolyline:
-      InsertUnsizedGrObjMode.Obj
-        := TPolyline2D.CreateSpec(-1, [Point2D(0, 0)]);
+      IMode.Obj := TPolyline2D.CreateSpec(-1, [Point2D(0, 0)]);
     Msg_InsertPolygon:
-      InsertUnsizedGrObjMode.Obj
-        := TPolygon2D.CreateSpec(-1, [Point2D(0, 0)]);
+      IMode.Obj := TPolygon2D.CreateSpec(-1, [Point2D(0, 0)]);
     Msg_InsertCurve:
       begin
-        InsertUnsizedGrObjMode.Obj
-          := TSmoothPath2D.CreateSpec(-1, [Point2D(0, 0)]);
+        IMode.Obj := TSmoothPath2D.CreateSpec(-1, [Point2D(0, 0)]);
       end;
     Msg_InsertClosedCurve:
       begin
-        InsertUnsizedGrObjMode.Obj
+        IMode.Obj
           := TClosedSmoothPath2D.CreateSpec(-1, [Point2D(0, 0)]);
       end;
     Msg_InsertBezier:
       begin
-        InsertUnsizedGrObjMode.Obj
+        IMode.Obj
           := TBezierPath2D.CreateSpec(-1, [Point2D(0, 0)]);
       end;
     Msg_InsertClosedBezier:
       begin
-        InsertUnsizedGrObjMode.Obj
+        IMode.Obj
           := TClosedBezierPath2D.CreateSpec(-1, [Point2D(0, 0)]);
       end;
     Msg_InsertText: if not InsertText then Exit;
     Msg_InsertStar:
-      InsertSimpleGrObjMode.Obj
-        := TStar2D.CreateSpec(-1, Point2D(0, 0));
+      IMode.Obj := TStar2D.CreateSpec(-1, Point2D(0, 0));
     Msg_InsertSymbol:
-      InsertSimpleGrObjMode.Obj
-        := TSymbol2D.CreateSpec(-1, Point2D(1, 1),
+      IMode.Obj := TSymbol2D.CreateSpec(-1, Point2D(1, 1),
         Drawing.DefaultSymbolSize);
+    Msg_InsertBitmap:
+      if not InsertBitmap then Exit;
   end;
-  case Msg of
-    Msg_InsertLine, Msg_InsertRectangle, Msg_InsertCircle,
-      Msg_InsertEllipse,
-      Msg_InsertArc, Msg_InsertSector, Msg_InsertSegment:
-      begin
-        InsertSizedGrObjMode.PressedBtn := Sender;
-        PushMode(InsertSizedGrObjMode);
-      end;
-    Msg_InsertPolyline, Msg_InsertPolygon, Msg_InsertCurve,
-      Msg_InsertClosedCurve, Msg_InsertBezier,
-      Msg_InsertClosedBezier:
-      begin
-        InsertUnsizedGrObjMode.PressedBtn := Sender;
-        PushMode(InsertUnsizedGrObjMode);
-      end;
-    Msg_InsertText, Msg_InsertStar, Msg_InsertSymbol:
-      begin
-        InsertSimpleGrObjMode.PressedBtn := Sender;
-        PushMode(InsertSimpleGrObjMode);
-      end;
+  if IMode.Obj is TPrimitive2D then
+  begin
+    Drawing.ApplyProperties(IMode.Obj);
   end;
+  if IMode is TInsertSizedGrObjMode then
+    InsertSizedGrObjMode.NPoints := NPoints;
+  IMode.PressedBtn := Sender;
+  PushMode(IMode);
 end;
 
 procedure TBaseMode.OnMessage(Msg: TEventMessage; Sender: TObject);
+  function GetDelSmallObjSize: TRealType;
+  var
+    TmpStr: string;
+  begin
+    Result := -1;
+    TmpStr := '1';
+    while Result = -1 do
+    begin
+      if not InputQuery('Delete small objects',
+        'Specify minimum objects size', TmpStr)
+        or (TmpStr = '') then Exit;
+      Result := StrToRealType(TmpStr, -1);
+    end;
+  end;
 begin
   case Msg of
     Msg_StartProgram: StartProgram;
@@ -1451,7 +1482,8 @@ begin
         Drawing.SelectionClear;
         Drawing.RepaintViewports;
       end;
-    Msg_Stop: SaveSettings;
+    Msg_Stop:
+      SaveSettings;
     Msg_New:
       begin
         if AskSaveCurrentDrawing <> mrCancel then
@@ -1470,22 +1502,44 @@ begin
     Msg_Undo: EditUndo;
     Msg_Redo: EditRedo;
     Msg_Copy: Drawing.CopySelectionToClipboard;
-    Msg_Paste: Drawing.PasteFromClipboard;
+    Msg_Paste:
+      begin
+        Drawing.PasteFromClipboard;
+        Drawing.RepaintViewports;
+      end;
     Msg_Cut:
       begin
         Drawing.CopySelectionToClipboard;
         Drawing.DeleteSelected;
+        Drawing.RepaintViewports;
       end;
-    Msg_Delete: Drawing.DeleteSelected;
+    Msg_Delete:
+      begin
+        Drawing.DeleteSelected;
+        Drawing.RepaintViewports;
+      end;
     Msg_Duplicate:
       begin
-        DuplicateSelected(Drawing, ViewPort.GetPixelAperture);
+        DuplicateSelected(Drawing,
+          V2D(ViewPort.PixelSize, ViewPort.PixelSize));
         Drawing.NotifyChanged;
         Drawing.RepaintViewports;
       end;
-    Msg_SelectAll: Drawing.SelectAll;
-    Msg_SelNext: Drawing.SelectNext(1);
-    Msg_SelPrev: Drawing.SelectNext(-1);
+    Msg_SelectAll:
+      begin
+        Drawing.SelectAll;
+        Drawing.RepaintViewports;
+      end;
+    Msg_SelNext:
+      begin
+        Drawing.SelectNext(1);
+        Drawing.RepaintViewports;
+      end;
+    Msg_SelPrev:
+      begin
+        Drawing.SelectNext(-1);
+        Drawing.RepaintViewports;
+      end;
     Msg_AreaSelect:
       begin
         SelectObjectsInAreaMode.PressedBtn := Sender;
@@ -1499,15 +1553,27 @@ begin
       end;
     Msg_SelectedProperties: ChangeSelectedProperties;
     Msg_PictureProperties: PictureProperties;
-    Msg_InsertLine..Msg_InsertSymbol: OnInsertGrObj(Msg, Sender);
+    Msg_InsertLine..Msg_InsertBitmap: OnInsertGrObj(Msg, Sender);
     Msg_FreehandPolyline:
       begin
-        FreehandPolylineMode.PressedBtn := Sender;
-        PushMode(FreehandPolylineMode);
+        FreehandMode.PressedBtn := Sender;
+        FreehandMode.IsPolyline := True;
+        PushMode(FreehandMode);
+      end;
+    Msg_FreehandBezier:
+      begin
+        FreehandMode.PressedBtn := Sender;
+        FreehandMode.IsPolyline := False;
+        PushMode(FreehandMode);
       end;
     Msg_SimplifyPoly:
       begin
-        SimplifyPoly(Drawing, ViewPort.GetPixelAperture.Y);
+        SimplifyPoly(Drawing, ViewPort.PixelSize);
+        Drawing.RepaintViewports;
+      end;
+    Msg_SimplifyBezierPaths:
+      begin
+        SimplifyBezierPaths(Drawing, ViewPort.PixelSize);
         Drawing.RepaintViewports;
       end;
     Msg_ConnectPaths:
@@ -1520,9 +1586,29 @@ begin
         SelectedReversePoints(Drawing);
         Drawing.RepaintViewports;
       end;
+    Msg_DeleteSmall:
+      begin
+        DeleteSmallObjects(Drawing, GetDelSmallObjSize);
+        Drawing.RepaintViewports;
+      end;
     Msg_Group:
       begin
         GroupSelected(Drawing);
+        Drawing.RepaintViewports;
+      end;
+    Msg_Ungroup:
+      begin
+        UngroupSelected(Drawing);
+        Drawing.RepaintViewports;
+      end;
+    Msg_MakeCompound:
+      begin
+        CompoundFromSelected(Drawing);
+        Drawing.RepaintViewports;
+      end;
+    Msg_Uncompound:
+      begin
+        UncompoundSelected(Drawing);
         Drawing.RepaintViewports;
       end;
     Msg_AddPoint:
@@ -1543,24 +1629,24 @@ begin
     //Msg_ConvertTo: MainForm.ConvertToExecute(Self);
     Msg_MoveUp:
       ShiftSelected(V2D(0,
-        ViewPort.GetPixelAperture.Y * 20));
+        ViewPort.PixelSize * 20));
     Msg_MoveDown:
       ShiftSelected(V2D(0,
-        -ViewPort.GetPixelAperture.Y * 20));
+        -ViewPort.PixelSize * 20));
     Msg_MoveLeft:
-      ShiftSelected(V2D(-ViewPort.GetPixelAperture.X *
+      ShiftSelected(V2D(-ViewPort.PixelSize *
         20, 0));
     Msg_MoveRight:
-      ShiftSelected(V2D(ViewPort.GetPixelAperture.X *
+      ShiftSelected(V2D(ViewPort.PixelSize *
         20, 0));
     Msg_MoveUpPixel:
-      ShiftSelected(V2D(0, ViewPort.GetPixelAperture.Y));
+      ShiftSelected(V2D(0, ViewPort.PixelSize));
     Msg_MoveDownPixel:
-      ShiftSelected(V2D(0, -ViewPort.GetPixelAperture.Y));
+      ShiftSelected(V2D(0, -ViewPort.PixelSize));
     Msg_MoveLeftPixel:
-      ShiftSelected(V2D(-ViewPort.GetPixelAperture.X, 0));
+      ShiftSelected(V2D(-ViewPort.PixelSize, 0));
     Msg_MoveRightPixel:
-      ShiftSelected(V2D(ViewPort.GetPixelAperture.X, 0));
+      ShiftSelected(V2D(ViewPort.PixelSize, 0));
     Msg_FlipV:
       FlipSelected(0, 1);
     Msg_FlipH:
@@ -1658,7 +1744,7 @@ var
 begin
   TmpObj := Drawing.PickObject_PreferSelected(//PickObject(
     ViewPort.ScreenToViewport(Point2D(X, Y)),
-    ViewPort.GetPixelAperture.X * PixelApertureCoefficient,
+    ViewPort.PixelSize * PixelApertureCoefficient,
     ViewPort.VisualRect, TpX_Manager.PickFilter,
     {FirstFound} False, OnObjectIndex);
   if OnObjectIndex < PICK_INOBJECT
@@ -1685,10 +1771,10 @@ begin
   if SSLeft in Shift then
   begin //Start drag
     if PointDistance2D(fLastMousePoint, fLastClickedPoint)
-      < ViewPort.GetAperture(Drag_Aperture) then Exit;
+      < ViewPort.PixelSize * Drag_Aperture then Exit;
     TmpObj := Drawing.PickObject_PreferSelected(//PickObject(
       fLastClickedPoint,
-      ViewPort.GetPixelAperture.X * PixelApertureCoefficient,
+      ViewPort.PixelSize * PixelApertureCoefficient,
       ViewPort.VisualRect, TpX_Manager.PickFilter,
     {FirstFound} False, OnObjectIndex);
 
@@ -1697,10 +1783,11 @@ begin
     if Assigned(TmpObj) then
     begin
       CurrentCtrlPt := TmpObj.OnMe(fLastClickedPoint,
-        ViewPort.GetAperture({fApertureSize} Drag_Aperture),
+        ViewPort.PixelSize * Drag_Aperture,
         TmpDist);
       if (CurrentCtrlPt >= 0) and
-        (Drawing.SelectedObjects.Find(TmpObj.ID) <> nil) then
+        (Drawing.SelectedObjects.Find(TmpObj.ID) <> nil)
+        and (TmpObj is TPrimitive2D) then
       begin
         MoveControlPointMode.PointIndex := CurrentCtrlPt;
         MoveControlPointMode.Shift := Shift;
@@ -1712,6 +1799,12 @@ begin
     end;
     if not Assigned(TmpObj) then
     begin
+      if SSAlt in Shift then
+      begin
+        PushMode(PanningAltMode);
+        PanningAltMode.OnMouseDown(Sender, mbLeft, [], X, Y);
+        Exit;
+      end;
       if not (SSShift in Shift) then
         if Drawing.SelectedObjects.Count > 0 then
         begin
@@ -1763,7 +1856,7 @@ begin
   end;
   TmpObj := Drawing.PickObject_PreferSelected(//PickObject(
     fLastClickedPoint,
-    ViewPort.GetPixelAperture.X * PixelApertureCoefficient,
+    ViewPort.PixelSize * PixelApertureCoefficient,
     ViewPort.VisualRect, TpX_Manager.PickFilter,
     {FirstFound} False, OnObjectIndex);
   if OnObjectIndex < PICK_INOBJECT
@@ -1773,7 +1866,7 @@ begin
   begin
     TmpObj := Drawing.PickObject_PreferSelected(
       fLastClickedPoint,
-      ViewPort.GetPixelAperture.X * PixelApertureCoefficient,
+      ViewPort.PixelSize * PixelApertureCoefficient,
       ViewPort.VisualRect, TpX_Manager.PickFilter,
     {FirstFound} False, OnObjectIndex);
     if (SSAlt in Shift) and
@@ -1786,8 +1879,8 @@ begin
       // Break path at a point
       BreakPath(Drawing,
         TmpObj as TPrimitive2D, fLastClickedPoint,
-        ViewPort.GetAperture({fApertureSize} Drag_Aperture),
-        ViewPort.GetPixelAperture.X);
+        ViewPort.PixelSize * Drag_Aperture,
+        ViewPort.PixelSize);
       Drawing.RepaintViewports;
       Exit;
     end;
@@ -1799,8 +1892,8 @@ begin
       // Add a point to the path
       (TmpObj as TPrimitive2D).InsertControlPoint(
         fLastClickedPoint,
-        ViewPort.GetAperture({fApertureSize} Drag_Aperture),
-        ViewPort.GetPixelAperture.X);
+        ViewPort.PixelSize * Drag_Aperture,
+        ViewPort.PixelSize);
       Drawing.RepaintViewports;
       Exit;
     end;
@@ -1843,7 +1936,7 @@ begin
   Pt := MainForm.LocalView.ClientToScreen(Point(X, Y));
   TmpObj := Drawing.PickObject_PreferSelected(
     fLastClickedPoint,
-    ViewPort.GetPixelAperture.X * PixelApertureCoefficient,
+    ViewPort.PixelSize * PixelApertureCoefficient,
     ViewPort.VisualRect, TpX_Manager.PickFilter,
     {FirstFound} False, OnObjectIndex);
   if OnObjectIndex < PICK_INOBJECT
@@ -2017,7 +2110,7 @@ begin
     Prim.Points.Add(CurrPoint)
   else
   begin
-    if Drawing.UseAngularSnap then
+    if UseAngularSnap then
       Make45_2D(Prim.Points[Prim.FirstDrawPoint - 1],
         CurrPoint);
     Prim.Points[Prim.FirstDrawPoint] := CurrPoint;
@@ -2042,7 +2135,7 @@ begin
     ViewPort.ScreenToViewport(Point2D(X, Y)));
   ViewPort.DrawObject2DWithRubber(Obj, IdentityTransf2D);
   if Prim.FirstDrawPoint > 0 then
-    if Drawing.UseAngularSnap then
+    if UseAngularSnap then
       Make45_2D(Prim.Points[Prim.FirstDrawPoint - 1], CurrPoint);
   Prim.Points[Prim.FirstDrawPoint] := CurrPoint;
   ViewPort.DrawObject2DWithRubber(Obj, IdentityTransf2D);
@@ -2089,12 +2182,17 @@ begin
       Prim.Points[I] := P;
     if Prim is TBox2D0 then
       Prim.Points[2] := Point2D(P.X, P.Y - 1);
+    if Prim is TBitmap2D then
+      Prim.MoveControlPoint0(2, P, [], False);
   end
   else
   begin
-    if Drawing.UseAngularSnap then
+    if UseAngularSnap then
       Make45_2D(Prim.Points[Prim.FirstDrawPoint - 1], P);
-    Prim.Points[Prim.FirstDrawPoint] := P;
+    if Prim is TBitmap2D then
+      Prim.MoveControlPoint0(2, P, [], True)
+    else
+      Prim.Points[Prim.FirstDrawPoint] := P;
   end;
   Inc(Prim.FirstDrawPoint);
   if Prim.FirstDrawPoint = NPoints then
@@ -2125,10 +2223,13 @@ begin
   CurrPoint :=
     ViewPort.GetSnappedPoint(
     ViewPort.ScreenToViewport(Point2D(X, Y)));
-  if Drawing.UseAngularSnap then
+  if UseAngularSnap then
     Make45_2D(Prim.Points[Prim.FirstDrawPoint - 1], CurrPoint);
   ViewPort.DrawObject2DWithRubber(Obj, IdentityTransf2D);
-  Prim.Points[Prim.FirstDrawPoint] := CurrPoint;
+  if Prim is TBitmap2D then
+    Prim.MoveControlPoint0(2, CurrPoint, [], False)
+  else
+    Prim.Points[Prim.FirstDrawPoint] := CurrPoint;
   ViewPort.DrawObject2DWithRubber(Obj, IdentityTransf2D);
 end;
 
@@ -2142,35 +2243,55 @@ begin
       ViewPort.ScreenToViewport(Point2D(X, Y))));
 end;
 
-{* --------- TFreehandPolylineMode --------- *}
+{* --------- TFreehandMode --------- *}
 
-procedure TFreehandPolylineMode.OnPush;
+procedure TFreehandMode.OnPush;
 begin
   inherited OnPush;
   //ViewPort.Cursor := crPen;
   ViewPort.Cursor := crHandPoint;
 end;
 
-procedure TFreehandPolylineMode.OnPop;
+procedure TFreehandMode.OnPop;
 begin
   ViewPort.Cursor := crDefault;
   inherited OnPop;
 end;
 
-procedure TFreehandPolylineMode.FinishDraw;
+procedure TFreehandMode.FinishDraw;
+var
+  TmpBezier: TBezierPath2D;
+  OnChangeDrawing0: TOnChangeDrawing;
 begin
-  if Assigned(Obj) then
-  begin
-    (Obj as TPrimitive2D).FinishFirstDraw;
-    Obj.ParentDrawing := nil;
-    Drawing.AddObject(-1, Obj);
-    Drawing.SelectionAdd(Obj);
-    Obj := nil;
+  OnChangeDrawing0 := Drawing.OnChangeDrawing;
+  Drawing.OnChangeDrawing := nil;
+  try
+    if Assigned(Obj) then
+    begin
+      if not IsPolyline then
+      begin
+        TmpBezier := TBezierPath2D.Create(-1);
+        TmpBezier.Assign(Obj);
+        Obj.Free;
+        Obj := TmpBezier;
+        SimplifyBezierPath(TmpBezier.Points,
+          ViewPort.PixelSize * 7, False);
+      end;
+      Obj.ParentDrawing := nil;
+      Drawing.AddObject(-1, Obj);
+      Drawing.ApplyProperties(Obj);
+      Drawing.SelectionAdd(Obj);
+      Obj.UpdateExtension(nil);
+      Obj := nil;
+    end;
+  finally
+    Drawing.OnChangeDrawing := OnChangeDrawing0;
+    Drawing.NotifyChanged;
+    PopSelf;
   end;
-  PopSelf;
 end;
 
-procedure TFreehandPolylineMode.OnMouseDown(Sender: TObject;
+procedure TFreehandMode.OnMouseDown(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if Button <> mbLeft then Exit;
@@ -2178,7 +2299,7 @@ begin
   Obj.ParentDrawing := Drawing;
 end;
 
-procedure TFreehandPolylineMode.OnMouseMove(Sender: TObject;
+procedure TFreehandMode.OnMouseMove(Sender: TObject;
   Shift: TShiftState; X, Y: Integer);
 var
   CurrPoint: TPoint2D;
@@ -2190,12 +2311,12 @@ begin
     ViewPort.ScreenToViewport(Point2D(X, Y));
   ViewPort.DrawObject2DWithRubber(Obj, IdentityTransf2D);
   Prim.Points.Add(CurrPoint);
-  SimplifyPolyInPlace(Prim.Points,
-    ViewPort.GetPixelAperture.Y, False);
+  if IsPolyline then
+    SimplifyPolyInPlace(Prim.Points, ViewPort.PixelSize, False);
   ViewPort.DrawObject2DWithRubber(Obj, IdentityTransf2D);
 end;
 
-procedure TFreehandPolylineMode.OnMouseUp(Sender: TObject;
+procedure TFreehandMode.OnMouseUp(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   FinishDraw;
@@ -2253,7 +2374,7 @@ end;
 procedure TSelectObjectsInAreaMode.DoSelectObjectsInArea(Rect:
   TRect2D);
 var
-  AreaMode: TGroupMode;
+  AreaMode: TCollectMode;
   TempList: TGraphicObjList;
 begin
   if AreaSelectInside = True then
@@ -2261,10 +2382,9 @@ begin
   else
     AreaMode := gmCrossFrame;
   TempList := TGraphicObjList.Create;
-  TempList.FreeOnClear := False;
+  TempList.FreeOnDelete := False;
   try
-    ViewPort.StopRepaint;
-    Drawing.GroupObjects(TempList, Rect, ViewPort.VisualRect,
+    Drawing.CollectObjects(TempList, Rect, ViewPort.VisualRect,
       AreaMode, TpX_Manager.PickFilter, False);
     Drawing.SelectionAddList(TempList);
   finally
@@ -2312,7 +2432,7 @@ procedure TZoomAreaMode.OnMouseUp(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited OnMouseUp(Sender, Button, Shift, X, Y);
-  ViewPort.ZoomWindow(Rect.BoundingBox);
+  ViewPort.VisualRect := Rect.BoundingBox;
 end;
 
 {* --------- TPanningMode --------- *}
@@ -2356,8 +2476,18 @@ procedure TPanningMode.OnMouseUp(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   OnMouseMove(Sender, Shift, X, Y);
-  inherited OnMouseUp(Sender, Button, Shift, X, Y);
   fIsMoving := False;
+  PopSelf;
+end;
+
+{* --------- TPanningAltMode --------- *}
+
+procedure TPanningAltMode.OnMouseUp(Sender: TObject;
+  Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  OnMouseMove(Sender, Shift, X, Y);
+  fIsMoving := False;
+  PopSelf;
 end;
 
 {* --------- TTransformingMode --------- *}
@@ -2365,14 +2495,15 @@ end;
 procedure TTransformingMode.ConfirmTransform(X, Y: Integer);
 begin
   MouseMove(X, Y);
-  TransformSelected(CurrTransf, True);
+  TransformSelected(CurrTransf);
   PopSelf;
 end;
 
 procedure TTransformingMode.OnMouseDown(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
-  ConfirmTransform(X, Y);
+  if (Self is TDragMode) or (Self is TDragCopyMode) then
+    ConfirmTransform(X, Y);
 end;
 
 procedure TTransformingMode.MouseMove(X, Y: Integer);
@@ -2397,37 +2528,32 @@ end;
 procedure TTransformingMode.OnMouseUp(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
-  if (Self is TDragMode) or (Self is TDragCopyMode) then
-    ConfirmTransform(X, Y);
+  ConfirmTransform(X, Y);
 end;
 
 function TTransformingMode.GetTransform(P: TPoint2D): TTransf2D;
 begin
-  if Drawing.UseAngularSnap then
+  if UseAngularSnap then
     Make45_2D(StartPoint, P);
   Result := Translate2D(P.X - StartPoint.X, P.Y - StartPoint.Y);
 end;
 
 procedure TTransformingMode.DrawRubber;
 var
-  Obj: TObject2D;
-  Iter: TGraphicObjIterator;
+  Obj: TGraphicObject;
 begin
-  Iter := Drawing.SelectedObjects.GetIterator;
-  with ViewPort do
-  try
-    Obj := Iter.First as TObject2D;
-    while Assigned(Obj) do
+  Obj := Drawing.SelectedObjects.FirstObj;
+  while Assigned(Obj) do
+  begin
+    if (Obj is TObject2D)
+      and (Obj as TObject2D).IsVisible(
+      // Do not show far objects to speed-up drawing
+      EnlargeBoxPerc2D(ViewPort.VisualRect, 2)) then
     begin
-      //if not (Obj is TObject2D) then Continue;
-      if not TObject2D(Obj).IsVisible(
-        VisualRect) then Exit;
       with Obj as TObject2D do
         ViewPort.DrawObject2DWithRubber(Obj, CurrTransf);
-      Obj := Iter.Next as TObject2D;
     end;
-  finally
-    Iter.Free;
+    Obj := Drawing.SelectedObjects.NextObj;
   end;
 end;
 
@@ -2437,7 +2563,7 @@ procedure TDragCopyMode.ConfirmTransform(X, Y: Integer);
 begin
   MouseMove(X, Y);
   DuplicateSelected(Drawing, V2D(0, 0));
-  TransformSelected(CurrTransf, True);
+  TransformSelected(CurrTransf);
   PopSelf;
 end;
 
@@ -2481,7 +2607,7 @@ end;
 
 function TRotateMode.GetTransform(P: TPoint2D): TTransf2D;
 begin
-  if Drawing.UseAngularSnap then
+  if UseAngularSnap then
     Make45_2D(StartPoint, P);
   Result := RotateCenter2D(
     ArcTan2(P.Y - StartPoint.Y,
@@ -2510,10 +2636,10 @@ begin
     IdentityTransf2D);
   P := ViewPort.GetSnappedPoint(
     ViewPort.ScreenToViewport(Point2D(X, Y)));
-  if Drawing.UseAngularSnap then
+  if UseAngularSnap then
     Make45_2D(OriginalPrimitive.Points[PointIndex], P);
   P := ViewPort.WorldToObject(CurrentPrimitive, P);
-  CurrentPrimitive.MoveControlPoint0(PointIndex, P, Shift);
+  CurrentPrimitive.MoveControlPoint0(PointIndex, P, Shift, False);
   ViewPort.DrawObject2DWithRubber(CurrentPrimitive,
     IdentityTransf2D);
 end;
@@ -2521,6 +2647,9 @@ end;
 procedure TMoveControlPointMode.OnMouseUp(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
+  CurrentPrimitive.MoveControlPoint0(PointIndex,
+    ViewPort.GetSnappedPoint(
+    ViewPort.ScreenToViewport(Point2D(X, Y))), Shift, True);
   OriginalPrimitive.Assign(CurrentPrimitive);
   Drawing.NotifyChanged;
   if Drawing.SelectedObjects.Find(
@@ -2536,10 +2665,11 @@ initialization
   InsertSimpleGrObjMode := TInsertSimpleGrObjMode.Create;
   InsertUnsizedGrObjMode := TInsertUnsizedGrObjMode.Create;
   InsertSizedGrObjMode := TInsertSizedGrObjMode.Create;
-  FreehandPolylineMode := TFreehandPolylineMode.Create;
+  FreehandMode := TFreehandMode.Create;
   SelectObjectsInAreaMode := TSelectObjectsInAreaMode.Create;
   ZoomAreaMode := TZoomAreaMode.Create;
   PanningMode := TPanningMode.Create;
+  PanningAltMode := TPanningAltMode.Create;
   DragMode := TDragMode.Create;
   DragCopyMode := TDragCopyMode.Create;
   MoveMode := TMoveMode.Create;
@@ -2551,7 +2681,7 @@ finalization
   InsertSimpleGrObjMode.Free;
   InsertUnsizedGrObjMode.Free;
   InsertSizedGrObjMode.Free;
-  FreehandPolylineMode.Free;
+  FreehandMode.Free;
   SelectObjectsInAreaMode.Free;
   ZoomAreaMode.Create;
   PanningMode.Free;

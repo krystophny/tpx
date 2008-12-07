@@ -12,7 +12,7 @@ type
 
 // A class for TikZ output
 
-  T_TikZ_Device = class(TStreamDevice)
+  T_TikZ_Device = class(TFileDevice)
   protected
     fCurrLineColor, fCurrFillColor, fCurrTextColor: TColor;
     procedure DefineColor(Color: TColor; ID: Char);
@@ -20,6 +20,12 @@ type
       const LineColor, HatchColor, FillColor: TColor;
       const LineStyle: TLineStyle; const LineWidth: TRealType;
       const Hatching: THatching);
+    procedure HatchingLine(P0, P1: TPoint2D;
+      const LineColor: TColor; const LineStyle: TLineStyle;
+      const LineWidth: TRealType); override;
+    procedure WriteHatchingLines(const Lines: TPointsSet2D;
+      const HatchColor: TColor; const LineWidth: TRealType);
+      override;
     procedure Bezier(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
       const LineStyle: TLineStyle; const LineWidth: TRealType;
@@ -45,18 +51,14 @@ type
       const Hatching: THatching; const Kind: TCircularKind);
     procedure RotText(P: TPoint2D; H, ARot: TRealType;
       WideText: WideString; TeXText: AnsiString;
-      const HJustification: THJustification;
-      const VJustification: TVJustification;
+      const HAlignment: THAlignment;
       const LineColor: TColor;
       const FaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
-    procedure HatchingLine(P0, P1: TPoint2D;
-      const LineColor: TColor; const LineStyle: TLineStyle;
-      const LineWidth: TRealType); override;
-    procedure WriteHatchingLines(const Lines: TPointsSet2D;
-      const HatchColor: TColor; const LineWidth: TRealType);
-      override;
+    procedure Bitmap(P: TPoint2D; W, H: TRealType;
+      const KeepAspectRatio: Boolean; BitmapEntry: TObject);
   public
+    FontSizeInTeX: Boolean;
     DvipsFixBB: Boolean;
     constructor Create;
     procedure Poly(PP: TPointsSet2D;
@@ -70,7 +72,7 @@ type
 
 implementation
 
-uses ColorEtc, Output;
+uses ColorEtc, Output, Bitmaps;
 
 // =====================================================================
 // T_TikZ_Device
@@ -86,6 +88,7 @@ begin
   OnRotRect := RotRect;
   OnCircular := Circular;
   OnRotText := RotText;
+  OnBitmap := Bitmap;
   fHasBezier := True;
   fHasClosedBezier := True;
   fHasArc := True;
@@ -100,10 +103,12 @@ end;
 procedure T_TikZ_Device.WriteHeader(ExtRect: TRect2D);
 begin
   if fFactorMM = 0 then fFactorMM := 1;
+//  if DvipsFixBB then
+//    WriteLnStream(DvipsFixBB_RuleStr(ExtRect, fFactorMM));
   if DvipsFixBB then
-    WriteLnStream(DvipsFixBB_RuleStr(ExtRect, fFactorMM));
+    WriteLnStream('\beginpgfgraphicnamed{\jobname}%');
   WriteStream(Format(
-    '\begin{tikzpicture}[x=%.2fmm, y=%.2fmm, inner xsep=0pt, inner ysep=-1.2pt',
+    '\begin{tikzpicture}[x=%.2fmm, y=%.2fmm, inner xsep=0pt, inner ysep=0pt, outer xsep=0pt, outer ysep=0pt', //ysep=-1.2pt
     [1 / fFactorMM, 1 / fFactorMM]));
   if fMiterLimit <> 10 then
     WriteStream(Format(
@@ -120,6 +125,8 @@ end;
 procedure T_TikZ_Device.WriteFooter;
 begin
   WriteLnStream('\end{tikzpicture}%');
+  if DvipsFixBB then
+    WriteLnStream('\endpgfgraphicnamed');
 end;
 
 {function TikZGetColor(Color: TColor): string;
@@ -191,7 +198,7 @@ begin
     liDotted:
       begin
         AddAttr(Format('dash pattern=on %.2fmm off %.2fmm',
-          [fLineWidthBase * 2, fDottedSize]));
+          [fLineWidthBase * LineWidth, fDottedSize]));
       end;
     liDashed:
       begin
@@ -391,8 +398,7 @@ end;
 
 procedure T_TikZ_Device.RotText(P: TPoint2D; H, ARot: TRealType;
   WideText: WideString; TeXText: AnsiString;
-  const HJustification: THJustification;
-  const VJustification: TVJustification;
+  const HAlignment: THAlignment;
   const LineColor: TColor;
   const FaceName: AnsiString;
   const Charset: TFontCharSet; const Style: TFontStyles);
@@ -402,19 +408,13 @@ begin
   if LineColor <> clDefault then DefineColor(LineColor, 'T');
   WriteStream('\draw');
   if LineColor <> clDefault then WriteStream('[T] ');
+  ShiftTeXTextPoint(P, H, ARot);
   WriteStreamPoint(P);
-  AnchorSt := '';
-  case VJustification of
-    jvBaseline: AnchorSt := 'base';
-    jvBottom: AnchorSt := 'south';
-    jvCenter: ;
-    jvTop: AnchorSt := 'north';
-  end;
-  case HJustification of
-    jhLeft: AnchorSt := AnchorSt + ' west';
-    jhCenter: if VJustification = jvCenter then
-        AnchorSt := AnchorSt + ' center';
-    jhRight: AnchorSt := AnchorSt + ' east';
+  AnchorSt := 'base';
+  case HAlignment of
+    ahLeft: AnchorSt := AnchorSt + ' west';
+    ahCenter: ;
+    ahRight: AnchorSt := AnchorSt + ' east';
   end;
   if Copy(AnchorSt, 1, 1) = ' ' then Delete(AnchorSt, 1, 1);
   if ARot <> 0 then
@@ -422,10 +422,31 @@ begin
       Format(',rotate=%d', [Round(RadToDeg(ARot))]);
   WriteStream(' node[anchor=' + AnchorSt + ']');
   St := Get_TeXText(LineColor, Style, WideText, TeXText);
+//  St := St + '\strut';
   if fFactorMM = 0 then fFactorMM := 1;
-  WriteStream(
-    '{' + GetTeXTextFontSize(H, 1 / fFactorMM) + St + '\strut}');
+  WriteStream('{' +
+    GetTeXTextFontSize(H, 1 / fFactorMM, FontSizeInTeX)
+    + St + '}');
   WriteLnStream(';');
+end;
+
+procedure T_TikZ_Device.Bitmap(P: TPoint2D; W, H: TRealType;
+  const KeepAspectRatio: Boolean; BitmapEntry: TObject);
+var
+  BE: TBitmapEntry;
+  OutDir: string;
+begin
+  BE := BitmapEntry as TBitmapEntry;
+  OutDir := ExtractFilePath(BE.GetFullLink);
+  if not BE.RequirePNGJPEG(OutDir) then Exit;
+  if not BE.RequireEPS(OutDir) then Exit;
+  WriteStream('\node at ');
+  WriteStreamPoint(P);
+  WriteStream('[anchor=south west]');
+  if fFactorMM = 0 then fFactorMM := 1;
+  WriteLnStream('{' + BE.GetIncludeGraphics(
+    W / fFactorMM, H / fFactorMM, KeepAspectRatio,
+    IncludePath) + '};');
 end;
 
 end.

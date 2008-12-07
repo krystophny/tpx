@@ -12,7 +12,7 @@ type
 
 // A class for LaTeX picure environment output
 
-  T_TeX_Picture_Device = class(TStreamDevice)
+  T_TeX_Picture_Device = class(TFileDevice)
   protected
     fPrec: Integer;
     function PointStr0(const X, Y: TRealType): string;
@@ -47,8 +47,7 @@ type
       const Hatching: THatching; const Kind: TCircularKind);
     procedure RotText(P: TPoint2D; H, ARot: TRealType;
       WideText: WideString; TeXText: AnsiString;
-      const HJustification: THJustification;
-      const VJustification: TVJustification;
+      const HAlignment: THAlignment;
       const LineColor: TColor;
       const FaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
@@ -60,6 +59,7 @@ type
       override;
   public
     DvipsFixBB: Boolean;
+    FontSizeInTeX: Boolean;
     constructor Create;
     procedure Poly(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
@@ -154,8 +154,8 @@ begin
       begin
         WriteStream('\dottedline{');
         WriteStream(Format('%.2f',
-          [fDottedSize * fFactorMM + fLineWidthBase * 2 *
-            fFactorMM]));
+          [fDottedSize * fFactorMM +
+          fLineWidthBase * LineWidth * fFactorMM]));
         WriteStream('}');
         WriteStreamPointT(P0, Transf);
         WriteStreamPointT(P1, Transf);
@@ -281,7 +281,7 @@ begin
   for I := 0 to (PP.Count - 4) div 3 do
     WriteCBezier(PP[I * 3], PP[I * 3 + 1], PP[I * 3 + 2], PP[I * 3
       + 3],
-      Transf);
+        Transf);
   if (I mod 50) = 49 then
   begin
     WriteLnStream('');
@@ -415,18 +415,17 @@ end;
 procedure T_TeX_Picture_Device.RotText(P: TPoint2D; H, ARot:
   TRealType;
   WideText: WideString; TeXText: AnsiString;
-  const HJustification: THJustification;
-  const VJustification: TVJustification;
+  const HAlignment: THAlignment;
   const LineColor: TColor;
   const FaceName: AnsiString;
   const Charset: TFontCharSet; const Style: TFontStyles);
 begin
-  ShiftTeXTextPoint(P, VJustification, H, ARot);
+  ShiftTeXTextPoint(P, H, ARot);
   if fFactorMM = 0 then fFactorMM := 1;
   WriteLnStream(Format('\put(%.2f,%.2f){%s}', [P.X, P.Y,
     GetTeXTextMakebox0(
-      H, ARot, 1 / fFactorMM, LineColor, HJustification,
-      VJustification, Style, WideText, TeXText)]));
+      H, ARot, 1 / fFactorMM, LineColor, HAlignment,
+      Style, WideText, TeXText, FontSizeInTeX)]));
 end;
 
 end.

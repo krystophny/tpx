@@ -24,7 +24,7 @@ type
     Line: TPieceLine;
     Fill: TPieceFill;
     Hatch: TPieceHatch;
-    constructor Create(const _Capacity: Integer); override;
+    constructor Create(const _Capacity: Integer);
     constructor Assign(Source: TPiece); virtual;
     function GetLineStyle(Obj: TObject): TLineStyle;
     function GetLineWidth(Obj: TObject): TRealType;
@@ -32,7 +32,8 @@ type
     function GetHatchColor(Obj: TObject): TColor;
     function GetHatching(Obj: TObject): THatching;
     function GetFillColor(Obj: TObject): TColor;
-    procedure Linearize(const PP: TPointsSet2D); virtual;
+    procedure Linearize(const PP: TPointsSet2D;
+      const Precision: TRealType); virtual;
     procedure BezierPoints(const PP: TPointsSet2D); virtual;
     function IsPointOnStroke(
       const P: TPoint2D; const Precision: TRealType;
@@ -41,13 +42,14 @@ type
   end;
 
   // polyline/polygon
-  TLinPath = class(TPiece)
+  TPolyLinPiece = class(TPiece)
   end;
 
   // polybezier
-  TBezierPath = class(TPiece)
+  TBezierPiece = class(TPiece)
   public
-    procedure Linearize(const PP: TPointsSet2D); override;
+    procedure Linearize(const PP: TPointsSet2D;
+      const Precision: TRealType); override;
     procedure BezierPoints(const PP: TPointsSet2D); override;
     procedure GetBoundingBox0(var Rect: TRect2D); override;
     function IsPointOnStroke(
@@ -66,9 +68,10 @@ type
   TCirclePiece = class(TFixedPiece)
   public
     R: TRealType;
-    constructor Create(const _Capacity: Integer); override;
+    constructor Create(const _Capacity: Integer);
     procedure TransformPoints(const T: TTransf2D); override;
-    procedure Linearize(const PP: TPointsSet2D); override;
+    procedure Linearize(const PP: TPointsSet2D;
+      const Precision: TRealType); override;
     procedure BezierPoints(const PP: TPointsSet2D); override;
     function GetBoundingBox: TRect2D; override;
     function IsPointOnStroke(
@@ -84,7 +87,8 @@ type
   public
     R, SA, EA: TRealType;
     Kind: TCircularKind;
-    procedure Linearize(const PP: TPointsSet2D); override;
+    procedure Linearize(const PP: TPointsSet2D;
+      const Precision: TRealType); override;
     procedure BezierPoints(const PP: TPointsSet2D); override;
     function GetBoundingBox: TRect2D; override;
     function IsPointOnStroke(
@@ -99,7 +103,8 @@ type
   TRectanglePiece = class(TFixedPiece)
   public
     W, H, ARot: TRealType;
-    procedure Linearize(const PP: TPointsSet2D); override;
+    procedure Linearize(const PP: TPointsSet2D;
+      const Precision: TRealType); override;
     function GetBoundingBox: TRect2D; override;
     function IsPointOnStroke(
       const P: TPoint2D; const Precision: TRealType;
@@ -114,7 +119,8 @@ type
   public
     RX, RY, ARot: TRealType;
     Kind: TCircularKind;
-    procedure Linearize(const PP: TPointsSet2D); override;
+    procedure Linearize(const PP: TPointsSet2D;
+      const Precision: TRealType); override;
     procedure BezierPoints(const PP: TPointsSet2D); override;
     function GetBoundingBox: TRect2D; override;
     function IsPointOnStroke(
@@ -129,15 +135,15 @@ type
   TTextPiece = class(TFixedPiece)
   public
     ARot: TRealType;
-    WideText: Widestring;
+    WideText: WideString;
     TeXText: AnsiString;
     Height: TRealType;
-    HJustification: THJustification;
-    VJustification: TVJustification;
+    HAlignment: THAlignment;
     FaceName: AnsiString;
     Style: TFontStyles;
     Charset: TFontCharSet;
-    procedure Linearize(const PP: TPointsSet2D); override;
+    procedure Linearize(const PP: TPointsSet2D;
+      const Precision: TRealType); override;
     procedure MeasureTextRectangle(
       var P: TPoint2D; out Size: TVector2D);
     function GetBoundingBox: TRect2D; override;
@@ -147,6 +153,43 @@ type
       out Pos: Integer): Boolean; override;
     function IsPointInside(const P: TPoint2D;
       const Precision: TRealType): Boolean; override;
+  end;
+
+  // Bitmap
+  TBitmapPiece = class(TFixedPiece)
+  public
+    BitmapEntry: TObject;
+    Width, Height: TRealType;
+    ImageLink: string;
+    KeepAspectRatio: Boolean;
+    constructor Create(const _Capacity: Integer);
+    procedure Linearize(const PP: TPointsSet2D;
+      const Precision: TRealType); override;
+    function GetBoundingBox: TRect2D; override;
+    function IsPointOnStroke(
+      const P: TPoint2D; const Precision: TRealType;
+      var Distance: TRealType;
+      out Pos: Integer): Boolean; override;
+    function IsPointInside(const P: TPoint2D;
+      const Precision: TRealType): Boolean; override;
+  end;
+
+// Generic path
+
+  TGenPathPiece = class(TPiece)
+  protected
+    PGenPath: TGenericPath;
+  public
+    constructor Create(const _Path: TGenericPath);
+    destructor Destroy; override;
+    procedure GetBoundingBox0(var Rect: TRect2D); override;
+    function IsPointOnStroke(
+      const P: TPoint2D; const Precision: TRealType;
+      var Distance: TRealType;
+      out Pos: Integer): Boolean; override;
+    function IsPointInside(const P: TPoint2D;
+      const Precision: TRealType): Boolean; override;
+    property Path: TGenericPath read PGenPath;
   end;
 
   TPiece_CreateFromSvg = class(TPointsSet2D)
@@ -185,7 +228,7 @@ type
 
 implementation
 
-uses GObjects, Drawings, SysBasic;
+uses GObjects, Drawings, Bitmaps, SysBasic;
 
 // =====================================================================
 // TPiece
@@ -283,7 +326,8 @@ begin
   end;
 end;
 
-procedure TPiece.Linearize(const PP: TPointsSet2D);
+procedure TPiece.Linearize(const PP: TPointsSet2D;
+  const Precision: TRealType);
 begin
   PP.Clear;
   PP.Copy(Self, 0, Count - 1);
@@ -295,7 +339,7 @@ var
 begin
   LinPP := TPointsSet2D.Create(0);
   try
-    Linearize(LinPP);
+    Linearize(LinPP, 0);
     LinPolyToBezier(LinPP, Closed, PP);
   finally
     LinPP.Free;
@@ -312,27 +356,27 @@ begin
 end;
 
 // =====================================================================
-// TBezierPath
+// TBezierPiece
 // =====================================================================
 
-procedure TBezierPath.Linearize(const PP: TPointsSet2D);
+procedure TBezierPiece.Linearize(const PP: TPointsSet2D;
+  const Precision: TRealType);
 begin
-  //LinearizeBezier_X(Self, 0.03, Closed, PP);
-  LinearizeBezier(Self, BezierPrecision, Closed, PP);
+  LinearizeBezier(Self, Precision, Closed, PP);
 end;
 
-procedure TBezierPath.BezierPoints(const PP: TPointsSet2D);
+procedure TBezierPiece.BezierPoints(const PP: TPointsSet2D);
 begin
   PP.Clear;
   PP.Copy(Self, 0, Count - 1);
 end;
 
-procedure TBezierPath.GetBoundingBox0(var Rect: TRect2D);
+procedure TBezierPiece.GetBoundingBox0(var Rect: TRect2D);
 begin
   BezierPathBoundingBox(Self, Closed, Rect);
 end;
 
-function TBezierPath.IsPointOnStroke(
+function TBezierPiece.IsPointOnStroke(
   const P: TPoint2D; const Precision: TRealType;
   var Distance: TRealType;
   out Pos: Integer): Boolean;
@@ -341,7 +385,7 @@ begin
     Self, P, Closed, Precision, Distance, Pos);
 end;
 
-function TBezierPath.IsPointInside(const P: TPoint2D;
+function TBezierPiece.IsPointInside(const P: TPoint2D;
   const Precision: TRealType): Boolean;
 begin
   Result := IsPointInBezierShape(
@@ -380,10 +424,10 @@ begin
   R := PointDistance2D(Points[0], P);
 end;
 
-procedure TCirclePiece.Linearize(const PP: TPointsSet2D);
+procedure TCirclePiece.Linearize(const PP: TPointsSet2D;
+  const Precision: TRealType);
 begin
-  PP.Expand(150);
-  LinearizeCircle(PP, Points[0], R, PP.Capacity);
+  LinearizeCircle(PP, Points[0], R, Precision);
 end;
 
 procedure TCirclePiece.BezierPoints(const PP: TPointsSet2D);
@@ -418,9 +462,10 @@ end;
 // TCircularPiece
 // =====================================================================
 
-procedure TCircularPiece.Linearize(const PP: TPointsSet2D);
+procedure TCircularPiece.Linearize(const PP: TPointsSet2D;
+  const Precision: TRealType);
 begin
-  LinearizeCircular(PP, Points[0], R, SA, EA, Kind, 150);
+  LinearizeCircular(PP, Points[0], R, SA, EA, Kind, Precision);
 end;
 
 procedure TCircularPiece.BezierPoints(const PP: TPointsSet2D);
@@ -453,7 +498,8 @@ end;
 // TRectanglePiece
 // =====================================================================
 
-procedure TRectanglePiece.Linearize(const PP: TPointsSet2D);
+procedure TRectanglePiece.Linearize(const PP: TPointsSet2D;
+  const Precision: TRealType);
 begin
   LinearizeRectangle(PP, Points[0], W, H, ARot);
 end;
@@ -505,10 +551,10 @@ end;
 // TEllipsePiece
 // =====================================================================
 
-procedure TEllipsePiece.Linearize(const PP: TPointsSet2D);
+procedure TEllipsePiece.Linearize(const PP: TPointsSet2D;
+  const Precision: TRealType);
 begin
-  PP.Expand(150);
-  LinearizeEllipse(PP, Points[0], RX, RY, ARot, PP.Capacity);
+  LinearizeEllipse(PP, Points[0], RX, RY, ARot, Precision);
 end;
 
 procedure TEllipsePiece.BezierPoints(const PP: TPointsSet2D);
@@ -535,9 +581,13 @@ function TEllipsePiece.IsPointInside(const P: TPoint2D;
 begin
   Result := IsPointInEllipse(P, Points[0], RX, RY, ARot);
 end;
-     {*---- TTextPiece ----*}
 
-procedure TTextPiece.Linearize(const PP: TPointsSet2D);
+// =====================================================================
+// TTextPiece
+// =====================================================================
+
+procedure TTextPiece.Linearize(const PP: TPointsSet2D;
+  const Precision: TRealType);
 var
   Rect: TRect2D;
   P: TPoint2D;
@@ -556,17 +606,12 @@ begin
     Size.X, V.Y);
   Size.X := Size.X * Height;
   Size.Y := Height;
-  case HJustification of
-    jhLeft: V.X := 0;
-    jhCenter: V.X := -Size.X / 2;
-    jhRight: V.X := -Size.X;
+  case HAlignment of
+    ahLeft: V.X := 0;
+    ahCenter: V.X := -Size.X / 2;
+    ahRight: V.X := -Size.X;
   end;
-  case VJustification of
-    jvTop: V.Y := 1;
-    jvCenter: V.Y := 0.5;
-    jvBottom: V.Y := 0;
 //    jvBaseline: V.Y := Text_Metric.tmDescent / TmpH;
-  end;
   V.Y := -V.Y * Height;
   P := ShiftPoint(Points[0],
     TransformVector2D(V, Rotate2D(ARot)));
@@ -603,13 +648,94 @@ begin
     and (V.X <= Size.X) and (V.Y <= Size.Y);
 end;
 
-     {*---- TPiece_CreateFromSvg ----*}
+// =====================================================================
+// TBitmapPiece
+// =====================================================================
+
+constructor TBitmapPiece.Create(const _Capacity: Integer);
+begin
+  inherited Create(_Capacity);
+  BitmapEntry := nil;
+end;
+
+procedure TBitmapPiece.Linearize(const PP: TPointsSet2D;
+  const Precision: TRealType);
+begin
+  LinearizeRectangle(PP, Points[0], Width, Height, 0);
+end;
+
+function TBitmapPiece.GetBoundingBox: TRect2D;
+begin
+  Result := RectangleBoundingBox(Points[0], Width, Height, 0);
+end;
+
+function TBitmapPiece.IsPointOnStroke(
+  const P: TPoint2D; const Precision: TRealType;
+  var Distance: TRealType;
+  out Pos: Integer): Boolean;
+begin
+  Result := False;
+end;
+
+function TBitmapPiece.IsPointInside(const P: TPoint2D;
+  const Precision: TRealType): Boolean;
+var
+  V: TVector2D;
+begin
+  V := Vector2D(Points[0], P);
+  Result := (V.X >= 0) and (V.Y >= 0)
+    and (V.X <= Width) and (V.Y <= Height);
+end;
+
+// =====================================================================
+// TGenPathPiece
+// =====================================================================
+
+constructor TGenPathPiece.Create(const _Path: TGenericPath);
+begin
+  inherited Create(0);
+  PGenPath := _Path;
+end;
+
+destructor TGenPathPiece.Destroy;
+begin
+  inherited Destroy;
+end;
+
+procedure TGenPathPiece.GetBoundingBox0(var Rect: TRect2D);
+begin
+  PGenPath.GetBoundingBox0(Rect);
+end;
+
+function TGenPathPiece.IsPointOnStroke(
+  const P: TPoint2D; const Precision: TRealType;
+  var Distance: TRealType;
+  out Pos: Integer): Boolean;
+begin
+  Result := PGenPath.IsPointOnStroke(P, Precision, Distance, Pos);
+end;
+
+function TGenPathPiece.IsPointInside(const P: TPoint2D;
+  const Precision: TRealType): Boolean;
+begin
+  Result := PGenPath.IsPointInside(P, wn_NonZero, Precision);
+end;
+
+// =====================================================================
+// TPiece_CreateFromSvg
+// =====================================================================
 
 procedure TPiece_CreateFromSvg.PathOnClose(const X, Y: TRealType);
 begin
   //fPiece.Add(Point2D(X, Y));
   //fPiece.Fill :=
   fPiece.Closed := True;
+  if fPiece is TPolyLinPiece then
+  else
+  begin
+//    fPiece.Add(Point2D(X, Y));
+//    fPiece.Add(Point2D(X, Y));
+  end;
 end;
 
 procedure TPiece_CreateFromSvg.PathOnMoveTo(const X, Y: TRealType);
@@ -619,7 +745,16 @@ end;
 
 procedure TPiece_CreateFromSvg.PathOnLineTo(const X, Y: TRealType);
 begin
-  fPiece.Add(Point2D(X, Y));
+  if fPiece is TPolyLinPiece then
+    fPiece.Add(Point2D(X, Y))
+  else
+  begin
+    fPiece.Add(
+      MixPoint(fPiece[fPiece.Count - 1], Point2D(X, Y), 0.25));
+    fPiece.Add(
+      MixPoint(fPiece[fPiece.Count - 2], Point2D(X, Y), 0.75));
+    fPiece.Add(Point2D(X, Y));
+  end;
 end;
 
 procedure TPiece_CreateFromSvg.PathOnBezierTo(
@@ -637,14 +772,14 @@ var
 begin
   fIsBezier := SVG_Path_HasCurves(SvgPath);
   if fIsBezier then
-    Result := TBezierPath.Create(0)
+    Result := TBezierPiece.Create(0)
   else
-    Result := TLinPath.Create(0);
+    Result := TPolyLinPiece.Create(0);
   fPiece := Result;
   PathParser := T_SVG_Path_Parser.Create(
     PathOnClose, PathOnMoveTo, PathOnLineTo, PathOnBezierTo);
   try
-    PathParser.AllAsBezier := fIsBezier;
+    //?PathParser.AllAsBezier := fIsBezier;
     PathParser.Parse(SvgPath);
   finally
     PathParser.Free;
@@ -741,7 +876,7 @@ begin
     Piece := GetItem(I);
     if (Piece.GetFillColor(Obj) <> clDefault)
       or (Piece.GetHatching(Obj) <> haNone)
-      or (Piece is TTextPiece) then
+      or (Piece is TTextPiece) or (Piece is TBitmapPiece) then
       if Piece.IsPointInside(P, Precision) then Exit;
   end;
   Result := False;

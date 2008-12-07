@@ -13,18 +13,22 @@ uses Types,
 {$IFDEF VER140}
   Windows, ShellAPI, WinBasic,
 {$ELSE}
-  LCLIntf, LCLType, LazBasic, 
+  LCLIntf, LCLType, LazBasic,
 {$IFDEF LINUX}
   oldlinux,
 {$ENDIF}
 {$ENDIF}
   SysUtils, Forms, Graphics;
 
+function CheckFilePath(var FilePath: string;
+  const FileDescription: string): Boolean;
+function PrepareFilePath(const FilePath: string): string;
 function FileExec(const aCmdLine, InFile, OutFile, Directory:
   string; aHide, aWait: Boolean): Boolean;
 procedure OpenOrExec(const ViewerPath, FileName: string);
 function TryDeleteFile(const FileName: string): Boolean;
 function RenameFile(const FileName1, FileName2: string): Boolean;
+function CopyFile(const FileName1, FileName2: string): Boolean;
 function GetTempDir: string;
 procedure MessageBoxInfo(MsgStr: string);
 procedure MessageBoxError(MsgStr: string);
@@ -72,6 +76,77 @@ uses
 //WinBasic,
   MainUnit;
 
+function CheckFilePath(var FilePath: string;
+  const FileDescription: string): Boolean;
+var
+  I: Integer;
+  TmpFilePath: string;
+const
+  PathSepa = ';'; //?? Lazarus
+  // Checks whether the path exists.
+  // Adds a space to the path to indicate problem.
+  // If the path already starts with a space, error message does not show up.
+begin
+  Result := False;
+  if Pos(' ', FilePath) = 1 then Exit;
+  TmpFilePath := Trim(FilePath);
+  if FileExists(TmpFilePath) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  if (TmpFilePath <> '') and
+    not (TmpFilePath[1] in ['"', '''']) then
+  begin
+    I := Pos(' ', TmpFilePath);
+    if I > 0 then TmpFilePath := Copy(TmpFilePath, 1, I - 1);
+  end;
+  if (TmpFilePath <> '') and (TmpFilePath[1] in ['"', '''']) then
+    TmpFilePath := AnsiDequotedStr(TmpFilePath, TmpFilePath[1]);
+  if TmpFilePath = '' then
+  begin
+    MessageBoxError(FileDescription + ' path is empty');
+    FilePath := ' ';
+    Exit;
+  end;
+  if ExtractFilePath(TmpFilePath) = '' then
+  // If the path is not full, try to find the file
+    TmpFilePath := FileSearch(
+      TmpFilePath, '.' + PathSepa +
+      ExtractFilePath(ParamStr(0)) + PathSepa +
+      GetEnvironmentVariable('PATH'));
+  if not FileExists(TmpFilePath) then
+  begin
+    MessageBoxError(
+      FileDescription + ' path not found: ' + FilePath);
+    FilePath := ' ' + FilePath;
+    Exit;
+  end;
+  Result := True;
+end;
+
+function PrepareFilePath(const FilePath: string): string;
+// Add quotes to execution file
+var
+  I: Integer;
+begin
+  if Pos(' ', FilePath) = 1 then Exit;
+  Result := Trim(FilePath);
+  if Result = '' then Exit;
+  if FileExists(Result) then
+  begin
+    Result := AnsiQuotedStr(Result, '"');
+    Exit;
+  end;
+  if not (Result[1] in ['"', '''']) then
+  begin
+    I := Pos(' ', Result);
+    if I > 0 then Result :=
+      AnsiQuotedStr(Copy(Result, 1, I - 1), '"')
+        + Copy(Result, I, Length(Result));
+  end;
+end;
+
 function FileExec(const aCmdLine, InFile, OutFile, Directory:
   string; aHide, aWait: Boolean): Boolean;
 {$IFDEF VER140}
@@ -87,6 +162,7 @@ var
   OldDir: string;
 {$ENDIF}
 begin
+//  MessageBoxInfo(aCmdLine);
 {$IFDEF VER140}
   FillChar(StartupInfo, SizeOf(TSTARTUPINFO), 0);
   try
@@ -188,7 +264,7 @@ begin
 {$ENDIF}
   else
     FileExec(Format('%s "%s"',
-      [ViewerPath, FileName]), '', '',
+      [PrepareFilePath(ViewerPath), FileName]), '', '',
       {IncludeTrailingPathDelimiter(ExtractFilePath(FileName))}'',
       False, False);
 end;
@@ -208,6 +284,38 @@ begin
   Result := SysUtils.RenameFile(PChar(FileName1), PChar(FileName2))
 end;
 
+function CopyFile(const FileName1, FileName2: string): Boolean;
+var
+  FHandle1, FHandle2: Integer;
+  NRead, NWritten: Word;
+  Buffer: PChar;
+begin
+  Result := False;
+  FHandle1 := FileOpen(FileName1, fmOpenRead + fmShareDenyNone);
+  if FHandle1 >= 0 then
+  try
+    FHandle2 := FileCreate(FileName2);
+    try
+      GetMem(Buffer, 16384);
+      try
+        FileSeek(FHandle1, 0, 0);
+        repeat
+          NRead := FileRead(FHandle1, Buffer^, 16384);
+          NWritten := FileWrite(FHandle2, Buffer^, NRead);
+        until (NRead = 0) or (NRead <> NWritten);
+        if NRead = NWritten then Result := True;
+      finally
+        FreeMem(Buffer, 16384);
+      end;
+      FileSetDate(FHandle2, FileGetDate(FHandle1));
+    finally
+      FileClose(FHandle2);
+    end;
+  finally
+    FileClose(FHandle1);
+  end;
+end;
+
 function GetTempDir: string;
 var
   Buffer: array[0..1023] of Char;
@@ -215,6 +323,7 @@ begin
 {$IFDEF VER140}
   GetTempPath(SizeOf(Buffer) - 1, Buffer);
   SetString(Result, Buffer, StrLen(Buffer));
+  Result := GetLongPath(Result);
 {$ELSE}
   Result := SysUtils.GetTempDir;
 {$ENDIF}
