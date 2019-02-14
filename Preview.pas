@@ -40,7 +40,7 @@ var
 
 implementation
 
-uses Output, ShellAPI, SysBasic, MiscUtils;
+uses Output, SysBasic, MiscUtils;
 
 procedure WriteTempTeXFile(const FileName, TpXName: string);
 var

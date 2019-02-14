@@ -1116,7 +1116,7 @@ begin
   try
     while True do begin
       Len := gzread(zfile, @Buffer, BufferSize);
-      if (Len < 0) then Len := Len div (Len * 0); //Error
+      //if (Len < 0) then Len := Len div (Len * 0); //Error
       if (Len = 0) then Break;
       OutStream.WriteBuffer(Buffer, Len);
     end;

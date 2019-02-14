@@ -2223,7 +2223,7 @@ type
   end;
 
   //TSY:
-  TCheckSum = MD5Digest;
+  TCheckSum = TMD5Digest;
 
   //TSY:
   TDrawHistory = class(TObjectList)
@@ -2593,7 +2593,7 @@ uses Math, GObjects,
 
 function MD5Stream(const AStream: TStream): TCheckSum;
 var
-  Context: MD5Context;
+  Context: TMD5Context;
   Buffer: array[0..4095] of Byte;
   Len: Integer;
 begin
@@ -2601,7 +2601,7 @@ begin
   AStream.Seek(0, soFromBeginning);
   repeat
     Len := AStream.Read(Buffer, 4096);
-    if Len > 0 then MD5Update(Context, @Buffer, Len);
+    if Len > 0 then MD5Update(Context, Buffer, Len);
   until Len = 0;
   MD5Final(Context, Result);
 end;

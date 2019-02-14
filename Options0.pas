@@ -93,7 +93,7 @@ type
     procedure LoadFromStream(const AStream: TStream); override;
   end;
 
-  TCheckSum = MD5Digest;
+  TCheckSum = TMD5Digest;
 
   TOptionsList = class(TObjectList)
     constructor Create; overload;
@@ -415,14 +415,14 @@ end;
 function TOptionsList.GetCheckSum: TCheckSum;
 var
   I: Integer;
-  Context: MD5Context;
+  Context: TMD5Context;
   St: string;
 begin
   MD5Init(Context);
   for I := 0 to Count - 1 do
   begin
     St := (Items[I] as TOptionData).GetAsString;
-    MD5Update(Context, @St[1], Length(St));
+    MD5Update(Context, St[1], Length(St));
   end;
   MD5Final(Context, Result);
 end;

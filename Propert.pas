@@ -6,7 +6,7 @@ unit Propert;
 
 interface
 
-uses Windows, Messages, SysUtils, Classes, Graphics,
+uses Messages, SysUtils, Classes, Graphics,
   Controls, Forms,
   Dialogs, ExtCtrls, ComCtrls, StdCtrls,
 {$IFDEF VER140}

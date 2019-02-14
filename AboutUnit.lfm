@@ -1,21 +1,29 @@
 object AboutForm: TAboutForm
-  Left = 275
+  Left = 1443
   Height = 311
-  Top = 125
+  Top = 845
   Width = 440
   HorzScrollBar.Page = 439
   VertScrollBar.Page = 310
   ActiveControl = Memo1
   Caption = 'TpX'
+  ClientHeight = 311
+  ClientWidth = 440
+  DesignTimePPI = 95
   Font.Height = -13
   Font.Name = 'MS Sans Serif'
+  LCLVersion = '1.8.2.0'
   object Panel1: TPanel
+    Left = 0
     Height = 281
+    Top = 0
     Width = 440
     Align = alTop
     BevelOuter = bvNone
     BorderStyle = bsSingle
     Caption = 'Panel1'
+    ClientHeight = 279
+    ClientWidth = 438
     Color = clWhite
     ParentColor = False
     TabOrder = 0
@@ -10298,25 +10306,25 @@ object AboutForm: TAboutForm
       Left = 18
       Height = 17
       Top = 4
-      Width = 181
+      Width = 196
       Caption = '(c) Alexander Tsyplakov, 2006'
-      Color = clNone
       Font.Color = clGreen
       Font.Height = -13
       Font.Name = 'MS Sans Serif'
       ParentColor = False
+      ParentFont = False
     end
     object Label2: TLabel
       Left = 20
       Height = 17
       Top = 244
-      Width = 114
+      Width = 124
       Caption = 'Version 1.4 alpha 1'
-      Color = clNone
       Font.Color = clGreen
       Font.Height = -13
       Font.Name = 'MS Sans Serif'
       ParentColor = False
+      ParentFont = False
     end
     object Memo1: TMemo
       Left = 16
@@ -10380,7 +10388,10 @@ object AboutForm: TAboutForm
       Font.Name = 'MS Sans Serif'
       Font.Style = [fsUnderline]
       OnClick = WebAddressClick
+      ParentFont = False
+      ParentColor = False
       ShowAccelChar = False
+      TabOrder = 1
     end
   end
   object Button1: TButton

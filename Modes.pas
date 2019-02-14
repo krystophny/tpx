@@ -48,7 +48,7 @@ type
   TOpenAnyPictureDialog = class(TOpenPictureDialog)
   protected
     procedure DoSelectionChange; override;
-    procedure PreviewClick(Sender: TObject); override;
+    procedure PreviewClick(Sender: TObject);
   end;
 
   TTpXMode = class(TMode)
@@ -568,7 +568,7 @@ begin
   Ext := LowerCase(ExtractFileExt(FileName));
   Delete(Ext, 1, 1);
   if ((Ext = 'emf') or (Ext = 'wmf')) then
-    inherited PreviewClick(Sender)
+    PreviewClick(Sender)
   else if ((Ext = 'eps') or (Ext = 'ps')) then
     OpenOrExec(PSViewerPath, FileName)
   else

@@ -88,7 +88,7 @@ procedure RO_Free(var aDst{ : TRefObject});
 implementation
 
 uses
-	Math, SysUtils, Windows;
+	Math, SysUtils;
 	
 function EncodeHtmlString(const s: String): String;
 begin
@@ -356,8 +356,8 @@ begin
 		Result[Length(Result)] := aChar;
     GotoNextChar;
 	end;
-	if ConvertOemToChar and (Result <> '') then
-		OemToCharBuff(PChar(Result), PChar(Result), Length(Result));
+//	if ConvertOemToChar and (Result <> '') then
+//		OemToCharBuff(PChar(Result), PChar(Result), Length(Result));
 end;
 
 procedure TTextReader.ReadLineToBuf(aBuf: PChar; aBufSize: Integer);
@@ -380,8 +380,8 @@ begin
     GotoNextChar;
   end;
 	aBuf^ := #0;
-	if ConvertOemToChar then
-		OemToCharBuff(aSaveBuf, aSaveBuf, aBuf - aSaveBuf);
+//	if ConvertOemToChar then
+//		OemToCharBuff(aSaveBuf, aSaveBuf, aBuf - aSaveBuf);
 end;
 
 function TTextReader.ReadChar: Char;
@@ -389,8 +389,8 @@ begin
 	if not Eof then begin
 		Result := BufPos^;
 		GotoNextChar;
-		if ConvertOemToChar then
-			OemToCharBuff(@Result, @Result, 1);
+//		if ConvertOemToChar then
+//			OemToCharBuff(@Result, @Result, 1);
 	end
 	else
 		Result := #0;

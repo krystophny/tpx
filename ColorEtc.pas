@@ -6,8 +6,7 @@ unit ColorEtc; //Colors and miscellanea
 
 interface
 
-uses Types, Classes, SysUtils, Graphics, StdCtrls, Dialogs,
-Windows, StrUtils;
+uses Types, Classes, SysUtils, Graphics, StdCtrls, Dialogs, StrUtils;
 
 type
   T_PS_RGB = record R, G, B: Single;
