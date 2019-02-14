@@ -1,0 +1,136 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<title>TpX output formats</title>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1251">
+<style type="text/css">
+<!--
+body {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+}
+p {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+}
+h1 {
+	font-family: "Courier New", Courier, mono;
+	color: #FFFFCC;
+	font-size: medium;
+	background-color: #999966;
+	font-weight: bold;
+	font-variant: normal;
+	text-align: center;
+}
+h2 {
+	font-family: "Courier New", Courier, mono;
+	text-decoration: underline;
+}
+.text {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+	font-size: 10pt;
+}
+.footer {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+	font-size: 8pt;
+}
+code {
+	font-size: 10pt;
+}
+-->
+</style>
+</head>
+
+<body>
+<table  border="0" cellspacing="1" cellpadding="5">
+  <tr>
+    <td width="70" class="text" scope="row">&nbsp;&nbsp;<a href="TpX.htm" class="text">Contents</a></td>
+    <td width="300"><div align="center"><span class="text"><a href="index.htm">Home</a></span></div></td>
+    <td width="200"><div align="center"><a href="tpx_tpxabout_tpx_drawing_tool.htm" class="text">About
+    TpX drawing tool</a></div></td>
+  </tr>
+</table>
+<hr size="1">
+
+
+<h1>  TpX output formats </h1>
+
+<p class="text">TpX provides several output formats. Use "Picture 
+properties" to change the format. The format is chosen separately 
+for LaTeX and PdfLaTeX.
+
+<p class="text">Not all of the formats are ideal, so the choice needs thoughtful 
+consideration. EPS and PDF are TpX defaults for LaTeX/DVI and PdfLaTeX 
+respectively. Also recommended is PGF.
+
+<ul>
+
+ <li class="text"><i><b>LaTeX <code>picture</code> environment</b></i>. This standard 
+ LaTeX environment is enhanced by <code>epic.sty</code> and 
+ <code>bez123.sty</code> LaTeX packages. Both packages are compatible 
+ with TeX/DVI and PdfLaTeX. The format is suitable for simple drawings 
+ only, because complicated drawings take a long time for TeX to 
+ translate and can cause memory shortage. Also, in general the result 
+ is poor.</li>
+
+ <li class="text"><i><b>Encapsulated Postscript (EPS)</b></i>. The most popular 
+ format for advanced TeX graphics. EPS is saved as a separate file 
+ without text and is inserted into TpX file using 
+ <code>\includegraphics</code> command from <code>graphicx</code> 
+ LaTeX package. TpX surrounds <code>\includegraphics</code> command by 
+ <code>picture</code> environment to put text over the picture. Can 
+ not be used with PdfLaTeX.</li>
+
+ <li class="text"><i><b>PDF</b></i>. Included in TpX in the same fashion as EPS. 
+ Can only be used with PdfLaTeX, not LaTeX/DVI.</li>
+
+ <li class="text"><i><b>PDF using EpsToPdf</b></i>. PDF is created from EPS using 
+ EpsToPdf. Set the path to the program in "TpX 
+ Settings".</li>
+
+ <li class="text"><b><i>PGF</i></b>. PGF code is kept in LaTeX
+ <code>pgfpicture</code> environment similar to <code>picture</code> 
+ environment. Requires <code>pgf</code> package. Compatible with 
+ both LaTeX/DVI and PdfLaTeX. </li>
+
+ <li class="text"><b><i>PSTricks</i></b>. PSTricks code is kept in TeX 
+ <code>pspicture</code> environment similar to <code>picture</code> 
+ environment. Requires <code>pstricks</code> package. Not 
+ compatible with PdfLaTeX.</li>
+
+ <li class="text"><b><i>Metapost</i></b>. Graphic language similar to pstricks, but 
+ an external file is created and an external MetaPost program is 
+ needed. Set the path to the program in "TpX Settings". Compatible 
+ with both LaTeX/DVI and PdfLaTeX. TeX is used to typeset text labels in 
+ MetaPost. This could be turned off by setting MetaPostTeXText to 0. 
+ Use <code>metapost.tex.inc</code> file to configure 
+ <a href="tpx_latex_preamble.htm">LaTeX preamble</a>.</li>
+
+ <li class="text"><i><b>Bitmap (PNG, BMP)</b></i>. Requires graphicx LaTeX package. 
+ Obviously, bitmap is not vector graphics, so it is not scalable. TpX 
+ does not use TeX to write text in bitmaps, so they can not 
+ incorporate TeX formulas. PNG is compatible with both LaTeX/DVI and 
+ PdfLaTeX. Currently BMP is not compatible with PdfLaTeX. Note that 
+ PNG is more compact than BMP so it is recommended. Currently bitmaps 
+ are not compatible with DVIPS and dvi2pdf; they are for DVI viewers 
+ only when used with LaTeX. Thus, bitmaps are most useful with
+ PdfLaTeX.</li>
+
+ <li class="text"><b><i>Enhanced Metafile (EMF)</i></b>. Can be used with LaTeX/DVI 
+ for preview (it is converted to bitmap for this purpose). Not 
+ compatible with PdfLaTeX. Recommended for export only.</li>
+
+ <li class="text"><b><i>None</i></b>. Set format to 'none' if you do not need 
+ output.</li>
+
+</ul>
+
+<p class="text">All TeX packages used are available from <a href="http://www.ctan.org/">CTAN</a>.
+ 
+See also <a href="tpx_export_formats.htm">Export formats</a>
+
+
+<p>
+<hr size="1">
+<div class="footer" align="right">TpX 1.3 help, generated 2006-05-22 16:21:09<div>
+</body>
+</html>

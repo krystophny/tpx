@@ -1,0 +1,3256 @@
+object MainForm: TMainForm
+  Left = 319
+  Height = 586
+  Top = 182
+  Width = 705
+  HelpType = htKeyword
+  HelpContext = 101
+  HorzScrollBar.Page = 704
+  VertScrollBar.Page = 561
+  ActiveControl = ComboBox1
+  Caption = 'TpX Editor'
+  Font.Height = -10
+  Font.Name = 'MS Sans Serif'
+  Menu = MainMenu1
+  OnCloseQuery = FormCloseQuery
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  OnKeyDown = FormKeyDown
+  OnShow = FormShow
+  Position = poScreenCenter
+  object Panel1: TPanel
+    Left = 87
+    Height = 487
+    Top = 46
+    Width = 618
+    Align = alClient
+    Caption = 'Panel1'
+    PopupMenu = LocalPopUp
+    TabOrder = 1
+    object VScrollBar: TScrollBar
+      Left = 600
+      Height = 437
+      Top = 1
+      Width = 17
+      Align = alRight
+      Kind = sbVertical
+      LargeChange = 4
+      Position = 50
+      TabOrder = 0
+      TabStop = False
+      OnScroll = ScrollBarScroll
+    end
+    object Panel7: TPanel
+      Left = 1
+      Height = 48
+      Top = 438
+      Width = 616
+      Align = alBottom
+      BevelOuter = bvNone
+      Caption = 'Panel7'
+      TabOrder = 1
+      object HScrollBar: TScrollBar
+        Height = 17
+        Width = 616
+        Align = alTop
+        LargeChange = 4
+        Position = 50
+        TabOrder = 0
+        TabStop = False
+        OnScroll = ScrollBarScroll
+      end
+      object Panel2: TPanel
+        Height = 31
+        Top = 17
+        Width = 616
+        Align = alClient
+        BevelOuter = bvNone
+        Caption = ' '
+        TabOrder = 1
+        Visible = False
+      end
+    end
+  end
+  object StatusBar1: TStatusBar
+    Height = 23
+    Top = 539
+    Width = 705
+    Panels = <    
+      item
+        Width = 150
+      end    
+      item
+        Width = 50
+      end>
+    SimplePanel = False
+  end
+  object ProgressBar1: TProgressBar
+    Height = 6
+    Top = 533
+    Width = 705
+    Align = alBottom
+    Max = 100
+    Position = 50
+    Smooth = True
+    Step = 1
+    TabOrder = 0
+  end
+  object Panel3: TPanel
+    Left = 25
+    Height = 487
+    Top = 46
+    Width = 62
+    Align = alLeft
+    BevelOuter = bvNone
+    Caption = ' '
+    TabOrder = 2
+    Visible = False
+  end
+  object Panel10: TPanel
+    Height = 46
+    Width = 705
+    Align = alTop
+    AutoSize = True
+    BevelInner = bvRaised
+    BevelOuter = bvNone
+    TabOrder = 3
+    object ToolBar1: TToolBar
+      Left = 1
+      Height = 22
+      Top = 1
+      Width = 703
+      AutoSize = True
+      DragKind = dkDock
+      EdgeBorders = [ebTop, ebBottom]
+      EdgeInner = esNone
+      EdgeOuter = esNone
+      Flat = True
+      Images = ImageList2
+      ParentShowHint = False
+      ShowHint = True
+      TabOrder = 0
+      object ToolButton9: TToolButton
+        Left = 1
+        Hint = 'New drawing'
+        Action = NewDoc
+      end
+      object ToolButton10: TToolButton
+        Left = 24
+        Hint = 'Open drawing'
+        Action = OpenDoc
+      end
+      object ToolButton11: TToolButton
+        Left = 47
+        Hint = 'Save drawing'
+        Action = SaveDoc
+      end
+      object ToolButton13: TToolButton
+        Left = 70
+        Width = 8
+        Caption = 'ToolButton13'
+        ImageIndex = 1
+        Style = tbsSeparator
+      end
+      object BasicModeBtn: TToolButton
+        Left = 78
+        Hint = 'Basic mode'
+        Caption = 'BasicModeBtn'
+        ImageIndex = 21
+        OnClick = BasicModeExecute
+      end
+      object AreaSelectBtn: TToolButton
+        Left = 101
+        Hint = 'Area select'
+        Action = AreaSelect
+      end
+      object ToolButton17: TToolButton
+        Left = 124
+        Width = 8
+        Caption = 'ToolButton17'
+        ImageIndex = 40
+        Style = tbsSeparator
+      end
+      object ClipboardCutBtn: TToolButton
+        Left = 132
+        Hint = 'Cut to clipboard'
+        Action = ClipboardCut
+      end
+      object ClipboardCopyBtn: TToolButton
+        Left = 155
+        Hint = 'Copy to clipboard'
+        Action = ClipboardCopy
+      end
+      object ClipboardPasteBtn: TToolButton
+        Left = 178
+        Hint = 'Paste from clipboard'
+        Action = ClipboardPaste
+      end
+      object ToolButton7: TToolButton
+        Left = 201
+        Width = 8
+        Caption = 'ToolButton7'
+        ImageIndex = 0
+        Style = tbsSeparator
+      end
+      object UndoBtn: TToolButton
+        Left = 209
+        Hint = 'Undo'
+        Action = Undo
+      end
+      object RedoBtn: TToolButton
+        Left = 232
+        Hint = 'Redo'
+        Action = Redo
+      end
+      object ToolButton14: TToolButton
+        Left = 255
+        Width = 8
+        Caption = 'ToolButton14'
+        ImageIndex = 0
+        Style = tbsSeparator
+      end
+      object ZoomAreaBtn: TToolButton
+        Left = 263
+        Hint = 'Zoom area'
+        Action = ZoomArea
+      end
+      object ToolButton3: TToolButton
+        Left = 286
+        Hint = 'Zoom in'
+        Action = ZoomIn
+      end
+      object ToolButton5: TToolButton
+        Left = 309
+        Hint = 'Zoom out'
+        Action = ZoomOut
+      end
+      object ToolButton6: TToolButton
+        Left = 332
+        Hint = 'Zoom all'
+        Action = ZoomAll
+      end
+      object PanningBtn: TToolButton
+        Left = 355
+        Hint = 'Hand tool'
+        Action = HandTool
+      end
+      object ToolButton12: TToolButton
+        Left = 378
+        Width = 8
+        Caption = 'ToolButton12'
+        ImageIndex = 0
+        Style = tbsSeparator
+      end
+      object ToolButton8: TToolButton
+        Left = 386
+        Hint = 'Image tool'
+        Action = ImageTool
+      end
+      object ToolButton21: TToolButton
+        Left = 409
+        Width = 8
+        Caption = 'ToolButton21'
+        ImageIndex = 59
+        Style = tbsSeparator
+      end
+      object ToolButton18: TToolButton
+        Left = 417
+        Hint = 'Preview LaTeX->DVI'
+        Action = PreviewLaTeX
+      end
+      object ToolButton20: TToolButton
+        Left = 440
+        Hint = 'Preview LaTeX->DVI->PS'
+        Action = PreviewLaTeX_PS
+      end
+      object ToolButton1: TToolButton
+        Left = 463
+        Hint = 'TeX output format'
+        Action = TeXFormat
+      end
+      object ToolButton19: TToolButton
+        Left = 486
+        Hint = 'Preview PdfLaTeX'
+        Action = PreviewPdfLaTeX
+      end
+      object ToolButton2: TToolButton
+        Left = 509
+        Hint = 'TeX output format'
+        Action = PdfTeXFormat
+      end
+      object ToolButton15: TToolButton
+        Left = 532
+        Width = 8
+        Caption = 'ToolButton15'
+        ImageIndex = 66
+        Style = tbsSeparator
+      end
+      object ToolButton4: TToolButton
+        Left = 540
+        Action = SimplifyPoly
+      end
+    end
+    object ToolBar3: TToolBar
+      Left = 1
+      Height = 22
+      Top = 23
+      Width = 703
+      Align = alBottom
+      AutoSize = True
+      Caption = 'ToolBar3'
+      DragKind = dkDock
+      EdgeInner = esNone
+      EdgeOuter = esNone
+      TabOrder = 1
+      object Panel4: TPanel
+        Left = 1
+        Height = 22
+        Width = 37
+        Alignment = taRightJustify
+        BevelOuter = bvNone
+        BorderWidth = 5
+        Caption = 'Line'
+        TabOrder = 6
+      end
+      object ComboBox1: TComboBox
+        Left = 38
+        Height = 22
+        Width = 63
+        AutoCompleteText = [cbactEndOfLineComplete, cbactSearchAscending]
+        ItemHeight = 13
+        Items.Strings = (
+          'None'
+          'Solid'
+          'Dotted'
+          'Dashed'
+        )
+        MaxLength = 0
+        OnSelect = ComboBox1Select
+        Style = csDropDownList
+        TabOrder = 0
+      end
+      object ComboBox3: TComboBox
+        Left = 101
+        Height = 22
+        Width = 72
+        AutoCompleteText = [cbactEndOfLineComplete, cbactSearchAscending]
+        ItemHeight = 16
+        MaxLength = 0
+        OnDrawItem = ColorBox_DrawItem
+        OnSelect = ComboBox3Select
+        Style = csOwnerDrawFixed
+        TabOrder = 1
+      end
+      object ComboBox6: TComboBox
+        Left = 173
+        Height = 22
+        Width = 100
+        AutoCompleteText = [cbactEndOfLineComplete, cbactSearchAscending]
+        ItemHeight = 13
+        Items.Strings = (
+          '0.5'
+          '1'
+          '2'
+          '4'
+        )
+        MaxLength = 0
+        OnChange = ComboBox6Change
+        TabOrder = 5
+        Text = ' '
+      end
+      object Panel5: TPanel
+        Left = 273
+        Height = 22
+        Width = 65
+        Alignment = taRightJustify
+        BevelOuter = bvNone
+        BorderWidth = 5
+        Caption = 'Hatching'
+        TabOrder = 7
+      end
+      object ComboBox2: TComboBox
+        Left = 338
+        Height = 22
+        Width = 68
+        AutoCompleteText = [cbactEndOfLineComplete, cbactSearchAscending]
+        ItemHeight = 13
+        ItemIndex = 0
+        Items.Strings = (
+          'None'
+          'Horizontal'
+          'Vertical'
+          'FDiagonal'
+          'BDiagonal'
+          'Cross'
+          'DiagCross'
+        )
+        MaxLength = 0
+        OnSelect = ComboBox2Select
+        Style = csDropDownList
+        TabOrder = 2
+        Text = 'None'
+      end
+      object ComboBox4: TComboBox
+        Left = 406
+        Height = 22
+        Width = 72
+        AutoCompleteText = [cbactEndOfLineComplete, cbactSearchAscending]
+        ItemHeight = 16
+        MaxLength = 0
+        OnDrawItem = ColorBox_DrawItem
+        OnSelect = ComboBox4Select
+        Style = csOwnerDrawFixed
+        TabOrder = 3
+      end
+      object Panel6: TPanel
+        Left = 478
+        Height = 22
+        Width = 32
+        Alignment = taRightJustify
+        BevelOuter = bvNone
+        BorderWidth = 5
+        Caption = 'Fill'
+        TabOrder = 8
+      end
+      object ComboBox5: TComboBox
+        Left = 510
+        Height = 22
+        Width = 72
+        AutoCompleteText = [cbactEndOfLineComplete, cbactSearchAscending]
+        ItemHeight = 16
+        MaxLength = 0
+        OnDrawItem = ColorBox_DrawItem
+        OnSelect = ComboBox5Select
+        Style = csOwnerDrawFixed
+        TabOrder = 4
+      end
+    end
+  end
+  object Panel20: TPanel
+    Height = 487
+    Top = 46
+    Width = 25
+    Align = alLeft
+    AutoSize = True
+    BevelInner = bvRaised
+    BevelOuter = bvNone
+    TabOrder = 4
+    object ToolBar2: TToolBar
+      Left = 1
+      Height = 485
+      Top = 1
+      Width = 23
+      Align = alLeft
+      AutoSize = True
+      DragKind = dkDock
+      EdgeBorders = [ebTop, ebBottom]
+      EdgeInner = esNone
+      EdgeOuter = esNone
+      Flat = True
+      Images = ImageList2
+      ParentShowHint = False
+      ShowHint = True
+      TabOrder = 0
+      object InsertLineBtn: TToolButton
+        Left = 1
+        Hint = 'Insert line'
+        Action = InsertLine
+        Wrap = True
+      end
+      object InsertRectangleBtn: TToolButton
+        Left = 1
+        Hint = 'Insert rectangle'
+        Top = 22
+        Action = InsertRectangle
+        Wrap = True
+      end
+      object InsertCircleBtn: TToolButton
+        Left = 1
+        Hint = 'Insert circle'
+        Top = 44
+        Action = InsertCircle
+        Wrap = True
+      end
+      object InsertEllipseBtn: TToolButton
+        Left = 1
+        Hint = 'Insert ellipse'
+        Top = 66
+        Action = InsertEllipse
+        Wrap = True
+      end
+      object InsertArcBtn: TToolButton
+        Left = 1
+        Hint = 'Insert arc'
+        Top = 88
+        Action = InsertArc
+        Wrap = True
+      end
+      object InsertSectorBtn: TToolButton
+        Left = 1
+        Hint = 'Insert sector'
+        Top = 110
+        Action = InsertSector
+        Wrap = True
+      end
+      object InsertSegmentBtn: TToolButton
+        Left = 1
+        Hint = 'Insert segment'
+        Top = 132
+        Action = InsertSegment
+        Wrap = True
+      end
+      object InsertPolylineBtn: TToolButton
+        Left = 1
+        Hint = 'Insert polyline'
+        Top = 154
+        Action = InsertPolyline
+        Wrap = True
+      end
+      object InsertPolygonBtn: TToolButton
+        Left = 1
+        Hint = 'Insert polygon'
+        Top = 176
+        Action = InsertPolygon
+        Wrap = True
+      end
+      object InsertCurveBtn: TToolButton
+        Left = 1
+        Hint = 'Insert curve'
+        Top = 198
+        Action = InsertCurve
+        Wrap = True
+      end
+      object InsertClosedCurveBtn: TToolButton
+        Left = 1
+        Hint = 'Insert closed curve'
+        Top = 220
+        Action = InsertClosedCurve
+        Wrap = True
+      end
+      object InsertBezierPathBtn: TToolButton
+        Left = 1
+        Hint = 'Insert Bezier path'
+        Top = 242
+        Action = InsertBezierPath
+        Wrap = True
+      end
+      object InsertClosedBezierPathBtn: TToolButton
+        Left = 1
+        Hint = 'Insert closed Bezier path'
+        Top = 264
+        Action = InsertClosedBezierPath
+        Wrap = True
+      end
+      object InsertTextBtn: TToolButton
+        Left = 1
+        Hint = 'Insert text'
+        Top = 286
+        Action = InsertText
+        Wrap = True
+      end
+      object InsertStarBtn: TToolButton
+        Left = 1
+        Hint = 'Insert star'
+        Top = 308
+        Action = InsertStar
+        Wrap = True
+      end
+      object InsertSymbolBtn: TToolButton
+        Left = 1
+        Hint = 'Insert symbol'
+        Top = 330
+        Action = InsertSymbol
+        Wrap = True
+      end
+      object FreehandPolylineBtn: TToolButton
+        Left = 1
+        Hint = 'Freehand polyline'
+        Top = 352
+        Action = FreehandPolyline
+      end
+    end
+  end
+  object MainMenu1: TMainMenu
+    Images = ImageList2
+    left = 33
+    top = 56
+    object File1: TMenuItem
+      Caption = 'File'
+      object New1: TMenuItem
+        Action = NewDoc
+        OnClick = UserEventExecute
+      end
+      object Newwindow1: TMenuItem
+        Action = NewWindow
+        OnClick = UserEventExecute
+      end
+      object OpenDoc1: TMenuItem
+        Action = OpenDoc
+        OnClick = UserEventExecute
+      end
+      object Recentfiles1: TMenuItem
+        Caption = 'Recent files'
+        object TMenuItem
+        end
+      end
+      object Save1: TMenuItem
+        Action = SaveDoc
+        OnClick = UserEventExecute
+      end
+      object Saveas1: TMenuItem
+        Action = SaveAs
+        OnClick = UserEventExecute
+      end
+      object N14: TMenuItem
+        Caption = '-'
+      end
+      object Copytoclipboard2: TMenuItem
+        Action = CopyPictureToClipboard
+        OnClick = UserEventExecute
+      end
+      object N12: TMenuItem
+        Caption = '-'
+      end
+      object TpXsettings1: TMenuItem
+        Action = TpXSettings
+        OnClick = UserEventExecute
+      end
+      object N3: TMenuItem
+        Caption = '-'
+      end
+      object Exit1: TMenuItem
+        Action = ExitProgram
+        OnClick = UserEventExecute
+      end
+    end
+    object Edit2: TMenuItem
+      Caption = 'Edit'
+      object Undo1: TMenuItem
+        Action = Undo
+        OnClick = UserEventExecute
+      end
+      object Redo1: TMenuItem
+        Action = Redo
+        OnClick = UserEventExecute
+      end
+      object N17: TMenuItem
+        Caption = '-'
+      end
+      object Cut1: TMenuItem
+        Action = ClipboardCut
+        OnClick = UserEventExecute
+      end
+      object Copy1: TMenuItem
+        Action = ClipboardCopy
+        OnClick = UserEventExecute
+      end
+      object Paste1: TMenuItem
+        Action = ClipboardPaste
+        OnClick = UserEventExecute
+      end
+      object Duplicateselected1: TMenuItem
+        Action = DuplicateSelected
+        ShortCut = 16452
+        OnClick = UserEventExecute
+      end
+      object Deleteselected1: TMenuItem
+        Action = DeleteSelected
+        OnClick = UserEventExecute
+      end
+      object N6: TMenuItem
+        Caption = '-'
+      end
+      object Selectall1: TMenuItem
+        Action = SelectAll
+        OnClick = UserEventExecute
+      end
+      object Selectnext1: TMenuItem
+        Action = SelNext
+        OnClick = UserEventExecute
+      end
+      object Selectprevious1: TMenuItem
+        Action = SelPrev
+        OnClick = UserEventExecute
+      end
+      object Areaselect2: TMenuItem
+        Action = AreaSelect
+        OnClick = AreaSelectExecute
+      end
+      object Areaselectinsideonly1: TMenuItem
+        Action = AreaSelectInsideAction
+        OnClick = UserEventExecute
+      end
+      object N11: TMenuItem
+        Caption = '-'
+      end
+      object Usesnap2: TMenuItem
+        Action = SnapToGrid
+        OnClick = UserEventExecute
+      end
+      object AngularSnap1: TMenuItem
+        Action = AngularSnap
+        OnClick = UserEventExecute
+      end
+      object Smoothbeziernodes1: TMenuItem
+        Action = SmoothBezierNodesAction
+        OnClick = UserEventExecute
+      end
+      object N10: TMenuItem
+        Caption = '-'
+      end
+      object Copytoclipboard1: TMenuItem
+        Caption = 'Copy drawing to clipboard'
+        Visible = False
+      end
+      object Objectproperties1: TMenuItem
+        Action = ObjectProperties
+        OnClick = UserEventExecute
+      end
+      object Options1: TMenuItem
+        Action = PictureProperties
+        OnClick = UserEventExecute
+      end
+    end
+    object Insert1: TMenuItem
+      Caption = 'Insert'
+      object Insertline1: TMenuItem
+        Action = InsertLine
+        OnClick = InsertLineExecute
+      end
+      object InsertRectangle1: TMenuItem
+        Action = InsertRectangle
+        OnClick = InsertRectangleExecute
+      end
+      object InsertCircle1: TMenuItem
+        Action = InsertCircle
+        OnClick = InsertCircleExecute
+      end
+      object InsertEllipse1: TMenuItem
+        Action = InsertEllipse
+        OnClick = InsertEllipseExecute
+      end
+      object InsertArc1: TMenuItem
+        Action = InsertArc
+        OnClick = InsertArcExecute
+      end
+      object Insertsector1: TMenuItem
+        Action = InsertSector
+        OnClick = InsertSectorExecute
+      end
+      object Insertsegment1: TMenuItem
+        Action = InsertSegment
+        OnClick = InsertSegmentExecute
+      end
+      object InsertPolyline1: TMenuItem
+        Action = InsertPolyline
+        OnClick = InsertPolylineExecute
+      end
+      object InsertPolygon1: TMenuItem
+        Action = InsertPolygon
+        OnClick = InsertPolygonExecute
+      end
+      object Insertcurve1: TMenuItem
+        Action = InsertCurve
+        OnClick = InsertCurveExecute
+      end
+      object Insertclosedcurve1: TMenuItem
+        Action = InsertClosedCurve
+        OnClick = InsertClosedCurveExecute
+      end
+      object InsertBezierpath1: TMenuItem
+        Action = InsertBezierPath
+        OnClick = InsertBezierPathExecute
+      end
+      object InsertclosedBezierpath1: TMenuItem
+        Action = InsertClosedBezierPath
+        OnClick = InsertClosedBezierPathExecute
+      end
+      object InsertText1: TMenuItem
+        Action = InsertText
+        OnClick = InsertTextExecute
+      end
+      object Insertstar1: TMenuItem
+        Action = InsertStar
+        OnClick = InsertStarExecute
+      end
+      object Insertsymbol1: TMenuItem
+        Action = InsertSymbol
+        OnClick = InsertSymbolExecute
+      end
+      object N18: TMenuItem
+        Caption = '-'
+      end
+      object Freehandpolyline1: TMenuItem
+        Action = FreehandPolyline
+        OnClick = FreehandPolylineExecute
+      end
+    end
+    object Transform1: TMenuItem
+      Caption = 'Transform'
+      object Fliphorizontally1: TMenuItem
+        Action = FlipH
+        OnClick = UserEventExecute
+      end
+      object Flipvertically1: TMenuItem
+        Action = FlipV
+        OnClick = UserEventExecute
+      end
+      object N5: TMenuItem
+        Caption = '-'
+      end
+      object Move1: TMenuItem
+        Caption = 'Move'
+        object Moveup1: TMenuItem
+          Action = MoveUp
+          OnClick = UserEventExecute
+        end
+        object Movedown1: TMenuItem
+          Action = MoveDown
+          OnClick = UserEventExecute
+        end
+        object Moveleft1: TMenuItem
+          Action = MoveLeft
+          OnClick = UserEventExecute
+        end
+        object Moveright1: TMenuItem
+          Action = MoveRight
+          OnClick = UserEventExecute
+        end
+        object N9: TMenuItem
+          Caption = '-'
+        end
+        object Moveup1pixel1: TMenuItem
+          Action = MoveUpPixel
+          OnClick = UserEventExecute
+        end
+        object Movedown1pixel1: TMenuItem
+          Action = MoveDownPixel
+          OnClick = UserEventExecute
+        end
+        object Moveleft1pixel1: TMenuItem
+          Action = MoveLeftPixel
+          OnClick = UserEventExecute
+        end
+        object Moveright1pixel1: TMenuItem
+          Action = MoveRightPixel
+          OnClick = UserEventExecute
+        end
+      end
+      object Rotate1: TMenuItem
+        Caption = 'Rotate'
+        object Rotateclockwise1: TMenuItem
+          Action = RotateClockW
+          OnClick = UserEventExecute
+        end
+        object Rotatecounterclockwise1: TMenuItem
+          Action = RotateCounterclockW
+          OnClick = UserEventExecute
+        end
+        object Rotateclockwise1deg1: TMenuItem
+          Action = RotateClockWDegree
+          OnClick = UserEventExecute
+        end
+        object Rotatecounterclockwise1deg1: TMenuItem
+          Action = RotateCounterclockWDegree
+          OnClick = UserEventExecute
+        end
+      end
+      object Scale2: TMenuItem
+        Caption = 'Scale'
+        object Grow101: TMenuItem
+          Action = Grow10
+          OnClick = UserEventExecute
+        end
+        object Grow102: TMenuItem
+          Action = Shrink10
+          OnClick = UserEventExecute
+        end
+        object Grow11: TMenuItem
+          Action = Grow1
+          OnClick = UserEventExecute
+        end
+        object Shrink11: TMenuItem
+          Action = Shrink1
+          OnClick = UserEventExecute
+        end
+      end
+      object Align1: TMenuItem
+        Caption = 'Align'
+        object Left1: TMenuItem
+          Action = AlignLeft
+          OnClick = UserEventExecute
+        end
+        object HCenter1: TMenuItem
+          Action = AlignHCenter
+          OnClick = UserEventExecute
+        end
+        object Right1: TMenuItem
+          Action = AlignRight
+          OnClick = UserEventExecute
+        end
+        object Bottom1: TMenuItem
+          Action = AlignBottom
+          OnClick = UserEventExecute
+        end
+        object VCenter1: TMenuItem
+          Action = AlignVCenter
+          OnClick = UserEventExecute
+        end
+        object op1: TMenuItem
+          Action = AlignTop
+          OnClick = UserEventExecute
+        end
+      end
+      object N8: TMenuItem
+        Caption = '-'
+      end
+      object Startmove1: TMenuItem
+        Action = StartMove
+        OnClick = UserEventExecute
+      end
+      object Startrotate1: TMenuItem
+        Action = StartRotate
+        OnClick = UserEventExecute
+      end
+      object Deleteselected2: TMenuItem
+        Caption = '-'
+        Hint = 'Delete selected'
+        ShortCut = 46
+        OnClick = UserEventExecute
+      end
+      object Areaselect3: TMenuItem
+        Action = CustomTransform
+        OnClick = UserEventExecute
+      end
+      object Scalestandard1: TMenuItem
+        Action = ScaleStandard
+        OnClick = UserEventExecute
+      end
+      object Scalephysicalunits1: TMenuItem
+        Action = ScalePhysical
+        Visible = False
+        OnClick = ScalePhysicalExecute
+      end
+      object N4: TMenuItem
+        Caption = '-'
+      end
+      object Scalelinewidth1: TMenuItem
+        Action = ScaleLineWidthAction
+        OnClick = ScaleLineWidthActionExecute
+      end
+      object Scaletext1: TMenuItem
+        Action = ScaleTextAction
+        OnClick = ScaleTextActionExecute
+      end
+      object Rotatetext1: TMenuItem
+        Action = RotateTextAction
+        OnClick = RotateTextActionExecute
+      end
+      object Rotatesymbols1: TMenuItem
+        Action = RotateSymbolsAction
+        OnClick = RotateSymbolsActionExecute
+      end
+    end
+    object Modify1: TMenuItem
+      Caption = 'Modify'
+      object Edit1: TMenuItem
+        Caption = 'Arrange'
+        object MoveForward1: TMenuItem
+          Action = MoveBackward
+          OnClick = UserEventExecute
+        end
+        object MoveForward4: TMenuItem
+          Action = MoveForward
+          OnClick = UserEventExecute
+        end
+        object MoveForward3: TMenuItem
+          Action = MoveToBack
+          OnClick = UserEventExecute
+        end
+        object MoveForward2: TMenuItem
+          Action = MoveToFront
+          OnClick = UserEventExecute
+        end
+      end
+      object Group1: TMenuItem
+        Action = Group
+        OnClick = UserEventExecute
+      end
+      object Converttopolyline1: TMenuItem
+        Action = ConvertTo
+        OnClick = ConvertToExecute
+      end
+      object Simplifypolylinepolygon1: TMenuItem
+        Action = SimplifyPoly
+        OnClick = UserEventExecute
+      end
+      object Connectpaths1: TMenuItem
+        Action = ConnectPaths
+        OnClick = UserEventExecute
+      end
+      object Reversepoints1: TMenuItem
+        Action = ReversePoints
+        OnClick = UserEventExecute
+      end
+      object Converttograyscale1: TMenuItem
+        Action = ConvertToGrayScale
+        OnClick = UserEventExecute
+      end
+    end
+    object Tools1: TMenuItem
+      Caption = 'Tools'
+      OnClick = Tools1Click
+      object PreviewLaTeX1: TMenuItem
+        Action = PreviewLaTeX
+        OnClick = UserEventExecute
+      end
+      object PreviewLaTeXDVIPS1: TMenuItem
+        Action = PreviewLaTeX_PS
+        OnClick = UserEventExecute
+      end
+      object PreviewPdfLaTeX1: TMenuItem
+        Action = PreviewPdfLaTeX
+        OnClick = UserEventExecute
+      end
+      object Preview1: TMenuItem
+        Caption = 'Preview as image'
+        object PreviewEPS1: TMenuItem
+          Action = PreviewEPS
+          OnClick = UserEventExecute
+        end
+        object PreviewPDF1: TMenuItem
+          Action = PreviewPDF
+          OnClick = UserEventExecute
+        end
+        object PreviewSVG1: TMenuItem
+          Action = PreviewSVG
+          OnClick = UserEventExecute
+        end
+        object PreviewPNG1: TMenuItem
+          Action = PreviewPNG
+          OnClick = UserEventExecute
+        end
+        object PreviewBMP1: TMenuItem
+          Action = PreviewBMP
+          OnClick = UserEventExecute
+        end
+        object PreviewBMP2: TMenuItem
+          Action = PreviewEMF
+          OnClick = UserEventExecute
+        end
+      end
+      object Viewsource1: TMenuItem
+        Caption = 'View source'
+        object Drawingsource1: TMenuItem
+          Action = DrawingSource
+          OnClick = UserEventExecute
+        end
+        object previewtexinc1: TMenuItem
+          Action = preview_tex_inc
+          OnClick = UserEventExecute
+        end
+        object metaposttexinc1: TMenuItem
+          Action = metapost_tex_inc
+          OnClick = UserEventExecute
+        end
+      end
+      object N7: TMenuItem
+        Caption = '-'
+      end
+      object CaptureEMF1: TMenuItem
+        Action = CaptureEMF
+        OnClick = UserEventExecute
+      end
+      object ImagetoEPStool1: TMenuItem
+        Action = ImageTool
+        OnClick = UserEventExecute
+      end
+    end
+    object u1: TMenuItem
+      Caption = 'View'
+      object Zoomarea2: TMenuItem
+        Action = ZoomArea
+        OnClick = ZoomAreaExecute
+      end
+      object Zoomin2: TMenuItem
+        Action = ZoomIn
+        OnClick = UserEventExecute
+      end
+      object Zoomout2: TMenuItem
+        Action = ZoomOut
+        OnClick = UserEventExecute
+      end
+      object Zoomall2: TMenuItem
+        Action = ZoomAll
+        OnClick = UserEventExecute
+      end
+      object Panning2: TMenuItem
+        Action = HandTool
+        OnClick = HandToolExecute
+      end
+      object Setpoint2: TMenuItem
+        Caption = 'Set point'
+        Visible = False
+      end
+      object N15: TMenuItem
+        Caption = '-'
+      end
+      object Showgrid2: TMenuItem
+        Action = ShowGrid
+        OnClick = ShowGridExecute
+      end
+      object ShowRulers1: TMenuItem
+        Action = ShowRulers
+        OnClick = ShowRulersExecute
+      end
+      object Showscrollbars1: TMenuItem
+        Action = ShowScrollBars
+        OnClick = ShowScrollBarsExecute
+      end
+      object Useareatoselectobjects2: TMenuItem
+        Caption = 'Use area to select objects'
+        Visible = False
+      end
+    end
+    object Help2: TMenuItem
+      Caption = 'Help'
+      object Help1: TMenuItem
+        Action = TpXHelp
+        OnClick = UserEventExecute
+      end
+      object Pictureinfo1: TMenuItem
+        Action = PictureInfo
+        OnClick = UserEventExecute
+      end
+      object About1: TMenuItem
+        Action = About
+        OnClick = UserEventExecute
+      end
+    end
+  end
+  object LocalPopUp: TPopupMenu
+    Images = ImageList2
+    AutoPopup = False
+    left = 63
+    top = 64
+    object Test1: TMenuItem
+      Caption = 'Test'
+      OnClick = Test1Click
+    end
+  end
+  object DrawingSaveDlg: TSaveDialog
+    Title = 'Сохранить файл как'
+    Filter = 'TpX drawing|*.TpX|Scalable vector graphics (SVG)|*.svg|Enhanced metafile (EMF)|*.emf|Encapsulated PostScript (EPS)|*.eps|Portable network graphics (PNG)|*.png|Windows bitmap (BMP)|*.bmp|Portable document format (PDF)|*.pdf|MetaPost (.mp)|*.mp|MetaPost EPS output (.mps)|*.mps|PDF using EpsToPdf|*.pdf|LaTeX EPS (latex-dvips)|*.eps|LaTeX PDF (latex-dvips-epstopdf)|*.pdf|LaTeX custom (latex-dvips-gs)|*.*'
+    FilterIndex = 0
+    Options = [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing]
+    left = 123
+    top = 90
+  end
+  object OpenDialog1: TOpenDialog
+    Title = 'Открыть существующий файл'
+    DefaultExt = '.xml'
+    Filter = '*.xml|*.xml'
+    FilterIndex = 0
+    left = 196
+    top = 32
+  end
+  object EMFOpenDialog: TOpenPictureDialog
+    Title = 'Открыть существующий файл'
+    DefaultExt = '.tpx'
+    FilterIndex = 2
+    left = 200
+    top = 84
+  end
+  object ActionList1: TActionList
+    Images = ImageList2
+    left = 152
+    top = 92
+    object Undo: TAction
+      Category = 'Edit'
+      Caption = 'Undo'
+      DisableIfNoHandler = True
+      Hint = 'Undo'
+      ImageIndex = 50
+      OnExecute = UserEventExecute
+      SecondaryShortCuts.Strings = (
+        'Alt+BkSp'
+      )
+      ShortCut = 16474
+    end
+    object Redo: TAction
+      Category = 'Edit'
+      Caption = 'Redo'
+      DisableIfNoHandler = True
+      Hint = 'Redo'
+      ImageIndex = 51
+      OnExecute = UserEventExecute
+      SecondaryShortCuts.Strings = (
+        'Shift+Alt+BkSp'
+      )
+      ShortCut = 24666
+    end
+    object ClipboardCopy: TAction
+      Category = 'Edit'
+      Caption = 'Copy'
+      DisableIfNoHandler = True
+      Hint = 'Copy to clipboard'
+      ImageIndex = 37
+      OnExecute = UserEventExecute
+      SecondaryShortCuts.Strings = (
+        'ctrl+ins'
+      )
+      ShortCut = 16451
+    end
+    object ClipboardPaste: TAction
+      Category = 'Edit'
+      Caption = 'Paste'
+      DisableIfNoHandler = True
+      Hint = 'Paste from clipboard'
+      ImageIndex = 38
+      OnExecute = UserEventExecute
+      SecondaryShortCuts.Strings = (
+        'shift+ins'
+      )
+      ShortCut = 16470
+    end
+    object ClipboardCut: TAction
+      Category = 'Edit'
+      Caption = 'Cut'
+      DisableIfNoHandler = True
+      Hint = 'Cut to clipboard'
+      ImageIndex = 36
+      OnExecute = UserEventExecute
+      SecondaryShortCuts.Strings = (
+        'Shift+Del'
+      )
+      ShortCut = 16472
+    end
+    object DeleteSelected: TAction
+      Category = 'Edit'
+      Caption = 'Delete selected'
+      DisableIfNoHandler = True
+      Hint = 'Delete selected'
+      ImageIndex = 23
+      OnExecute = UserEventExecute
+      SecondaryShortCuts.Strings = (
+        'Ctrl+Del'
+      )
+      ShortCut = 46
+    end
+    object DuplicateSelected: TAction
+      Category = 'Edit'
+      Caption = 'Duplicate selected'
+      DisableIfNoHandler = True
+      Hint = 'Duplicate selected'
+      ImageIndex = 48
+      OnExecute = UserEventExecute
+    end
+    object MoveUp: TAction
+      Category = 'Transform'
+      Caption = 'Move up'
+      DisableIfNoHandler = True
+      ImageIndex = 40
+      OnExecute = UserEventExecute
+      ShortCut = 38
+    end
+    object MoveDown: TAction
+      Category = 'Transform'
+      Caption = 'Move down'
+      DisableIfNoHandler = True
+      ImageIndex = 43
+      OnExecute = UserEventExecute
+      ShortCut = 40
+    end
+    object MoveLeft: TAction
+      Category = 'Transform'
+      Caption = 'Move left'
+      DisableIfNoHandler = True
+      ImageIndex = 41
+      OnExecute = UserEventExecute
+      ShortCut = 37
+    end
+    object MoveRight: TAction
+      Category = 'Transform'
+      Caption = 'Move right'
+      DisableIfNoHandler = True
+      ImageIndex = 42
+      OnExecute = UserEventExecute
+      ShortCut = 39
+    end
+    object MoveUpPixel: TAction
+      Category = 'Transform'
+      Caption = 'Move up 1 pixel'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 16422
+    end
+    object MoveDownPixel: TAction
+      Category = 'Transform'
+      Caption = 'Move down 1 pixel'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 16424
+    end
+    object MoveLeftPixel: TAction
+      Category = 'Transform'
+      Caption = 'Move left 1 pixel'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 16421
+    end
+    object MoveRightPixel: TAction
+      Category = 'Transform'
+      Caption = 'Move right 1 pixel'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 16423
+    end
+    object FlipV: TAction
+      Category = 'Transform'
+      Caption = 'Flip vertically'
+      DisableIfNoHandler = True
+      ImageIndex = 29
+      OnExecute = UserEventExecute
+      SecondaryShortCuts.Strings = (
+        'Alt+Shift+Down'
+      )
+      ShortCut = 40998
+    end
+    object SelectAll: TAction
+      Category = 'Edit'
+      Caption = 'Select all'
+      DisableIfNoHandler = True
+      Hint = 'Select all'
+      OnExecute = UserEventExecute
+      ShortCut = 16449
+    end
+    object SelNext: TAction
+      Category = 'Edit'
+      Caption = 'Select next'
+      DisableIfNoHandler = True
+      Hint = 'Select next'
+      OnExecute = UserEventExecute
+      ShortCut = 9
+    end
+    object SelPrev: TAction
+      Category = 'Edit'
+      Caption = 'Select previous'
+      DisableIfNoHandler = True
+      Hint = 'Select previous'
+      OnExecute = UserEventExecute
+      ShortCut = 8201
+    end
+    object FlipH: TAction
+      Category = 'Transform'
+      Caption = 'Flip horizontally'
+      DisableIfNoHandler = True
+      ImageIndex = 28
+      OnExecute = UserEventExecute
+      SecondaryShortCuts.Strings = (
+        'Alt+Shift+Left'
+      )
+      ShortCut = 40999
+    end
+    object ConvertToGrayScale: TAction
+      Category = 'Modify'
+      Caption = 'Convert to grayscale'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+    end
+    object RotateCounterclockW: TAction
+      Category = 'Transform'
+      Caption = 'Rotate counterclockwise 90deg'
+      DisableIfNoHandler = True
+      ImageIndex = 31
+      OnExecute = UserEventExecute
+      ShortCut = 32805
+    end
+    object RotateClockW: TAction
+      Category = 'Transform'
+      Caption = 'Rotate clockwise 90deg'
+      DisableIfNoHandler = True
+      ImageIndex = 30
+      OnExecute = UserEventExecute
+      ShortCut = 32807
+    end
+    object RotateCounterclockWDegree: TAction
+      Category = 'Transform'
+      Caption = 'Rotate counterclockwise 1deg'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 49189
+    end
+    object RotateClockWDegree: TAction
+      Category = 'Transform'
+      Caption = 'Rotate clockwise 1deg'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 49191
+    end
+    object Grow10: TAction
+      Category = 'Transform'
+      Caption = 'Grow 10%'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 32806
+    end
+    object Shrink10: TAction
+      Category = 'Transform'
+      Caption = 'Shrink 10%'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 32808
+    end
+    object Grow1: TAction
+      Category = 'Transform'
+      Caption = 'Grow 1%'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 49190
+    end
+    object Shrink1: TAction
+      Category = 'Transform'
+      Caption = 'Shrink 1%'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 49192
+    end
+    object MoveForward: TAction
+      Category = 'Arrange'
+      Caption = 'Move forward'
+      DisableIfNoHandler = True
+      Hint = 'Move forward'
+      ImageIndex = 24
+      OnExecute = UserEventExecute
+      ShortCut = 33
+    end
+    object MoveBackward: TAction
+      Category = 'Arrange'
+      Caption = 'Move backward'
+      DisableIfNoHandler = True
+      Hint = 'Move backward'
+      ImageIndex = 25
+      OnExecute = UserEventExecute
+      ShortCut = 34
+    end
+    object MoveToFront: TAction
+      Category = 'Arrange'
+      Caption = 'Bring to front'
+      DisableIfNoHandler = True
+      Hint = 'Bring to front'
+      ImageIndex = 26
+      OnExecute = UserEventExecute
+      ShortCut = 36
+    end
+    object MoveToBack: TAction
+      Category = 'Arrange'
+      Caption = 'Put to  back'
+      DisableIfNoHandler = True
+      Hint = 'Put to  back'
+      ImageIndex = 27
+      OnExecute = UserEventExecute
+      ShortCut = 35
+    end
+    object StartRotate: TAction
+      Category = 'Transform'
+      Caption = 'Start rotate'
+      DisableIfNoHandler = True
+      ImageIndex = 32
+      OnExecute = UserEventExecute
+      ShortCut = 16466
+    end
+    object StartMove: TAction
+      Category = 'Transform'
+      Caption = 'Start move'
+      DisableIfNoHandler = True
+      ImageIndex = 49
+      OnExecute = UserEventExecute
+      ShortCut = 16461
+    end
+    object InsertLine: TAction
+      Category = 'Insert'
+      Caption = 'Insert line'
+      DisableIfNoHandler = True
+      Hint = 'Insert line'
+      ImageIndex = 0
+      OnExecute = InsertLineExecute
+      ShortCut = 76
+    end
+    object InsertRectangle: TAction
+      Category = 'Insert'
+      Caption = 'Insert rectangle'
+      DisableIfNoHandler = True
+      Hint = 'Insert rectangle'
+      ImageIndex = 1
+      OnExecute = InsertRectangleExecute
+      ShortCut = 82
+    end
+    object InsertCircle: TAction
+      Category = 'Insert'
+      Caption = 'Insert circle'
+      DisableIfNoHandler = True
+      Hint = 'Insert circle'
+      ImageIndex = 10
+      OnExecute = InsertCircleExecute
+      ShortCut = 67
+    end
+    object InsertEllipse: TAction
+      Category = 'Insert'
+      Caption = 'Insert ellipse'
+      DisableIfNoHandler = True
+      Hint = 'Insert ellipse'
+      ImageIndex = 3
+      OnExecute = InsertEllipseExecute
+      ShortCut = 69
+    end
+    object InsertArc: TAction
+      Category = 'Insert'
+      Caption = 'Insert arc'
+      DisableIfNoHandler = True
+      Hint = 'Insert arc'
+      ImageIndex = 2
+      OnExecute = InsertArcExecute
+      ShortCut = 65
+    end
+    object InsertPolyline: TAction
+      Category = 'Insert'
+      Caption = 'Insert polyline'
+      DisableIfNoHandler = True
+      Hint = 'Insert polyline'
+      ImageIndex = 4
+      OnExecute = InsertPolylineExecute
+      ShortCut = 80
+    end
+    object InsertPolygon: TAction
+      Category = 'Insert'
+      Caption = 'Insert polygon'
+      DisableIfNoHandler = True
+      Hint = 'Insert polygon'
+      ImageIndex = 5
+      OnExecute = InsertPolygonExecute
+      ShortCut = 71
+    end
+    object InsertText: TAction
+      Category = 'Insert'
+      Caption = 'Insert text'
+      DisableIfNoHandler = True
+      Hint = 'Insert text'
+      ImageIndex = 7
+      OnExecute = InsertTextExecute
+      ShortCut = 84
+    end
+    object InsertStar: TAction
+      Category = 'Insert'
+      Caption = 'Insert star'
+      DisableIfNoHandler = True
+      Hint = 'Insert star'
+      ImageIndex = 11
+      OnExecute = InsertStarExecute
+      ShortCut = 66
+    end
+    object NewDoc: TAction
+      Category = 'File'
+      Caption = 'New'
+      DisableIfNoHandler = True
+      Hint = 'New drawing'
+      ImageIndex = 12
+      OnExecute = UserEventExecute
+      ShortCut = 16462
+    end
+    object NewWindow: TAction
+      Category = 'File'
+      Caption = 'New window'
+      DisableIfNoHandler = True
+      ImageIndex = 61
+      OnExecute = UserEventExecute
+      ShortCut = 16471
+    end
+    object OpenDoc: TAction
+      Category = 'File'
+      Caption = 'Open'
+      DisableIfNoHandler = True
+      Hint = 'Open drawing'
+      ImageIndex = 13
+      OnExecute = UserEventExecute
+      ShortCut = 16463
+    end
+    object SaveDoc: TAction
+      Category = 'File'
+      Caption = 'Save'
+      DisableIfNoHandler = True
+      Hint = 'Save drawing'
+      ImageIndex = 14
+      OnExecute = UserEventExecute
+      ShortCut = 16467
+    end
+    object Print: TAction
+      Category = 'File'
+      Caption = 'Print'
+      DisableIfNoHandler = True
+      Hint = 'Print'
+      ImageIndex = 15
+      OnExecute = UserEventExecute
+      ShortCut = 16464
+    end
+    object ZoomArea: TAction
+      Category = 'View'
+      Caption = 'Zoom area'
+      DisableIfNoHandler = True
+      Hint = 'Zoom area'
+      ImageIndex = 16
+      OnExecute = ZoomAreaExecute
+      ShortCut = 32881
+    end
+    object ZoomIn: TAction
+      Category = 'View'
+      Caption = 'Zoom in'
+      DisableIfNoHandler = True
+      Hint = 'Zoom in'
+      ImageIndex = 17
+      OnExecute = UserEventExecute
+      SecondaryShortCuts.Strings = (
+        'Alt+='
+      )
+      ShortCut = 107
+    end
+    object ZoomOut: TAction
+      Category = 'View'
+      Caption = 'Zoom out'
+      DisableIfNoHandler = True
+      Hint = 'Zoom out'
+      ImageIndex = 18
+      OnExecute = UserEventExecute
+      SecondaryShortCuts.Strings = (
+        'Alt+-'
+      )
+      ShortCut = 109
+    end
+    object ZoomAll: TAction
+      Category = 'View'
+      Caption = 'Zoom all'
+      DisableIfNoHandler = True
+      Hint = 'Zoom all'
+      ImageIndex = 19
+      OnExecute = UserEventExecute
+      SecondaryShortCuts.Strings = (
+        'Alt+0'
+      )
+      ShortCut = 106
+    end
+    object HandTool: TAction
+      Category = 'View'
+      Caption = 'Hand tool'
+      DisableIfNoHandler = True
+      Hint = 'Hand tool'
+      ImageIndex = 20
+      OnExecute = HandToolExecute
+    end
+    object SaveAs: TAction
+      Category = 'File'
+      Caption = 'Save as...'
+      DisableIfNoHandler = True
+      Hint = 'Save as...'
+      ImageIndex = 22
+      OnExecute = UserEventExecute
+      ShortCut = 24659
+    end
+    object InsertSector: TAction
+      Category = 'Insert'
+      Caption = 'Insert sector'
+      DisableIfNoHandler = True
+      Hint = 'Insert sector'
+      ImageIndex = 33
+      OnExecute = InsertSectorExecute
+      ShortCut = 83
+    end
+    object InsertSegment: TAction
+      Category = 'Insert'
+      Caption = 'Insert segment'
+      DisableIfNoHandler = True
+      Hint = 'Insert segment'
+      ImageIndex = 34
+      OnExecute = InsertSegmentExecute
+      ShortCut = 8275
+    end
+    object InsertCurve: TAction
+      Category = 'Insert'
+      Caption = 'Insert curve'
+      DisableIfNoHandler = True
+      Hint = 'Insert curve'
+      ImageIndex = 52
+      OnExecute = InsertCurveExecute
+      ShortCut = 85
+    end
+    object InsertClosedCurve: TAction
+      Category = 'Insert'
+      Caption = 'Insert closed curve'
+      DisableIfNoHandler = True
+      Hint = 'Insert closed curve'
+      ImageIndex = 53
+      OnExecute = InsertClosedCurveExecute
+      ShortCut = 79
+    end
+    object ShowGrid: TAction
+      Category = 'View'
+      Caption = 'Show grid'
+      Checked = True
+      DisableIfNoHandler = True
+      OnExecute = ShowGridExecute
+    end
+    object SnapToGrid: TAction
+      Category = 'Edit'
+      Caption = 'Snap to grid'
+      DisableIfNoHandler = True
+      Hint = 'Snap to grid'
+      OnExecute = UserEventExecute
+      ShortCut = 114
+    end
+    object AngularSnap: TAction
+      Category = 'Edit'
+      Caption = 'Angular snap'
+      DisableIfNoHandler = True
+      Hint = 'Use orto'
+      OnExecute = UserEventExecute
+      ShortCut = 117
+    end
+    object SmoothBezierNodesAction: TAction
+      Category = 'Edit'
+      Caption = 'Smooth bezier nodes'
+      Checked = True
+      DisableIfNoHandler = True
+      Hint = 'Smooth bezier nodes'
+      OnExecute = UserEventExecute
+    end
+    object AreaSelect: TAction
+      Category = 'Edit'
+      Caption = 'Area select'
+      DisableIfNoHandler = True
+      Hint = 'Area select'
+      ImageIndex = 35
+      OnExecute = AreaSelectExecute
+      ShortCut = 113
+    end
+    object AreaSelectInsideAction: TAction
+      Category = 'Edit'
+      Caption = 'Area select inside only'
+      Checked = True
+      DisableIfNoHandler = True
+      Hint = 'Area select inside only'
+      OnExecute = UserEventExecute
+      ShortCut = 16497
+    end
+    object ConvertToPolyline: TAction
+      Category = 'Modify'
+      Caption = 'Convert to polyline'
+      DisableIfNoHandler = True
+      Hint = 'Convert to polyline'
+      ImageIndex = 4
+      OnExecute = UserEventExecute
+    end
+    object CustomTransform: TAction
+      Category = 'Transform'
+      Caption = 'Custom transform'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 115
+    end
+    object ShowRulers: TAction
+      Category = 'View'
+      Caption = 'Show rulers'
+      DisableIfNoHandler = True
+      OnExecute = ShowRulersExecute
+    end
+    object ShowScrollBars: TAction
+      Category = 'View'
+      Caption = 'Show scroll bars'
+      DisableIfNoHandler = True
+      OnExecute = ShowScrollBarsExecute
+    end
+    object ConvertTo: TAction
+      Category = 'Modify'
+      Caption = 'Convert to...'
+      DisableIfNoHandler = True
+      Hint = 'Convert to...'
+      OnExecute = ConvertToExecute
+      ShortCut = 116
+    end
+    object DoConvertTo: TAction
+      Category = 'Modify'
+      Caption = 'DoConvert'
+      DisableIfNoHandler = True
+      OnExecute = DoConvertToExecute
+    end
+    object PreviewLaTeX: TAction
+      Category = 'Tools'
+      Caption = 'Preview LaTeX->DVI'
+      DisableIfNoHandler = True
+      Hint = 'Preview LaTeX->DVI'
+      ImageIndex = 54
+      OnExecute = UserEventExecute
+      ShortCut = 24662
+    end
+    object PreviewPdfLaTeX: TAction
+      Category = 'Tools'
+      Caption = 'Preview PdfLaTeX'
+      DisableIfNoHandler = True
+      Hint = 'Preview PdfLaTeX'
+      ImageIndex = 55
+      OnExecute = UserEventExecute
+      ShortCut = 24658
+    end
+    object PreviewLaTeX_PS: TAction
+      Category = 'Tools'
+      Caption = 'Preview LaTeX->DVI->PS'
+      DisableIfNoHandler = True
+      Hint = 'Preview LaTeX->DVI->PS'
+      ImageIndex = 58
+      OnExecute = UserEventExecute
+      ShortCut = 24647
+    end
+    object OpenRecent: TAction
+      Category = 'File'
+      Caption = 'OpenRecent'
+      DisableIfNoHandler = True
+      OnExecute = OpenRecentExecute
+    end
+    object PreviewSVG: TAction
+      Category = 'Tools'
+      Caption = 'Preview SVG'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 49235
+    end
+    object PreviewEPS: TAction
+      Category = 'Tools'
+      Caption = 'Preview EPS'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 49221
+    end
+    object PreviewPDF: TAction
+      Category = 'Tools'
+      Caption = 'Preview PDF'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 49232
+    end
+    object PreviewPNG: TAction
+      Category = 'Tools'
+      Caption = 'Preview PNG'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 49230
+    end
+    object PreviewBMP: TAction
+      Category = 'Tools'
+      Caption = 'Preview BMP'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 49218
+    end
+    object PreviewEMF: TAction
+      Category = 'Tools'
+      Caption = 'Preview EMF'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 49229
+    end
+    object ScalePhysical: TAction
+      Category = 'Transform'
+      Caption = 'Scale physical units'
+      DisableIfNoHandler = True
+      OnExecute = ScalePhysicalExecute
+    end
+    object InsertBezierPath: TAction
+      Category = 'Insert'
+      Caption = 'Insert Bezier path'
+      DisableIfNoHandler = True
+      Hint = 'Insert Bezier path'
+      ImageIndex = 59
+      OnExecute = InsertBezierPathExecute
+      ShortCut = 90
+    end
+    object InsertClosedBezierPath: TAction
+      Category = 'Insert'
+      Caption = 'Insert closed Bezier path'
+      DisableIfNoHandler = True
+      Hint = 'Insert closed Bezier path'
+      ImageIndex = 60
+      OnExecute = InsertClosedBezierPathExecute
+      ShortCut = 68
+    end
+    object InsertSymbol: TAction
+      Category = 'Insert'
+      Caption = 'Insert symbol'
+      DisableIfNoHandler = True
+      Hint = 'Insert closed Bezier path'
+      ImageIndex = 62
+      OnExecute = InsertSymbolExecute
+      ShortCut = 88
+    end
+    object SimplifyPoly: TAction
+      Category = 'Modify'
+      Caption = 'Simplify polyline/polygon'
+      DisableIfNoHandler = True
+      ImageIndex = 65
+      OnExecute = UserEventExecute
+    end
+    object ConnectPaths: TAction
+      Category = 'Modify'
+      Caption = 'Connect paths'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+    end
+    object RotateTextAction: TAction
+      Category = 'Transform'
+      Caption = 'Rotate text'
+      Checked = True
+      DisableIfNoHandler = True
+      OnExecute = RotateTextActionExecute
+    end
+    object RotateSymbolsAction: TAction
+      Category = 'Transform'
+      Caption = 'Rotate symbols'
+      Checked = True
+      DisableIfNoHandler = True
+      OnExecute = RotateSymbolsActionExecute
+    end
+    object ScaleLineWidthAction: TAction
+      Category = 'Transform'
+      Caption = 'Scale line width'
+      Checked = True
+      DisableIfNoHandler = True
+      OnExecute = ScaleLineWidthActionExecute
+    end
+    object DrawingSource: TAction
+      Category = 'Tools'
+      Caption = 'Drawing source'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 24644
+    end
+    object preview_tex_inc: TAction
+      Category = 'Tools'
+      Caption = 'preview.tex.inc'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+    end
+    object metapost_tex_inc: TAction
+      Category = 'Tools'
+      Caption = 'metapost.tex.inc'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+    end
+    object CaptureEMF: TAction
+      Category = 'Tools'
+      Caption = 'Capture EMF'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+    end
+    object ImageTool: TAction
+      Category = 'Tools'
+      Caption = 'Image tool'
+      DisableIfNoHandler = True
+      Hint = 'Image tool'
+      ImageIndex = 56
+      OnExecute = UserEventExecute
+    end
+    object ObjectProperties: TAction
+      Category = 'Edit'
+      Caption = 'Object properties'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      SecondaryShortCuts.Strings = (
+        'f3'
+      )
+      ShortCut = 13
+    end
+    object TeXFormat: TAction
+      Category = 'Edit'
+      Caption = 'TeX output format'
+      DisableIfNoHandler = True
+      Hint = 'TeX output format'
+      ImageIndex = 66
+      OnExecute = TeXFormatExecute
+    end
+    object PdfTeXFormat: TAction
+      Category = 'Edit'
+      Caption = 'PdfTeX output format'
+      DisableIfNoHandler = True
+      Hint = 'TeX output format'
+      ImageIndex = 66
+      OnExecute = PdfTeXFormatExecute
+    end
+    object PictureProperties: TAction
+      Category = 'Edit'
+      Caption = 'Picture properties'
+      DisableIfNoHandler = True
+      ImageIndex = 46
+      OnExecute = UserEventExecute
+      ShortCut = 32781
+    end
+    object CopyPictureToClipboard: TAction
+      Category = 'File'
+      Caption = 'Copy picture to clipboard'
+      DisableIfNoHandler = True
+      ImageIndex = 39
+      OnExecute = UserEventExecute
+      ShortCut = 49219
+    end
+    object ScaleTextAction: TAction
+      Category = 'Transform'
+      Caption = 'Scale text'
+      Checked = True
+      DisableIfNoHandler = True
+      OnExecute = ScaleTextActionExecute
+    end
+    object ScaleStandard: TAction
+      Category = 'Transform'
+      Caption = 'Scale standard'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 121
+    end
+    object TpXHelp: TAction
+      Category = 'Help'
+      Caption = 'TpX help'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 112
+    end
+    object PictureInfo: TAction
+      Category = 'Help'
+      Caption = 'Picture info'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+      ShortCut = 32880
+    end
+    object TpXSettings: TAction
+      Category = 'File'
+      Caption = 'TpX settings'
+      DisableIfNoHandler = True
+      ImageIndex = 47
+      OnExecute = UserEventExecute
+    end
+    object ExitProgram: TAction
+      Category = 'File'
+      Caption = 'Exit'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+    end
+    object About: TAction
+      Category = 'Help'
+      Caption = 'About'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+    end
+    object BasicModeAction: TAction
+      Category = 'File'
+      Caption = 'BasicModeAction'
+      DisableIfNoHandler = True
+      OnExecute = BasicModeExecute
+      ShortCut = 27
+    end
+    object FreehandPolyline: TAction
+      Category = 'Insert'
+      Caption = 'Freehand polyline'
+      DisableIfNoHandler = True
+      ImageIndex = 63
+      OnExecute = FreehandPolylineExecute
+    end
+    object ReversePoints: TAction
+      Category = 'Modify'
+      Caption = 'Reverse points'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+    end
+    object AlignLeft: TAction
+      Category = 'Align'
+      Caption = 'Left'
+      DisableIfNoHandler = True
+      ImageIndex = 67
+      OnExecute = UserEventExecute
+    end
+    object AlignRight: TAction
+      Category = 'Align'
+      Caption = 'Right'
+      DisableIfNoHandler = True
+      ImageIndex = 68
+      OnExecute = UserEventExecute
+    end
+    object AlignHCenter: TAction
+      Category = 'Align'
+      Caption = 'HCenter'
+      DisableIfNoHandler = True
+      ImageIndex = 69
+      OnExecute = UserEventExecute
+    end
+    object AlignTop: TAction
+      Category = 'Align'
+      Caption = 'Top'
+      DisableIfNoHandler = True
+      ImageIndex = 70
+      OnExecute = UserEventExecute
+    end
+    object AlignBottom: TAction
+      Category = 'Align'
+      Caption = 'Bottom'
+      DisableIfNoHandler = True
+      ImageIndex = 71
+      OnExecute = UserEventExecute
+    end
+    object AlignVCenter: TAction
+      Category = 'Align'
+      Caption = 'VCenter'
+      DisableIfNoHandler = True
+      ImageIndex = 72
+      OnExecute = UserEventExecute
+    end
+    object Group: TAction
+      Category = 'Modify'
+      Caption = 'Group'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+    end
+    object BreakPath: TAction
+      Category = 'Modify'
+      Caption = 'Break path'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+    end
+    object DeletePoint: TAction
+      Category = 'Modify'
+      Caption = 'Delete point'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+    end
+    object AddPoint: TAction
+      Category = 'Modify'
+      Caption = 'Add point'
+      DisableIfNoHandler = True
+      OnExecute = UserEventExecute
+    end
+  end
+  object ImageList2: TImageList
+    left = 164
+    top = 44
+    Bitmap = {
+      6C694900000010000000100000008D0100002F2A2058504D202A2F0A73746174
+      69632063686172202A677261706869635B5D203D207B0A223136203136203220
+      31222C0A222E2063204E6F6E65222C0A222C20632023303030303030222C0A22
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2C2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E
+      2E2C2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2C2E2E2E222C0A222E2E2E2E
+      2E2E2E2E2E2E2E2C2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2C2E2E2E2E2E
+      222C0A222E2E2E2E2E2E2E2E2E2C2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E
+      2C2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2C2E2E2E2E2E2E2E2E222C0A22
+      2E2E2E2E2E2E2C2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2C2E2E2E2E2E2E
+      2E2E2E2E222C0A222E2E2E2E2C2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2C
+      2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2C2E2E2E2E2E2E2E2E2E2E2E2E2E
+      222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0A8D
+      0100002F2A2058504D202A2F0A7374617469632063686172202A677261706869
+      635B5D203D207B0A22313620313620322031222C0A222E2063204E6F6E65222C
+      0A222C20632023303030303030222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2C2C2C2C2C2C
+      2C2C2C2C2C2C2C2E2E222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2C2E2E222C0A
+      222E2C2E2E2E2E2E2E2E2E2E2E2E2C2E2E222C0A222E2C2E2E2E2E2E2E2E2E2E
+      2E2E2C2E2E222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2C2E2E222C0A222E2C2E
+      2E2E2E2E2E2E2E2E2E2E2C2E2E222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2C2E
+      2E222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2C2E2E222C0A222E2C2E2E2E2E2E
+      2E2E2E2E2E2E2C2E2E222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2C2E2E222C0A
+      222E2C2C2C2C2C2C2C2C2C2C2C2C2C2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E2E227D0A8D0100002F2A2058504D202A2F0A7374
+      617469632063686172202A677261706869635B5D203D207B0A22313620313620
+      322031222C0A222E2063204E6F6E65222C0A222C20632023303030303030222C
+      0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2C2C
+      2C2C2E2E2E2E222C0A222E2E2E2E2E2E2C2C2E2E2E2E2C2C2E2E222C0A222E2E
+      2E2E2C2C2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2C2E2E2E2E2E2E2E2E2E2E
+      2E2E222C0A222E2E2E2C2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2C2E2E2E
+      2E2E2E2E2E2E2E2E2E2E222C0A222E2E2C2E2E2E2E2E2E2E2E2E2E2E2E2E222C
+      0A222E2C2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2C2E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2C
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E222C0A222E2E2C2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2C2E2E2E
+      2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D
+      0A8D0100002F2A2058504D202A2F0A7374617469632063686172202A67726170
+      6869635B5D203D207B0A22313620313620322031222C0A222E2063204E6F6E65
+      222C0A222C20632023303030303030222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E
+      2C2C2C2C2C2C2E2E2E2E2E222C0A222E2E2E2C2C2E2E2E2E2E2E2C2C2E2E2E22
+      2C0A222E2E2C2E2E2E2E2E2E2E2E2E2E2C2E2E222C0A222E2C2E2E2E2E2E2E2E
+      2E2E2E2E2E2C2E222C0A222C2E2E2E2E2E2E2E2E2E2E2E2E2E2E2C222C0A222C
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2C222C0A222C2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2C222C0A222C2E2E2E2E2E2E2E2E2E2E2E2E2E2E2C222C0A222E2C2E2E2E
+      2E2E2E2E2E2E2E2E2E2C2E222C0A222E2E2C2E2E2E2E2E2E2E2E2E2E2C2E2E22
+      2C0A222E2E2E2C2C2E2E2E2E2E2E2C2C2E2E2E222C0A222E2E2E2E2E2C2C2C2C
+      2C2C2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0A8D0100002F2A2058504D202A2F0A
+      7374617469632063686172202A677261706869635B5D203D207B0A2231362031
+      3620322031222C0A222E2063204E6F6E65222C0A222C20632023303030303030
+      222C0A222E2E2E2E2E2E2E2E2C2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E
+      2E2C2E2E2E2E2E2E222C0A222E2E2E2E2C2E2E2E2E2E2C2E2E2E2E2E222C0A22
+      2E2E2E2E2C2C2E2E2E2E2E2C2E2E2E2E222C0A222E2E2E2C2E2C2E2E2E2E2E2E
+      2C2E2E2E222C0A222E2E2E2C2E2E2C2E2E2E2E2E2C2E2E2E222C0A222E2E2C2E
+      2E2E2C2E2E2E2E2E2C2E2E2E222C0A222E2E2C2E2E2E2E2C2E2E2E2E2C2E2E2E
+      222C0A222E2C2E2E2E2E2E2C2E2E2E2C2E2E2E2E222C0A222E2C2E2E2E2E2E2E
+      2C2E2E2C2E2E2E2E222C0A222C2E2E2E2E2E2E2E2C2E2E2C2E2E2E2E222C0A22
+      2E2E2E2E2E2E2E2E2E2C2E2C2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2C2E2C
+      2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2C2E2E2E2E2E222C0A222E2E2E2E
+      2E2E2E2E2E2E2C2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      227D0A8D0100002F2A2058504D202A2F0A7374617469632063686172202A6772
+      61706869635B5D203D207B0A22313620313620322031222C0A222E2063204E6F
+      6E65222C0A222C20632023303030303030222C0A222E2E2E2E2E2E2E2E2E2C2C
+      2E2E2E2E2E222C0A222E2E2E2E2E2E2E2C2C2E2C2E2E2E2E2E222C0A222E2E2E
+      2E2E2C2C2E2E2E2C2E2E2E2E2E222C0A222E2E2E2C2C2E2E2E2E2E2C2E2E2E2E
+      2E222C0A222E2C2C2E2E2E2E2E2E2E2C2E2E2E2E2E222C0A222E2C2E2E2E2E2E
+      2E2E2E2E2C2E2E2E2E222C0A222E2C2E2E2E2E2E2E2E2E2E2C2E2E2E2E222C0A
+      222E2C2E2E2E2E2E2E2E2E2E2C2E2E2E2E222C0A222E2C2E2E2E2E2E2E2E2E2E
+      2C2C2C2E2E222C0A222E2C2C2C2C2C2C2E2E2E2E2E2E2E2C2C222C0A222E2E2E
+      2E2E2E2C2E2E2E2E2E2E2E2E2C222C0A222E2E2E2E2E2E2C2E2E2E2E2E2E2C2C
+      2E222C0A222E2E2E2E2E2E2C2E2E2E2E2C2C2E2E2E222C0A222E2E2E2E2E2E2C
+      2E2E2C2C2E2E2E2E2E222C0A222E2E2E2E2E2E2C2C2C2E2E2E2E2E2E2E222C0A
+      222E2E2E2E2E2E2C2E2E2E2E2E2E2E2E2E227D0A9C0100002F2A2058504D202A
+      2F0A7374617469632063686172202A677261706869635B5D203D207B0A223136
+      20313620332031222C0A222E2063204E6F6E65222C0A222C2063202330303030
+      3030222C0A222D20632023383030303030222C0A222E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E
+      2E2E2E2E2E2E2C2C2C2E2E2E2E222C0A222E2E2E2E2E2E2E2D2D2D2D2E2C2E2E
+      2E222C0A222E2E2C2E2E2E2D2D2E2D2D2E2E2C2E2E222C0A222E2E2C2E2E2E2D
+      2D2E2D2D2E2E2C2E2E222C0A222E2C2E2E2E2E2D2D2E2D2D2E2E2C2E2E222C0A
+      222E2C2E2E2E2E2E2D2D2D2D2E2C2E2E2E222C0A222E2E2C2E2E2E2E2C2E2D2D
+      2E2C2E2E2E222C0A222E2E2C2E2E2E2C2E2E2D2D2E2C2E2E2E222C0A222E2E2E
+      2C2E2E2C2E2E2D2E2C2E2E2E2E222C0A222E2E2E2C2C2C2E2E2E2E2E2C2E2E2E
+      2E222C0A222E2E2E2E2E2E2E2E2E2E2C2E2E2E2E2E222C0A222E2E2E2E2E2E2E
+      2E2E2E2C2E2E2E2C2E222C0A222E2E2E2E2E2E2E2E2E2E2E2C2C2C2E2E222C0A
+      222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0A8D0100002F2A2058504D202A
+      2F0A7374617469632063686172202A677261706869635B5D203D207B0A223136
+      20313620322031222C0A222E2063204E6F6E65222C0A222C2063202330303030
+      3030222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C
+      0A222E2E2E2E2C2E2E2E2E2C2E2E2E2E2E2E222C0A222E2E2E2E2C2E2E2E2E2C
+      2E2E2E2E2E2E222C0A222E2E2E2E2C2E2E2E2E2C2E2E2E2E2E2E222C0A222E2E
+      2E2C2E2C2E2E2E2C2E2C2C2E2E2E222C0A222E2E2C2E2E2C2E2E2E2C2C2E2E2C
+      2E2E222C0A222E2E2C2E2E2C2E2E2E2C2E2E2E2E2C2E222C0A222E2C2C2C2C2C
+      2E2E2E2C2E2E2E2E2C2E222C0A222E2C2E2E2E2E2C2E2E2C2E2E2E2E2C2E222C
+      0A222C2E2E2E2E2E2C2E2E2C2E2E2E2C2E2E222C0A222C2E2E2E2E2E2C2E2E2C
+      2C2C2C2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E227D0A8D0100002F2A2058504D202A2F0A7374617469632063686172202A
+      677261706869635B5D203D207B0A22313620313620322031222C0A222E206320
+      4E6F6E65222C0A222C20632023303030303030222C0A222E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E
+      2E2E2E2E2E2C2C2C2C2E2E2E2E2E2E222C0A222E2E2E2E2C2C2E2E2E2E2C2C2E
+      2E2E2E222C0A222E2E2E2C2E2E2E2E2E2E2E2E2C2E2E2E222C0A222E2E2E2C2E
+      2E2E2E2E2E2E2E2C2E2E2E222C0A222E2E2C2E2E2E2E2E2E2E2E2E2E2C2E2E22
+      2C0A222E2E2C2E2E2E2E2E2E2E2E2E2E2C2E2E222C0A222E2E2C2E2E2E2E2E2E
+      2E2E2E2E2C2E2E222C0A222E2E2C2E2E2E2E2E2E2E2E2E2E2C2E2E222C0A222E
+      2E2E2C2E2E2E2E2E2E2E2E2C2E2E2E222C0A222E2E2E2C2E2E2E2E2E2E2E2E2C
+      2E2E2E222C0A222E2E2E2E2C2C2E2E2E2E2C2C2E2E2E2E222C0A222E2E2E2E2E
+      2E2C2C2C2C2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E22
+      2C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0A9C0100002F2A2058504D
+      202A2F0A7374617469632063686172202A677261706869635B5D203D207B0A22
+      313620313620332031222C0A222E2063204E6F6E65222C0A222C206320233030
+      30303030222C0A222D20632023383030303030222C0A222E2E2E2E2E2E2E2E2C
+      2C2C2E2E2E2E2E222C0A222E2E2E2E2E2E2E2C2E2E2E2C2E2E2E2E222C0A222E
+      2E2E2E2E2E2C2E2E2E2E2C2E2E2E2E222C0A222E2E2E2E2E2E2C2E2E2E2E2E2C
+      2E2E2E222C0A222E2E2E2E2E2C2E2D2D2D2D2E2C2E2E2E222C0A222E2E2E2E2E
+      2C2D2D2E2D2D2E2E2C2E2E222C0A222E2E2E2E2C2E2D2D2E2D2D2E2E2C2E2E22
+      2C0A222E2E2E2C2E2E2D2D2E2D2D2E2E2C2E2E222C0A222E2E2C2E2E2E2E2D2D
+      2D2D2E2E2C2E2E222C0A222E2C2E2E2E2E2E2E2E2D2D2E2E2C2E2E222C0A222E
+      2C2E2E2E2E2E2E2E2D2D2E2C2E2E2E222C0A222E2C2E2E2E2E2E2E2E2D2E2E2C
+      2E2E2E222C0A222E2E2C2E2E2E2E2E2E2E2E2C2E2E2E2E222C0A222E2E2E2C2E
+      2E2E2E2E2C2C2E2E2E2E2E222C0A222E2E2E2E2C2C2C2C2C2E2E2E2E2E2E2E22
+      2C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0A8D0100002F2A2058504D
+      202A2F0A7374617469632063686172202A677261706869635B5D203D207B0A22
+      313620313620322031222C0A222E2063204E6F6E65222C0A222C206320233030
+      30303030222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2C2C2C2C2E2E2E2E2E2E
+      222C0A222E2E2E2E2C2C2E2E2E2E2C2C2E2E2E2E222C0A222E2E2E2C2E2E2E2E
+      2E2E2E2E2C2E2E2E222C0A222E2E2E2C2E2E2E2E2E2E2E2E2C2E2E2E222C0A22
+      2E2E2C2E2E2E2E2E2E2E2E2E2E2C2E2E222C0A222E2E2C2E2E2E2E2E2E2E2E2E
+      2E2C2E2E222C0A222E2E2C2E2E2E2E2E2E2E2E2E2E2C2E2E222C0A222E2E2C2E
+      2E2E2E2E2E2E2E2E2E2C2E2E222C0A222E2E2E2C2E2E2E2E2E2E2E2E2C2E2E2E
+      222C0A222E2E2E2C2E2E2E2E2E2E2E2E2C2E2E2E222C0A222E2E2E2E2C2C2E2E
+      2E2E2C2C2E2E2E2E222C0A222E2E2E2E2E2E2C2C2C2C2E2E2E2E2E2E222C0A22
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E227D0A9C0100002F2A2058504D202A2F0A7374617469632063686172
+      202A677261706869635B5D203D207B0A22313620313620332031222C0A222E20
+      63204E6F6E65222C0A222C20632023383038303830222C0A222D206320233030
+      30303030222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2C2D2C2E2E2E2E2E2E2E
+      222C0A222E2E2E2E2E2E2D2D2D2E2E2E2E2E2E2E222C0A222E2E2E2C2E2E2D2D
+      2D2E2E2C2E2E2E2E222C0A222E2E2D2D2D2C2D2D2D2C2D2D2D2E2E2E222C0A22
+      2E2E2D2D2D2D2D2D2D2D2D2D2D2E2E2E222C0A222E2E2E2D2D2D2D2D2D2D2D2D
+      2E2E2E2E222C0A222E2E2E2E2E2D2D2D2D2D2E2E2E2E2E2E222C0A222E2E2E2E
+      2D2D2D2D2D2D2D2E2E2E2E2E222C0A222E2E2E2D2D2D2D2E2D2D2D2D2E2E2E2E
+      222C0A222E2E2E2C2D2D2E2E2E2D2D2C2E2E2E2E222C0A222E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A22
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E227D0A9C0100002F2A2058504D202A2F0A7374617469632063686172
+      202A677261706869635B5D203D207B0A22313620313620332031222C0A222E20
+      63204E6F6E65222C0A222C20632023303030303030222C0A222D206320234646
+      46464646222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2C2C
+      2C2C2C2C2C2C2E2E2E2E2E2E222C0A222E2E2C2D2D2D2D2D2D2C2C2E2E2E2E2E
+      222C0A222E2E2C2D2D2D2D2D2D2C2D2C2E2E2E2E222C0A222E2E2C2D2D2D2D2D
+      2D2C2C2C2C2E2E2E222C0A222E2E2C2D2D2D2D2D2D2D2D2D2C2E2E2E222C0A22
+      2E2E2C2D2D2D2D2D2D2D2D2D2C2E2E2E222C0A222E2E2C2D2D2D2D2D2D2D2D2D
+      2C2E2E2E222C0A222E2E2C2D2D2D2D2D2D2D2D2D2C2E2E2E222C0A222E2E2C2D
+      2D2D2D2D2D2D2D2D2C2E2E2E222C0A222E2E2C2D2D2D2D2D2D2D2D2D2C2E2E2E
+      222C0A222E2E2C2D2D2D2D2D2D2D2D2D2C2E2E2E222C0A222E2E2C2D2D2D2D2D
+      2D2D2D2D2C2E2E2E222C0A222E2E2C2C2C2C2C2C2C2C2C2C2C2E2E2E222C0A22
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E227D0ABA0100002F2A2058504D202A2F0A7374617469632063686172
+      202A677261706869635B5D203D207B0A22313620313620352031222C0A222E20
+      63204E6F6E65222C0A222C20632023303030303030222C0A222D206320234646
+      46463030222C0A222A20632023464646464646222C0A22612063202338303830
+      3030222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E
+      2E2E2E2C2C2C2E2E2E2E222C0A222E2E2E2E2E2E2E2E2C2E2E2E2C2E2C2E222C
+      0A222E2E2E2E2E2E2E2E2E2E2E2E2E2C2C2E222C0A222E2C2C2C2E2E2E2E2E2E
+      2E2E2C2C2C2E222C0A222C2D2A2D2C2C2C2C2C2C2C2E2E2E2E2E222C0A222C2A
+      2D2A2D2A2D2A2D2A2C2E2E2E2E2E222C0A222C2D2A2D2A2D2A2D2A2D2C2E2E2E
+      2E2E222C0A222C2A2D2A2D2C2C2C2C2C2C2C2C2C2C2C222C0A222C2D2A2D2C61
+      61616161616161612C2E222C0A222C2A2D2C6161616161616161612C2E2E222C
+      0A222C2D2C6161616161616161612C2E2E2E222C0A222C2C6161616161616161
+      612C2E2E2E2E222C0A222C2C2C2C2C2C2C2C2C2C2C2E2E2E2E2E222C0A222E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E227D0AAB0100002F2A2058504D202A2F0A7374617469632063686172202A
+      677261706869635B5D203D207B0A22313620313620342031222C0A222E206320
+      4E6F6E65222C0A222C20632023303030303030222C0A222D2063202338303830
+      3030222C0A222A20632023433043304330222C0A222E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E222C0A222E2C2C2C2C2C2C2C2C2C2C2C2C2C2C2E222C0A222E2C2D
+      2C2A2A2A2A2A2A2A2A2C2A2C2E222C0A222E2C2D2C2A2A2A2A2A2A2A2A2C2C2C
+      2E222C0A222E2C2D2C2A2A2A2A2A2A2A2A2C2D2C2E222C0A222E2C2D2C2A2A2A
+      2A2A2A2A2A2C2D2C2E222C0A222E2C2D2C2A2A2A2A2A2A2A2A2C2D2C2E222C0A
+      222E2C2D2C2A2A2A2A2A2A2A2A2C2D2C2E222C0A222E2C2D2D2C2C2C2C2C2C2C
+      2C2D2D2C2E222C0A222E2C2D2D2D2D2D2D2D2D2D2D2D2D2C2E222C0A222E2C2D
+      2D2C2C2C2C2C2C2C2C2C2D2C2E222C0A222E2C2D2D2C2C2C2C2C2C2A2A2C2D2C
+      2E222C0A222E2C2D2D2C2C2C2C2C2C2A2A2C2D2C2E222C0A222E2C2D2D2C2C2C
+      2C2C2C2A2A2C2D2C2E222C0A222E2E2C2C2C2C2C2C2C2C2C2C2C2C2C2E222C0A
+      222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0AC90100002F2A2058504D202A
+      2F0A7374617469632063686172202A677261706869635B5D203D207B0A223136
+      20313620362031222C0A222E2063204E6F6E65222C0A222C2063202330303030
+      3030222C0A222D20632023464646464646222C0A222A20632023433043304330
+      222C0A226120632023383038303830222C0A226220632023464646463030222C
+      0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2C2C2C2C2C
+      2C2C2C2C2E2E222C0A222E2E2E2E2C2D2D2D2D2D2D2D2D2C2E2E222C0A222E2E
+      2E2E2C2D2C2C2C2C2C2D2C2E2E2E222C0A222E2E2E2C2D2D2D2D2D2D2D2D2C2E
+      2E2E222C0A222E2E2E2C2D2C2C2C2C2C2D2C2C2C2C2E222C0A222E2E2C2D2D2D
+      2D2D2D2D2D2C2A2C2A2C222C0A222E2C2C2C2C2C2C2C2C2C2C2A2C2A2C2C222C
+      0A222C2A2A2A2A2A2A2A2A2A2A2C2A2C2A2C222C0A222C2C2C2C2C2C2C2C2C2C
+      2C2C2C2A2A2C222C0A222C2A2A2A2A2A2A6161612A2A2C2A2C2E222C0A222C2A
+      2A2A2A2A2A6262622A2A2C2C2C2E222C0A222C2C2C2C2C2C2C2C2C2C2C2C2C2A
+      2C2E222C0A222E2C2A2A2A2A2A2A2A2A2A2C2A2C2E2E222C0A222E2E2C2C2C2C
+      2C2C2C2C2C2C2C2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D
+      0ABA0100002F2A2058504D202A2F0A7374617469632063686172202A67726170
+      6869635B5D203D207B0A22313620313620352031222C0A222E2063204E6F6E65
+      222C0A222C20632023303030303030222C0A222D20632023383038303830222C
+      0A222A20632023433043304330222C0A226120632023303046464646222C0A22
+      2E2E2E2C2E2E2E2E2E2E2E2C2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E222C0A222E2C2E2C2E2C2E2C2E2C2E2C2E2C2E2E222C0A222E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2C2E2E2E2E2E2E2E2C2E2E2E2E
+      222C0A222E2E2E2E2E2E2E2E2C2C2C2C2E2E2E2E222C0A222E2E2E2C2E2E2E2C
+      2D2A2A2D2C2E2E2E222C0A222E2E2E2E2E2E2C2D61612A2D2D2C2E2E222C0A22
+      2E2E2E2C2E2E2C2A612A2A2D2A2C2E2E222C0A222E2E2E2E2E2E2C2A2A2A2A2D
+      2A2C2E2E222C0A222E2E2E2C2E2E2C2D2A2A612D2D2C2E2E222C0A222E2E2E2E
+      2E2E2E2C2D2A2A2D2C2D2E2E222C0A222E2E2E2C2E2E2E2E2C2C2C2C2D2C2C2E
+      222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2C2C2C222C0A222E2C2E2C2E2C2E2C
+      2E2C2E2C2D2E2C2C222C0A222E2E2E2C2E2E2E2E2E2E2E2C2E2E2E2E227D0AD8
+      0100002F2A2058504D202A2F0A7374617469632063686172202A677261706869
+      635B5D203D207B0A22313620313620372031222C0A222E2063204E6F6E65222C
+      0A222C20632023383038303830222C0A222D20632023303030303030222C0A22
+      2A20632023433043304330222C0A226120632023303046464646222C0A226220
+      632023464646464646222C0A226320632023303030303830222C0A222E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2C2D2D2D2D2C2E2E2E2E2E2E
+      222C0A222E2E2E2D2D2A2A2A2A2D2D2E2E2E2E2E222C0A222E2E2D2C6162612A
+      2A2A2C2D2E2E2E2E222C0A222E2C2D61622A2D2D2A2A2A2D2C2E2E2E222C0A22
+      2E2D2A622A2A2D2D2A2A2A2A2D2E2E2E222C0A222E2D2A612D2D2D2D2D2D2A2A
+      2D2E2E2E222C0A222E2D2A2A2D2D2D2D2D2D2A2A2D2E2E2E222C0A222E2D2A2A
+      2A2A2D2D2A2A612A2D2E2E2E222C0A222E2C2D2A2A2A2D2D2A612A2D2C2E2E2E
+      222C0A222E2E2D2C2A2A2A2A612A2C2D2E2E2E2E222C0A222E2E2E2D2D2A2A2A
+      2A2D2D63632E2E2E222C0A222E2E2E2E2C2D2D2D2D2C2E6363632E2E222C0A22
+      2E2E2E2E2E2E2E2E2E2E2E2E6363632E222C0A222E2E2E2E2E2E2E2E2E2E2E2E
+      2E636363222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E6363227D0AD80100002F
+      2A2058504D202A2F0A7374617469632063686172202A677261706869635B5D20
+      3D207B0A22313620313620372031222C0A222E2063204E6F6E65222C0A222C20
+      632023383038303830222C0A222D20632023303030303030222C0A222A206320
+      23433043304330222C0A226120632023303046464646222C0A22622063202346
+      4646464646222C0A226320632023303030303830222C0A222E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E222C0A222E2E2E2E2C2D2D2D2D2C2E2E2E2E2E2E222C0A22
+      2E2E2E2D2D2A2A2A2A2D2D2E2E2E2E2E222C0A222E2E2D2C6162612A2A2A2C2D
+      2E2E2E2E222C0A222E2C2D61622A2A2A2A2A2A2D2C2E2E2E222C0A222E2D2A62
+      2A2A2A2A2A2A2A2A2D2E2E2E222C0A222E2D2A612D2D2D2D2D2D2A2A2D2E2E2E
+      222C0A222E2D2A2A2D2D2D2D2D2D2A2A2D2E2E2E222C0A222E2D2A2A2A2A2A2A
+      2A2A612A2D2E2E2E222C0A222E2C2D2A2A2A2A2A2A612A2D2C2E2E2E222C0A22
+      2E2E2D2C2A2A2A2A612A2C2D2E2E2E2E222C0A222E2E2E2D2D2A2A2A2A2D2D63
+      632E2E2E222C0A222E2E2E2E2C2D2D2D2D2C2E6363632E2E222C0A222E2E2E2E
+      2E2E2E2E2E2E2E2E6363632E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E636363
+      222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E6363227D0A9C0100002F2A205850
+      4D202A2F0A7374617469632063686172202A677261706869635B5D203D207B0A
+      22313620313620332031222C0A222E2063204E6F6E65222C0A222C2063202330
+      3030303830222C0A222D20632023303030303030222C0A222E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E222C0A222E2C2C2C2E2E2E2E2E2E2E2E2C2C2C2E222C0A22
+      2E2C2C2E2E2E2E2E2E2E2E2E2E2C2C2E222C0A222E2C2E2C2E2E2E2E2E2E2E2E
+      2C2E2C2E222C0A222E2E2E2E2C2E2E2E2E2E2E2C2E2E2E2E222C0A222E2E2E2E
+      2E2D2D2D2D2D2D2E2E2E2E2E222C0A222E2E2E2E2E2D2D2D2D2D2D2E2E2E2E2E
+      222C0A222E2E2E2E2E2D2D2D2D2D2D2E2E2E2E2E222C0A222E2E2E2E2E2D2D2D
+      2D2D2D2E2E2E2E2E222C0A222E2E2E2E2E2D2D2D2D2D2D2E2E2E2E2E222C0A22
+      2E2E2E2E2C2E2E2E2E2E2E2C2E2E2E2E222C0A222E2C2E2C2E2E2E2E2E2E2E2E
+      2C2E2C2E222C0A222E2C2C2E2E2E2E2E2E2E2E2E2E2C2C2E222C0A222E2C2C2C
+      2E2E2E2E2E2E2E2E2C2C2C2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0AAB0100002F2A205850
+      4D202A2F0A7374617469632063686172202A677261706869635B5D203D207B0A
+      22313620313620342031222C0A222E2063204E6F6E65222C0A222C2063202330
+      3030303030222C0A222D20632023464646464646222C0A222A20632023303030
+      303830222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E
+      2E2E2C2C2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2C2C2D2C2C2E2E2E2E2E22
+      2C0A222E2E2E2E2E2C2D2C2D2C2D2C2E2E2E2E222C0A222E2E2E2E2E2C2D2C2D
+      2C2D2C2C2E2E2E222C0A222E2E2E2E2E2C2D2C2D2C2D2C2D2C2E2E222C0A222E
+      2E2E2E2E2C2D2C2D2C2D2C2D2C2E2E222C0A222E2C2C2C2E2C2D2C2D2C2D2C2D
+      2C2E2E222C0A222E2C2D2D2C2C2D2C2D2C2D2C2D2C2E2E222C0A222E2E2C2D2D
+      2C2D2D2D2D2D2D2D2C2E2E222C0A222E2E2E2C2D2D2D2D2D2D2D2D2D2C2E2E22
+      2C0A222E2E2E2C2D2D2D2D2D2D2D2D2D2C2E2E222C0A222E2E2E2E2C2D2D2D2D
+      2D2D2D2D2C2E2E222C0A222E2E2E2E2E2C2D2D2D2D2D2D2C2E2E2E222C0A222E
+      2E2E2E2E2A2A2A2A2A2A2A2A2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E227D0A9C0100002F2A2058504D202A2F0A737461746963206368617220
+      2A677261706869635B5D203D207B0A22313620313620332031222C0A222E2063
+      204E6F6E65222C0A222C20632023303030303030222C0A222D20632023464646
+      464646222C0A222E2E2E2E2C2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2C
+      2C2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2C2D2C2E2E2E2E2E2E2E2E2E22
+      2C0A222E2E2E2E2C2D2D2C2E2E2E2E2E2E2E2E222C0A222E2E2E2E2C2D2D2D2C
+      2E2E2E2E2E2E2E222C0A222E2E2E2E2C2D2D2D2D2C2E2E2E2E2E2E222C0A222E
+      2E2E2E2C2D2D2D2D2D2C2E2E2E2E2E222C0A222E2E2E2E2C2D2D2D2D2D2D2C2E
+      2E2E2E222C0A222E2E2E2E2C2D2D2D2D2C2C2C2C2E2E2E222C0A222E2E2E2E2C
+      2D2D2C2D2C2E2E2E2E2E2E222C0A222E2E2E2E2C2D2C2C2D2D2C2E2E2E2E2E22
+      2C0A222E2E2E2E2C2C2E2E2C2D2C2E2E2E2E2E222C0A222E2E2E2E2C2E2E2E2C
+      2D2D2C2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2C2D2C2E2E2E2E222C0A222E
+      2E2E2E2E2E2E2E2E2C2C2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E227D0ABA0100002F2A2058504D202A2F0A737461746963206368617220
+      2A677261706869635B5D203D207B0A22313620313620352031222C0A222E2063
+      204E6F6E65222C0A222C20632023303030303030222C0A222D20632023383038
+      303030222C0A222A20632023433043304330222C0A2261206320233830383038
+      30222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2C2C2C2C2C2C
+      2C2C2C2C2C2E2E2E2E222C0A222E2C2D2C2A2A2A2A2A2C2A2C2E2E2E2E222C0A
+      222E2C2D2C2A2A2A2A2A2C2C2C2E2E2E2E222C0A222E2C2D2C2A2A2A2A2A2C2D
+      2C2E2E2E2E222C0A222E2C2D2C2A2A2A2A2A2C2D2C2E2E2E2E222C0A222E2C2D
+      2D2C2C2C2C2C2D2D2C2E2E2E2E222C0A222E2C2D2D2D2D2D2D2D2D2D2C2E2E2E
+      2E222C0A222E2C2D2D2C2C2C2C2C2C2D2C2E2E2E2E222C0A222E2C2D2D2C2C2C
+      2C2A2C2D2C2E2E2E2E222C0A222E2C2D2D2C2C2C2C2A2C2D2C2E2E2E2E222C0A
+      222E2E2C2C2C2C2C2C2C2C2C2C2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E222C0A222E2E2E2E2E2C2C2E2C2C2E2C2C2E2E2E222C0A222E2E2E
+      2E2E612C2E612C2E612C2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E227D0A8D0100002F2A2058504D202A2F0A7374617469632063686172202A67
+      7261706869635B5D203D207B0A22313620313620322031222C0A222E2063204E
+      6F6E65222C0A222C20632023303030303030222C0A222E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E
+      2C2C2E2E2E2E2E2E2E2E2E2C2C2E222C0A222E2E2C2C2C2C2E2E2E2E2E2E2C2C
+      2E2E222C0A222E2E2E2C2C2C2C2E2E2E2E2C2C2E2E2E222C0A222E2E2E2E2E2C
+      2C2C2E2E2C2E2E2E2E2E222C0A222E2E2E2E2E2E2C2C2C2C2C2E2E2E2E2E222C
+      0A222E2E2E2E2E2E2E2C2C2C2E2E2E2E2E2E222C0A222E2E2E2E2E2E2C2C2C2C
+      2C2E2E2E2E2E222C0A222E2E2E2E2E2C2C2C2E2E2C2C2E2E2E2E222C0A222E2E
+      2E2E2C2C2C2E2E2E2E2C2C2E2E2E222C0A222E2E2E2C2C2C2E2E2E2E2E2E2C2E
+      2E2E222C0A222E2E2E2C2C2C2E2E2E2E2E2E2E2C2E2E222C0A222E2E2E2E2C2E
+      2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2C2E222C
+      0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0ABA0100002F2A2058504D20
+      2A2F0A7374617469632063686172202A677261706869635B5D203D207B0A2231
+      3620313620352031222C0A222E2063204E6F6E65222C0A222C20632023303030
+      303030222C0A222D20632023464646463030222C0A222A206320234646464646
+      46222C0A226120632023383038303830222C0A222E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2C2C2C
+      2C2C2C2C2C2C2C2C2E2E2E2E222C0A222E2C2D2A2D2A2D2A2D2A2D2C2E2E2E2E
+      222C0A222E2C2A2D2A2D2A2D2A2D2A2C2E2E2E2E222C0A222E2C2D2A2D2A2D2A
+      2D2A2D2C2E2E2E2E222C0A222E2C2A2D2A2D2A2D2A2D2A2C2E2E2E2E222C0A22
+      2E2C2D2A2D2A2D2A2D2A2D2C2C2C2C2E222C0A222E2C2A2D2A2D2A2D2A2D2A2C
+      61612C2E222C0A222E2C2D2A2D2A2D2A2D2A2D2C61612C2E222C0A222E2C2A2D
+      2A2D2A2D2A2D2A2C61612C2E222C0A222E2C2C2C2C2C2C2C2C2C2C2C61612C2E
+      222C0A222E2E2E2E2E2E2C616161616161612C2E222C0A222E2E2E2E2E2E2C61
+      6161616161612C2E222C0A222E2E2E2E2E2E2C2C2C2C2C2C2C2C2C2E222C0A22
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0ABA0100002F2A2058504D202A2F
+      0A7374617469632063686172202A677261706869635B5D203D207B0A22313620
+      313620352031222C0A222E2063204E6F6E65222C0A222C206320233030303030
+      30222C0A222D20632023464646463030222C0A222A2063202346464646464622
+      2C0A226120632023383038303830222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E222C0A222E2C2C2C2C2C2C2C2C2C2C2C2E2E2E2E222C0A222E2C2D2A2D2A
+      2D2A2D2A2D2C2E2E2E2E222C0A222E2C2A2D2A2D2A2D2A2D2A2C2E2E2E2E222C
+      0A222E2C2D2A2D2A2D2A2D2A2D2C2E2E2E2E222C0A222E2C2A2D2A2D2A2D2A2D
+      2A2C2E2E2E2E222C0A222E2C2D2A2D2A2C2C2C2C2C2C2C2C2C2E222C0A222E2C
+      2A2D2A2D2C616161616161612C2E222C0A222E2C2D2A2D2A2C61616161616161
+      2C2E222C0A222E2C2A2D2A2D2C616161616161612C2E222C0A222E2C2C2C2C2C
+      2C616161616161612C2E222C0A222E2E2E2E2E2E2C616161616161612C2E222C
+      0A222E2E2E2E2E2E2C616161616161612C2E222C0A222E2E2E2E2E2E2C2C2C2C
+      2C2C2C2C2C2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0ABA0100002F2A2058504D202A2F0A73
+      74617469632063686172202A677261706869635B5D203D207B0A223136203136
+      20352031222C0A222E2063204E6F6E65222C0A222C2063202330303030303022
+      2C0A222D20632023383038303830222C0A222A20632023464646463030222C0A
+      226120632023464646464646222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      222C0A222C2C2C2C2C2C2C2E2E2E2E2E2E2E2E2E222C0A222C2D2D2D2D2D2C2E
+      2E2E2E2E2E2E2E2E222C0A222C2D2D2C2C2C2C2C2C2C2C2C2E2E2E2E222C0A22
+      2C2D2D2C2A612A612A612A2C2E2E2E2E222C0A222C2D2D2C612A612A612A612C
+      2E2E2E2E222C0A222C2D2D2C2A612A612A612A2C2E2E2E2E222C0A222C2C2C2C
+      612A612A612A612C2E2E2E2E222C0A222E2E2E2C2A612A612A612A2C2C2C2C2E
+      222C0A222E2E2E2C612A612A612A612C2D2D2C2E222C0A222E2E2E2C2A612A61
+      2A612A2C2D2D2C2E222C0A222E2E2E2C2C2C2C2C2C2C2C2C2D2D2C2E222C0A22
+      2E2E2E2E2E2E2E2E2C2D2D2D2D2D2C2E222C0A222E2E2E2E2E2E2E2E2C2D2D2D
+      2D2D2C2E222C0A222E2E2E2E2E2E2E2E2C2C2C2C2C2C2C2E222C0A222E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E227D0ABA0100002F2A2058504D202A2F0A737461
+      7469632063686172202A677261706869635B5D203D207B0A2231362031362035
+      2031222C0A222E2063204E6F6E65222C0A222C20632023303030303030222C0A
+      222D20632023383038303830222C0A222A20632023464646464646222C0A2261
+      20632023464646463030222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C
+      0A222C2C2C2C2C2C2C2E2E2E2E2E2E2E2E2E222C0A222C2D2D2D2D2D2C2E2E2E
+      2E2E2E2E2E2E222C0A222C2D2D2D2D2D2C2C2C2C2C2C2E2E2E2E222C0A222C2D
+      2D2D2D2D2C2A612A612C2E2E2E2E222C0A222C2D2D2D2D2D2C612A612A2C2E2E
+      2E2E222C0A222C2D2D2D2D2D2C2A612A612C2E2E2E2E222C0A222C2C2C2C2C2C
+      2C612A612A2C2E2E2E2E222C0A222E2E2E2C612A612A2C2C2C2C2C2C2C2E222C
+      0A222E2E2E2C2A612A612C2D2D2D2D2D2C2E222C0A222E2E2E2C612A612A2C2D
+      2D2D2D2D2C2E222C0A222E2E2E2C2C2C2C2C2C2D2D2D2D2D2C2E222C0A222E2E
+      2E2E2E2E2E2E2C2D2D2D2D2D2C2E222C0A222E2E2E2E2E2E2E2E2C2D2D2D2D2D
+      2C2E222C0A222E2E2E2E2E2E2E2E2C2C2C2C2C2C2C2E222C0A222E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E227D0AAB0100002F2A2058504D202A2F0A7374617469
+      632063686172202A677261706869635B5D203D207B0A22313620313620342031
+      222C0A222E2063204E6F6E65222C0A222C20632023303030303030222C0A222D
+      20632023433043304330222C0A222A20632023383030303830222C0A222E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E222C0A222E2E2E2E2E2E2C2E2E2C2E2E2E2E2E2E222C0A222E2E2E2E2E2C2C
+      2E2E2C2C2E2E2E2E2E222C0A222E2E2E2E2E2C2C2E2E2C2C2E2E2E2E2E222C0A
+      222E2E2E2E2C2D2C2E2E2C2A2C2E2E2E2E222C0A222E2E2E2E2C2D2C2E2E2C2A
+      2C2E2E2E2E222C0A222E2E2E2C2D2D2C2E2E2C2A2A2C2E2E2E222C0A222E2E2E
+      2C2D2D2C2E2E2C2A2A2C2E2E2E222C0A222E2E2C2D2D2D2C2E2E2C2A2A2A2C2E
+      2E222C0A222E2E2C2D2D2D2C2E2E2C2A2A2A2C2E2E222C0A222E2C2D2D2D2D2C
+      2E2E2C2A2A2A2A2C2E222C0A222E2C2C2C2C2C2C2E2E2C2C2C2C2C2C2E222C0A
+      222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0AAB010000
+      2F2A2058504D202A2F0A7374617469632063686172202A677261706869635B5D
+      203D207B0A22313620313620342031222C0A222E2063204E6F6E65222C0A222C
+      20632023303030303030222C0A222D20632023433043304330222C0A222A2063
+      2023383030303830222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A22
+      2E2E2E2E2E2E2E2E2E2E2E2C2C2E2E2E222C0A222E2E2E2E2E2E2E2E2E2C2C2D
+      2C2E2E2E222C0A222E2E2E2E2E2E2E2C2C2D2D2D2C2E2E2E222C0A222E2E2E2E
+      2E2C2C2D2D2D2D2D2C2E2E2E222C0A222E2E2E2C2C2D2D2D2D2D2D2D2C2E2E2E
+      222C0A222E2E2C2C2C2C2C2C2C2C2C2C2C2E2E2E222C0A222E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A22
+      2E2E2C2C2C2C2C2C2C2C2C2C2C2E2E2E222C0A222E2E2E2C2C2A2A2A2A2A2A2A
+      2C2E2E2E222C0A222E2E2E2E2E2C2C2A2A2A2A2A2C2E2E2E222C0A222E2E2E2E
+      2E2E2E2C2C2A2A2A2C2E2E2E222C0A222E2E2E2E2E2E2E2E2E2C2C2A2C2E2E2E
+      222C0A222E2E2E2E2E2E2E2E2E2E2E2C2C2E2E2E222C0A222E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E227D0ABA0100002F2A2058504D202A2F0A73746174696320
+      63686172202A677261706869635B5D203D207B0A22313620313620352031222C
+      0A222E2063204E6F6E65222C0A222C20632023303030303830222C0A222D2063
+      2023303030303030222C0A222A20632023383030303830222C0A226120632023
+      433043304330222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E
+      2E2E2E2C2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2C2C2E2E2E2E2E2E2E
+      2E2E222C0A222E2E2E2C2C2C2C2C2E2E2D2E2E2E2E2E222C0A222E2E2C2E2E2C
+      2C2E2E2E2D2D2E2E2E2E222C0A222E2C2E2E2E2C2E2E2E2E2D2D2E2E2E2E222C
+      0A222E2C2E2E2E2E2E2E2E2E2D2A2D2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E
+      2D2A2D2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2D2A2A2D2E2E222C0A222E2E
+      2E2E2E2E2E2D2D2E2D2A2A2D2E2E222C0A222E2E2E2E2E2D2D612D2E2D2A2A2A
+      2D2E222C0A222E2E2E2D2D6161612D2E2D2A2A2A2D2E222C0A222E2D2D616161
+      61612D2E2D2A2A2A2A2D222C0A222D2D2D2D2D2D2D2D2D2E2D2D2D2D2D2D222C
+      0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E227D0ABA0100002F2A2058504D202A2F0A737461746963206368
+      6172202A677261706869635B5D203D207B0A22313620313620352031222C0A22
+      2E2063204E6F6E65222C0A222C20632023303030303830222C0A222D20632023
+      303030303030222C0A222A20632023383030303830222C0A2261206320234330
+      43304330222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E
+      2E2E2E2E2E2E2C2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2C2C2E2E2E2E2E
+      222C0A222E2E2E2E2E2D2E2E2C2C2C2C2C2E2E2E222C0A222E2E2E2E2D2D2E2E
+      2E2C2C2E2E2C2E2E222C0A222E2E2E2E2D2D2E2E2E2E2C2E2E2E2C2E222C0A22
+      2E2E2E2D2A2D2E2E2E2E2E2E2E2E2C2E222C0A222E2E2E2D2A2D2E2E2E2E2E2E
+      2E2E2E2E222C0A222E2E2D2A2A2D2E2E2E2E2E2E2E2E2E2E222C0A222E2E2D2A
+      2A2D2E2D2D2E2E2E2E2E2E2E222C0A222E2D2A2A2A2D2E2D612D2D2E2E2E2E2E
+      222C0A222E2D2A2A2A2D2E2D6161612D2D2E2E2E222C0A222D2A2A2A2A2D2E2D
+      61616161612D2D2E222C0A222D2D2D2D2D2D2E2D2D2D2D2D2D2D2D2D222C0A22
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E227D0A9C0100002F2A2058504D202A2F0A7374617469632063686172
+      202A677261706869635B5D203D207B0A22313620313620332031222C0A222E20
+      63204E6F6E65222C0A222C20632023383038303830222C0A222D206320233030
+      30303830222C0A222E2E2E2E2E2E2C2D2D2C2E2E2E2E2E2E222C0A222E2E2E2E
+      2E2C2D2C2C2D2C2E2E2E2E2E222C0A222E2E2E2E2E2D2E2E2E2C2D2E2E2E2E2E
+      222C0A222E2E2E2E2C2D2E2E2E2E2D2D2D2E2E2E222C0A222E2E2E2E2D2E2E2E
+      2E2D2D2D2D2E2E2E222C0A222E2E2E2C2D2E2E2E2E2E2D2D2D2E2E2E222C0A22
+      2E2E2E2C2D2E2E2E2E2E2E2D2D2E2E2E222C0A222E2E2E2C2D2E2E2E2E2E2E2E
+      2E2E2E2E222C0A222E2E2E2C2D2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2C
+      2D2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2C2D2E2E2E2E2E2E2E2E2E2E2E
+      222C0A222E2E2E2E2D2E2E2E2E2E2E2C2E2E2E2E222C0A222E2E2E2E2C2D2E2E
+      2E2E2D2C2E2E2E2E222C0A222E2E2E2E2E2D2E2E2E2E2D2E2E2E2E2E222C0A22
+      2E2E2E2E2E2C2D2C2C2D2C2E2E2E2E2E222C0A222E2E2E2E2E2E2C2D2D2C2E2E
+      2E2E2E2E227D0A9C0100002F2A2058504D202A2F0A7374617469632063686172
+      202A677261706869635B5D203D207B0A22313620313620332031222C0A222E20
+      63204E6F6E65222C0A222C20632023303030303030222C0A222D206320233830
+      38303830222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E
+      2E2E2E2E2C2C2C2E2E2E2E2E222C0A222E2E2E2E2E2E2C2C2E2E2C2E2E2E2E2E
+      222C0A222E2E2E2E2E2C2E2E2E2E2C2E2E2E2E2E222C0A222E2E2E2E2C2E2E2E
+      2E2E2E2C2E2E2E2E222C0A222E2E2E2C2E2E2E2E2E2E2E2C2E2E2E2E222C0A22
+      2E2E2C2E2E2E2E2E2E2E2E2C2E2E2E2E222C0A222E2E2C2E2E2E2E2E2E2E2E2E
+      2C2E2E2E222C0A222E2C2E2E2E2E2E2E2E2E2E2E2C2E2E2E222C0A222E2C2E2E
+      2E2E2E2E2E2E2E2E2C2E2E2E222C0A222E2C2C2C2E2E2E2E2E2E2E2E2E2C2E2E
+      222C0A222E2E2E2E2C2C2C2E2E2E2E2E2E2C2E2E222C0A222E2E2E2E2E2E2E2C
+      2C2C2E2E2E2C2E2E222C0A222E2E2E2E2E2E2E2E2E2E2C2C2C2C2D2E222C0A22
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2D2C2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E227D0A8D0100002F2A2058504D202A2F0A7374617469632063686172
+      202A677261706869635B5D203D207B0A22313620313620322031222C0A222E20
+      63204E6F6E65222C0A222C20632023303030303030222C0A222E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2C2C2C2C2E2E2E2E222C0A
+      222E2E2E2E2E2E2C2C2E2E2E2E2C2C2E2E222C0A222E2E2E2E2C2C2E2E2E2E2E
+      2E2E2E2C2E222C0A222E2E2E2C2E2E2E2E2E2E2E2E2E2C2E2E222C0A222E2E2E
+      2C2E2E2E2E2E2E2E2E2C2E2E2E222C0A222E2E2C2E2E2E2E2E2E2E2E2C2E2E2E
+      2E222C0A222E2E2C2E2E2E2E2E2E2E2C2E2E2E2E2E222C0A222E2C2E2E2E2E2E
+      2E2E2C2E2E2E2E2E2E222C0A222E2C2E2E2E2E2E2E2C2E2E2E2E2E2E2E222C0A
+      222E2C2E2E2E2E2E2C2E2E2E2E2E2E2E2E222C0A222E2C2E2E2E2E2C2E2E2E2E
+      2E2E2E2E2E222C0A222E2E2C2E2E2C2E2E2E2E2E2E2E2E2E2E222C0A222E2E2C
+      2E2C2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2C2E2E2E2E2E2E2E2E2E2E2E
+      2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0AAB0100002F2A2058
+      504D202A2F0A7374617469632063686172202A677261706869635B5D203D207B
+      0A22313620313620342031222C0A222E2063204E6F6E65222C0A222C20632023
+      303030303030222C0A222D20632023464646464646222C0A222A206320233830
+      38303830222C0A222E2E2E2C2E2E2E2E2E2E2E2C2E2E2E2E222C0A222E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2C2E2C2E2C2E2C2E2C2E2C2E2C2E2E
+      222C0A222E2E2E2E2E2E2E2C2C2E2E2E2E2E2E2E222C0A222E2E2E2C2E2E2E2C
+      2D2C2E2C2E2E2E2E222C0A222E2E2E2E2E2E2E2C2D2D2C2E2E2E2E2E222C0A22
+      2E2E2E2C2E2E2E2C2D2D2D2C2E2E2E2E222C0A222E2E2E2E2E2E2E2C2D2D2D2D
+      2C2E2E2E222C0A222E2E2E2C2E2E2E2C2D2D2D2C2C2C2E2E222C0A222E2E2E2E
+      2E2E2E2C2D2C2D2C2E2E2E2E222C0A222E2E2E2C2E2E2E2C2C2C2D2D2C2E2E2E
+      222C0A222E2E2E2E2E2E2E2C2E2E2C2D2C2E2E2E222C0A222E2E2E2C2E2E2E2E
+      2E2E2C2D2C2A2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2C2E2E2E2E222C0A22
+      2E2C2E2C2E2C2E2C2E2C2E2A2E2C2E2E222C0A222E2E2E2C2E2E2E2E2E2E2E2C
+      2E2E2E2E227D0A9C0100002F2A2058504D202A2F0A7374617469632063686172
+      202A677261706869635B5D203D207B0A22313620313620332031222C0A222E20
+      63204E6F6E65222C0A222C20632023303030303030222C0A222D206320233030
+      30303830222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E
+      2E2C2E2E2E2C2E2E2E2E2E2E222C0A222E2E2E2E2E2C2E2E2E2C2E2E2E2E2E2E
+      222C0A222E2E2E2E2E2C2E2E2E2C2E2E2E2E2E2E222C0A222E2E2E2E2E2C2C2E
+      2C2C2E2E2E2E2E2E222C0A222E2E2E2E2E2E2C2E2C2E2E2E2E2E2E2E222C0A22
+      2E2E2E2E2E2E2C2C2C2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2C2E2E2E2E
+      2E2E2E2E222C0A222E2E2E2E2E2E2D2C2D2E2E2E2E2E2E2E222C0A222E2E2E2E
+      2E2E2D2E2D2D2D2E2E2E2E2E222C0A222E2E2E2E2D2D2D2E2D2E2E2D2E2E2E2E
+      222C0A222E2E2E2D2E2E2D2E2D2E2E2D2E2E2E2E222C0A222E2E2E2D2E2E2D2E
+      2D2E2E2D2E2E2E2E222C0A222E2E2E2D2E2E2D2E2E2D2D2E2E2E2E2E222C0A22
+      2E2E2E2E2D2D2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E227D0AAB0100002F2A2058504D202A2F0A7374617469632063686172
+      202A677261706869635B5D203D207B0A22313620313620342031222C0A222E20
+      63204E6F6E65222C0A222C20632023303030303030222C0A222D206320234646
+      46464646222C0A222A20632023303030303830222C0A222E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E222C0A222C2C2C2C2C2C2E2E2E2E2E2E2E2E2E2E222C0A222C
+      2D2D2D2D2C2C2E2E2E2E2E2E2E2E2E222C0A222C2D2D2D2D2C2D2C2E2E2E2E2E
+      2E2E2E222C0A222C2D2C2C2D2C2A2A2A2A2A2A2E2E2E2E222C0A222C2D2D2D2D
+      2D2A2D2D2D2D2A2A2E2E2E222C0A222C2D2C2C2C2C2A2D2D2D2D2A2D2A2E2E22
+      2C0A222C2D2D2D2D2D2A2D2C2C2D2A2A2A2A2E222C0A222C2D2C2C2C2C2A2D2D
+      2D2D2D2D2D2A2E222C0A222C2D2D2D2D2D2A2D2C2C2C2C2C2D2A2E222C0A222C
+      2C2C2C2C2C2A2D2D2D2D2D2D2D2A2E222C0A222E2E2E2E2E2E2A2D2C2C2C2C2C
+      2D2A2E222C0A222E2E2E2E2E2E2A2D2D2D2D2D2D2D2A2E222C0A222E2E2E2E2E
+      2E2A2A2A2A2A2A2A2A2A2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E22
+      2C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0AD80100002F2A2058504D
+      202A2F0A7374617469632063686172202A677261706869635B5D203D207B0A22
+      313620313620372031222C0A222E2063204E6F6E65222C0A222C206320233030
+      30303030222C0A222D20632023464646463030222C0A222A2063202338303830
+      3030222C0A226120632023383038303830222C0A226220632023303030303830
+      222C0A226320632023464646464646222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E222C0A222E2E2E2E2E2C2C2C2C2E2E2E2E2E2E2E222C0A222E2C2C2C2C
+      2C2D2D2C2C2C2C2C2E2E2E222C0A222C2A612A2C2D2C2C2D2C612A612C2E2E22
+      2C0A222C61612C2E2E2E2E2E2E2C612A2C2E2E222C0A222C2A612C2C2C2C2C2C
+      2C2C61612C2E2E222C0A222C612A612A612A612A612A612A2C2E2E222C0A222C
+      2A612A612A626262626262622C2E2E222C0A222C612A612A6162636363636362
+      622E2E222C0A222C2A612A612A6263636363636263622E222C0A222C612A612A
+      6162636262626362626262222C0A222C2A612A612A6263636363636363636222
+      2C0A222C612A612A6162636262626262626362222C0A222E2C2C2C2C2C626363
+      63636363636362222C0A222E2E2E2E2E2E62626262626262626262222C0A222E
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0AF60100002F2A2058504D202A2F0A
+      7374617469632063686172202A677261706869635B5D203D207B0A2231362031
+      3620392031222C0A222E2063204E6F6E65222C0A222C20632023303030303030
+      222C0A222D20632023433043304330222C0A222A20632023464646464646222C
+      0A226120632023303030303830222C0A226220632023383038303830222C0A22
+      6320632023383030303830222C0A226420632023303030304646222C0A226520
+      632023464630303030222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A
+      222E2C2C2C2C2C2C2C2C2C2C2E2E2E2E2E222C0A222E2C2D2A2D2A2D2A2D2A2C
+      2E2E2E2E2E222C0A222E2C2A2D2A616261622D2C2E2E2E2E2E222C0A222E2C2D
+      2A63636162612A2C2E2E2E2E2E222C0A222E2C2A63622C2C2C2C2C2C2C2C2C2C
+      2E222C0A222E2C2D62632C2A2D2A2D2A2D2A2D2C2E222C0A222E2C2A63622C2D
+      2A2D646464642A2C2E222C0A222E2C2D2A632C2A2D65656464642D2C2E222C0A
+      222E2C2A2D2A2C2D6565656564642A2C2E222C0A222E2C2C2C2C2C2A65656565
+      64642D2C2E222C0A222E2E2E2E2E2C2D656565652A2D2A2C2E222C0A222E2E2E
+      2E2E2C2A2D65652A2D2A2D2C2E222C0A222E2E2E2E2E2C2D2A2D2A2D2A2D2A2C
+      2E222C0A222E2E2E2E2E2C2C2C2C2C2C2C2C2C2C2E222C0A222E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E227D0ABA0100002F2A2058504D202A2F0A737461746963
+      2063686172202A677261706869635B5D203D207B0A2231362031362035203122
+      2C0A222E2063204E6F6E65222C0A222C20632023303030303030222C0A222D20
+      632023464646464646222C0A222A20632023303030303830222C0A2261206320
+      23383038303830222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E
+      2E2E2C2C2C2C2C2C2C2C2C2E2E2E2E222C0A222E2E2E2C2D2D2D2D2D2D2D2C2E
+      2E2E2E222C0A222E2E2E2C2D2D2D2A2D2D2D2C2E2E2E2E222C0A222E2E2E2C2D
+      2D2A2A2A2D2D2C2E2E2E2E222C0A222E2E2E2C2D2A2A2A2A2A2D2C2E2E2E2E22
+      2C0A222E2E2E2C2D2D2D2A2D2D2D2C2E2E2E2E222C0A222E2E2E2C2D2D2D2A2D
+      2D2D2C2E2E2E2E222C0A222E2E2E2C2D2D2D2A2D2D2D2C2E2E2E2E222C0A222E
+      2E2E2C2C2C2C2A612C2C2C2E2E2E2E222C0A222E2E2E2E2E2E2E2A2E2E2E2E2E
+      2E2E2E222C0A222E2E2E2C2E2E2E2A2E2E2E2C2E2E2E2E222C0A222E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2C2E2C2E2C2E2C2E2C2E2E2E2E22
+      2C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E227D0ABA0100002F2A2058504D202A2F0A7374617469632063
+      686172202A677261706869635B5D203D207B0A22313620313620352031222C0A
+      222E2063204E6F6E65222C0A222C20632023303030303030222C0A222D206320
+      23464646464646222C0A222A20632023303030303830222C0A22612063202338
+      3038303830222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E222C0A222E2E2C2C2C2C2C2C2C2C2C2E2C2E2C2E222C0A222E2E2C2D2D2D2D
+      2D2D2D2C2E2E2E2E2E222C0A222E2E2C2D2D2D2A2D2D2D2C2E2E2E2C2E222C0A
+      222E2E2C2D2D2A2A2D2D2D2C2E2E2E2E2E222C0A222E2E2C2D2A2A2A2A2A2A2A
+      2A2A2E2C2E222C0A222E2E2C2D2D2A2A2D2D2D612E2E2E2E2E222C0A222E2E2C
+      2D2D2D2A2D2D2D2C2E2E2E2C2E222C0A222E2E2C2D2D2D2D2D2D2D2C2E2E2E2E
+      2E222C0A222E2E2C2C2C2C2C2C2C2C2C2E2C2E2C2E222C0A222E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A
+      222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E227D0ABA0100002F2A2058504D202A2F0A73746174696320636861
+      72202A677261706869635B5D203D207B0A22313620313620352031222C0A222E
+      2063204E6F6E65222C0A222C20632023303030303030222C0A222D2063202346
+      4646464646222C0A222A20632023303030303830222C0A226120632023383038
+      303830222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E22
+      2C0A222E2C2E2C2E2C2C2C2C2C2C2C2C2C2E2E222C0A222E2E2E2E2E2C2D2D2D
+      2D2D2D2D2C2E2E222C0A222E2C2E2E2E2C2D2D2D2A2D2D2D2C2E2E222C0A222E
+      2E2E2E2E2C2D2D2D2A2A2D2D2C2E2E222C0A222E2C2E2A2A2A2A2A2A2A2A2A2D
+      2C2E2E222C0A222E2E2E2E2E612D2D2D2A2A2D2D2C2E2E222C0A222E2C2E2E2E
+      2C2D2D2D2A2D2D2D2C2E2E222C0A222E2E2E2E2E2C2D2D2D2D2D2D2D2C2E2E22
+      2C0A222E2C2E2C2E2C2C2C2C2C2C2C2C2C2E2E222C0A222E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E227D0ABA0100002F2A2058504D202A2F0A737461746963206368617220
+      2A677261706869635B5D203D207B0A22313620313620352031222C0A222E2063
+      204E6F6E65222C0A222C20632023303030303030222C0A222D20632023303030
+      303830222C0A222A20632023383038303830222C0A2261206320234646464646
+      46222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2C2E2C2E
+      2C2E2C2E2C2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A
+      222E2E2E2C2E2E2E2D2E2E2E2C2E2E2E2E222C0A222E2E2E2E2E2E2E2D2E2E2E
+      2E2E2E2E2E222C0A222E2E2E2C2C2C2C2D2A2C2C2C2E2E2E2E222C0A222E2E2E
+      2C6161612D6161612C2E2E2E2E222C0A222E2E2E2C6161612D6161612C2E2E2E
+      2E222C0A222E2E2E2C6161612D6161612C2E2E2E2E222C0A222E2E2E2C612D2D
+      2D2D2D612C2E2E2E2E222C0A222E2E2E2C61612D2D2D61612C2E2E2E2E222C0A
+      222E2E2E2C6161612D6161612C2E2E2E2E222C0A222E2E2E2C61616161616161
+      2C2E2E2E2E222C0A222E2E2E2C2C2C2C2C2C2C2C2C2E2E2E2E222C0A222E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E227D0A9C0100002F2A2058504D202A2F0A7374617469632063686172202A67
+      7261706869635B5D203D207B0A22313620313620332031222C0A222E2063204E
+      6F6E65222C0A222C20632023303030303030222C0A222D206320233030303046
+      46222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2C2C2C2E2E2E2E222C0A
+      222E2E2E2E2E2E2D2D2D2D2E2E2C2E2E2E222C0A222E2E2C2E2E2D2D2E2D2D2E
+      2E2E2C2E2E222C0A222E2E2C2E2E2D2D2E2E2E2E2E2E2C2E2E222C0A222E2C2E
+      2E2E2D2D2E2E2D2E2E2E2C2E2E222C0A222E2C2E2E2E2E2D2D2D2E2E2E2C2E2E
+      2E222C0A222E2E2C2E2E2E2E2C2E2E2E2E2C2E2E2E222C0A222E2E2C2E2E2E2C
+      2E2E2E2E2E2C2E2E2E222C0A222E2E2E2C2E2E2C2E2E2E2E2C2E2E2E2E222C0A
+      222E2E2E2C2C2C2E2E2E2E2E2C2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2C
+      2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2C2E2E2E2C2E222C0A222E2E2E
+      2E2E2E2E2E2E2E2E2C2C2C2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E227D0A9C0100002F2A2058504D202A2F0A7374617469632063686172202A67
+      7261706869635B5D203D207B0A22313620313620332031222C0A222E2063204E
+      6F6E65222C0A222C20632023303030303030222C0A222D206320233030303046
+      46222C0A222E2E2E2E2E2E2E2E2C2C2C2E2E2E2E2E222C0A222E2E2E2E2E2E2E
+      2C2E2E2E2C2E2E2E2E222C0A222E2E2E2E2E2E2C2E2E2E2E2C2E2E2E2E222C0A
+      222E2E2E2E2E2E2C2E2E2E2E2E2C2E2E2E222C0A222E2E2E2E2E2C2E2E2E2E2E
+      2E2C2E2E2E222C0A222E2E2E2E2E2C2E2D2D2D2D2E2E2C2E2E222C0A222E2E2E
+      2E2C2E2D2D2E2D2D2E2E2C2E2E222C0A222E2E2E2C2E2E2D2D2E2E2E2E2E2C2E
+      2E222C0A222E2E2C2E2E2E2D2D2E2E2D2E2E2C2E2E222C0A222E2C2E2E2E2E2E
+      2D2D2D2E2E2E2C2E2E222C0A222E2C2E2E2E2E2E2E2E2E2E2E2C2E2E2E222C0A
+      222E2C2E2E2E2E2E2E2E2E2E2E2C2E2E2E222C0A222E2E2C2E2E2E2E2E2E2E2E
+      2C2E2E2E2E222C0A222E2E2E2C2E2E2E2E2E2C2C2E2E2E2E2E222C0A222E2E2E
+      2E2C2C2C2C2C2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E227D0AAB0100002F2A2058504D202A2F0A7374617469632063686172202A67
+      7261706869635B5D203D207B0A22313620313620342031222C0A222E2063204E
+      6F6E65222C0A222C20632023303030303030222C0A222D206320233030303038
+      30222C0A222A20632023464646464646222C0A222E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E222C0A222E2E2E2E2E2E2E2C2C2C2C2C2C2E2D2D222C0A222E2E2E2E
+      2E2E2C2E2E2E2E2E2E2C2D2D222C0A222E2E2E2E2E2C2E2C2E2E2E2E2E2E2D2D
+      222C0A222C2C2C2C2C2E2C2E2C2E2E2E2E2E2D2D222C0A222C2A2A2C2E2C2E2C
+      2E2C2E2E2E2C2D2D222C0A222C2A2C2E2C2A2C2E2C2E2C2C2C2E2D2D222C0A22
+      2C2A2C2C2A2A2A2C2E2C2A2C2E2E2E2D222C0A222C2A2A2A2A2A2A2A2C2A2A2C
+      2E2E2E2E222C0A222C2A2A2A2A2A2A2A2A2A2A2C2E2E2E2E222C0A222C2A2C2C
+      2A2C2C2C2C2C2A2C2E2E2E2E222C0A222C2A2A2A2A2A2A2A2A2A2A2C2E2E2E2E
+      222C0A222C2A2C2C2A2C2C2C2C2C2A2C2E2E2E2E222C0A222C2A2A2A2A2A2A2A
+      2A2A2A2C2E2E2E2E222C0A222C2C2C2C2C2C2C2C2C2C2C2C2E2E2E2E222C0A22
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0AC90100002F2A2058504D202A2F
+      0A7374617469632063686172202A677261706869635B5D203D207B0A22313620
+      313620362031222C0A222E2063204E6F6E65222C0A222C206320233830383038
+      30222C0A222D20632023303030303030222C0A222A2063202346464646464622
+      2C0A226120632023383038303030222C0A226220632023464646463030222C0A
+      222E2E2E2E2E2C2E2E2E2E2E2E2E2E2E2E222C0A222E2E2C2E2D2A2D2E2D2E2E
+      2E2E2E2E2E222C0A222E2C2E2D2A2C2D2D2A2D2E2E2E2E2E2E222C0A222E2D2A
+      2A2D2A2D2A2E2D2E2E2E2E2E2E222C0A222C2D2C2D2D2A2D2D2C2D2D2E2E2E2E
+      2E222C0A222D2E2A2A2D2D2D2A2A2A2D2E2E2E2E2E222C0A222D2C2D2A2C2A2A
+      2D2A2E2C2E2E2D2E2E222C0A222E2D2E2C2C2A2D612D2D2A2D2D622D2E222C0A
+      222D2A2C2D2D2C2D62612C2A2D62612D2E222C0A222E2D2D2E2D2D2D612D2D2A
+      2D2D2A2D2D222C0A222E2E2E2E2E2D61622A2D2D2D2A62612D222C0A222E2E2E
+      2E2E2D612D622A622A622D612D222C0A222E2E2E2E2E2E2D6261612A2D61622D
+      2E222C0A222E2E2E2E2E2D62612D2D622D2D61612D222C0A222E2E2E2E2E2E2D
+      2D2E2D612D2E2D2D2E222C0A222E2E2E2E2E2E2E2E2E2D2D2D2E2E2E2E227D0A
+      E70100002F2A2058504D202A2F0A7374617469632063686172202A6772617068
+      69635B5D203D207B0A22313620313620382031222C0A222E2063204E6F6E6522
+      2C0A222C20632023303030303030222C0A222D20632023383038303830222C0A
+      222A20632023303030303830222C0A226120632023433043304330222C0A2262
+      20632023464646464646222C0A226320632023383038303030222C0A22642063
+      2023303038303030222C0A222E2E2E2C2C2C2E2E2E2E2C2C2C2E2E2E222C0A22
+      2E2E2E2C2D2C2A2A2A2A2C2D2C2E2E2E222C0A222E2E2E2C2C2C616261622C2C
+      2C2E2E2E222C0A222C2C2C2E2A6162616261622A2E2E2E2E222C0A222C2D2C2A
+      2A6261626162612A2E2E2E2E222C0A222C2C2C622A6162616261622A2E2E2E2E
+      222C0A222E2A622C2C2C616261622C2C2C2E2E2E222C0A222E2A612C2D2C2A2A
+      2A2A2C2D2C2E2E2E222C0A222E2A622C2C2C62612A632C2C2C2E2E2E222C0A22
+      2C2C2C626162612C2C2C2E2E2E2E2E2E222C0A222C2D2C2A2A2A2A2C2D2C2E64
+      6464642E222C0A222C2C2C2E2E2E2E2C2C2C2E2E642D642E222C0A222E2E2E2E
+      2E2E2E2E2E2E2E642D64642E222C0A222E2E2E2E2E2E2E2E2E2E642D642E642E
+      222C0A222E2E2E2E2E2E2E2E2E642D642E2E2E2E222C0A222E2E2E2E2E2E2E2E
+      2E2E642E2E2E2E2E227D0A8D0100002F2A2058504D202A2F0A73746174696320
+      63686172202A677261706869635B5D203D207B0A22313620313620322031222C
+      0A222E2063204E6F6E65222C0A222C20632023303030303830222C0A222E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2C2E2E2E2E2E2E2E
+      2E222C0A222E2E2E2E2E2E2C2C2C2E2E2E2E2E2E2E222C0A222E2E2E2E2E2C2C
+      2C2C2C2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2C2E2E2E2E2E2E2E2E222C0A
+      222E2E2E2C2E2E2E2C2E2E2E2C2E2E2E2E222C0A222E2E2C2C2E2E2E2E2E2E2E
+      2C2C2E2E2E222C0A222E2C2C2C2C2C2E2E2E2C2C2C2C2C2E2E222C0A222E2E2C
+      2C2E2E2E2E2E2E2E2C2C2E2E2E222C0A222E2E2E2C2E2E2E2C2E2E2E2C2E2E2E
+      2E222C0A222E2E2E2E2E2E2E2C2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2C2C
+      2C2C2C2E2E2E2E2E2E222C0A222E2E2E2E2E2E2C2C2C2E2E2E2E2E2E2E222C0A
+      222E2E2E2E2E2E2E2C2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0A8D010000
+      2F2A2058504D202A2F0A7374617469632063686172202A677261706869635B5D
+      203D207B0A22313620313620322031222C0A222E2063204E6F6E65222C0A222C
+      20632023303030303830222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C
+      0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E
+      2E2E2E2E2E2E2C2C2C2C2E2E2E2E222C0A222E2E2C2E2E2E2C2C2E2E2E2E2C2E
+      2E2E222C0A222E2E2C2C2E2C2E2E2E2E2E2E2E2C2E2E222C0A222E2E2C2C2C2E
+      2E2E2E2E2E2E2E2C2E2E222C0A222E2E2C2C2C2C2E2E2E2E2E2E2E2C2E2E222C
+      0A222E2E2C2C2C2C2C2E2E2E2E2E2C2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E
+      2E2E2C2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E227D0A8D0100002F2A2058504D202A2F0A7374617469
+      632063686172202A677261706869635B5D203D207B0A22313620313620322031
+      222C0A222E2063204E6F6E65222C0A222C20632023303030303830222C0A222E
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2C2C2C2C2E2E2E2E2E2E2E2E22
+      2C0A222E2E2E2C2E2E2E2E2C2C2E2E2E2C2E2E222C0A222E2E2C2E2E2E2E2E2E
+      2E2C2E2C2C2E2E222C0A222E2E2C2E2E2E2E2E2E2E2E2C2C2C2E2E222C0A222E
+      2E2C2E2E2E2E2E2E2E2C2C2C2C2E2E222C0A222E2E2E2C2E2E2E2E2E2C2C2C2C
+      2C2E2E222C0A222E2E2E2C2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E22
+      2C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0A8D01
+      00002F2A2058504D202A2F0A7374617469632063686172202A67726170686963
+      5B5D203D207B0A22313620313620322031222C0A222E2063204E6F6E65222C0A
+      222C20632023303030303030222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E
+      2E2E2C2C2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2C2E2E2C2E2E2E222C0A22
+      2E2E2E2C2E2E2E2E2E2C2E2E2E2C2E2E222C0A222E2E2C2E2E2E2E2E2C2E2E2E
+      2E2C2E2E222C0A222E2C2E2E2E2E2E2E2C2E2E2E2E2C2E2E222C0A222E2C2E2E
+      2E2E2E2C2E2E2E2E2C2E2E2E222C0A222E2E2C2E2E2E2E2C2E2E2E2E2C2E2E2E
+      222C0A222E2E2C2E2E2E2C2E2E2E2E2E2C2E2E2E222C0A222E2E2E2C2E2E2C2E
+      2E2E2E2C2E2E2E2E222C0A222E2E2E2C2C2C2E2E2E2E2E2C2E2E2E2E222C0A22
+      2E2E2E2E2E2E2E2E2E2E2C2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2C2E
+      2E2E2C2E222C0A222E2E2E2E2E2E2E2E2E2E2E2C2C2C2E2E222C0A222E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E227D0A8D0100002F2A2058504D202A2F0A737461
+      7469632063686172202A677261706869635B5D203D207B0A2231362031362032
+      2031222C0A222E2063204E6F6E65222C0A222C20632023303030303030222C0A
+      222E2E2E2E2E2E2E2E2C2C2C2E2E2E2E2E222C0A222E2E2E2E2E2E2E2C2E2E2E
+      2C2E2E2E2E222C0A222E2E2E2E2E2E2C2E2E2E2E2C2E2E2E2E222C0A222E2E2E
+      2E2E2E2C2E2E2E2E2E2C2E2E2E222C0A222E2E2E2E2E2C2E2E2E2E2E2E2C2E2E
+      2E222C0A222E2E2E2E2E2C2E2E2E2E2E2E2E2C2E2E222C0A222E2E2E2E2C2E2E
+      2E2E2E2E2E2E2C2E2E222C0A222E2E2E2C2E2E2E2E2E2E2E2E2E2C2E2E222C0A
+      222E2E2C2E2E2E2E2E2E2E2E2E2E2C2E2E222C0A222E2C2E2E2E2E2E2E2E2E2E
+      2E2E2C2E2E222C0A222E2C2E2E2E2E2E2E2E2E2E2E2C2E2E2E222C0A222E2C2E
+      2E2E2E2E2E2E2E2E2E2C2E2E2E222C0A222E2E2C2E2E2E2E2E2E2E2E2C2E2E2E
+      2E222C0A222E2E2E2C2E2E2E2E2E2C2C2E2E2E2E2E222C0A222E2E2E2E2C2C2C
+      2C2C2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0A
+      E70100002F2A2058504D202A2F0A7374617469632063686172202A6772617068
+      69635B5D203D207B0A22313620313620382031222C0A222E2063204E6F6E6522
+      2C0A222C20632023303030303030222C0A222D20632023383038303830222C0A
+      222A20632023433043304330222C0A226120632023303046464646222C0A2262
+      20632023464646464646222C0A226320632023303030304646222C0A22642063
+      2023464630303030222C0A222E2E2E2E2E2E2E2E2C2C2C2C2E2E2E2E222C0A22
+      2E2E2E2E2E2E2E2C2D2A2A2D2C2E2E2E222C0A222E2C2C2C2C2C2C2D61612A2D
+      2D2C2E2E222C0A222E2C2A622A622C2A612A2A2D2A2C2E2E222C0A222E2C622A
+      63632C2A2A2A2A2D2A2C2E2E222C0A222E2C2A6264632C2D2A2A612D2D2C2E2E
+      222C0A222E2C62646463632C2D2A2A2D2C2D2E2E222C0A222E2C2A646464632A
+      2C2C2C2C2D2C2C2E222C0A222E2C62646464622A622C2E2E2E2C2C2C222C0A22
+      2E2C2A6264622A622A2C2E2E2E2E2C2C222C0A222E2C2C2C2C2C2C2C2C2C2E2E
+      2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E6363
+      2E2E632E632E632E2E2E2E2E222C0A222E2E632E632E632E632E632E2E2E2E2E
+      222C0A222E2E632E632E632E632E632E2E2E2E2E222C0A222E2E63632E2E2E63
+      2E2E632E2E2E2E2E227D0AE70100002F2A2058504D202A2F0A73746174696320
+      63686172202A677261706869635B5D203D207B0A22313620313620382031222C
+      0A222E2063204E6F6E65222C0A222C20632023303030303030222C0A222D2063
+      2023383038303830222C0A222A20632023433043304330222C0A226120632023
+      303046464646222C0A226220632023464646464646222C0A2263206320233030
+      30304646222C0A226420632023464630303030222C0A222E2E2E2E2E2E2E2E2C
+      2C2C2C2E2E2E2E222C0A222E2E2E2E2E2E2E2C2D2A2A2D2C2E2E2E222C0A222E
+      2C2C2C2C2C2C2D61612A2D2D2C2E2E222C0A222E2C2A622A622C2A612A2A2D2A
+      2C2E2E222C0A222E2C622A63632C2A2A2A2A2D2A2C2E2E222C0A222E2C2A6264
+      632C2D2A2A612D2D2C2E2E222C0A222E2C62646463632C2D2A2A2D2C2D2E2E22
+      2C0A222E2C2A646464632A2C2C2C2C2D2C2C2E222C0A222E2C62646464622A62
+      2C2E2E2E2C2C2C222C0A222E2C2A6264622A622A2C2E2E2E2E2C2C222C0A222E
+      2C2C2C2C2C2C2C2C2C2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E222C0A222E2E63632E2E63632E2E6363632E2E2E222C0A222E2E632E63
+      2E632E632E632E2E2E2E2E222C0A222E2E63632E2E632E632E63632E2E2E2E22
+      2C0A222E2E632E2E2E63632E2E632E2E2E2E2E227D0AF60100002F2A2058504D
+      202A2F0A7374617469632063686172202A677261706869635B5D203D207B0A22
+      313620313620392031222C0A222E2063204E6F6E65222C0A222C206320233030
+      30303830222C0A222D20632023303030303030222C0A222A2063202346464646
+      4646222C0A226120632023433043304330222C0A226220632023383038303830
+      222C0A226320632023303038303030222C0A226420632023464630303030222C
+      0A226520632023464646463030222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2C2C
+      2C2C2C2C2C2C2C2C2E222C0A222E2E2E2D2D2D2A612A612A612A612C2E222C0A
+      222E2E2E2E2D2D622A61636363632A2C2E222C0A222E2D2E2E2D2D6261646463
+      6363612C2E222C0A222E2D2D2D2D2D626464646463632A2C2E222C0A222E2D2D
+      2D2D652D626464646363612C2E222C0A222E2E2E2E622D652D6264642A612A2C
+      2E222C0A222E2E2E2E2E622D652D622A612A612C2E222C0A222E2E2E2E2E2C62
+      2D652D622A612A2C2E222C0A222E2E2E2E2E2C2C622D652D622C2C2C2E222C0A
+      222E2E2E2E2E2E2E2E622D652D2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E622D
+      2D2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E2E227D0AD80100002F2A2058504D202A2F0A7374
+      617469632063686172202A677261706869635B5D203D207B0A22313620313620
+      372031222C0A222E2063204E6F6E65222C0A222C20632023303030303030222C
+      0A222D20632023464646464646222C0A222A20632023383038303830222C0A22
+      6120632023433043304330222C0A226220632023464630303030222C0A226320
+      632023303030303830222C0A222E2E2E2E2E2C2C2C2C2C2C2C2C2E2E2E222C0A
+      222E2E2E2E2E2C2D2A2D2A2D2D2C2E2E2E222C0A222E2E2E2E2C2D2A2D2A2D61
+      2C2E2E2E2E222C0A222E2E2C2C2C2A2D2A2D2A2D2C2C2C2C2E222C0A222E2C61
+      2A2C2C2C2C2C2C2C2C2A612D2C222C0A222A2A61616161616161616161612D2A
+      2C222C0A222C2D2D2D2D2D2D2D2D2D2D2D2D2A2A2C222C0A222C2D6262616161
+      6161616161612A2A2C222C0A222C2D61616161616161616161612A2C2E222C0A
+      222E2C2A2C2A2C2A2C2A2C2A2C2A2C2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E222C0A222E6363632E6363632E6363632E2E2E2E222C0A222E632E
+      2E2E632E632E632E2E2E2E2E2E222C0A222E63632E2E6363632E6363632E2E2E
+      2E222C0A222E632E2E2E632E2E2E2E2E632E2E2E2E222C0A222E6363632E632E
+      2E2E6363632E2E2E2E227D0AE70100002F2A2058504D202A2F0A737461746963
+      2063686172202A677261706869635B5D203D207B0A2231362031362038203122
+      2C0A222E2063204E6F6E65222C0A222C20632023303030303030222C0A222D20
+      632023383038303830222C0A222A20632023433043304330222C0A2261206320
+      23303046464646222C0A226220632023464646464646222C0A22632063202330
+      3030304646222C0A226420632023464630303030222C0A222E2E2E2E2E2E2E2E
+      2C2C2C2C2E2E2E2E222C0A222E2E2E2E2E2E2E2C2D2A2A2D2C2E2E2E222C0A22
+      2E2C2C2C2C2C2C2D61612A2D2D2C2E2E222C0A222E2C2A622A622C2A612A2A2D
+      2A2C2E2E222C0A222E2C622A63632C2A2A2A2A2D2A2C2E2E222C0A222E2C2A62
+      64632C2D2A2A612D2D2C2E2E222C0A222E2C62646463632C2D2A2A2D2C2D2E2E
+      222C0A222E2C2A646464632A2C2C2C2C2D2C2C2E222C0A222E2C62646464622A
+      622C2E2E2E2C2C2C222C0A222E2C2A6264622A622A2C2E2E2E2E2C2C222C0A22
+      2E2C2C2C2C2C2C2C2C2C2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E222C0A222E2E2E63632E2E63632E2E2E2E2E2E2E222C0A222E2E2E63
+      2E632E632E2E2E2E2E2E2E2E222C0A222E2E2E63632E2E2E632E2E2E2E2E2E2E
+      222C0A222E2E2E632E2E2E63632E2E2E2E2E2E2E227D0AAB0100002F2A205850
+      4D202A2F0A7374617469632063686172202A677261706869635B5D203D207B0A
+      22313620313620342031222C0A222E2063204E6F6E65222C0A222C2063202330
+      3030303830222C0A222D20632023383038303830222C0A222A20632023303030
+      303030222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E
+      2C2C2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2C2C2E2E2E2C2C2E2E2E2E22
+      2C0A222E2E2E2E2D2E2A2E2E2E2C2C2E2E2E2E222C0A222E2E2E2D2E2A2E2E2E
+      2E2E2A2D2E2E2E222C0A222E2E2D2E2A2E2E2E2E2E2E2E2A2D2E2E222C0A222C
+      2C2E2A2E2E2E2E2E2E2E2E2A2D2E2E222C0A222C2C2E2A2E2E2E2E2E2E2E2E2A
+      2E2C2C222C0A222E2E2A2E2E2E2E2E2E2E2E2E2A2E2C2C222C0A222E2A2E2E2E
+      2E2E2E2E2E2E2E2A2E2E2E222C0A222E2A2E2E2E2E2E2E2E2E2E2A2E2E2E2E22
+      2C0A222E2A2E2E2E2E2E2E2E2E2E2A2E2E2E2E222C0A222E2E2A2E2E2E2E2E2E
+      2E2A2E2E2E2E2E222C0A222E2E2E2A2E2E2E2E2E2A2E2E2E2E2E2E222C0A222E
+      2E2E2E2A2A2A2A2A2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E227D0AAB0100002F2A2058504D202A2F0A737461746963206368617220
+      2A677261706869635B5D203D207B0A22313620313620342031222C0A222E2063
+      204E6F6E65222C0A222C20632023303030303830222C0A222D20632023383038
+      303830222C0A222A20632023303030303030222C0A222E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2C
+      2C2D2D2D2C2C2D2D2D2D2C2C2E2E222C0A222E2C2C2E2E2A2C2C2A2A2E2E2C2C
+      2E2E222C0A222E2E2E2E2A2E2E2E2E2E2A2A2E2E2E2E222C0A222E2E2E2A2E2E
+      2E2E2E2E2E2E2A2E2E2E222C0A222E2E2A2E2E2E2E2E2E2E2E2E2E2A2E2E222C
+      0A222E2A2E2E2E2E2E2E2E2E2E2E2E2A2E2E222C0A222E2A2E2E2E2E2E2E2E2E
+      2E2E2A2E2E2E222C0A222E2A2E2E2E2E2E2E2E2E2E2E2A2E2E2E222C0A222E2E
+      2A2E2E2E2E2E2E2E2E2A2E2E2E2E222C0A222E2E2E2A2E2E2E2E2E2A2A2E2E2E
+      2E2E222C0A222E2C2C2E2A2A2C2C2A2E2E2C2C2E2E2E222C0A222E2C2C2D2D2D
+      2C2C2D2D2D2C2C2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C
+      0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0AC90100002F2A2058504D20
+      2A2F0A7374617469632063686172202A677261706869635B5D203D207B0A2231
+      3620313620362031222C0A222E2063204E6F6E65222C0A222C20632023383038
+      303830222C0A222D20632023464646464646222C0A222A206320233030303038
+      30222C0A226120632023303030303030222C0A22622063202343304330433022
+      2C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222C2C2C2C2C2C2C2C2C
+      2C2C2C2C2C2C2E222C0A222C2D2A2A2A2A2A2A2A2A2A2D2A2D612E222C0A222C
+      2A2A2A2A2A2A2A2A2A2A2A2A2A612E222C0A222C2D2D2D2D2D2D2D2D2D2D2D2D
+      2D612E222C0A222C2D2D622D622D622D622D622D62612E222C0A222C2D622D62
+      2D622D622D622D622D612E222C0A222C2D2D622D622D622D622D622D62612E22
+      2C0A222C2D622D622D622D622D622D622D612E222C0A222C2D2D622D622D622D
+      622D622D62612E222C0A222C2D622D622D622D622D622D622D612E222C0A222C
+      2D2D622D622D622D622D622D62612E222C0A222C2D622D622D622D622D622D62
+      2D612E222C0A222C61616161616161616161616161612E222C0A222E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E22
+      7D0A8D0100002F2A2058504D202A2F0A7374617469632063686172202A677261
+      706869635B5D203D207B0A22313620313620322031222C0A222E2063204E6F6E
+      65222C0A222C20632023303030303030222C0A222E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E222C0A222E2E2E2E2E2E2E2C2C2E2E2E2E2E2E2E222C0A222E2E2E2E
+      2E2E2C2C2C2C2E2E2E2E2E2E222C0A222E2E2E2E2E2C2C2E2E2C2C2E2E2E2E2E
+      222C0A222E2E2E2E2E2E2C2E2E2C2E2E2E2E2E2E222C0A222E2E2E2C2E2E2C2E
+      2E2C2E2E2C2E2E2E222C0A222E2E2C2C2C2C2C2E2E2C2C2C2C2C2E2E222C0A22
+      2E2C2C2E2E2E2E2E2E2E2E2E2E2C2C2E222C0A222E2C2C2E2E2E2E2E2E2E2E2E
+      2E2C2C2E222C0A222E2E2C2C2C2C2C2E2E2C2C2C2C2C2E2E222C0A222E2E2E2C
+      2E2E2C2E2E2C2E2E2C2E2E2E222C0A222E2E2E2E2E2E2C2E2E2C2E2E2E2E2E2E
+      222C0A222E2E2E2E2E2C2C2E2E2C2C2E2E2E2E2E222C0A222E2E2E2E2E2E2C2C
+      2C2C2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2C2C2E2E2E2E2E2E2E222C0A22
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0AC90100002F2A2058504D202A2F
+      0A7374617469632063686172202A677261706869635B5D203D207B0A22313620
+      313620362031222C0A222E2063204E6F6E65222C0A222C206320233030303030
+      30222C0A222D20632023303030304646222C0A222A2063202330304646303022
+      2C0A226120632023303046464646222C0A226220632023464646464646222C0A
+      222E2E2E2E2E2E2E2E2C2C2C2E2E2E2E2E222C0A222E2E2E2E2E2E2E2C2D2D2D
+      2C2E2E2E2E222C0A222E2E2E2E2E2E2E2C2D2A2A2C2E2E2E2E222C0A222E2E2E
+      2E2E2E2C2C2D2A2C2E2E2E2E2E222C0A222E2E2E2E2E2E2C612C2C2C2E2E2E2E
+      2E222C0A222E2E2E2E2E2C61622E2C2E2E2E2E2E2E222C0A222E2E2E2E2E2C62
+      612C2C2E2E2E2E2E2E222C0A222E2E2E2E2C62612E2C2E2E2E2E2E2E2E222C0A
+      222E2E2E2E2C61622C2C2E2E2E2E2E2E2E222C0A222E2E2E2C61622E2C2E2E2E
+      2E2C2E2E2E222C0A222E2E2E2C2C612C2C2E2E2E2C2E2C2E2E222C0A222E2E2E
+      2C2C2C2C2E2E2E2C2E2E2E2C2E222C0A222E2E2E2C2C2C2E2E2E2C2E2E2E2E2E
+      2C222C0A222E2E2E2C2C2E2E2E2C2E2E2E2E2E2E2E222C0A222E2E2E2C2E2E2E
+      2C2E2E2E2E2E2E2E2E222C0A222E2C2C2E2C2C2C2E2E2E2E2E2E2E2E2E227D0A
+      C90100002F2A2058504D202A2F0A7374617469632063686172202A6772617068
+      69635B5D203D207B0A22313620313620362031222C0A222E2063204E6F6E6522
+      2C0A222C20632023303030303030222C0A222D20632023303030304646222C0A
+      222A20632023303046463030222C0A226120632023303046464646222C0A2262
+      20632023464646464646222C0A222E2E2E2E2E2E2E2E2C2C2C2E2E2E2E2E222C
+      0A222E2E2E2E2E2E2E2C2D2D2D2C2E2E2E2E222C0A222E2E2E2E2E2E2E2C2D2A
+      2A2C2E2E2E2E222C0A222E2E2E2E2E2E2C2C2D2A2C2E2E2E2E2E222C0A222E2E
+      2E2E2E2E2C612C2C2C2E2E2E2E2E222C0A222E2E2E2E2E2C61622E2C2E2E2E2E
+      2E2E222C0A222E2E2E2E2E2C62612C2C2E2E2E2E2E2E222C0A222E2E2E2E2C62
+      612E2C2E2E2E2E2E2E2E222C0A222E2E2E2E2C61622C2C2E2E2E2E2E2E2E222C
+      0A222E2E2E2C61622E2C2E2E2E2E2E2E2E2E222C0A222E2E2E2C2C612C2C2E2E
+      2C2C2C2C2E2E222C0A222E2E2E2C2C2C2C2E2E2C2E2E2E2E2C2E222C0A222E2E
+      2E2C2C2C2E2E2C2E2E2E2E2E2E2C222C0A222E2E2E2C2C2E2E2E2C2E2E2E2E2E
+      2E2C222C0A222E2C2E2C2E2E2E2C2E2E2E2E2E2E2E2C222C0A222E2E2C2E2C2C
+      2C2E2E2E2E2E2E2E2C2E227D0A9C0100002F2A2058504D202A2F0A7374617469
+      632063686172202A677261706869635B5D203D207B0A22313620313620332031
+      222C0A222E2063204E6F6E65222C0A222C20632023303030303030222C0A222D
+      20632023383030303030222C0A222E2E2E2E2E2E2C2E2E2E2E2E2E2E2C2E222C
+      0A222E2E2E2E2E2C2E2E2E2E2E2E2E2E2C2E222C0A222E2E2E2E2E2C2E2E2E2E
+      2E2E2E2C2E2E222C0A222E2E2E2E2C2E2E2E2E2E2E2E2E2C2E2E222C0A222E2E
+      2E2E2C2E2E2E2E2E2E2E2E2C2E2E222C0A222E2E2E2C2E2E2E2E2D2E2E2E2C2E
+      2E2E222C0A222E2E2E2C2E2D2D2D2D2D2E2E2C2E2E2E222C0A222E2E2C2E2E2E
+      2E2E2D2E2E2E2C2E2E2E222C0A222E2E2C2E2E2E2E2E2E2E2E2C2E2E2E2E222C
+      0A222E2E2C2E2E2E2E2E2E2E2E2C2E2E2E2E222C0A222E2E2C2E2E2E2E2E2E2E
+      2E2C2E2E2E2E222C0A222E2E2C2E2E2E2E2E2E2E2C2E2E2E2E2E222C0A222E2E
+      2C2E2E2E2E2E2E2E2C2E2E2E2E2E222C0A222E2E2C2E2E2E2E2E2E2E2C2E2E2E
+      2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E227D0A8D0100002F2A2058504D202A2F0A7374617469
+      632063686172202A677261706869635B5D203D207B0A22313620313620322031
+      222C0A222E2063204E6F6E65222C0A222C20632023303030303030222C0A222E
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E22
+      2C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2C2C2C2C2C
+      2C2C2E2E2E2E2E222C0A222E2E2E2E2E2C2C2C2C2C2E2E2E2E2E2E222C0A222E
+      2E2E2E2E2E2C2C2C2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2C2E2E2E2E2E
+      2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E22
+      2C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0AC901
+      00002F2A2058504D202A2F0A7374617469632063686172202A67726170686963
+      5B5D203D207B0A22313620313620362031222C0A222E2063204E6F6E65222C0A
+      222C20632023464630304646222C0A222D20632023303030303030222C0A222A
+      20632023303030303830222C0A226120632023303046464646222C0A22622063
+      2023303038303030222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A22
+      2E2C2D2D2D2D2D2D2D2D2D2D2D2D2D2D222C0A222E2C2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2D222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2E2E2D222C0A222E2C2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2D222C0A222E2A2A2A2A2A2E2E2E2E2E2E2E2E2E2D
+      222C0A222E2A6161612A2E2E2E622E2E2E2E2E2D222C0A222E2A6161612A2E2E
+      622E2E2E2E2E2E2D222C0A222E2A6161612A2E6262626262622E2E2D222C0A22
+      2E2A6161612A2E2E622E2E2E2E2E2E2D222C0A222E2A6161612A2E2E2E622E2E
+      2E2E2E2D222C0A222E2A2A2A2A2A2E2E2E2E2E2E2E2E2E2D222C0A222E2C2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2D222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2E2E2D
+      222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2E2E2D222C0A222E2C2D2D2D2D2D2D
+      2D2D2D2D2D2D2D2D227D0AC90100002F2A2058504D202A2F0A73746174696320
+      63686172202A677261706869635B5D203D207B0A22313620313620362031222C
+      0A222E2063204E6F6E65222C0A222C20632023303030303030222C0A222D2063
+      2023464630304646222C0A222A20632023303030303830222C0A226120632023
+      303038303030222C0A226220632023303046464646222C0A222E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E2E222C0A222E2C2C2C2C2C2C2C2C2C2C2C2C2C2C2D222C0A
+      222E2C2E2E2E2E2E2E2E2E2E2E2E2E2E2D222C0A222E2C2E2E2E2E2E2E2E2E2E
+      2E2E2E2E2D222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2E2E2D222C0A222E2C2E
+      2E2E2E2E2E2E2E2E2A2A2A2A2A222C0A222E2C2E2E2E2E2E612E2E2E2A626262
+      2A222C0A222E2C2E2E2E2E2E2E612E2E2A6262622A222C0A222E2C2E2E616161
+      6161612E2A6262622A222C0A222E2C2E2E2E2E2E2E612E2E2A6262622A222C0A
+      222E2C2E2E2E2E2E612E2E2E2A6262622A222C0A222E2C2E2E2E2E2E2E2E2E2E
+      2A2A2A2A2A222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2E2E2D222C0A222E2C2E
+      2E2E2E2E2E2E2E2E2E2E2E2E2D222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2E2E
+      2D222C0A222E2C2C2C2C2C2C2C2C2C2C2C2C2C2C2D227D0AC90100002F2A2058
+      504D202A2F0A7374617469632063686172202A677261706869635B5D203D207B
+      0A22313620313620362031222C0A222E2063204E6F6E65222C0A222C20632023
+      303030303030222C0A222D20632023464630304646222C0A222A206320233030
+      30303830222C0A226120632023303038303030222C0A22622063202330304646
+      4646222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2C2C2C2C2C
+      2C2C2D2C2C2C2C2C2C2C222C0A222E2C2E2E2E2E2E2E2D2E2E2E2E2E2E2C222C
+      0A222E2C2E2E2E2E2E2E2D2E2E2E2E2E2E2C222C0A222E2C2E2E2E2E2E2E2D2E
+      2E2E2E2E2E2C222C0A222E2C2E2E2E2E2A2A2A2A2A2E2E2E2E2C222C0A222E2C
+      2E612E2E2A6262622A2E2E612E2C222C0A222E2C2E2E612E2A6262622A2E612E
+      2E2C222C0A222E2C616161612A6262622A616161612C222C0A222E2C2E2E612E
+      2A6262622A2E612E2E2C222C0A222E2C2E612E2E2A6262622A2E2E612E2C222C
+      0A222E2C2E2E2E2E2A2A2A2A2A2E2E2E2E2C222C0A222E2C2E2E2E2E2E2E2D2E
+      2E2E2E2E2E2C222C0A222E2C2E2E2E2E2E2E2D2E2E2E2E2E2E2C222C0A222E2C
+      2E2E2E2E2E2E2D2E2E2E2E2E2E2C222C0A222E2C2C2C2C2C2C2C2D2C2C2C2C2C
+      2C2C227D0AC90100002F2A2058504D202A2F0A7374617469632063686172202A
+      677261706869635B5D203D207B0A22313620313620362031222C0A222E206320
+      4E6F6E65222C0A222C20632023464630304646222C0A222D2063202330303030
+      3830222C0A222A20632023303030303030222C0A226120632023303046464646
+      222C0A226220632023303038303030222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E222C0A222E2C2C2C2C2D2D2D2D2D2D2D2C2C2C2C222C0A222E2A2E2E2E
+      2D61616161612D2E2E2E2A222C0A222E2A2E2E2E2D61616161612D2E2E2E2A22
+      2C0A222E2A2E2E2E2D61616161612D2E2E2E2A222C0A222E2A2E2E2E2D2D2D2D
+      2D2D2D2E2E2E2A222C0A222E2A2E2E2E2E2E2E2E2E2E2E2E2E2E2A222C0A222E
+      2A2E2E2E2E2E2E622E2E2E2E2E2E2A222C0A222E2A2E2E2E2E2E6262622E2E2E
+      2E2E2A222C0A222E2A2E2E2E2E622E622E622E2E2E2E2A222C0A222E2A2E2E2E
+      2E2E2E622E2E2E2E2E2E2A222C0A222E2A2E2E2E2E2E2E622E2E2E2E2E2E2A22
+      2C0A222E2A2E2E2E2E2E2E622E2E2E2E2E2E2A222C0A222E2A2E2E2E2E2E2E2E
+      2E2E2E2E2E2E2A222C0A222E2A2E2E2E2E2E2E2E2E2E2E2E2E2E2A222C0A222E
+      2A2A2A2A2A2A2A2A2A2A2A2A2A2A2A227D0AC90100002F2A2058504D202A2F0A
+      7374617469632063686172202A677261706869635B5D203D207B0A2231362031
+      3620362031222C0A222E2063204E6F6E65222C0A222C20632023303030303030
+      222C0A222D20632023303038303030222C0A222A20632023303030303830222C
+      0A226120632023303046464646222C0A226220632023464630304646222C0A22
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2C2C2C2C2C2C2C2C2C2C2C
+      2C2C2C2C222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2E2E2C222C0A222E2C2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2C222C0A222E2C2E2E2E2E2E2E2D2E2E2E2E2E2E2C
+      222C0A222E2C2E2E2E2E2E2E2D2E2E2E2E2E2E2C222C0A222E2C2E2E2E2E2E2E
+      2D2E2E2E2E2E2E2C222C0A222E2C2E2E2E2E2D2E2D2E2D2E2E2E2E2C222C0A22
+      2E2C2E2E2E2E2E2D2D2D2E2E2E2E2E2C222C0A222E2C2E2E2E2E2E2E2D2E2E2E
+      2E2E2E2C222C0A222E2C2E2E2E2E2E2E2E2E2E2E2E2E2E2C222C0A222E2C2E2E
+      2E2A2A2A2A2A2A2A2E2E2E2C222C0A222E2C2E2E2E2A61616161612A2E2E2E2C
+      222C0A222E2C2E2E2E2A61616161612A2E2E2E2C222C0A222E2C2E2E2E2A6161
+      6161612A2E2E2E2C222C0A222E626262622A2A2A2A2A2A2A62626262227D0AC9
+      0100002F2A2058504D202A2F0A7374617469632063686172202A677261706869
+      635B5D203D207B0A22313620313620362031222C0A222E2063204E6F6E65222C
+      0A222C20632023303030303030222C0A222D20632023303038303030222C0A22
+      2A20632023303030303830222C0A226120632023303046464646222C0A226220
+      632023464630304646222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A
+      222E2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C222C0A222E2C2E2E2E2E2E2E2D2E2E
+      2E2E2E2E2C222C0A222E2C2E2E2E2E2D2E2D2E2D2E2E2E2E2C222C0A222E2C2E
+      2E2E2E2E2D2D2D2E2E2E2E2E2C222C0A222E2C2E2E2E2E2E2E2D2E2E2E2E2E2E
+      2C222C0A222E2C2E2E2E2A2A2A2A2A2A2A2E2E2E2C222C0A222E2C2E2E2E2A61
+      616161612A2E2E2E2C222C0A222E626262622A61616161612A62626262222C0A
+      222E2C2E2E2E2A61616161612A2E2E2E2C222C0A222E2C2E2E2E2A2A2A2A2A2A
+      2A2E2E2E2C222C0A222E2C2E2E2E2E2E2E2D2E2E2E2E2E2E2C222C0A222E2C2E
+      2E2E2E2E2D2D2D2E2E2E2E2E2C222C0A222E2C2E2E2E2E2D2E2D2E2D2E2E2E2E
+      2C222C0A222E2C2E2E2E2E2E2E2D2E2E2E2E2E2E2C222C0A222E2C2C2C2C2C2C
+      2C2C2C2C2C2C2C2C2C227D0A
+    }
+  end
+  object CaptureEMF_Dialog: TSaveDialog
+    Title = 'Сохранить файл как'
+    DefaultExt = '.emf'
+    Filter = 'Enhanced metafile (*.emf)|*.emf'
+    FilterIndex = 0
+    Options = [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing]
+    left = 128
+    top = 132
+  end
+  object ConvertPopup: TPopupMenu
+    AutoPopup = False
+    left = 156
+    top = 172
+    object N13: TMenuItem
+      Caption = '1'
+    end
+    object N21: TMenuItem
+      Caption = '2'
+    end
+  end
+  object PopupMenuDVI: TPopupMenu
+    OnPopup = PopupMenuDVIPopup
+    left = 364
+    top = 108
+    object tex1: TMenuItem
+      Caption = 'tex'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object pgf1: TMenuItem
+      Caption = 'pgf'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object pstricks1: TMenuItem
+      Caption = 'pstricks'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object pdf1: TMenuItem
+      Caption = 'eps'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object png1: TMenuItem
+      Caption = 'png'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object bmp1: TMenuItem
+      Caption = 'bmp'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object metapost1: TMenuItem
+      Caption = 'metapost'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object tikz1: TMenuItem
+      Caption = 'tikz'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object emf1: TMenuItem
+      Caption = 'emf'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+    object none1: TMenuItem
+      Caption = 'none'
+      RadioItem = True
+      OnClick = DVI_Format_Click
+    end
+  end
+  object PopupMenuPdf: TPopupMenu
+    OnPopup = PopupMenuPdfPopup
+    left = 400
+    top = 108
+    object MenuItem1: TMenuItem
+      Caption = 'tex'
+      RadioItem = True
+      OnClick = Pdf_Format_Click
+    end
+    object MenuItem2: TMenuItem
+      Caption = 'pgf'
+      RadioItem = True
+      OnClick = Pdf_Format_Click
+    end
+    object MenuItem4: TMenuItem
+      Caption = 'pdf'
+      RadioItem = True
+      OnClick = Pdf_Format_Click
+    end
+    object MenuItem5: TMenuItem
+      Caption = 'png'
+      RadioItem = True
+      OnClick = Pdf_Format_Click
+    end
+    object MenuItem7: TMenuItem
+      Caption = 'metapost'
+      RadioItem = True
+      OnClick = Pdf_Format_Click
+    end
+    object tikz2: TMenuItem
+      Caption = 'tikz'
+      RadioItem = True
+      OnClick = Pdf_Format_Click
+    end
+    object MenuItem8: TMenuItem
+      Caption = 'epstopdf'
+      RadioItem = True
+      OnClick = Pdf_Format_Click
+    end
+    object none2: TMenuItem
+      Caption = 'none'
+      RadioItem = True
+      OnClick = Pdf_Format_Click
+    end
+  end
+end

@@ -25,13 +25,16 @@
  * 2001.08.19 small changes in TPdfDictiinary and TPdfArray.
  * 2001.09.01 changed some definations and methods to work with kylix.
  *}
+{$IFDEF LAZ_POWERPDF}
+{$H+}
+{$ENDIF}
 unit PdfTypes;
 
 interface
 
 // if use "FlateDecode" compression, comment out the next line.
 // (this unit and PdfDoc.pas)
-//{$DEFINE NOZLIB}
+{$DEFINE NOZLIB}
 
 uses
   SysUtils, Classes
@@ -294,7 +297,17 @@ type
   function _PdfRect(Left, Top, Right, Bottom: Single): TPdfRect;
   function _GetCharCount(Text: string): integer;
 
+{$IFDEF LAZ_POWERPDF}
+  procedure PdfLazRegisterClassAlias(aClass: TPersistentClass; Alias: string);
+  function  PdfLazFindClass(aClassName: string):TPersistentClass;
+{$ENDIF}
+
 implementation
+
+{$IFDEF LAZ_POWERPDF}
+var
+  AliasList: TStringList;
+{$ENDIF}
 
 {TPdfObject}
 
@@ -1122,5 +1135,38 @@ begin
       (ByteType(Text, i) = mbLeadByte) then
       inc(result);
 end;
+
+{$IFDEF LAZ_POWERPDF}
+procedure PdfLazRegisterClassAlias(aClass: TPersistentClass; Alias: string);
+begin
+  Classes.RegisterClass(aClass);
+  if AliasList=nil then
+    AliasList := TStringList.Create;
+  AliasList.AddObject(Alias, TObject(aClass));
+end;
+
+function PdfLazFindClass(aClassName: String): TPersistentClass;
+var
+  i: Integer;
+begin
+  result := Classes.GetClass(aClassName);
+  if Result=nil then begin
+    i := AliasList.IndexOf(aClassName);
+    if i>=0 then
+      Result := TPersistentClass(AliasList.Objects[i]);
+  end;
+  if not Assigned(Result) then
+    raise EClassNotFound.CreateFmt('No class was found', [aClassName]);
+end;
+
+initialization
+  AliasList := nil;
+
+finalization
+  if AliasList<>nil then
+    AliasList.Free;
+  AliasList:=nil;
+{$ENDIF}
+
 
 end.

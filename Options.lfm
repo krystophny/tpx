@@ -1,0 +1,127 @@
+object OptionsForm: TOptionsForm
+  Caption = 'Picture properties'
+  ClientHeight = 509
+  ClientWidth = 479
+  Font.Height = -13
+  Font.Name = 'MS Sans Serif'
+  OnCloseQuery = FormCloseQuery
+  OnShow = FormShow
+  PixelsPerInch = 120
+  TextHeight = 16
+  HorzScrollBar.Page = 478
+  VertScrollBar.Page = 508
+  Left = 259
+  Height = 509
+  Top = 125
+  Width = 479
+  object Panel1: TPanel
+    Align = alBottom
+    BevelOuter = bvNone
+    Caption = ' '
+    ClientHeight = 35
+    ClientWidth = 479
+    TabOrder = 0
+    Height = 35
+    Top = 474
+    Width = 479
+    object Button1: TButton
+      BorderSpacing.InnerBorder = 4
+      Caption = 'OK'
+      Default = True
+      ModalResult = 1
+      TabOrder = 0
+      Left = 290
+      Height = 25
+      Top = 8
+      Width = 75
+    end
+    object Button2: TButton
+      BorderSpacing.InnerBorder = 4
+      Cancel = True
+      Caption = 'Cancel'
+      ModalResult = 2
+      TabOrder = 1
+      Left = 370
+      Height = 25
+      Top = 8
+      Width = 75
+    end
+  end
+  object Memo1: TMemo
+    Align = alBottom
+    Color = clBtnFace
+    Lines.Strings = (
+      ''
+    )
+    ReadOnly = True
+    ScrollBars = ssVertical
+    TabOrder = 1
+    Height = 100
+    Top = 374
+    Width = 479
+  end
+  object TreeView1: TTreeView
+    Align = alBottom
+    Color = clBtnFace
+    DefaultItemHeight = 19
+    HideSelection = False
+    Images = ImageList1
+    Indent = 19
+    RightClickSelect = True
+    ShowLines = False
+    ShowRoot = False
+    TabOrder = 2
+    OnChange = TreeView1Change
+    OnChanging = TreeView1Changing
+    Options = [tvoAutoItemHeight, tvoKeepCollapsedNodes, tvoRightClickSelect, tvoShowButtons, tvoToolTips]
+    Height = 311
+    Top = 63
+    Width = 479
+  end
+  object ComboBox1: TComboBox
+    AutoCompleteText = [cbactEndOfLineComplete, cbactSearchAscending]
+    ItemHeight = 16
+    MaxLength = 0
+    OnChange = ComboBox1Change
+    OnDropDown = ComboBox1DropDown
+    TabOrder = 3
+    Text = ' '
+    Height = 24
+    Width = 465
+  end
+  object FontDialog1: TFontDialog
+    Title = 'Выбрать шрифт'
+    Font.Height = -13
+    Font.Name = 'MS Sans Serif'
+    Options = [fdTrueTypeOnly]
+    Title = 'Выбрать шрифт'
+    left = 132
+    top = 116
+  end
+  object ImageList1: TImageList
+    left = 152
+    top = 56
+    Bitmap = {
+      6C690100000010000000100000008D0100002F2A2058504D202A2F0A73746174
+      69632063686172202A677261706869635B5D203D207B0A223136203136203220
+      31222C0A222E2063204E6F6E65222C0A222C20632023303030303030222C0A22
+      2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E
+      2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      222C0A222E2E2E2E2E2C2C2C2C2C2E2E2E2E2E2E222C0A222E2E2E2E2E2C2C2C
+      2C2C2E2E2E2E2E2E222C0A222E2E2E2E2E2C2C2C2C2C2E2E2E2E2E2E222C0A22
+      2E2E2E2E2E2C2C2C2C2C2E2E2E2E2E2E222C0A222E2E2E2E2E2C2C2C2C2C2E2E
+      2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E
+      2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E
+      222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E
+      2E2E2E2E2E2E2E2E222C0A222E2E2E2E2E2E2E2E2E2E2E2E2E2E2E2E227D0A
+    }
+  end
+  object OpenDialog1: TOpenDialog
+    Title = 'Открыть существующий файл'
+    FilterIndex = 0
+    Title = 'Открыть существующий файл'
+    left = 176
+    top = 120
+  end
+end

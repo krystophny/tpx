@@ -194,7 +194,7 @@ end;
 
 function TXList.Delete(anIndex: Integer): TObject;
 begin
-	Result := Items[anIndex];
+	Result := TObject(Items[anIndex]);
 	inherited Delete(anIndex);
 	if Assigned(Result) then
 		ItemRemoved(Result);
@@ -207,7 +207,7 @@ var
 begin
 	i := Count - 1;
 	while i >= 0 do begin
-		anItem := Items[i];
+		anItem := TObject(Items[i]);
 		inherited Delete(i);
 		if Assigned(anItem) then begin
 			ItemRemoved(anItem);
@@ -237,7 +237,7 @@ end;
 
 { TRefObject }
 
-procedure TRefObject.Free;
+procedure TRefObject.Free(YourMustNotToCallThisMethodDirectly: Integer);
 begin
 	raise Exception.CreateFmt(
 		'¬нутренн€€ ошибка: пр€мое уничтожение ссылочного объекта [%s]', [ClassName]);
@@ -285,7 +285,7 @@ var
 	anItem: TRefObject;
 begin
 	for i := 0 to Count - 1 do begin
-		anItem := inherited Items[i];
+		anItem := TRefObject(inherited Items[i]);
 		if Assigned(anItem) then begin
 			inherited Items[i] := nil;
 			RO_Free(anItem);

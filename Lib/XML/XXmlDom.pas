@@ -835,7 +835,7 @@ end;
 
 function TXmlDNodeList.GetItem(anIndex: Integer): TXmlDNode;
 begin
-  Result := FItems[anIndex];
+  Result := TXmlDNode(FItems[anIndex]);
 end;
 
 function TXmlDNodeList.GetCount: Integer;
@@ -862,13 +862,13 @@ begin
     aNode.FNextSibling := nil;
     if anIndex > 0 then
     begin
-      aNode2 := FItems[anIndex - 1];
+      aNode2 := TXmlDNode(FItems[anIndex - 1]);
       aNode2.FNextSibling := aNode;
       aNode.FPreviousSibling := aNode2;
     end;
     if anIndex < FItems.Count - 1 then
     begin
-      aNode2 := FItems[anIndex + 1];
+      aNode2 := TXmlDNode(FItems[anIndex + 1]);
       aNode2.FPreviousSibling := aNode;
       aNode.FNextSibling := aNode2;
     end;
@@ -879,7 +879,7 @@ procedure TXmlDNodeList.Delete(anIndex: Integer);
 var
   aNode, aNodePrev, aNodeNext: TXmlDNode;
 begin
-  RO_Init(aNode, FItems[anIndex]);
+  RO_Init(aNode, TXmlDNode(FItems[anIndex]));
   try
     FItems.Delete(anIndex);
     if IsOwner then
@@ -891,9 +891,9 @@ begin
       aNodePrev := nil;
       aNodeNext := nil;
       if anIndex > 0 then
-        aNodePrev := FItems[anIndex - 1];
+        aNodePrev := TXmlDNode(FItems[anIndex - 1]);
       if anIndex < FItems.Count then
-        aNodeNext := FItems[anIndex];
+        aNodeNext := TXmlDNode(FItems[anIndex]);
 
       if Assigned(aNodePrev) then
         aNodePrev.FNextSibling := aNodeNext;
@@ -941,7 +941,7 @@ var
 begin
   for I := 0 to FItems.Count - 1 do
   begin
-    Result := FItems[I];
+    Result := TXmlDNode(FItems[I]);
     if Result.NodeName = aName then
     begin
       anIndex := I;

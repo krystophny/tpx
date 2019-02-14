@@ -328,7 +328,9 @@ var
 	Context: MD5Context;
 begin
 	MD5Init(Context);
+{$IFDEF DELPHI}
 	MD5Update(Context, pChar(M), length(M));
+{$ENDIF}
 	MD5Final(Context, Result);
 end;
 
@@ -340,6 +342,7 @@ var
 	ViewPointer: pointer;
 	Context: MD5Context;
 begin
+{$IFDEF DELPHI}
 	MD5Init(Context);
 	FileHandle := CreateFile(pChar(N), GENERIC_READ, FILE_SHARE_READ or FILE_SHARE_WRITE,
 		nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL or FILE_FLAG_SEQUENTIAL_SCAN, 0);
@@ -359,6 +362,7 @@ begin
 		CloseHandle(FileHandle);
 	end;
 	MD5Final(Context, Result);
+{$ENDIF}
 end;
 
 // Create hex representation of given Digest

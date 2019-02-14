@@ -1,8 +1,12 @@
 unit PreView;
 
+{$IFNDEF VER140}
+{$MODE Delphi}
+{$ENDIF}
+
 interface
 uses
-  SysUtils, Forms, Classes, CADSys4, Graphics;
+  SysUtils, Forms, Classes, Drawings, Graphics;
 
 type
   TLaTeXPreviewKind = (ltxview_Dvi, ltxview_Pdf, ltxview_PS);
@@ -27,8 +31,12 @@ var
   DviViewerPath: string = '';
   PdfViewerPath: string = '';
   TextViewerPath: string = '';
+  HtmlViewerPath: string = '';
   PSViewerPath: string = '';
-  GhostscriptPath: string = 'gswin32c.exe'; // or mgs.exe from MikTeX
+  SvgViewerPath: string = '';
+  PngViewerPath: string = '';
+  GhostscriptPath: string = 'gswin32c.exe';
+    // or mgs.exe from MikTeX
 
 implementation
 
@@ -39,7 +47,8 @@ var
   IncludeFile: string;
   List: TStringList;
 begin
-  IncludeFile := ExtractFilePath(Application.ExeName) + 'preview.tex.inc';
+  IncludeFile := ExtractFilePath(Application.ExeName) +
+    'preview.tex.inc';
   List := TStringList.Create;
   try
     if FileExists(IncludeFile) then List.LoadFromFile(IncludeFile)
@@ -73,7 +82,8 @@ begin
     List.Add('\begin{document}');
     //List.Add('\hrule height 1ex');
     List.Add('\thispagestyle{empty}');
-    List.Add('\ '); //Without this preview does not work for pgf inside figure
+    List.Add('\ ');
+      //Without this preview does not work for pgf inside figure
     List.Add('');
     List.Add('\input{' + TpXName + '}%');
     List.Add('');
@@ -228,16 +238,18 @@ begin
       StoreToFile_Saver(Drawing,
         TmpFileName, T_SVG_Export);
     export_EMF:
-      Drawing.SaveToFile_EMF(TmpFileName);
+      StoreToFile_EMF(Drawing, TmpFileName);
     export_EPS:
       StoreToFile_Saver(Drawing,
         TmpFileName, T_PostScript_Export);
+{$IFDEF VER140}
     export_PNG:
       StoreToFile_Saver(Drawing,
         TmpFileName, T_PNG_Export);
     export_BMP:
       StoreToFile_Saver(Drawing,
         TmpFileName, T_BMP_Export);
+{$ENDIF}
     export_PDF:
       StoreToFile_Saver(Drawing,
         TmpFileName, T_PDF_Export);
@@ -258,6 +270,12 @@ begin
   end;
   if PreviewKind in [export_EPS]
     then OpenOrExec(PSViewerPath, TmpFileName)
+  else if PreviewKind in [export_PDF]
+    then OpenOrExec(PdfViewerPath, TmpFileName)
+  else if PreviewKind in [export_SVG]
+    then OpenOrExec(SvgViewerPath, TmpFileName)
+  else if PreviewKind in [export_PNG]
+    then OpenOrExec(PngViewerPath, TmpFileName)
   else OpenOrExec('', TmpFileName);
 end;
 
@@ -318,4 +336,3 @@ begin
 end;
 
 end.
-

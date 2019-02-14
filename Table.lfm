@@ -1,0 +1,231 @@
+object TableForm: TTableForm
+  Left = 335
+  Height = 501
+  Top = 130
+  Width = 461
+  HorzScrollBar.Page = 460
+  VertScrollBar.Page = 500
+  ActiveControl = Button1
+  Caption = 'Edit coordinates'
+  Font.Height = -13
+  Font.Name = 'MS Sans Serif'
+  OnClose = FormClose
+  OnCreate = FormCreate
+  OnShow = FormShow
+  object Button1: TButton
+    Left = 340
+    Height = 25
+    Top = 8
+    Width = 75
+    BorderSpacing.InnerBorder = 4
+    Caption = 'OK'
+    ModalResult = 1
+    TabOrder = 0
+  end
+  object Button2: TButton
+    Left = 340
+    Height = 25
+    Top = 36
+    Width = 75
+    BorderSpacing.InnerBorder = 4
+    Cancel = True
+    Caption = 'Cancel'
+    ModalResult = 2
+    TabOrder = 1
+  end
+  object Panel1: TPanel
+    Left = 335
+    Height = 117
+    Top = 92
+    Width = 106
+    BevelOuter = bvNone
+    Caption = ' '
+    TabOrder = 2
+    object Button3: TButton
+      Left = 5
+      Height = 25
+      Top = 8
+      Width = 75
+      Action = AddPoints
+      BorderSpacing.InnerBorder = 4
+      TabOrder = 0
+    end
+    object RadioButton1: TRadioButton
+      Left = 5
+      Height = 17
+      Top = 71
+      Width = 63
+      Caption = 'above'
+      Checked = True
+      State = cbChecked
+      TabOrder = 2
+    end
+    object RadioButton2: TRadioButton
+      Left = 5
+      Height = 17
+      Top = 91
+      Width = 60
+      Caption = 'below'
+      TabOrder = 1
+    end
+    object Edit2: TEdit
+      Left = 7
+      Height = 24
+      Top = 43
+      Width = 66
+      OnKeyDown = nil
+      TabOrder = 3
+      Text = '1'
+    end
+    object UpDown1: TUpDown
+      Left = 73
+      Height = 24
+      Top = 43
+      Width = 19
+      Associate = Edit2
+      Min = 1
+      Max = 32000
+      Position = 1
+      TabOrder = 4
+    end
+  end
+  object CheckBox1: TCheckBox
+    Left = 340
+    Height = 17
+    Top = 216
+    Width = 105
+    Caption = 'Inplace editor'
+    Checked = True
+    OnClick = CheckBox1Click
+    State = cbChecked
+    TabOrder = 3
+  end
+  object Panel2: TPanel
+    Height = 501
+    Width = 333
+    Align = alLeft
+    Caption = 'Panel2'
+    TabOrder = 4
+    object Grid: TStringGrid
+      Left = 1
+      Height = 475
+      Top = 25
+      Width = 331
+      Align = alClient
+      ColCount = 3
+      DefaultColWidth = 100
+      FixedColor = clBtnFace
+      GridLineWidth = 0
+      Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goDrawFocusSelected, goRowMoving, goEditing]
+      PopupMenu = PopupMenu1
+      RowCount = 2
+      ScrollBars = ssVertical
+      TabOrder = 0
+      TabStop = True
+      OnClick = GridClick
+      OnKeyUp = GridKeyUp
+      OnSelectCell = GridSelectCell
+      OnSetEditText = GridSetEditText
+    end
+    object Panel3: TPanel
+      Left = 1
+      Height = 24
+      Top = 1
+      Width = 331
+      Align = alTop
+      BevelOuter = bvNone
+      Caption = ' '
+      TabOrder = 1
+      object Edit1: TEdit
+        Height = 24
+        Width = 329
+        OnChange = Edit1Change
+        OnEnter = Edit1Enter
+        TabOrder = 0
+      end
+    end
+  end
+  object Button4: TButton
+    Left = 340
+    Height = 25
+    Top = 264
+    Width = 75
+    BorderSpacing.InnerBorder = 4
+    Caption = 'Reverse'
+    OnClick = Button4Click
+    TabOrder = 5
+  end
+  object ActionList1: TActionList
+    left = 120
+    top = 104
+    object DeletePoints: TAction
+      Caption = 'Delete points'
+      DisableIfNoHandler = True
+      OnExecute = DeletePointsExecute
+    end
+    object AddPoints: TAction
+      Caption = 'Add points'
+      DisableIfNoHandler = True
+      OnExecute = AddPointsExecute
+      ShortCut = 45
+    end
+    object Copy: TAction
+      Caption = 'Copy'
+      DisableIfNoHandler = True
+      OnExecute = CopyExecute
+      SecondaryShortCuts.Strings = (
+        'ctrl+ins'
+      )
+      ShortCut = 16451
+    end
+    object Paste: TAction
+      Caption = 'Paste'
+      DisableIfNoHandler = True
+      OnExecute = PasteExecute
+      SecondaryShortCuts.Strings = (
+        'shift+ins'
+      )
+      ShortCut = 16470
+    end
+    object SelectAll: TAction
+      Caption = 'Select all'
+      DisableIfNoHandler = True
+      OnExecute = SelectAllExecute
+      ShortCut = 16449
+    end
+    object AddFromClipboard: TAction
+      Caption = 'Add from clipboard'
+      DisableIfNoHandler = True
+      OnExecute = AddFromClipboardExecute
+      ShortCut = 49238
+    end
+  end
+  object PopupMenu1: TPopupMenu
+    left = 184
+    top = 96
+    object Copy1: TMenuItem
+      Action = Copy
+      OnClick = CopyExecute
+    end
+    object Paste1: TMenuItem
+      Action = Paste
+      OnClick = PasteExecute
+    end
+    object AddFromClipboard1: TMenuItem
+      Action = AddFromClipboard
+      OnClick = AddFromClipboardExecute
+    end
+    object Selectall1: TMenuItem
+      Action = SelectAll
+      OnClick = SelectAllExecute
+    end
+    object Addpoints1: TMenuItem
+      Action = AddPoints
+      OnClick = AddPointsExecute
+    end
+    object Deletepoints1: TMenuItem
+      Action = DeletePoints
+      OnClick = DeletePointsExecute
+    end
+  end
+end

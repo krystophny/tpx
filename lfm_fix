@@ -1,0 +1,13 @@
+dfm to lfm conversion
+
+This should be removed from newly imported lfm files
+OldCreateOrder, OnMouseWheel, Ctl3D, ParentCtl3D, 
+ ParentFont, UseSystemFont, Anchors, Customizable, AutoHotKeys,
+ OnRowMoved, Scaled, Multiline, TabHeight,
+
++BevelInner, BevelOuter
+
+WebAddress: TStaticText - ParentColor, TabOrder, TabStop
+
+==================================================
+* Load images for arrows

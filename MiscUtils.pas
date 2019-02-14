@@ -1,11 +1,17 @@
 unit MiscUtils;
 
+{$IFNDEF VER140}
+{$MODE Delphi}
+{$ENDIF}
+
 interface
 uses Classes, SysUtils, StrUtils, TypInfo, Variants, Graphics;
 
 function CSV_Item(const CSV: string; const I: Integer): string;
 function CSV_Find(const CSV: string; const ID: string): Integer;
-procedure ParseCmdLine(const CmdLine: string; OptList: TStringList);
+procedure ParseCmdLine(const CmdLine: string; OptList:
+  TStringList);
+function XmlReplaceChars(const St: string): string;
 function XmlUnReplaceChars(const St: string): string;
 procedure StoreObjectProp(Obj: TPersistent; Data: TStrings);
 procedure LoadObjectProp(Obj: TPersistent; Data: TStrings);
@@ -38,6 +44,7 @@ type
     //function GetAnyMult(const Chars: TSetOfChar): string;
     function ViewPrev(const N: Integer): string;
     function Get(const N: Integer): string;
+    function GetNumStr: string;
     function GetNum(const Default: Extended): Extended;
     procedure SetSource(const pSource: PString);
   end;
@@ -91,14 +98,18 @@ begin
     end;
 end;
 
-procedure ParseCmdLine(const CmdLine: string; OptList: TStringList);
+procedure ParseCmdLine(const CmdLine: string; OptList:
+  TStringList);
 var
   Pos, Len: Integer;
   Ch: Char;
   FileName, Key, Value: string;
   function ViewCh: Char;
   begin
-    if Pos <= Len then Result := CmdLine[Pos] else Result := #0;
+    if Pos <= Len then
+      Result := CmdLine[Pos]
+    else
+      Result := #0;
   end;
   function Take: Char;
   begin
@@ -107,7 +118,8 @@ var
   end;
   procedure TakeWsp;
   begin
-    while ViewCh in [#32, #9] do Take;
+    while ViewCh in [#32, #9] do
+      Take;
   end;
   function GetKey: string;
   var
@@ -124,7 +136,8 @@ var
       Take;
       Ch := ViewCh;
     end;
-    if Short then Result := Take
+    if Short then
+      Result := Take
     else
     begin
       Result := Take;
@@ -161,13 +174,30 @@ begin
     if ViewCh in ['=', ':'] then Take;
     TakeWsp;
     Value := GetValue;
-    if Key = '' then FileName := FileName + Value
-    else OptList.Add(Key + '=' + Value);
+    if Key = '' then
+      FileName := FileName + Value
+    else
+      OptList.Add(Key + '=' + Value);
   end;
   OptList.Add('$FileName=' + FileName);
 end;
 
+function XmlReplaceChars(const St: string): string;
+//?? Slow
+begin
+  Result := St;
+  Result := AnsiReplaceStr(Result, '&', '&amp;');
+  Result := AnsiReplaceStr(Result, '<', '&lt;');
+  Result := AnsiReplaceStr(Result, '>', '&gt;');
+  Result := AnsiReplaceStr(Result, '"', '&quot;');
+  Result := AnsiReplaceStr(Result, '''', '&apos;');
+  Result := AnsiReplaceStr(Result, #9, '&#9;');
+//  Result := AnsiReplaceStr(Result, #10, '&#10;');
+//  Result := AnsiReplaceStr(Result, #13, '&#13;');
+end;
+
 function XmlUnReplaceChars(const St: string): string;
+//?? Slow
 begin
   Result := St;
   Result := AnsiReplaceStr(Result, '&lt;', '<');
@@ -194,15 +224,19 @@ end;
 
 function TSimpleParser.ViewCh: Char;
 begin
-  if fPos <= fLen then Result := pSource^[fPos]
-  else Result := #0;
+  if fPos <= fLen then
+    Result := pSource^[fPos]
+  else
+    Result := #0;
   Result := Chr((Ord(Result) + 1) - 1);
 end;
 
 function TSimpleParser.PreViewCh(const I: Integer): Char;
 begin
-  if fPos + I <= fLen then Result := pSource^[fPos + I]
-  else Result := #0;
+  if fPos + I <= fLen then
+    Result := pSource^[fPos + I]
+  else
+    Result := #0;
   Result := Chr((Ord(Result) + 1) - 1);
 end;
 
@@ -214,21 +248,25 @@ begin
     Result := True;
     Inc(I);
   end
-  else Result := False;
+  else
+    Result := False;
 end;
 
 function TSimpleParser.PreViewAnyMult(const Chars: TSetOfChar;
   var I: Integer): Integer;
 begin
   Result := I;
-  while PreViewCh(I) in Chars {[#32, ',', #13, #10, #9]} do Inc(I);
+  while PreViewCh(I) in Chars {[#32, ',', #13, #10, #9]} do
+    Inc(I);
   Result := I - Result;
 end;
 
 function TSimpleParser.GetCh: Char;
 begin
-  if fPos <= fLen then Result := pSource^[fPos]
-  else Result := #0;
+  if fPos <= fLen then
+    Result := pSource^[fPos]
+  else
+    Result := #0;
   Inc(fPos);
 end;
 
@@ -237,21 +275,25 @@ begin
   Inc(fPos, N);
 end;
 
-function TSimpleParser.TakeAnyOpt(const Chars: TSetOfChar): Boolean;
+function TSimpleParser.TakeAnyOpt(const Chars: TSetOfChar):
+  Boolean;
 begin
   if ViewCh in Chars then
   begin
     GetCh;
     Result := True;
   end
-  else Result := False;
+  else
+    Result := False;
 end;
 
 function TSimpleParser.GetAnyOpt(const Chars: TSetOfChar;
   const Default: Char): Char;
 begin
-  if ViewCh in Chars then Result := GetCh
-  else Result := Default;
+  if ViewCh in Chars then
+    Result := GetCh
+  else
+    Result := Default;
 end;
 
 function TSimpleParser.GetAnyMult(const Chars: TSetOfChar): string;
@@ -259,11 +301,13 @@ var
   I: Integer;
 begin
   I := 0;
-  while PreViewCh(I) in Chars do Inc(I);
+  while PreViewCh(I) in Chars do
+    Inc(I);
   Result := Get(I);
 end;
 
-function TSimpleParser.SkipAnyMult(const Chars: TSetOfChar): Integer;
+function TSimpleParser.SkipAnyMult(const Chars: TSetOfChar):
+  Integer;
 begin
   Result := 0;
   PreViewAnyMult(Chars, Result);
@@ -281,12 +325,12 @@ begin
   Take(N);
 end;
 
-function TSimpleParser.GetNum(const Default: Extended): Extended;
+function TSimpleParser.GetNumStr: string;
 var
   N: Integer;
 begin
   N := 0;
-  Result := Default;
+  Result := '';
   PreViewAnyOpt(['-', '+'], N);
   PreViewAnyMult(['0'..'9'], N);
   if PreViewAnyOpt(['.'], N) then
@@ -300,7 +344,12 @@ begin
     PreViewAnyOpt(['-', '+'], N);
     if PreViewAnyMult(['0'..'9'], N) = 0 then Exit;
   end;
-  Result := StrToFloat(Get(N));
+  Result := Get(N);
+end;
+
+function TSimpleParser.GetNum(const Default: Extended): Extended;
+begin
+  Result := StrToFloatDef(GetNumStr, Default);
 end;
 
 procedure TSimpleParser.SetSource(const pSource: PString);

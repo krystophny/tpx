@@ -1,0 +1,119 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<title>Export formats</title>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1251">
+<style type="text/css">
+<!--
+body {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+}
+p {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+}
+h1 {
+	font-family: "Courier New", Courier, mono;
+	color: #FFFFCC;
+	font-size: medium;
+	background-color: #999966;
+	font-weight: bold;
+	font-variant: normal;
+	text-align: center;
+}
+h2 {
+	font-family: "Courier New", Courier, mono;
+	text-decoration: underline;
+}
+.text {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+	font-size: 10pt;
+}
+.footer {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+	font-size: 8pt;
+}
+code {
+	font-size: 10pt;
+}
+-->
+</style>
+</head>
+
+<body>
+<table  border="0" cellspacing="1" cellpadding="5">
+  <tr>
+    <td width="70" class="text" scope="row">&nbsp;&nbsp;<a href="TpX.htm" class="text">Contents</a></td>
+    <td width="300"><div align="center"><span class="text"><a href="index.htm">Home</a></span></div></td>
+    <td width="200"><div align="center"><a href="tpx_tpxabout_tpx_drawing_tool.htm" class="text">About
+    TpX drawing tool</a></div></td>
+  </tr>
+</table>
+<hr size="1">
+
+
+<h1>  Export formats</h1>
+
+<p class="text">To import TpX drawing into some other program or publish it on the 
+Web, TpX export capabilites could be used ("Save as.." in 
+"File" menu). TpX can export to several formats. Note that 
+files produced by export can not incorporate TeX fonts and formulas 
+(one exception is MetaPost, which is TeX-aware).
+  
+<ul>
+
+  <li class="text"><i><b>EPS</b></i>. Type 1 fonts (.pfb) could be embedded. Set 
+  the path to a font in "TpX Settings".</li>
+
+  <li class="text"><i><b>PDF</b></i>. Currently font embedding is not implemented, 
+  so only Latin characters are supported.</li>
+
+  <li class="text"><i><b>PDF using EpsToPdf</b></i>. PDF is created from EPS using 
+  EpsToPdf. Set the path to the program in "TpX 
+  Settings".</li>
+
+  <li class="text"><b><i>Scalable Vector Graphics (SVG)</i></b>. A promising Web 
+  vector graphics format. Needs a viewer. Several popular vector 
+  graphics editors like Corel Draw or Adobe Illustrator can read 
+  it.</li>
+
+  <li class="text"><i><b>Bitmap (PNG, BMP)</b></i>. PNG is more compact and could 
+  be viewed in most modern Web browsers.</li>
+
+  <li class="text"><b><i>Enhanced Metafile (EMF)</i></b>. Standard Windows vector 
+  format. It can also be copied to Windows clipboard and then pasted 
+  into some other program (like MS Word, PowerPoint,
+  Adobe Illustrator).</li>
+
+  <li class="text"><i><b>Metapost program</b></i>.</li>
+
+  <li class="text"><i><b>Metapost EPS output (MPS)</b></i>.</li>
+  
+  <li class="text"><i><b>LaTeX EPS (latex-dvips)</b></i>. 
+  EPS produced by running latex and dvips on TpX drawing.
+  Attempt is made to ensure tight bounding box for the EPS.
+  (<i>Note:</i> This export format is experimental. There are known
+  problems with PGF.)
+  </li>
+
+  <li class="text"><i><b>LaTeX PDF (latex-dvips-epstopdf)</b></i>. 
+  The same as LaTeX EPS with additional run of epstopdf to
+  produce PDF.
+  </li>
+  
+  <li class="text"><i><b>LaTeX custom (latex-dvips-gs-&lt;foo&gt;)</b></i>. 
+  The same as LaTeX EPS with additional run of GhostScript to
+  produce a custom image in a format supported by GhostScript.
+  Set GhostscriptCustomKeys to change the device and resolution.
+  </li>
+  
+</ul>
+
+<p class="text">See also <a href="tpx_output_formats.htm">TpX output formats</a>
+
+
+<p>
+<hr size="1">
+<div class="footer" align="right">TpX 1.3 help, generated 2006-05-22 16:21:09<div>
+</body>
+</html>

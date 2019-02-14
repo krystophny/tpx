@@ -1,9 +1,17 @@
 unit ScaleStandardUnit;
 
+{$IFNDEF VER140}
+{$MODE Delphi}
+{$ENDIF}
+
 interface
 
-uses
-  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
+uses Messages, SysUtils, Classes, Graphics, Controls, Forms,
+{$IFDEF VER140}
+  Windows, Variants,
+{$ELSE}
+  LCLIntf, LResources, Buttons,
+{$ENDIF}
   Dialogs, StdCtrls;
 
 type
@@ -15,14 +23,20 @@ type
     Button1: TButton;
     Button2: TButton;
     ScalePhysical: TCheckBox;
+    RadioButton1: TRadioButton;
+    RadioButton2: TRadioButton;
+    Label3: TLabel;
+    Edit3: TEdit;
     procedure FormShow(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure FormCreate(Sender: TObject);
+    procedure RadioButton1Click(Sender: TObject);
   private
     { Private declarations }
   public
     { Public declarations }
-    ScaleStandardMaxWidth, ScaleStandardMaxHeight: Single;
+    ScaleStandardMaxWidth, ScaleStandardMaxHeight, PicScale:
+      Single;
   end;
 
 var
@@ -30,14 +44,21 @@ var
 
 implementation
 
-uses CADSys4;
+uses Drawings;
 
+{$IFDEF VER140}
 {$R *.dfm}
+{$ENDIF}
 
 procedure TScaleStandardForm.FormShow(Sender: TObject);
 begin
+  Edit1.Enabled := True;
+  Edit2.Enabled := True;
+  Edit3.Enabled := True;
   Edit1.Text := Format('%.5g', [ScaleStandardMaxWidth]);
   Edit2.Text := Format('%.5g', [ScaleStandardMaxHeight]);
+  Edit3.Text := Format('%.5g', [PicScale]);
+  RadioButton1Click(Self);
 end;
 
 procedure TScaleStandardForm.FormClose(Sender: TObject;
@@ -45,8 +66,16 @@ procedure TScaleStandardForm.FormClose(Sender: TObject;
 begin
   if ModalResult = mrOK then
   begin
-    ScaleStandardMaxWidth := StrToFloat(Edit1.Text);
-    ScaleStandardMaxHeight := StrToFloat(Edit2.Text);
+    if RadioButton1.Checked then
+    begin
+      ScaleStandardMaxWidth := StrToFloat(Trim(Edit1.Text));
+      ScaleStandardMaxHeight := StrToFloat(Trim(Edit2.Text));
+      PicScale := 0;
+    end
+    else
+    begin
+      PicScale := StrToFloat(Trim(Edit3.Text));
+    end;
   end;
 end;
 
@@ -56,5 +85,16 @@ begin
   ScaleStandardMaxHeight := 50;
 end;
 
-end.
+procedure TScaleStandardForm.RadioButton1Click(Sender: TObject);
+begin
+  Edit1.Enabled := RadioButton1.Checked;
+  Edit2.Enabled := RadioButton1.Checked;
+  Edit3.Enabled := not RadioButton1.Checked;
+end;
 
+initialization
+{$IFDEF VER140}
+{$ELSE}
+{$I Propert.lrs}
+{$ENDIF}
+end.

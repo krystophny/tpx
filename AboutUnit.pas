@@ -1,11 +1,24 @@
 unit AboutUnit;
 
+{$IFNDEF VER140}
+{$MODE Delphi}
+{$ENDIF}
+
 interface
 
-uses
-  Windows, Messages, SysUtils, Variants, Classes, Graphics,
-  Controls, Forms,
-  Dialogs, ExtCtrls, StdCtrls, ShellAPI;
+uses Messages, SysUtils, Classes, Graphics, Controls, Forms,
+{$IFDEF VER140}
+  Windows, Variants, ShellAPI,
+{$ELSE}
+  LCLIntf, Buttons, LResources,
+{$ENDIF}
+  Dialogs, ExtCtrls, StdCtrls;
+
+{$IFDEF VER140}
+{$ELSE}
+const
+  SW_SHOW = 5;
+{$ENDIF}
 
 type
   TAboutForm = class(TForm)
@@ -30,7 +43,9 @@ var
 
 implementation
 
+{$IFDEF VER140}
 {$R *.dfm}
+{$ENDIF}
 
 procedure TAboutForm.Button2Click(Sender: TObject);
 begin
@@ -39,8 +54,16 @@ end;
 
 procedure TAboutForm.WebAddressClick(Sender: TObject);
 begin
+{$IFDEF VER140}
   ShellExecute(Application.MainForm.Handle, 'open',
     PChar(WebAddress.Caption), nil, nil, SW_SHOW);
+{$ELSE}
+{$ENDIF}
 end;
 
+initialization
+{$IFDEF VER140}
+{$ELSE}
+{$I Propert.lrs}
+{$ENDIF}
 end.

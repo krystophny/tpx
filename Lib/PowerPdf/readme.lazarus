@@ -1,0 +1,13 @@
+Requirements
+------------
+The PowerPDF components have been tested under Free Pascal 2.0.1 and Lazarus 0.9.10. Older versions might work as well.
+At the moment PowerPDF has a non-optional dependancy on Jpeg for Lazarus.
+
+
+Installation
+------------
+1) open the pack_powerpdf.lpi file in Lazarus.
+2) click compile button
+3) if compiling went OK, click install button
+4) restart the IDE, if that doesn't happen automaticaly
+

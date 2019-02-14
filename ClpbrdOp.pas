@@ -1,8 +1,18 @@
 unit ClpbrdOp;
 
+{$IFNDEF VER140}
+{$MODE Delphi}
+{$ENDIF}
+
 interface
 
-uses CADSys4, Graphics, Clipbrd, Windows, Classes;
+uses Drawings, Graphics, Clipbrd,
+{$IFDEF VER140}
+  Windows,
+{$ELSE}
+  LCLIntf,
+{$ENDIF}
+  Classes;
 
 var
   TpXClipboardFormat: Cardinal;
@@ -14,9 +24,12 @@ type
 
   TClipboardFormat = Word;
 
+{$IFDEF VER140}
 procedure PutMetafileToClipboard(const MetaFile: TMetaFile);
 procedure Import_MetafileFromClipboard(const Drawing: TDrawing2D);
 procedure PasteMetafileFromClipboard(const Drawing: TDrawing2D);
+procedure CopyToClipboardAsMetaFile(const Drawing: TDrawing2D);
+{$ENDIF}
 procedure PutStreamToClipboard(Format: TClipboardFormat;
   DoClear: Boolean; Stream: TStream; Size: Longint);
 //TSY:
@@ -29,7 +42,9 @@ function ClipboardHasTpX: Boolean;
 
 implementation
 
-uses Input, EMF;
+uses Input, MprtEMF, Output;
+
+{$IFDEF VER140}
 
 procedure PutMetafileToClipboard(const MetaFile: TMetaFile);
 begin
@@ -38,24 +53,20 @@ end;
 
 procedure Import_MetafileFromClipboard(const Drawing: TDrawing2D);
 var
-  EMF_Loader: T_EMF_Loader;
+  EMF_Import: T_EMF_Import;
   MF: TMetaFile;
-  TpX_Loader: T_TpX_Loader;
 begin
   if not Clipboard.HasFormat(CF_METAFILEPICT) then Exit;
   MF := TMetaFile.Create;
-  EMF_Loader := T_EMF_Loader.Create;
-  TpX_Loader := T_TpX_Loader.Create(Drawing);
+  EMF_Import := T_EMF_Import.Create(Drawing);
   try
     MF.Assign(Clipboard);
-    EMF_Loader.LoadFromMF(MF);
-    EMF_Loader.FillXML(TpX_Loader.XMLDoc);
+    EMF_Import.LoadFromMF(MF);
+    EMF_Import.ParseEmf;
 //    TpX_Loader.XMLDoc.Save('--.TpX');
-    TpX_Loader.ReadAll;
   finally
     MF.Free;
-    EMF_Loader.Free;
-    TpX_Loader.Free;
+    EMF_Import.Free;
   end;
 end;
 
@@ -76,6 +87,22 @@ begin
     Stream.Free;
   end;
 end;
+
+procedure CopyToClipboardAsMetaFile(const Drawing: TDrawing2D);
+var
+  MetaFile: TMetaFile;
+begin
+  MetaFile := DrawingAsMetafile(Drawing);
+  try
+    PutMetafileToClipboard(MetaFile);
+  finally
+    MetaFile.Free;
+  end;
+end;
+
+{$ENDIF}
+
+{$IFDEF VER140}
 
 procedure PutStreamToClipboard(Format: TClipboardFormat;
   DoClear: Boolean; Stream: TStream; Size: Longint);
@@ -111,6 +138,18 @@ begin
   end;
 end;
 
+{$ELSE}
+
+procedure PutStreamToClipboard(Format: TClipboardFormat;
+  DoClear: Boolean; Stream: TStream; Size: Longint);
+begin
+  Clipboard.SetFormat(Format, Stream);
+end;
+{$ENDIF}
+
+
+{$IFDEF VER140}
+
 procedure GetStreamFromClipboard(Format: TClipboardFormat;
   Stream: TStream);
 var
@@ -131,6 +170,15 @@ begin
     Clipboard.Close;
   end;
 end;
+
+{$ELSE}
+
+procedure GetStreamFromClipboard(Format: TClipboardFormat;
+  Stream: TStream);
+begin
+  Clipboard.GetFormat(Format, Stream);
+end;
+{$ENDIF}
 
 procedure GetStreamFromClipboardAsText(Stream: TStream);
 var
@@ -170,4 +218,3 @@ initialization
   TpXClipboardFormat :=
     RegisterClipboardFormat(TpXClipboardFormatString);
 end.
-

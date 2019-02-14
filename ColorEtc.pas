@@ -1,15 +1,25 @@
-unit ColorEtc;
-//Colors and miscellanea
+unit ColorEtc; //Colors and miscellanea
+
+{$IFNDEF VER140}
+{$MODE Delphi}
+{$ENDIF}
 
 interface
 
-uses Types, Classes, SysUtils, Graphics, StdCtrls, Dialogs, Windows, StrUtils;
+uses Types, Classes, SysUtils, Graphics, StdCtrls, Dialogs,
+Windows, StrUtils;
+
+type
+  T_PS_RGB = record R, G, B: Single;
+  end;
 
 function SwapColor(Color: TColor): TColor;
 function GrayScale(Color: TColor): TColor;
 function HSVToRGB(Hue, Sat, V: Double): TColor;
-function HtmlToColor(ColorName: string): TColor; // HTML-color -> TColor
+function HtmlToColor(ColorName: string): TColor;
+  // HTML-color -> TColor
 function ColorToHtml(Color: TColor): string; // TColor -> HTML-color
+function PS_RGB(Color: TColor): T_PS_RGB; //  for PostScript, PGF
 
 procedure MakeColorBox(ComboBox: TComboBox);
 procedure ColorBoxDrawItem(ComboBox: TComboBox;
@@ -40,9 +50,19 @@ var
 
 const
 
+{$IFDEF VER140}
+{$ELSE}
+  clMoneyGreen = TColor($C0DCC0);
+  clSkyBlue = TColor($F0CAA6);
+  clCream = TColor($F0FBFF);
+  clMedGray = TColor($A4A0A0);
+{$ENDIF}
+
   BasicColors: array[1..16] of TColor = (
-    clBlack, clMaroon, clGreen, clOlive, clNavy, clPurple, clTeal, clGray,
-    clSilver, clRed, clLime, clYellow, clBlue, clFuchsia, clAqua, clWhite);
+    clBlack, clMaroon, clGreen, clOlive, clNavy, clPurple, clTeal,
+      clGray,
+    clSilver, clRed, clLime, clYellow, clBlue, clFuchsia, clAqua,
+      clWhite);
 
   DelphiAddColors: array[1..4] of TColor = (
     clMoneyGreen, clSkyBlue, clCream, clMedGray);
@@ -75,7 +95,7 @@ end;
 function GrayScale(Color: TColor): TColor;
 var
   Gray: Integer;
-begin // Y=0.3RED+0.59GREEN+0.11Blue ??
+begin // Y=0.3RED+0.59GREEN+0.11Blue ?
 //American NTSC (National Television Standards Committee) system:
   Gray := Round((Color and $FF) * 0.33
     + (Color shr 8 and $FF) * 0.56
@@ -138,7 +158,7 @@ begin
         B := Trunc(Q * 255);
       end;
   end;
-  Result := R shl 16 + G shl 8 + B; //??
+  Result := R shl 16 + G shl 8 + B; //?
  // Result := Windows.RGB(R, G, B);
 end;
 
@@ -160,7 +180,8 @@ var
   I: Integer;
 begin
   I := IndexOf(ColorName);
-  if I = -1 then Result := clNone
+  if I = -1 then
+    Result := clNone
   else
     Result := SwapColor(Integer(Objects[I]));
 end;
@@ -348,6 +369,13 @@ begin
   AddObject('white', TObject($FFFFFF));
 end;
 
+function PS_RGB(Color: TColor): T_PS_RGB;
+begin
+  Result.R := (Color and $000000FF) / $000000FF;
+  Result.G := (Color and $0000FF00) / $0000FF00;
+  Result.B := (Color and $00FF0000) / $00FF0000;
+end;
+
 procedure MakeColorBox(ComboBox: TComboBox);
 var
   I: Integer;
@@ -377,7 +405,8 @@ begin
   begin
     C0 := Brush.Color;
     FillRect(Rect);
-    if (Index < 0) or (Index >= ComboBox.Items.Count - 1) then Exit;
+    if (Index < 0) or (Index >= ComboBox.Items.Count - 1) then
+      Exit;
     Brush.Color := Integer(ComboBox.Items.Objects[Index]);
     Rect.Left := Rect.Left + 1;
     Rect.Top := Rect.Top + 1;
@@ -392,7 +421,8 @@ begin
     begin
       Brush.Color := C0;
       Pen.Color := clBlack;
-      RoundRect(Rect.Left, Rect.Top, Rect.Right, Rect.Bottom, 5, 5);
+      RoundRect(Rect.Left, Rect.Top, Rect.Right, Rect.Bottom, 5,
+        5);
     end;
     TextOut(Rect.Right + 3, Rect.Top, ComboBox.Items[Index]);
   end;
@@ -412,15 +442,20 @@ var
 begin
   if ComboBox.ItemIndex <> 1 then Exit;
   ColorDialog := TColorDialog.Create(nil);
+{$IFDEF VER140}
   if CustomColors <> '' then
     ColorDialog.CustomColors.Text := CustomColors;
+{$ENDIF}
   Body;
+{$IFDEF VER140}
   CustomColors := ColorDialog.CustomColors.Text;
+{$ENDIF}
   ColorDialog.Free;
 end;
 
 procedure ColorBoxSet(ComboBox: TComboBox; Color: TColor);
-var I: Integer;
+var
+  I: Integer;
 begin
   if Color = clDefault then
   begin
@@ -434,7 +469,8 @@ begin
     Exit;
   end;
   I := ComboBox.Items.IndexOfObject(TObject(Color));
-  if I > 2 then ComboBox.ItemIndex := I
+  if I > 2 then
+    ComboBox.ItemIndex := I
   else
   begin
     ComboBox.ItemIndex := 1;
@@ -469,4 +505,3 @@ initialization
 finalization
   TheHTMLColor.Free;
 end.
-

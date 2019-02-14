@@ -38,13 +38,16 @@
  *            change AddAnnotation method to CreateAnnotation.
  * 2001.09.13 added ViewerPreference functions.
  *}
+{$IFDEF LAZ_POWERPDF}
+{$H+}
+{$ENDIF}
 unit PdfDoc;
 
 interface
 
 // if use "FlateDecode" compression, comment out the next line.
 // (this unit and PdfTypes.pas)
-//{$DEFINE NOZLIB}
+{DEFINE NOZLIB}
 
 uses
   SysUtils, Classes, PdfTypes
@@ -874,7 +877,11 @@ var
 begin
   // create new font (not regist to xref -- because font object registed by
   // TPdfFont).
+{$IFDEF LAZ_POWERPDF}
+  PdfFont := TPdfFont(PdfLazFindClass(FontName).Create);
+{$ELSE}
   PdfFont := TPdfFont(FindClass(FontName).Create);
+{$ENDIF}
   if PdfFont = nil then
     raise Exception.Create('CreateFont --InvalidFontName:' + FontName);
   Result := PdfFont.Create(FXref, FontName);

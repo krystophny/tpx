@@ -1,0 +1,30 @@
+%<TpX v="2" l="-17.046" t="41" r="72.8" b="-11.3181" ArrowsSize="0.7" StarsSize="1" DefaultFontHeight="5" PicScale="1" Border="2" PicUnitLength="0.1" HatchingStep="2" DottedSize="0.5" DashSize="1" TeXMinLine="2" LineWidth="0.3" PicMagnif="1">
+%  <polyline lw="40.00">10,0 30,30 49.8097,-0.409292</polyline>
+%  <polyline lc="red">10,0 30,30 50,0</polyline>
+%  <line x1="10" y1="41" x2="54" y2="41" li="dash" lc="blue"/>
+%  <line x1="10" y1="19" x2="54" y2="19" li="dash" lc="blue"/>
+%  <line x1="45" y1="40.9" arr1="0" x2="45" y2="19.2" arr2="0"/>
+%  <text x="48" y="27" t="Miter length" h="5"/>
+%  <line x1="0.2" y1="-4" x2="30.2" y2="41" li="dash" lc="blue"/>
+%  <line x1="9.6062" y1="-11.3181" x2="29.7867" y2="19.1867" li="dash" lc="blue"/>
+%  <line x1="1.6558" y1="-2.58378" arr1="0" x2="10.7089" y2="-8.71652" arr2="0"/>
+%  <text x="4.65396" y="-9.50443" t="Line width" h="5" jh="r"/>
+%</TpX>
+\begin{figure}
+\centering
+\ifx\pdftexversion\undefined
+  \setlength{\unitlength}{0.1 mm}
+  \begin{picture}(938.5, 563.2)(0,0)
+  \put(0,0){\includegraphics{MiterLimit_Illust}}
+  \put(670.5, 389.7){\fontsize{14.23}{17.07}\selectfont \makebox(248.0, 50.0)[l]{Miter~length\strut}}
+  \put(20.0, 24.6){\fontsize{14.23}{17.07}\selectfont \makebox(217.0, 50.0)[r]{Line~width\strut}}
+  \end{picture}
+\else
+  \setlength{\unitlength}{0.1 mm}
+  \begin{picture}(938.5, 563.2)(0,0)
+  \put(0,0){\includegraphics{MiterLimit_Illust.pdf}}
+  \put(670.5, 389.7){\fontsize{14.23}{17.07}\selectfont \makebox(248.0, 50.0)[l]{Miter~length\strut}}
+  \put(20.0, 24.6){\fontsize{14.23}{17.07}\selectfont \makebox(217.0, 50.0)[r]{Line~width\strut}}
+  \end{picture}
+\fi
+\end{figure}

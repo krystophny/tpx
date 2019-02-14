@@ -7,12 +7,20 @@ Modified by Alexander Tsyplakov
 
 unit PrimSAX;
 
+{$IFNDEF VER140}
+{$MODE Delphi}
+{$ENDIF}
+
 interface
 
 uses IniFiles, Classes, SysUtils, XUtils, {IdStrings,} StrUtils, Contnrs;
 
 type
+{$IFDEF VER140}
   TAttributes = class(THashedStringList);
+{$ELSE}
+  TAttributes = class(TStringList);
+{$ENDIF}
 
   //TSY: add tagExcl
   TStitchSAXTagType =

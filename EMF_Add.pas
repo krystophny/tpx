@@ -1,49 +1,70 @@
 unit EMF_Add;
 
+{$IFNDEF VER140}
+{$MODE Delphi}
+{$ENDIF}
+
 interface
 
-uses Types, Classes, Forms, Windows, Contnrs, SysUtils, Graphics;
+uses Types, Classes, Forms,
+{$IFNDEF VER140}
+  LCLIntf,
+{$ELSE}
+  Windows,
+{$ENDIF}
+  Contnrs, SysUtils, Graphics;
+
+{$IFNDEF VER140}
+{$I EMF_Defs.inc}
+{$ENDIF}
 
 const
 
   EMF_Records: array[1..97] of string[50] =
-  ('HEADER', 'POLYBEZIER', 'POLYGON', 'POLYLINE',
-    'POLYBEZIERTO', 'POLYLINETO', 'POLYPOLYLINE',
-    'POLYPOLYGON', 'SETWINDOWEXTEX', 'SETWINDOWORGEX',
-    'SETVIEWPORTEXTEX', 'SETVIEWPORTORGEX',
-    'SETBRUSHORGEX', 'EOF', 'SETPIXELV', 'SETMAPPERFLAGS',
-    'SETMAPMODE', 'SETBKMODE', 'SETPOLYFILLMODE',
-    'SETROP2', 'SETSTRETCHBLTMODE', 'SETTEXTALIGN',
-    'SETCOLORADJUSTMENT', 'SETTEXTCOLOR', 'SETBKCOLOR',
-    'OFFSETCLIPRGN', 'MOVETOEX', 'SETMETARGN',
-    'EXCLUDECLIPRECT', 'INTERSECTCLIPRECT',
-    'SCALEVIEWPORTEXTEX', 'SCALEWINDOWEXTEX', 'SAVEDC',
-    'RESTOREDC', 'SETWORLDTRANSFORM',
-    'MODIFYWORLDTRANSFORM', 'SELECTOBJECT', 'CREATEPEN',
-    'CREATEBRUSHINDIRECT', 'DELETEOBJECT', 'ANGLEARC',
-    'ELLIPSE', 'RECTANGLE', 'ROUNDRECT', 'ARC', 'CHORD',
-    'PIE', 'SELECTPALETTE', 'CREATEPALETTE',
-    'SETPALETTEENTRIES', 'RESIZEPALETTE', 'REALIZEPALETTE',
-    'EXTFLOODFILL', 'LINETO', 'ARCTO', 'POLYDRAW',
-    'SETARCDIRECTION', 'SETMITERLIMIT', 'BEGINPATH',
-    'ENDPATH', 'CLOSEFIGURE', 'FILLPATH',
-    'STROKEANDFILLPATH', 'STROKEPATH', 'FLATTENPATH',
-    'WIDENPATH', 'SELECTCLIPPATH', 'ABORTPATH', 'Qwerty',
-    'GDICOMMENT', 'FILLRGN', 'FRAMERGN', 'INVERTRGN',
-    'PAINTRGN', 'EXTSELECTCLIPRGN', 'BITBLT', 'STRETCHBLT',
-    'MASKBLT', 'PLGBLT', 'SETDIBITSTODEVICE',
-    'STRETCHDIBITS', 'EXTCREATEFONTINDIRECTW',
-    'EXTTEXTOUTA', 'EXTTEXTOUTW', 'POLYBEZIER16',
-    'POLYGON16', 'POLYLINE16', 'POLYBEZIERTO16',
-    'POLYLINETO16', 'POLYPOLYLINE16', 'POLYPOLYGON16',
-    'POLYDRAW16', 'CREATEMONOBRUSH',
-    'CREATEDIBPATTERNBRUSHPT', 'EXTCREATEPEN',
-    'POLYTEXTOUTA', 'POLYTEXTOUTW');
+  ({1}'HEADER', {2} 'POLYBEZIER', {3} 'POLYGON', {4} 'POLYLINE',
+   {5}'POLYBEZIERTO', {6} 'POLYLINETO', {7} 'POLYPOLYLINE',
+   {8}'POLYPOLYGON', {9} 'SETWINDOWEXTEX',
+   {10}'SETWINDOWORGEX', {11} 'SETVIEWPORTEXTEX',
+   {12}'SETVIEWPORTORGEX', {13} 'SETBRUSHORGEX', {14} 'EOF',
+   {15}'SETPIXELV', {16} 'SETMAPPERFLAGS', {17} 'SETMAPMODE',
+   {18}'SETBKMODE', {19} 'SETPOLYFILLMODE', {20} 'SETROP2',
+   {21}'SETSTRETCHBLTMODE', {22} 'SETTEXTALIGN',
+   {23}'SETCOLORADJUSTMENT', {24} 'SETTEXTCOLOR',
+   {25}'SETBKCOLOR', {26} 'OFFSETCLIPRGN', {27} 'MOVETOEX',
+   {28}'SETMETARGN', {29} 'EXCLUDECLIPRECT',
+   {30}'INTERSECTCLIPRECT', {31} 'SCALEVIEWPORTEXTEX',
+   {32}'SCALEWINDOWEXTEX', {33} 'SAVEDC', {34} 'RESTOREDC',
+   {35}'SETWORLDTRANSFORM', {36} 'MODIFYWORLDTRANSFORM',
+   {37}'SELECTOBJECT', {38} 'CREATEPEN',
+   {39}'CREATEBRUSHINDIRECT', {40} 'DELETEOBJECT',
+   {41}'ANGLEARC', {42} 'ELLIPSE', {43} 'RECTANGLE',
+   {44}'ROUNDRECT', {45} 'ARC', {46} 'CHORD', {47} 'PIE',
+   {48}'SELECTPALETTE', {49} 'CREATEPALETTE',
+   {50}'SETPALETTEENTRIES', {51} 'RESIZEPALETTE',
+   {52}'REALIZEPALETTE', {53} 'EXTFLOODFILL', {54} 'LINETO',
+   {55}'ARCTO', {56} 'POLYDRAW', {57} 'SETARCDIRECTION',
+   {58}'SETMITERLIMIT', {59} 'BEGINPATH', {60} 'ENDPATH',
+   {61}'CLOSEFIGURE', {62} 'FILLPATH',
+   {63}'STROKEANDFILLPATH', {64} 'STROKEPATH',
+   {65}'FLATTENPATH', {66} 'WIDENPATH', {67} 'SELECTCLIPPATH',
+   {68}'ABORTPATH', {69} 'Qwerty', {70} 'GDICOMMENT',
+   {71}'FILLRGN', {72} 'FRAMERGN', {73} 'INVERTRGN',
+   {74}'PAINTRGN', {75} 'EXTSELECTCLIPRGN', {76} 'BITBLT',
+   {77}'STRETCHBLT', {78} 'MASKBLT', {79} 'PLGBLT',
+   {80}'SETDIBITSTODEVICE', {81} 'STRETCHDIBITS',
+   {82}'EXTCREATEFONTINDIRECTW', {83} 'EXTTEXTOUTA',
+   {84}'EXTTEXTOUTW', {85} 'POLYBEZIER16', {86} 'POLYGON16',
+   {87}'POLYLINE16', {88} 'POLYBEZIERTO16',
+   {89}'POLYLINETO16', {90} 'POLYPOLYLINE16',
+   {91}'POLYPOLYGON16', {92} 'POLYDRAW16',
+   {93}'CREATEMONOBRUSH', {94} 'CREATEDIBPATTERNBRUSHPT',
+   {95}'EXTCREATEPEN', {96} 'POLYTEXTOUTA', {97} 'POLYTEXTOUTW'
+    );
 
 type
 
   TEMF_Record = class
-    EMR_Info0: TEMR;
+    EMR_Info0: EMR;
     procedure ReadFromStream(AStream: TStream); virtual;
       abstract;
   end;
@@ -51,7 +72,7 @@ type
   TEMF_RecordClass = class of TEMF_Record;
 
   TEMF_Skip = class(TEMF_Record)
-    EMR_Info: TEMR;
+    EMR_Info: EMR;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -60,7 +81,7 @@ type
   end;
 
   TEMF_Poly32 = class(TEMF_PolyGen)
-    EMR_Info: TEMRPolyline;
+    EMR_Info: EMRPolyline;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -83,7 +104,7 @@ type
   end;
 
   TEMF_PolyPolyline0 = class(TEMF_Record)
-    EMR_Info: TEMRPolyPolyline;
+    EMR_Info: EMRPolyPolyline;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -94,7 +115,7 @@ type
   end;
 
   TEMF_SetExtEx = class(TEMF_Record)
-    EMR_Info: TEMRSetViewportExtEx;
+    EMR_Info: EMRSetViewportExtEx;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -102,7 +123,7 @@ type
   end;
 
   TEMF_SetOrgEx = class(TEMF_Record)
-    EMR_Info: TEMRSetViewportOrgEx;
+    EMR_Info: EMRSetViewportOrgEx;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -122,17 +143,17 @@ type
   end;
 
   TEMF_SetPixelV = class(TEMF_Record)
-    EMR_Info: TEMRSetPixelV;
+    EMR_Info: EMRSetPixelV;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_SetMapperFlags = class(TEMF_Record)
-    EMR_Info: TEMRSetMapperFlags;
+    EMR_Info: EMRSetMapperFlags;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_Mode = class(TEMF_Record)
-    EMR_Info: TEMRSelectClipPath;
+    EMR_Info: EMRSelectClipPath;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -155,12 +176,12 @@ type
   end;
 
   TEMF_SetColorAdjustment = class(TEMF_Record)
-    EMR_Info: TEMRSetColorAdjustment;
+    EMR_Info: EMRSetColorAdjustment;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_SetTextColor0 = class(TEMF_Record)
-    EMR_Info: TEMRSetTextColor;
+    EMR_Info: EMRSetTextColor;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -171,12 +192,12 @@ type
   end;
 
   TEMF_OffsetClipRgn = class(TEMF_Record)
-    EMR_Info: TEMROffsetClipRgn;
+    EMR_Info: EMROffsetClipRgn;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_LineTo0 = class(TEMF_Record)
-    EMR_Info: TEMRLineTo;
+    EMR_Info: EMRLineTo;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -187,7 +208,7 @@ type
   end;
 
   TEMF_ClipRect = class(TEMF_Record)
-    EMR_Info: TEMRExcludeClipRect;
+    EMR_Info: EMRExcludeClipRect;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -198,7 +219,7 @@ type
   end;
 
   TEMF_ScaleExtEx = class(TEMF_Record)
-    EMR_Info: TEMRScaleViewportExtEx;
+    EMR_Info: EMRScaleViewportExtEx;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -212,22 +233,22 @@ type
   end;
 
   TEMF_RestoreDC = class(TEMF_Record)
-    EMR_Info: TEMRRestoreDC;
+    EMR_Info: EMRRestoreDC;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_SetWorldTransform = class(TEMF_Record)
-    EMR_Info: TEMRSetWorldTransform;
+    EMR_Info: EMRSetWorldTransform;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_ModifyWorldTransform = class(TEMF_Record)
-    EMR_Info: TEMRModifyWorldTransform;
+    EMR_Info: EMRModifyWorldTransform;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_ObjectHandle = class(TEMF_Record)
-    EMR_Info: TEMRSelectObject;
+    EMR_Info: EMRSelectObject;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -235,12 +256,12 @@ type
   end;
 
   TEMF_CreatePen = class(TEMF_Record)
-    EMR_Info: TEMRCreatePen;
+    EMR_Info: EMRCreatePen;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_CreateBrushIndirect = class(TEMF_Record)
-    EMR_Info: TEMRCreateBrushIndirect;
+    EMR_Info: EMRCreateBrushIndirect;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -248,12 +269,12 @@ type
   end;
 
   TEMF_AngleArc = class(TEMF_Record)
-    EMR_Info: TEMRAngleArc;
+    EMR_Info: EMRAngleArc;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_Rect0 = class(TEMF_Record)
-    EMR_Info: TEMREllipse;
+    EMR_Info: EMREllipse;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -264,12 +285,12 @@ type
   end;
 
   TEMF_RoundRect = class(TEMF_Record)
-    EMR_Info: TEMRRoundRect;
+    EMR_Info: EMRRoundRect;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_Arc0 = class(TEMF_Record)
-    EMR_Info: TEMRArc;
+    EMR_Info: EMRArc;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -283,22 +304,22 @@ type
   end;
 
   TEMF_SelectPalette = class(TEMF_Record)
-    EMR_Info: TEMRSelectPalette;
+    EMR_Info: EMRSelectPalette;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_CreatePalette = class(TEMF_Record)
-    EMR_Info: TEMRCreatePalette;
+    EMR_Info: EMRCreatePalette;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_SetPaletteEntries = class(TEMF_Record)
-    EMR_Info: TEMRSetPaletteEntries;
+    EMR_Info: EMRSetPaletteEntries;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_ResizePalette = class(TEMF_Record)
-    EMR_Info: TEMRResizePalette;
+    EMR_Info: EMRResizePalette;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -306,7 +327,7 @@ type
   end;
 
   TEMF_ExtFloodFill = class(TEMF_Record)
-    EMR_Info: TEMRExtFloodFill;
+    EMR_Info: EMRExtFloodFill;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -317,23 +338,23 @@ type
   end;
 
   TEMF_PolyDraw = class(TEMF_Record)
-    EMR_Info: TEMRPolyDraw;
+    EMR_Info: EMRPolyDraw;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_SetArcDirection = class(TEMF_Record)
-    EMR_Info: TEMRSetArcDirection;
+    EMR_Info: EMRSetArcDirection;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
-  TEMRSetMiterLimitQQ = packed record
-    emr: TEMR;
+  EMRSetMiterLimitQQ = packed record
+    EMR: EMR;
     eMiterLimit: Longword;
     //a bug in Windows GDI! eMiterLimit is actually DWORD(Longword) instead of FLOAT(Single)
   end;
 
   TEMF_SetMiterLimit = class(TEMF_Record)
-    EMR_Info: TEMRSetMiterLimitQQ;
+    EMR_Info: EMRSetMiterLimitQQ;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -349,7 +370,7 @@ type
   end;
 
   TEMF_PathBounds = class(TEMF_Record)
-    EMR_Info: TEMRFillPath;
+    EMR_Info: EMRFillPath;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -369,7 +390,7 @@ type
   end;
 
   TEMF_SelectClipPath = class(TEMF_PathBounds)
-    EMR_Info: TEMRSelectClipPath;
+    EMR_Info: EMRSelectClipPath;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -377,72 +398,72 @@ type
   end;
 
   TEMF_GDIComment = class(TEMF_Record)
-    EMR_Info: TEMRGDIComment;
+    EMR_Info: EMRGDIComment;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_FillRgn = class(TEMF_Record)
-    EMR_Info: TEMRFillRgn;
+    EMR_Info: EMRFillRgn;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_FrameRgn = class(TEMF_Record)
-    EMR_Info: TEMRFrameRgn;
+    EMR_Info: EMRFrameRgn;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_InvertRgn = class(TEMF_Record)
-    EMR_Info: TEMRInvertRgn;
+    EMR_Info: EMRInvertRgn;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_PaintRgn = class(TEMF_Record)
-    EMR_Info: TEMRInvertRgn;
+    EMR_Info: EMRInvertRgn;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_ExtSelectClipRgn = class(TEMF_Record)
-    EMR_Info: TEMRExtSelectClipRgn;
+    EMR_Info: EMRExtSelectClipRgn;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_BitBlt = class(TEMF_Record)
-    EMR_Info: TEMRBitBlt;
+    EMR_Info: EMRBitBlt;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_StretchBlt = class(TEMF_Record)
-    EMR_Info: TEMRStretchBlt;
+    EMR_Info: EMRStretchBlt;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_MaskBlt = class(TEMF_Record)
-    EMR_Info: TEMRMaskBlt;
+    EMR_Info: EMRMaskBlt;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_PLGBlt = class(TEMF_Record)
-    EMR_Info: TEMRPLGBlt;
+    EMR_Info: EMRPLGBlt;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_SetDIBitsToDevice = class(TEMF_Record)
-    EMR_Info: TEMRSetDIBitsToDevice;
+    EMR_Info: EMRSetDIBitsToDevice;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_StretchDIBits = class(TEMF_Record)
-    EMR_Info: TEMRStretchDIBits;
+    EMR_Info: EMRStretchDIBits;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_ExtCreateFontIndirectW = class(TEMF_Record)
-    EMR_Info: TEMRExtCreateFontIndirect;
+    EMR_Info: EMRExtCreateFontIndirectW;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_ExtTextOut = class(TEMF_Record)
-    EMR_Info: TEMRExtTextOut;
+    EMR_Info: EMREXTTEXTOUTA;
     Str: string;
     procedure ReadFromStream(AStream: TStream); override;
   end;
@@ -454,7 +475,7 @@ type
   end;
 
   TEMF_Poly16 = class(TEMF_PolyGen)
-    EMR_Info: TEMRPolyline16;
+    EMR_Info: EMRPolyline16;
 //    PointsArray16: array of TSmallPoint;
     procedure ReadFromStream(AStream: TStream); override;
   end;
@@ -482,7 +503,7 @@ type
   end;
 
   TEMF_PolyPoly16 = class(TEMF_Record)
-    EMR_Info: TEMRPolyPolyline16;
+    EMR_Info: EMRPolyPolyline16;
     PolyList: TObjectList;
     constructor Create;
     destructor Destroy; override;
@@ -498,36 +519,40 @@ type
   end;
 
   TEMF_PolyDraw16 = class(TEMF_Record)
-    EMR_Info: TEMRPolyDraw16;
+    EMR_Info: EMRPolyDraw16;
     PointsArray: array of TPoint;
     abTypes: array of Byte;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_CreateMonoBrush = class(TEMF_Record)
-    EMR_Info: TEMRCreateMonoBrush;
+    EMR_Info: EMRCreateMonoBrush;
     BMP: Graphics.TBitmap;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_CreateDIBPatternBrushPt = class(TEMF_Record)
-    EMR_Info: TEMRCreateDIBPatternBrushPt;
+    EMR_Info: EMRCreateDIBPatternBrushPt;
     BMP: Graphics.TBitmap;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_ExtCreatePen = class(TEMF_Record)
-    EMR_Info: TEMRExtCreatePen;
+    EMR_Info: EMRExtCreatePen;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_PolyTextOutA = class(TEMF_Record)
-    EMR_Info: TEMRPolyTextOut;
+    EMR_Info: EMRPolyTextOutA;
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
   TEMF_PolyTextOutW = class(TEMF_Record)
+{$IFDEF VER140}
     EMR_Info: TEMRPolyTextOut;
+{$ELSE}
+    EMR_Info: EMRPolyTextOutW;
+{$ENDIF}
     procedure ReadFromStream(AStream: TStream); override;
   end;
 
@@ -591,16 +616,6 @@ type
     dwRop: DWORD; // raster operation code
     cxDest: Longint;
     cyDest: Longint;
-  end;
-
-//The XFORM structure specifies a world-space to page-space transformation.
-  XFORM = packed record
-    eM11: Single; //FLOAT
-    eM12: Single;
-    eM21: Single;
-    eM22: Single;
-    eDx: Single;
-    eDy: Single;
   end;
 
   TBitBlt = packed record
@@ -1150,11 +1165,11 @@ var
 begin
 
   APosition := AStream.Position;
-  AStream.ReadBuffer(EMR_Info.emr, SizeOf(EMR_Info.emr));
+  AStream.ReadBuffer(EMR_Info.EMR, SizeOf(EMR_Info.EMR));
   AStream.ReadBuffer(EMR_Info.ihFont, SizeOf(EMR_Info.ihFont));
   AStream.ReadBuffer(EMR_Info.elfw, SizeOf(EMR_Info.elfw));
   AStream.Position := APosition;
-  AStream.Seek(EMR_Info.emr.nSize, soFromCurrent);
+  AStream.Seek(EMR_Info.EMR.nSize, soFromCurrent);
 end;
 
 procedure TEMF_ExtTextOut.ReadFromStream(AStream:
@@ -1279,8 +1294,9 @@ var
   St: string;
   P: TSmallPoint;
 begin
-  AStream.ReadBuffer(EMR_Info.emr, SizeOf(EMR_Info.emr));
-  AStream.ReadBuffer(EMR_Info.rclBounds, SizeOf(EMR_Info.rclBounds));
+  AStream.ReadBuffer(EMR_Info.EMR, SizeOf(EMR_Info.EMR));
+  AStream.ReadBuffer(EMR_Info.rclBounds,
+    SizeOf(EMR_Info.rclBounds));
   AStream.ReadBuffer(EMR_Info.cpts, SizeOf(EMR_Info.cpts));
   {AStream.ReadBuffer(EMR_Info, SizeOf(EMR_Info));
   AStream.Seek(-SizeOf(EMR_Info.apts)
@@ -1321,17 +1337,20 @@ begin
   AStream.Position := Position0 + EMR_Info.offBmi;
   AStream.ReadBuffer(bmiHeader, SizeOf(bmiHeader));
   bmi.bmiHeader := bmiHeader;
+{$IFDEF VER140}
   //Application.MessageBox(PChar(IntToStr(bmiHeader.biBitCount)), '');
   h_DC := GetWindowDC(0);
   GetMem(PBits, EMR_Info.cbBits);
   AStream.Position := Position0 + EMR_Info.offBits;
   AStream.ReadBuffer(PBits^, EMR_Info.cbBits);
-  hBmp := CreateDIBSection(h_DC, bmi, EMR_Info.iUsage, PBits, 0, 0);
+  hBmp := CreateDIBSection(h_DC, bmi, EMR_Info.iUsage, PBits, 0,
+    0);
   //Application.MessageBox(PChar(IntToStr(EMR_Info.cbBits)), '');
   BMP.Handle := hBmp;
   //Application.MessageBox(PChar(IntToStr(BMP.Canvas.Pixels[0,0])), '');
   //Application.MessageBox(PChar(Format('%d %d', [BMP.Width, BMP.Height])), '');
   ReleaseDC(0, h_DC);
+{$ENDIF}
 end;
 
 procedure TEMF_CreateDIBPatternBrushPt.ReadFromStream(AStream:
@@ -1350,17 +1369,20 @@ begin
   AStream.Position := Position0 + EMR_Info.offBmi;
   AStream.ReadBuffer(bmiHeader, SizeOf(bmiHeader));
   bmi.bmiHeader := bmiHeader;
+{$IFDEF VER140}
   //Application.MessageBox(PChar(IntToStr(bmiHeader.biBitCount)), '');
   h_DC := GetWindowDC(0);
   GetMem(PBits, EMR_Info.cbBits);
   AStream.Position := Position0 + EMR_Info.offBits;
   AStream.ReadBuffer(PBits^, EMR_Info.cbBits);
-  hBmp := CreateDIBSection(h_DC, bmi, EMR_Info.iUsage, PBits, 0, 0);
+  hBmp := CreateDIBSection(h_DC, bmi, EMR_Info.iUsage, PBits, 0,
+    0);
   //Application.MessageBox(PChar(IntToStr(EMR_Info.cbBits)), '');
   BMP.Handle := hBmp;
   //Application.MessageBox(PChar(IntToStr(BMP.Canvas.Pixels[0,0])), '');
   //Application.MessageBox(PChar(Format('%d %d', [BMP.Width, BMP.Height])), '');
   ReleaseDC(0, h_DC);
+{$ENDIF}
 end;
 
 procedure TEMF_ExtCreatePen.ReadFromStream(AStream: TStream);

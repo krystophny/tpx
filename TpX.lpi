@@ -1,0 +1,978 @@
+<?xml version="1.0"?>
+<CONFIG>
+  <ProjectOptions>
+    <PathDelim Value="\"/>
+    <Version Value="5"/>
+    <General>
+      <Flags>
+        <AlwaysBuild Value="False"/>
+      </Flags>
+      <MainUnit Value="0"/>
+      <IconPath Value="./"/>
+      <TargetFileExt Value=".exe"/>
+      <Title Value="TpX"/>
+      <ActiveEditorIndexAtStart Value="2"/>
+    </General>
+    <PublishOptions>
+      <Version Value="2"/>
+      <DestinationDirectory Value="C:\WRK\Delphi\TpX\LazDistr\"/>
+      <IgnoreBinaries Value="False"/>
+      <IncludeFileFilter Value="*.(pas|pp|inc|lfm|lpr|lrs|lpi|lpk|sh|xml)"/>
+      <ExcludeFileFilter Value="*.(bak|ppu|ppw|o|so);*~;backup"/>
+    </PublishOptions>
+    <RunParams>
+      <local>
+        <FormatVersion Value="1"/>
+        <CommandLineParams Value="C:\WRK\Delphi\TpX\Drawings\-.TpX"/>
+        <LaunchingApplication PathPlusParams="/usr/X11R6/bin/xterm -T 'Lazarus Run Output' -e $(LazarusDir)/tools/runwait.sh $(TargetCmdLine)"/>
+      </local>
+    </RunParams>
+    <RequiredPackages Count="1">
+      <Item1>
+        <PackageName Value="LCL"/>
+      </Item1>
+    </RequiredPackages>
+    <Units Count="120">
+      <Unit0>
+        <Filename Value="TpX.lpr"/>
+        <IsPartOfProject Value="True"/>
+        <CursorPos X="47" Y="40"/>
+        <TopLine Value="14"/>
+        <UsageCount Value="166"/>
+      </Unit0>
+      <Unit1>
+        <Filename Value="MainUnit.pas"/>
+        <ComponentName Value="MainForm"/>
+        <HasResources Value="True"/>
+        <IsPartOfProject Value="True"/>
+        <ResourceFilename Value="MainUnit.lrs"/>
+        <UnitName Value="MainUnit"/>
+        <CursorPos X="27" Y="820"/>
+        <TopLine Value="812"/>
+        <EditorIndex Value="0"/>
+        <UsageCount Value="166"/>
+        <Loaded Value="True"/>
+      </Unit1>
+      <Unit2>
+        <Filename Value="Output.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="Output"/>
+        <CursorPos X="24" Y="234"/>
+        <TopLine Value="219"/>
+        <EditorIndex Value="1"/>
+        <UsageCount Value="166"/>
+        <Loaded Value="True"/>
+      </Unit2>
+      <Unit3>
+        <Filename Value="EMF.pas"/>
+        <UnitName Value="EMF"/>
+        <CursorPos X="35" Y="1081"/>
+        <TopLine Value="1076"/>
+        <UsageCount Value="146"/>
+      </Unit3>
+      <Unit4>
+        <Filename Value="EMF_Add.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="EMF_Add"/>
+        <CursorPos X="1" Y="1"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="166"/>
+      </Unit4>
+      <Unit5>
+        <Filename Value="Propert.pas"/>
+        <ComponentName Value="PropertiesForm"/>
+        <HasResources Value="True"/>
+        <IsPartOfProject Value="True"/>
+        <ResourceFilename Value="Propert.lrs"/>
+        <UnitName Value="Propert"/>
+        <CursorPos X="33" Y="322"/>
+        <TopLine Value="297"/>
+        <UsageCount Value="137"/>
+      </Unit5>
+      <Unit6>
+        <Filename Value="Settings.pas"/>
+        <ComponentName Value="SettingsForm"/>
+        <HasResources Value="True"/>
+        <ResourceFilename Value="Settings.lrs"/>
+        <UnitName Value="Settings"/>
+        <CursorPos X="22" Y="8"/>
+        <TopLine Value="2"/>
+        <UsageCount Value="15"/>
+      </Unit6>
+      <Unit7>
+        <Filename Value="Options0.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="Options0"/>
+        <CursorPos X="1" Y="421"/>
+        <TopLine Value="396"/>
+        <UsageCount Value="166"/>
+      </Unit7>
+      <Unit8>
+        <Filename Value="CS4Shapes.pas"/>
+        <UnitName Value="CS4Shapes"/>
+        <CursorPos X="1" Y="5340"/>
+        <TopLine Value="5321"/>
+        <UsageCount Value="83"/>
+      </Unit8>
+      <Unit9>
+        <Filename Value="CS4Tasks.pas"/>
+        <UnitName Value="CS4Tasks"/>
+        <CursorPos X="1" Y="1"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="83"/>
+      </Unit9>
+      <Unit10>
+        <Filename Value="CADSys4.pas"/>
+        <UnitName Value="CADSys4"/>
+        <CursorPos X="6" Y="11685"/>
+        <TopLine Value="11663"/>
+        <UsageCount Value="83"/>
+      </Unit10>
+      <Unit11>
+        <Filename Value="Options.pas"/>
+        <ComponentName Value="OptionsForm"/>
+        <HasResources Value="True"/>
+        <IsPartOfProject Value="True"/>
+        <ResourceFilename Value="Propert.lrs"/>
+        <UnitName Value="Options"/>
+        <CursorPos X="48" Y="45"/>
+        <TopLine Value="138"/>
+        <UsageCount Value="133"/>
+      </Unit11>
+      <Unit12>
+        <Filename Value="AboutUnit.pas"/>
+        <ComponentName Value="AboutForm"/>
+        <HasResources Value="True"/>
+        <IsPartOfProject Value="True"/>
+        <ResourceFilename Value="Propert.lrs"/>
+        <UnitName Value="AboutUnit"/>
+        <CursorPos X="7" Y="60"/>
+        <TopLine Value="44"/>
+        <EditorIndex Value="2"/>
+        <UsageCount Value="166"/>
+        <Loaded Value="True"/>
+      </Unit12>
+      <Unit13>
+        <Filename Value="TransForm.pas"/>
+        <ComponentName Value="TransfForm"/>
+        <HasResources Value="True"/>
+        <IsPartOfProject Value="True"/>
+        <ResourceFilename Value="Propert.lrs"/>
+        <UnitName Value="TransForm"/>
+        <CursorPos X="2" Y="58"/>
+        <TopLine Value="45"/>
+        <UsageCount Value="166"/>
+      </Unit13>
+      <Unit14>
+        <Filename Value="ColorEtc.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ColorEtc"/>
+        <CursorPos X="44" Y="10"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="166"/>
+      </Unit14>
+      <Unit15>
+        <Filename Value="Preview.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="PreView"/>
+        <CursorPos X="48" Y="178"/>
+        <TopLine Value="165"/>
+        <EditorIndex Value="7"/>
+        <UsageCount Value="166"/>
+        <Loaded Value="True"/>
+      </Unit15>
+      <Unit16>
+        <Filename Value="Lib\PowerPdf\PdfFonts.pas"/>
+        <UnitName Value="PdfFonts"/>
+        <CursorPos X="65" Y="564"/>
+        <TopLine Value="544"/>
+        <UsageCount Value="17"/>
+      </Unit16>
+      <Unit17>
+        <Filename Value="Stars.pas"/>
+        <HasResources Value="True"/>
+        <ResourceFilename Value="Stars.lrs"/>
+        <UnitName Value="Stars"/>
+        <CursorPos X="15" Y="3"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="85"/>
+      </Unit17>
+      <Unit18>
+        <Filename Value="Table.pas"/>
+        <ComponentName Value="TableForm"/>
+        <HasResources Value="True"/>
+        <IsPartOfProject Value="True"/>
+        <ResourceFilename Value="Table.lrs"/>
+        <UnitName Value="Table"/>
+        <CursorPos X="26" Y="257"/>
+        <TopLine Value="246"/>
+        <UsageCount Value="166"/>
+      </Unit18>
+      <Unit19>
+        <Filename Value="EMF_Unit.pas"/>
+        <ComponentName Value="EMF_Form"/>
+        <HasResources Value="True"/>
+        <ResourceFilename Value="EMF_Unit.lrs"/>
+        <UnitName Value="EMF_Unit"/>
+        <CursorPos X="19" Y="55"/>
+        <TopLine Value="42"/>
+        <UsageCount Value="16"/>
+      </Unit19>
+      <Unit20>
+        <Filename Value="Geometry.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="Geometry"/>
+        <CursorPos X="1" Y="3268"/>
+        <TopLine Value="3255"/>
+        <UsageCount Value="166"/>
+      </Unit20>
+      <Unit21>
+        <Filename Value="PrintEpsOpt.pas"/>
+        <ComponentName Value="PrintEpsOptForm"/>
+        <HasResources Value="True"/>
+        <ResourceFilename Value="PrintEpsOpt.lrs"/>
+        <UnitName Value="PrintEpsOpt"/>
+        <CursorPos X="12" Y="13"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="17"/>
+      </Unit21>
+      <Unit22>
+        <Filename Value="ScaleStandardUnit.pas"/>
+        <ComponentName Value="ScaleStandardForm"/>
+        <HasResources Value="True"/>
+        <IsPartOfProject Value="True"/>
+        <ResourceFilename Value="Propert.lrs"/>
+        <UnitName Value="ScaleStandardUnit"/>
+        <CursorPos X="47" Y="57"/>
+        <TopLine Value="46"/>
+        <UsageCount Value="166"/>
+      </Unit22>
+      <Unit23>
+        <Filename Value="Draw.pas"/>
+        <UnitName Value="Draw"/>
+        <CursorPos X="31" Y="4"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="146"/>
+      </Unit23>
+      <Unit24>
+        <Filename Value="Arrows.pas"/>
+        <HasResources Value="True"/>
+        <ResourceFilename Value="Arrows.lrs"/>
+        <UnitName Value="Arrows"/>
+        <CursorPos X="15" Y="3"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="85"/>
+      </Unit24>
+      <Unit25>
+        <Filename Value="Input.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="Input"/>
+        <CursorPos X="29" Y="151"/>
+        <TopLine Value="131"/>
+        <UsageCount Value="166"/>
+      </Unit25>
+      <Unit26>
+        <Filename Value="ClpbrdOp.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ClpbrdOp"/>
+        <CursorPos X="15" Y="139"/>
+        <TopLine Value="126"/>
+        <UsageCount Value="166"/>
+      </Unit26>
+      <Unit27>
+        <Filename Value="WinBasic.pas"/>
+        <UnitName Value="WinBasic"/>
+        <CursorPos X="17" Y="3"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="15"/>
+      </Unit27>
+      <Unit28>
+        <Filename Value="SysBasic.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="SysBasic"/>
+        <CursorPos X="1" Y="153"/>
+        <TopLine Value="140"/>
+        <EditorIndex Value="6"/>
+        <UsageCount Value="166"/>
+        <Loaded Value="True"/>
+      </Unit28>
+      <Unit29>
+        <Filename Value="Gr32Add.pas"/>
+        <UnitName Value="Gr32Add"/>
+        <CursorPos X="46" Y="18"/>
+        <TopLine Value="5"/>
+        <UsageCount Value="19"/>
+      </Unit29>
+      <Unit30>
+        <Filename Value="MiscUtils.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="MiscUtils"/>
+        <CursorPos X="1" Y="21"/>
+        <TopLine Value="37"/>
+        <UsageCount Value="166"/>
+      </Unit30>
+      <Unit31>
+        <Filename Value="PrimSAX.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="PrimSAX"/>
+        <CursorPos X="42" Y="14"/>
+        <TopLine Value="52"/>
+        <UsageCount Value="166"/>
+      </Unit31>
+      <Unit32>
+        <Filename Value="Lib\md5\md5.pas"/>
+        <UnitName Value="md5"/>
+        <CursorPos X="1" Y="366"/>
+        <TopLine Value="341"/>
+        <UsageCount Value="7"/>
+      </Unit32>
+      <Unit33>
+        <Filename Value="LazBasic.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="LazBasic"/>
+        <CursorPos X="33" Y="207"/>
+        <TopLine Value="170"/>
+        <UsageCount Value="164"/>
+      </Unit33>
+      <Unit34>
+        <Filename Value="Lib\XML\XUtils.pas"/>
+        <UnitName Value="XUtils"/>
+        <CursorPos X="32" Y="39"/>
+        <TopLine Value="26"/>
+        <UsageCount Value="9"/>
+      </Unit34>
+      <Unit35>
+        <Filename Value="Lib\XML\XXmlDom.pas"/>
+        <UnitName Value="XXmlDom"/>
+        <CursorPos X="35" Y="944"/>
+        <TopLine Value="944"/>
+        <UsageCount Value="10"/>
+      </Unit35>
+      <Unit36>
+        <Filename Value="struct.inc"/>
+        <CursorPos X="1" Y="108"/>
+        <TopLine Value="91"/>
+        <UsageCount Value="10"/>
+      </Unit36>
+      <Unit37>
+        <Filename Value="Lib\PowerPdf\PdfTypes.pas"/>
+        <UnitName Value="PdfTypes"/>
+        <CursorPos X="25" Y="1080"/>
+        <TopLine Value="1067"/>
+        <UsageCount Value="8"/>
+      </Unit37>
+      <Unit38>
+        <Filename Value="Lib\Graphics32\GR32.inc"/>
+        <CursorPos X="84" Y="49"/>
+        <TopLine Value="36"/>
+        <UsageCount Value="8"/>
+      </Unit38>
+      <Unit39>
+        <Filename Value="Lib\Graphics32\GR32.pas"/>
+        <UnitName Value="GR32"/>
+        <CursorPos X="39" Y="370"/>
+        <TopLine Value="357"/>
+        <UsageCount Value="8"/>
+      </Unit39>
+      <Unit40>
+        <Filename Value="Lib\Graphics32\GR32_System.pas"/>
+        <UnitName Value="GR32_System"/>
+        <CursorPos X="1" Y="410"/>
+        <TopLine Value="385"/>
+        <UsageCount Value="8"/>
+      </Unit40>
+      <Unit41>
+        <Filename Value="Lib\Graphics32\GR32_Blend.pas"/>
+        <UnitName Value="GR32_Blend"/>
+        <CursorPos X="23" Y="506"/>
+        <TopLine Value="486"/>
+        <UsageCount Value="8"/>
+      </Unit41>
+      <Unit42>
+        <Filename Value="Lib\Graphics32\GR32_LowLevel.pas"/>
+        <UnitName Value="GR32_LowLevel"/>
+        <CursorPos X="1" Y="156"/>
+        <TopLine Value="134"/>
+        <UsageCount Value="8"/>
+      </Unit42>
+      <Unit43>
+        <Filename Value="Lib\Graphics32\GR32_Transforms.pas"/>
+        <UnitName Value="GR32_Transforms"/>
+        <CursorPos X="40" Y="412"/>
+        <TopLine Value="400"/>
+        <UsageCount Value="8"/>
+      </Unit43>
+      <Unit44>
+        <Filename Value="EMF_Unit.lfm"/>
+        <CursorPos X="40" Y="7"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="4"/>
+        <SyntaxHighlighter Value="LFM"/>
+      </Unit44>
+      <Unit45>
+        <Filename Value="Settings0.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="Settings0"/>
+        <CursorPos X="1" Y="27"/>
+        <TopLine Value="27"/>
+        <UsageCount Value="133"/>
+      </Unit45>
+      <Unit46>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\include\lclintf.inc"/>
+        <CursorPos X="12" Y="90"/>
+        <TopLine Value="80"/>
+        <UsageCount Value="10"/>
+      </Unit46>
+      <Unit47>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\include\application.inc"/>
+        <CursorPos X="1" Y="1541"/>
+        <TopLine Value="1528"/>
+        <UsageCount Value="8"/>
+      </Unit47>
+      <Unit48>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\include\winapi.inc"/>
+        <CursorPos X="36" Y="275"/>
+        <TopLine Value="234"/>
+        <UsageCount Value="8"/>
+      </Unit48>
+      <Unit49>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\interfaces\win32\win32wscontrols.pp"/>
+        <UnitName Value="Win32WSControls"/>
+        <CursorPos X="14" Y="265"/>
+        <TopLine Value="249"/>
+        <UsageCount Value="8"/>
+      </Unit49>
+      <Unit50>
+        <Filename Value="Lib\XML\XXml.pas"/>
+        <UnitName Value="XXml"/>
+        <CursorPos X="21" Y="725"/>
+        <TopLine Value="716"/>
+        <UsageCount Value="10"/>
+      </Unit50>
+      <Unit51>
+        <Filename Value="Lib\PowerPdf\PdfDoc.pas"/>
+        <UnitName Value="PdfDoc"/>
+        <CursorPos X="5" Y="1"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="11"/>
+      </Unit51>
+      <Unit52>
+        <Filename Value="..\..\..\..\P\lazarus\components\printers\printer4lazarus.pas"/>
+        <UnitName Value="Printer4Lazarus"/>
+        <CursorPos X="1" Y="1"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="10"/>
+      </Unit52>
+      <Unit53>
+        <Filename Value="..\..\..\..\P\lazarus\fpcsrc\rtl\objpas\classes\classesh.inc"/>
+        <CursorPos X="30" Y="81"/>
+        <TopLine Value="74"/>
+        <UsageCount Value="10"/>
+      </Unit53>
+      <Unit54>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\controls.pp"/>
+        <UnitName Value="Controls"/>
+        <CursorPos X="3" Y="81"/>
+        <TopLine Value="71"/>
+        <UsageCount Value="3"/>
+      </Unit54>
+      <Unit55>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\lresources.pp"/>
+        <UnitName Value="LResources"/>
+        <CursorPos X="79" Y="2370"/>
+        <TopLine Value="2358"/>
+        <UsageCount Value="9"/>
+      </Unit55>
+      <Unit56>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\include\bitmap.inc"/>
+        <CursorPos X="1" Y="155"/>
+        <TopLine Value="142"/>
+        <UsageCount Value="3"/>
+      </Unit56>
+      <Unit57>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\stdctrls.pp"/>
+        <UnitName Value="StdCtrls"/>
+        <CursorPos X="8" Y="53"/>
+        <TopLine Value="44"/>
+        <UsageCount Value="3"/>
+      </Unit57>
+      <Unit58>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\comctrls.pp"/>
+        <UnitName Value="ComCtrls"/>
+        <CursorPos X="82" Y="243"/>
+        <TopLine Value="230"/>
+        <UsageCount Value="10"/>
+      </Unit58>
+      <Unit59>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\include\wincontrol.inc"/>
+        <CursorPos X="1" Y="4675"/>
+        <TopLine Value="4662"/>
+        <UsageCount Value="3"/>
+      </Unit59>
+      <Unit60>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\include\canvas.inc"/>
+        <CursorPos X="31" Y="1288"/>
+        <TopLine Value="1107"/>
+        <UsageCount Value="4"/>
+      </Unit60>
+      <Unit61>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\include\customcontrol.inc"/>
+        <CursorPos X="1" Y="109"/>
+        <TopLine Value="96"/>
+        <UsageCount Value="3"/>
+      </Unit61>
+      <Unit62>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\include\control.inc"/>
+        <CursorPos X="1" Y="2241"/>
+        <TopLine Value="2228"/>
+        <UsageCount Value="9"/>
+      </Unit62>
+      <Unit63>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\graphics.pp"/>
+        <UnitName Value="Graphics"/>
+        <CursorPos X="17" Y="990"/>
+        <TopLine Value="977"/>
+        <UsageCount Value="10"/>
+      </Unit63>
+      <Unit64>
+        <Filename Value="..\..\..\..\P\lazarus\fpcsrc\rtl\win32\wininc\messages.inc"/>
+        <CursorPos X="15" Y="1210"/>
+        <TopLine Value="1197"/>
+        <UsageCount Value="3"/>
+      </Unit64>
+      <Unit65>
+        <Filename Value="ViewPort.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ViewPort"/>
+        <CursorPos X="1" Y="1"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="98"/>
+      </Unit65>
+      <Unit66>
+        <Filename Value="Drawings.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="Drawings"/>
+        <CursorPos X="78" Y="678"/>
+        <TopLine Value="674"/>
+        <UsageCount Value="98"/>
+      </Unit66>
+      <Unit67>
+        <Filename Value="GObjects.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="GObjects"/>
+        <CursorPos X="4" Y="9"/>
+        <TopLine Value="1"/>
+        <EditorIndex Value="5"/>
+        <UsageCount Value="98"/>
+        <Loaded Value="True"/>
+      </Unit67>
+      <Unit68>
+        <Filename Value="Manage.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="Manage"/>
+        <CursorPos X="28" Y="261"/>
+        <TopLine Value="251"/>
+        <UsageCount Value="98"/>
+      </Unit68>
+      <Unit69>
+        <Filename Value="Modes.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="Modes"/>
+        <CursorPos X="8" Y="15"/>
+        <TopLine Value="1"/>
+        <EditorIndex Value="4"/>
+        <UsageCount Value="98"/>
+        <Loaded Value="True"/>
+      </Unit69>
+      <Unit70>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\include\brush.inc"/>
+        <CursorPos X="25" Y="84"/>
+        <TopLine Value="76"/>
+        <UsageCount Value="4"/>
+      </Unit70>
+      <Unit71>
+        <Filename Value="Arrows.pas-"/>
+        <UsageCount Value="14"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit71>
+      <Unit72>
+        <Filename Value="CADSys4.pas-"/>
+        <UsageCount Value="14"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit72>
+      <Unit73>
+        <Filename Value="CS4Shapes.pas-"/>
+        <UsageCount Value="14"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit73>
+      <Unit74>
+        <Filename Value="CS4Tasks.pas-"/>
+        <UsageCount Value="14"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit74>
+      <Unit75>
+        <Filename Value="Devices.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="Devices"/>
+        <CursorPos X="19" Y="15"/>
+        <TopLine Value="15"/>
+        <UsageCount Value="95"/>
+      </Unit75>
+      <Unit76>
+        <Filename Value="DevSVG.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="DevSVG"/>
+        <UsageCount Value="95"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit76>
+      <Unit77>
+        <Filename Value="DevTikZ.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="DevTikZ"/>
+        <UsageCount Value="95"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit77>
+      <Unit78>
+        <Filename Value="MainUnit-old.pas-"/>
+        <UsageCount Value="14"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit78>
+      <Unit79>
+        <Filename Value="Numeric.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="Numeric"/>
+        <UsageCount Value="95"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit79>
+      <Unit80>
+        <Filename Value="Pieces.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="Pieces"/>
+        <CursorPos X="1" Y="165"/>
+        <TopLine Value="152"/>
+        <UsageCount Value="95"/>
+      </Unit80>
+      <Unit81>
+        <Filename Value="Settings.pas-"/>
+        <UsageCount Value="14"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit81>
+      <Unit82>
+        <Filename Value="Stars.pas-"/>
+        <UsageCount Value="14"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit82>
+      <Unit83>
+        <Filename Value="WinBasic.pas-"/>
+        <UsageCount Value="14"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit83>
+      <Unit84>
+        <Filename Value="XmlOut.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="XmlOut"/>
+        <UsageCount Value="95"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit84>
+      <Unit85>
+        <Filename Value="PrintEpsOpt.lfm"/>
+        <CursorPos X="1" Y="1"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="4"/>
+        <SyntaxHighlighter Value="LFM"/>
+      </Unit85>
+      <Unit86>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\interfaces\win32\win32callback.inc"/>
+        <CursorPos X="1" Y="154"/>
+        <TopLine Value="141"/>
+        <UsageCount Value="7"/>
+      </Unit86>
+      <Unit87>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\clipbrd.pp"/>
+        <UnitName Value="Clipbrd"/>
+        <CursorPos X="23" Y="207"/>
+        <TopLine Value="197"/>
+        <UsageCount Value="8"/>
+      </Unit87>
+      <Unit88>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\include\clipbrd.inc"/>
+        <CursorPos X="14" Y="182"/>
+        <TopLine Value="169"/>
+        <UsageCount Value="8"/>
+      </Unit88>
+      <Unit89>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\include\lclintfh.inc"/>
+        <CursorPos X="1" Y="55"/>
+        <TopLine Value="42"/>
+        <UsageCount Value="6"/>
+      </Unit89>
+      <Unit90>
+        <Filename Value="..\..\..\..\P\lazarus\fpcsrc\rtl\objpas\sysutils\osutilsh.inc"/>
+        <CursorPos X="18" Y="27"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="7"/>
+      </Unit90>
+      <Unit91>
+        <Filename Value="..\..\..\..\P\lazarus\fpcsrc\rtl\objpas\sysutils\diskh.inc"/>
+        <CursorPos X="10" Y="19"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="7"/>
+      </Unit91>
+      <Unit92>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\include\pagecontrol.inc"/>
+        <CursorPos X="1" Y="53"/>
+        <TopLine Value="38"/>
+        <UsageCount Value="10"/>
+      </Unit92>
+      <Unit93>
+        <Filename Value="..\..\..\..\P\lazarus\fpcsrc\rtl\objpas\types.pp"/>
+        <UnitName Value="types"/>
+        <CursorPos X="3" Y="82"/>
+        <TopLine Value="69"/>
+        <UsageCount Value="9"/>
+      </Unit93>
+      <Unit94>
+        <Filename Value="..\..\..\..\P\lazarus\fpcsrc\fcl\image\fpcanvas.pp"/>
+        <UnitName Value="FPCanvas"/>
+        <CursorPos X="15" Y="236"/>
+        <TopLine Value="223"/>
+        <UsageCount Value="9"/>
+      </Unit94>
+      <Unit95>
+        <Filename Value="..\..\..\..\P\lazarus\fpcsrc\fcl\image\fpcanvas.inc"/>
+        <CursorPos X="10" Y="298"/>
+        <TopLine Value="237"/>
+        <UsageCount Value="10"/>
+      </Unit95>
+      <Unit96>
+        <Filename Value="MainUnit.lfm"/>
+        <CursorPos X="20" Y="1643"/>
+        <TopLine Value="1630"/>
+        <UsageCount Value="10"/>
+        <SyntaxHighlighter Value="LFM"/>
+      </Unit96>
+      <Unit97>
+        <Filename Value="Table.lfm"/>
+        <CursorPos X="4" Y="21"/>
+        <TopLine Value="12"/>
+        <UsageCount Value="9"/>
+        <SyntaxHighlighter Value="LFM"/>
+      </Unit97>
+      <Unit98>
+        <Filename Value="ScaleStandardUnit.lfm"/>
+        <CursorPos X="14" Y="19"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="9"/>
+        <SyntaxHighlighter Value="LFM"/>
+      </Unit98>
+      <Unit99>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\grids.pas"/>
+        <UnitName Value="Grids"/>
+        <CursorPos X="1" Y="6299"/>
+        <TopLine Value="6286"/>
+        <UsageCount Value="17"/>
+      </Unit99>
+      <Unit100>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\include\popupmenu.inc"/>
+        <CursorPos X="1" Y="28"/>
+        <TopLine Value="15"/>
+        <UsageCount Value="9"/>
+      </Unit100>
+      <Unit101>
+        <Filename Value="DevCanvas.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="DevCanvas"/>
+        <CursorPos X="1" Y="1"/>
+        <TopLine Value="1"/>
+        <EditorIndex Value="3"/>
+        <UsageCount Value="40"/>
+        <Loaded Value="True"/>
+      </Unit101>
+      <Unit102>
+        <Filename Value="DevGr32.pas"/>
+        <UnitName Value="DevGr32"/>
+        <CursorPos X="8" Y="4"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="19"/>
+      </Unit102>
+      <Unit103>
+        <Filename Value="DevMP.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="DevMP"/>
+        <UsageCount Value="40"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit103>
+      <Unit104>
+        <Filename Value="DevPDF.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="DevPDF"/>
+        <UsageCount Value="40"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit104>
+      <Unit105>
+        <Filename Value="DevPGF.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="DevPGF"/>
+        <UsageCount Value="40"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit105>
+      <Unit106>
+        <Filename Value="DevPS.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="DevPS"/>
+        <UsageCount Value="40"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit106>
+      <Unit107>
+        <Filename Value="DevPSTr.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="DevPSTr"/>
+        <UsageCount Value="40"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit107>
+      <Unit108>
+        <Filename Value="DevTeXPc.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="DevTeXPc"/>
+        <UsageCount Value="40"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit108>
+      <Unit109>
+        <Filename Value="Modify.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="Modify"/>
+        <CursorPos X="1" Y="1"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="40"/>
+      </Unit109>
+      <Unit110>
+        <Filename Value="MprtEMF.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="MprtEMF"/>
+        <UsageCount Value="40"/>
+        <SyntaxHighlighter Value="Text"/>
+      </Unit110>
+      <Unit111>
+        <Filename Value="MprtSVG.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="MprtSVG"/>
+        <CursorPos X="28" Y="16"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="40"/>
+      </Unit111>
+      <Unit112>
+        <Filename Value="TpXSaver.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="TpXSaver"/>
+        <CursorPos X="70" Y="449"/>
+        <TopLine Value="444"/>
+        <UsageCount Value="40"/>
+      </Unit112>
+      <Unit113>
+        <Filename Value="..\..\..\..\P\lazarus\fpcsrc\rtl\objpas\sysutils\sysstrh.inc"/>
+        <CursorPos X="18" Y="113"/>
+        <TopLine Value="101"/>
+        <UsageCount Value="10"/>
+      </Unit113>
+      <Unit114>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\include\customupdown.inc"/>
+        <CursorPos X="6" Y="435"/>
+        <TopLine Value="421"/>
+        <UsageCount Value="10"/>
+      </Unit114>
+      <Unit115>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\dynamicarray.pas"/>
+        <UnitName Value="DynamicArray"/>
+        <CursorPos X="1" Y="69"/>
+        <TopLine Value="56"/>
+        <UsageCount Value="10"/>
+      </Unit115>
+      <Unit116>
+        <Filename Value="..\..\..\..\P\lazarus\examples\notebk.pp"/>
+        <UnitName Value="NoteBk"/>
+        <CursorPos X="1" Y="1"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="10"/>
+      </Unit116>
+      <Unit117>
+        <Filename Value="..\..\..\..\P\lazarus\lcl\interfaces\gtk\gtkdefines.inc"/>
+        <CursorPos X="6" Y="93"/>
+        <TopLine Value="73"/>
+        <UsageCount Value="10"/>
+      </Unit117>
+      <Unit118>
+        <Filename Value="TpXHelp.pas"/>
+        <ComponentName Value="HelpForm"/>
+        <ResourceFilename Value="TpXHelp.lrs"/>
+        <UnitName Value="TpXHelp"/>
+        <CursorPos X="57" Y="13"/>
+        <TopLine Value="5"/>
+        <UsageCount Value="21"/>
+      </Unit118>
+      <Unit119>
+        <Filename Value="..\LazDistr\TpX.lpr"/>
+        <UnitName Value="TpX"/>
+        <CursorPos X="1" Y="1"/>
+        <TopLine Value="1"/>
+        <UsageCount Value="10"/>
+      </Unit119>
+    </Units>
+    <JumpHistory Count="0" HistoryIndex="-1"/>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="5"/>
+    <PathDelim Value="\"/>
+    <SearchPaths>
+      <IncludeFiles Value="Lib\PowerPdf\"/>
+      <OtherUnitFiles Value="Lib\PowerPdf\;Lib\md5\;Lib\XML\;Lib\Graphics32\"/>
+      <UnitOutputDirectory Value="_tmp"/>
+    </SearchPaths>
+    <Parsing>
+      <SyntaxOptions>
+        <DelphiCompat Value="True"/>
+        <UseAnsiStrings Value="True"/>
+      </SyntaxOptions>
+    </Parsing>
+    <CodeGeneration>
+      <Generate Value="Smaller"/>
+      <TargetOS Value="Win32"/>
+    </CodeGeneration>
+    <Linking>
+      <Debugging>
+        <StripSymbols Value="True"/>
+      </Debugging>
+      <Options>
+        <Win32>
+          <GraphicApplication Value="True"/>
+        </Win32>
+      </Options>
+    </Linking>
+    <Other>
+      <CompilerPath Value="$(CompPath)"/>
+    </Other>
+  </CompilerOptions>
+  <Debugging>
+    <BreakPoints Count="3">
+      <Item1>
+        <Source Value="Lib\XML\XUtils.pas"/>
+        <Line Value="395"/>
+      </Item1>
+      <Item2>
+        <Source Value="MainUnit.pas"/>
+        <Line Value="1404"/>
+      </Item2>
+      <Item3>
+        <Source Value="CADSys4.pas"/>
+        <Line Value="6156"/>
+      </Item3>
+    </BreakPoints>
+    <Exceptions Count="2">
+      <Item1>
+        <Name Value="ECodetoolError"/>
+      </Item1>
+      <Item2>
+        <Name Value="EFOpenError"/>
+      </Item2>
+    </Exceptions>
+  </Debugging>
+</CONFIG>

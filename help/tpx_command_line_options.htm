@@ -1,0 +1,113 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<title>TpX command line options</title>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1251">
+<style type="text/css">
+<!--
+body {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+}
+p {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+}
+h1 {
+	font-family: "Courier New", Courier, mono;
+	color: #FFFFCC;
+	font-size: medium;
+	background-color: #999966;
+	font-weight: bold;
+	font-variant: normal;
+	text-align: center;
+}
+h2 {
+	font-family: "Courier New", Courier, mono;
+	text-decoration: underline;
+}
+.text {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+	font-size: 10pt;
+}
+.footer {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+	font-size: 8pt;
+}
+code {
+	font-size: 10pt;
+}
+-->
+</style>
+</head>
+
+<body>
+<table  border="0" cellspacing="1" cellpadding="5">
+  <tr>
+    <td width="70" class="text" scope="row">&nbsp;&nbsp;<a href="TpX.htm" class="text">Contents</a></td>
+    <td width="300"><div align="center"><span class="text"><a href="index.htm">Home</a></span></div></td>
+    <td width="200"><div align="center"><a href="tpx_tpxabout_tpx_drawing_tool.htm" class="text">About
+    TpX drawing tool</a></div></td>
+  </tr>
+</table>
+<hr size="1">
+
+
+<h1>  TpX command line options</h1>
+
+<ul>
+  <li class="text"><code>-f, --file &lt;file name&gt;</code> The name of input
+   file (TpX, EMF, SVG, ...)</li>
+  <li class="text"><code>-i, --texinput &lt;LaTeX file&gt;</code> The name of 
+  parent LaTeX document </li>
+  <li class="text"><code>-l, --texline &lt;line number&gt;</code> The line 
+  number in parent LaTeX document </li>
+  <li class="text"><code>-o, --output &lt;file name&gt;</code> The name of output
+  file</li>
+  <li class="text"><code>-m, --format &lt;format name&gt;,&lt;format name&gt;</code> 
+  The names of TpX 
+  <a href="tpx_output_formats.htm">output formats</a>
+  The formats are tex, pgf, pstricks, eps, png, bmp, metapost,
+  emf, none for LaTeX/DVI and tex, pgf, pdf, png, metapost,
+  epstopdf, none for PdfLaTeX.
+  </li>
+  <li class="text"><code>-x, --export &lt;format name&gt;</code> The id of 
+  <a href="tpx_export_formats.htm">export format</a>.
+  The formats are svg, emf, eps, png, bmp, pdf, metapost,
+  mps, epstopdf, latexeps, latexpdf, latexcustom.
+  </li>
+</ul>
+
+<p class="text">-f option can be absent. Just run TpX as<br>
+<code>  TpX.exe &lt;options&gt; &lt;file name&gt;</code>.
+
+<p class="text">When output file is not specified with -o option, TpX chooses
+file name automatically.
+
+<p class="text">When -i -l options are used the parent TeX file is scanned for 
+<code>\input{&lt;filename&gt;.TpX}</code> line. The line closest to 
+specified line is chosen. This is useful for calling TpX from
+LaTeX editor like WinEdt. (See <a href="tpx_winedt_menu.htm">Adding TpX to WinEdt menu</a>
+on how to use this with WinEdt.)
+
+<p class="text">In presence of -o and/or -x option TpX runs without GUI.
+
+<p class="text"><i><b>Examples:</b></i>
+
+<p class="text"><code>TpX.exe foo.TpX </code><br>
+ - open foo.TpX in TpX program, GUI
+
+<p class="text"><code>TpX.exe foo.TpX -o </code><br>
+ - refresh foo.TpX, no GUI
+
+<p class="text"><code>TpX.exe foo.svg -x png </code><br>
+ - import foo.svg and export it as png with name foo-export.png, no GUI
+
+<p class="text"><code>TpX.exe foo.TpX -o foofoo.TpX -m pgf,png </code><br>
+ - load foo.TpX and save it as foofoo.TpX using pgf and png output formats, no GUI
+
+
+<p>
+<hr size="1">
+<div class="footer" align="right">TpX 1.3 help, generated 2006-05-22 16:21:09<div>
+</body>
+</html>

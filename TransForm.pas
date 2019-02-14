@@ -1,12 +1,19 @@
 unit TransForm;
 
+{$IFNDEF VER140}
+{$MODE Delphi}
+{$ENDIF}
+
 interface
 
 uses
-  Windows, Messages, SysUtils, Variants, Classes, Graphics,
-  Controls, Forms,
-  Dialogs, StdCtrls, ExtCtrls, Geometry,  CADSys4;
-
+{$IFDEF VER140}
+  Windows, Variants,
+{$ELSE}
+  LCLIntf, LResources, Buttons,
+{$ENDIF}
+  Messages, SysUtils, Classes, Graphics, Controls, Forms,
+  Dialogs, StdCtrls, ExtCtrls, Geometry, Drawings;
 
 type
   TTransfForm = class(TForm)
@@ -47,7 +54,9 @@ var
 
 implementation
 
+{$IFDEF VER140}
 {$R *.dfm}
+{$ENDIF}
 
 procedure TTransfForm.FormCreate(Sender: TObject);
 begin
@@ -146,5 +155,9 @@ begin
   LabeledEdit7.Enabled := RadioGroup2.ItemIndex = 5;
 end;
 
+initialization
+{$IFDEF VER140}
+{$ELSE}
+{$I Propert.lrs}
+{$ENDIF}
 end.
-

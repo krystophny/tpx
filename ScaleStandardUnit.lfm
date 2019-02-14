@@ -1,0 +1,123 @@
+object ScaleStandardForm: TScaleStandardForm
+  BorderStyle = bsDialog
+  Caption = 'Scale standard'
+  ClientHeight = 240
+  ClientWidth = 321
+  Font.Height = -13
+  Font.Name = 'MS Sans Serif'
+  OnClose = FormClose
+  OnCreate = FormCreate
+  OnShow = FormShow
+  PixelsPerInch = 120
+  Position = poScreenCenter
+  TextHeight = 16
+  HorzScrollBar.Page = 320
+  VertScrollBar.Page = 239
+  Left = 259
+  Height = 240
+  Top = 125
+  Width = 321
+  object Label1: TLabel
+    Caption = 'Width limit (mm)'
+    Color = clNone
+    ParentColor = False
+    Left = 16
+    Height = 18
+    Top = 32
+    Width = 103
+  end
+  object Label2: TLabel
+    Caption = 'Height limit (mm)'
+    Color = clNone
+    ParentColor = False
+    Left = 152
+    Height = 18
+    Top = 32
+    Width = 105
+  end
+  object Label3: TLabel
+    Caption = 'PicScale, mm per unit'
+    Color = clNone
+    ParentColor = False
+    Left = 16
+    Height = 18
+    Top = 120
+    Width = 132
+  end
+  object Edit1: TEdit
+    TabOrder = 0
+    Text = 'Edit1'
+    Left = 16
+    Height = 24
+    Top = 52
+    Width = 121
+  end
+  object Edit2: TEdit
+    TabOrder = 1
+    Text = 'Edit2'
+    Left = 152
+    Height = 24
+    Top = 52
+    Width = 121
+  end
+  object Button1: TButton
+    BorderSpacing.InnerBorder = 4
+    Caption = 'OK'
+    Default = True
+    ModalResult = 1
+    TabOrder = 2
+    Left = 64
+    Height = 25
+    Top = 208
+    Width = 75
+  end
+  object Button2: TButton
+    BorderSpacing.InnerBorder = 4
+    Cancel = True
+    Caption = 'Cancel'
+    ModalResult = 2
+    TabOrder = 3
+    Left = 144
+    Height = 25
+    Top = 208
+    Width = 75
+  end
+  object ScalePhysical: TCheckBox
+    Caption = 'Scale physical units'
+    Checked = True
+    State = cbChecked
+    TabOrder = 4
+    Left = 16
+    Height = 17
+    Top = 180
+    Width = 142
+  end
+  object RadioButton1: TRadioButton
+    Caption = 'Scale to limits'
+    Checked = True
+    OnClick = RadioButton1Click
+    State = cbChecked
+    TabOrder = 5
+    Left = 16
+    Height = 17
+    Top = 8
+    Width = 106
+  end
+  object RadioButton2: TRadioButton
+    Caption = 'Change picture scale'
+    OnClick = RadioButton1Click
+    TabOrder = 6
+    Left = 16
+    Height = 17
+    Top = 96
+    Width = 150
+  end
+  object Edit3: TEdit
+    TabOrder = 7
+    Text = 'Edit3'
+    Left = 16
+    Height = 24
+    Top = 140
+    Width = 121
+  end
+end

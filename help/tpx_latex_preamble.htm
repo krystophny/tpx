@@ -1,0 +1,93 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<title>TpX: LaTeX preamble</title>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1251">
+<style type="text/css">
+<!--
+body {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+}
+p {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+}
+h1 {
+	font-family: "Courier New", Courier, mono;
+	color: #FFFFCC;
+	font-size: medium;
+	background-color: #999966;
+	font-weight: bold;
+	font-variant: normal;
+	text-align: center;
+}
+h2 {
+	font-family: "Courier New", Courier, mono;
+	text-decoration: underline;
+}
+.text {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+	font-size: 10pt;
+}
+.footer {
+	font-family: Verdana, Arial, Helvetica, sans-serif;
+	font-size: 8pt;
+}
+code {
+	font-size: 10pt;
+}
+-->
+</style>
+</head>
+
+<body>
+<table  border="0" cellspacing="1" cellpadding="5">
+  <tr>
+    <td width="70" class="text" scope="row">&nbsp;&nbsp;<a href="TpX.htm" class="text">Contents</a></td>
+    <td width="300"><div align="center"><span class="text"><a href="index.htm">Home</a></span></div></td>
+    <td width="200"><div align="center"><a href="tpx_tpxabout_tpx_drawing_tool.htm" class="text">About
+    TpX drawing tool</a></div></td>
+  </tr>
+</table>
+<hr size="1">
+
+
+<h1>  LaTeX preamble</h1>
+
+<p class="text">This is a sample preamble to include in parent LaTeX file. It 
+uses <code>ifpdf</code> package to switch between two different 
+modes of running PdfLaTeX. (Download <code>ifpdf</code> from <a href="http://www.ctan.org/">CTAN</a> if you do not have one).
+
+<pre>
+\documentclass[a4paper,10pt]{article}
+\usepackage{color}
+%\pdfoutput=0 % uncomment this if running PdfTeX in TeX mode
+\usepackage{ifpdf}
+\ifx\pdftexversion\undefined %if using TeX
+  \usepackage{graphicx}
+\else %if using PdfTeX
+  \usepackage[pdftex]{graphicx}
+\fi
+\ifpdf %if using PdfTeX in PDF mode
+  \DeclareGraphicsExtensions{.pdf,.png,.mps}
+  \usepackage{pgf}
+\else %if using TeX or PdfTeX in TeX mode
+  \usepackage{graphicx}
+  \DeclareGraphicsExtensions{.eps,.bmp}
+  \DeclareGraphicsRule{.emf}{bmp}{}{}% declare EMF filename extension
+  \DeclareGraphicsRule{.png}{bmp}{}{}% declare PNG filename extension
+  \usepackage{pgf}
+  \usepackage{pstricks}%variant: \usepackage{pst-all}
+\fi
+\usepackage{epic,bez123}
+\usepackage{floatflt}% package for floatingfigure environment
+\usepackage{wrapfig}% package for wrapfigure environment
+</pre>
+
+
+
+<p>
+<hr size="1">
+<div class="footer" align="right">TpX 1.3 help, generated 2006-05-22 16:21:09<div>
+</body>
+</html>

@@ -1,17 +1,24 @@
 unit Propert;
 
+{$IFNDEF VER140}
+{$MODE Delphi}
+{$ENDIF}
+
 interface
 
-uses
-  Windows, Messages, SysUtils, Variants, Classes, Graphics,
+uses Windows, Messages, SysUtils, Classes, Graphics,
   Controls, Forms,
   Dialogs, ExtCtrls, ComCtrls, StdCtrls,
-  CS4Shapes, Spin, Buttons, Stars, Arrows, ImgList;
+{$IFDEF VER140}
+  Variants,
+{$ELSE}
+  LResources,
+{$ENDIF}
+  Drawings, GObjects, Spin, Buttons, ImgList, ToolWin;
 
 type
   TPropertiesForm = class(TForm)
     PropPages: TPageControl;
-    LineSheet: TTabSheet;
     TextSheet: TTabSheet;
     Panel1: TPanel;
     Button1: TButton;
@@ -35,32 +42,65 @@ type
     Button3: TButton;
     LabeledEdit4: TLabeledEdit;
     ComboBox6: TComboBox;
-    ArrowsFrame1: TArrowsFrame;
     SymbolsSheet: TTabSheet;
     ComboBox7: TComboBox;
     ImageList1: TImageList;
     LabeledEdit5: TLabeledEdit;
     LabeledEdit6: TLabeledEdit;
-    StarsFrame1: TStarsFrame;
     Button4: TButton;
     FontDialog1: TFontDialog;
     FontCheckBox: TCheckBox;
+    ArrowsPanel: TPanel;
+    Label4: TLabel;
+    ComboBox8: TComboBox;
+    ComboBox9: TComboBox;
+    Label5: TLabel;
+    Edit1: TEdit;
+    ArrImageList: TImageList;
+    ToolBar1: TToolBar;
+    ToolButton1: TToolButton;
+    ToolButton2: TToolButton;
+    ToolButton3: TToolButton;
+    ToolButton4: TToolButton;
+    ToolButton5: TToolButton;
+    ToolButton6: TToolButton;
+    ToolButton7: TToolButton;
+    ToolButton8: TToolButton;
+    ToolButton9: TToolButton;
+    ToolButton10: TToolButton;
+    ToolButton11: TToolButton;
+    ToolButton12: TToolButton;
+    ToolButton13: TToolButton;
+    ToolButton14: TToolButton;
+    ToolButton15: TToolButton;
+    Label6: TLabel;
+    Edit2: TEdit;
+    StarsImageList: TImageList;
+    RectSheet: TTabSheet;
+    LabeledEdit7: TLabeledEdit;
+    LabeledEdit8: TLabeledEdit;
     procedure FormShow(Sender: TObject);
     procedure FormCreate(Sender: TObject);
-    procedure ColorBox_DrawItem(Control: TWinControl; Index: Integer;
+    procedure ColorBox_DrawItem(Control: TWinControl; Index:
+      Integer;
       Rect: TRect; State: TOwnerDrawState);
     procedure ColorBox_Select(Sender: TObject);
     procedure Button3Click(Sender: TObject);
-    procedure ComboBox7DrawItem(Control: TWinControl; Index: Integer;
+    procedure ComboBox7DrawItem(Control: TWinControl; Index:
+      Integer;
       Rect: TRect; State: TOwnerDrawState);
-    procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+    procedure FormCloseQuery(Sender: TObject; var CanClose:
+      Boolean);
     procedure Button4Click(Sender: TObject);
     procedure FontCheckBoxClick(Sender: TObject);
+    procedure ArrComboBoxDrawItem(Control: TWinControl; Index:
+      Integer;
+      Rect: TRect; State: TOwnerDrawState);
   private
     { Private declarations }
   public
     { Public declarations }
-    PPrimitive: TPrimitive2D;
+    PObject: TObject2D;
   end;
 
 var
@@ -68,12 +108,15 @@ var
 
 implementation
 
-uses ColorEtc, Table, Geometry;
+uses ColorEtc, Table, Geometry, Devices;
 
+{$IFDEF VER140}
 {$R *.dfm}
+{$ENDIF}
 
 procedure TPropertiesForm.FormCreate(Sender: TObject);
-var I: Integer;
+var
+  I: Integer;
 begin
   MakeColorBox(ComboBox3);
   MakeColorBox(ComboBox4);
@@ -86,18 +129,22 @@ procedure TPropertiesForm.FormShow(Sender: TObject);
 var
   I: Integer;
 begin
-  Caption := PPrimitive.Name;
-  ComboBox1.ItemIndex := Ord(PPrimitive.LineStyle);
-  ComboBox2.ItemIndex := Ord(PPrimitive.Hatching);
-  ColorBoxSet(ComboBox3, PPrimitive.LineColor);
-  ColorBoxSet(ComboBox4, PPrimitive.HatchColor);
-  ColorBoxSet(ComboBox5, PPrimitive.FillColor);
-  ComboBox6.Text := Format('%.5g', [PPrimitive.LineWidth]);
+  if not (PObject is TPrimitive2D) then Exit;
+  Caption := (PObject as TPrimitive2D).Name;
+  ComboBox1.ItemIndex := Ord((PObject as TPrimitive2D).LineStyle);
+  ComboBox2.ItemIndex := Ord((PObject as TPrimitive2D).Hatching);
+  ColorBoxSet(ComboBox3, (PObject as TPrimitive2D).LineColor);
+  ColorBoxSet(ComboBox4, (PObject as TPrimitive2D).HatchColor);
+  ColorBoxSet(ComboBox5, (PObject as TPrimitive2D).FillColor);
+  ComboBox6.Text := Format('%.5g',
+  [(PObject as TPrimitive2D).LineWidth]);
   //PropPages.TabHeight := 1;
+{$IFDEF VER140}
   for I := 0 to PropPages.PageCount - 1 do
     PropPages.Pages[I].TabVisible := False;
-  if PPrimitive is TText2D then
-    with PPrimitive as TText2D do
+{$ENDIF}
+  if PObject is TText2D then
+    with PObject as TText2D do
     begin
       LabeledEdit1.Text := Text;
       LabeledEdit3.Text := TeXText;
@@ -109,35 +156,41 @@ begin
       FontCheckBox.Checked := Font.Name <> ' ';
       Button4.Enabled := FontCheckBox.Checked;
     end
-  else if (PPrimitive is TLine2D) or (PPrimitive is TArc2D)
-    or (PPrimitive is TPolyline2D) or (PPrimitive is TSmoothPath2D)
-    or (PPrimitive is TBezierPath2D) then
-    with PPrimitive as TPrimitive2D do
+  else if (PObject is TLine2D) or (PObject is TArc2D)
+    or (PObject is TPolyline2D) or (PObject is TSmoothPath2D)
+    or (PObject is TBezierPath2D) then
+    with PObject as TPrimitive2D do
     begin
-      ArrowsFrame1.ComboBox1.ItemIndex := Ord(BeginArrowKind);
-      ArrowsFrame1.ComboBox2.ItemIndex := Ord(EndArrowKind);
-      ArrowsFrame1.Edit1.Text := FloatToStr(ArrowSizeFactor);
-      PropPages.ActivePage := LineSheet;
+      ArrowsPanel.Visible := True;
+      ComboBox8.ItemIndex := Ord(BeginArrowKind);
+      ComboBox9.ItemIndex := Ord(EndArrowKind);
+      Edit1.Text := FloatToStr(ArrowSizeFactor);
+      PropPages.ActivePage := VoidSheet;
     end
-  else if PPrimitive is TStar2D then
-    with PPrimitive as TStar2D do
+  else if PObject is TStar2D then
+    with PObject as TStar2D do
     begin
-      StarsFrame1.ToolBar1.Buttons[Ord(StarKind)].Down := True;
-      StarsFrame1.Edit1.Text := FloatToStr(StarSizeFactor);
+      ToolBar1.Buttons[Ord(StarKind)].Down := True;
+      Edit2.Text := FloatToStr(StarSizeFactor);
       PropPages.ActivePage := StarsSheet;
     end
-  else if PPrimitive is TSymbol2D then
-    with PPrimitive as TSymbol2D do
+  else if PObject is TSymbol2D then
+    with PObject as TSymbol2D do
     begin
       ComboBox7.ItemIndex := Ord(SymbolKind);
       LabeledEdit5.Text := Format('%.5g', [Diameter]);
       LabeledEdit6.Text := Format('%.6g', [RadToDeg(Rot)]);
       PropPages.ActivePage := SymbolsSheet;
     end
-  else PropPages.ActivePage := VoidSheet;
-  {for I := 0 to PropPages.PageCount - 1 do
-    PropPages.Pages[I].TabVisible := False;}
-      //I = PropPages.ActivePageIndex;
+  else if PObject is TRectangle2D then
+    with PObject as TRectangle2D do
+    begin
+      LabeledEdit7.Text := Format('%.5g', [RX]);
+      LabeledEdit8.Text := Format('%.5g', [RY]);
+      PropPages.ActivePage := RectSheet;
+    end
+  else
+    PropPages.ActivePage := VoidSheet;
 end;
 
 procedure TPropertiesForm.FormCloseQuery(Sender: TObject;
@@ -146,53 +199,58 @@ var
   I: Integer;
 begin
   if ModalResult <> mrOK then Exit;
-  PPrimitive.LineStyle :=
+  (PObject as TPrimitive2D).LineStyle :=
     TLineStyle(ComboBox1.ItemIndex);
-  PPrimitive.Hatching := THatching(ComboBox2.ItemIndex);
-  PPrimitive.LineColor := ColorBoxGet(ComboBox3);
-  PPrimitive.HatchColor := ColorBoxGet(ComboBox4);
-  PPrimitive.FillColor := ColorBoxGet(ComboBox5);
-  PPrimitive.LineWidth := StrToFloat(ComboBox6.Text);
-  if PPrimitive is TText2D then
-    with PPrimitive as TText2D do
+  (PObject as TPrimitive2D).Hatching := THatching(ComboBox2.ItemIndex);
+  (PObject as TPrimitive2D).LineColor := ColorBoxGet(ComboBox3);
+  (PObject as TPrimitive2D).HatchColor := ColorBoxGet(ComboBox4);
+  (PObject as TPrimitive2D).FillColor := ColorBoxGet(ComboBox5);
+  (PObject as TPrimitive2D).LineWidth := StrToFloat(ComboBox6.Text);
+  if PObject is TText2D then
+    with PObject as TText2D do
     begin
       Text := LabeledEdit1.Text;
       TeXText := LabeledEdit3.Text;
       Height := StrToFloat(LabeledEdit2.Text);
-      Rot := DegToRad(StrToRealType(LabeledEdit4.Text));
+      Rot := DegToRad(StrToRealType(LabeledEdit4.Text, 0));
       HJustification := THJustification(RadioGroup1.ItemIndex);
       VJustification := TVJustification(RadioGroup2.ItemIndex);
       if not FontCheckBox.Checked then Font.Name := ' ';
     end
-  else if (PPrimitive is TLine2D) or (PPrimitive is TArc2D)
-    or (PPrimitive is TPolyline2D) or (PPrimitive is TSmoothPath2D)
-    or (PPrimitive is TBezierPath2D) then
-    with PPrimitive as TPrimitive2D do
+  else if (PObject is TLine2D) or (PObject is TArc2D)
+    or (PObject is TPolyline2D) or (PObject is TSmoothPath2D)
+    or (PObject is TBezierPath2D) then
+    with PObject as TPrimitive2D do
     begin
-      BeginArrowKind := TArrowKind(ArrowsFrame1.ComboBox1.ItemIndex);
-      EndArrowKind := TArrowKind(ArrowsFrame1.ComboBox2.ItemIndex);
-      ArrowSizeFactor := StrToRealType(ArrowsFrame1.Edit1.Text);
+      BeginArrowKind := TArrowKind(ComboBox8.ItemIndex);
+      EndArrowKind := TArrowKind(ComboBox9.ItemIndex);
+      ArrowSizeFactor := StrToRealType(Edit1.Text, 1);
     end
-  else if PPrimitive is TStar2D then
-    with PPrimitive as TStar2D do
+  else if PObject is TStar2D then
+    with PObject as TStar2D do
     begin
-      for I := 0 to StarsFrame1.ToolBar1.ButtonCount - 1 do
-        if StarsFrame1.ToolBar1.Buttons[I].Down then
+      for I := 0 to ToolBar1.ButtonCount - 1 do
+        if ToolBar1.Buttons[I].Down then
         begin
           StarKind := TStarKind(I);
           Break;
         end;
-      StarSizeFactor := StrToRealType(StarsFrame1.Edit1.Text);
-      PPrimitive.UpdateExtension(nil);
+      StarSizeFactor := StrToRealType(Edit2.Text, 0);
+      PObject.UpdateExtension(nil);
     end
-  else if PPrimitive is TSymbol2D then
-    with PPrimitive as TSymbol2D do
+  else if PObject is TSymbol2D then
+    with PObject as TSymbol2D do
     begin
       SymbolKind := TSymbolKind(ComboBox7.ItemIndex);
-      Diameter := StrToRealType(LabeledEdit5.Text);
-      Rot := DegToRad(StrToRealType(LabeledEdit6.Text));
+      Diameter := StrToRealType(LabeledEdit5.Text, 0);
+      Rot := DegToRad(StrToRealType(LabeledEdit6.Text, 0));
     end
-
+  else if PObject is TRectangle2D then
+    with PObject as TRectangle2D do
+    begin
+      RX := StrToRealType(LabeledEdit7.Text, 0);
+      RY := StrToRealType(LabeledEdit8.Text, 0);
+    end
       ;
 end;
 
@@ -209,7 +267,7 @@ end;
 
 procedure TPropertiesForm.Button3Click(Sender: TObject);
 begin
-  TableForm.PPrimitive := PPrimitive;
+  TableForm.PPrimitive := PObject as TPrimitive2D;
   TableForm.ShowModal;
 end;
 
@@ -230,9 +288,9 @@ end;
 
 procedure TPropertiesForm.Button4Click(Sender: TObject);
 begin
-  FontDialog1.Font.Assign((PPrimitive as TText2D).Font);
+  FontDialog1.Font.Assign((PObject as TText2D).Font);
   if FontDialog1.Execute then
-    (PPrimitive as TText2D).Font.Assign(FontDialog1.Font);
+    (PObject as TText2D).Font.Assign(FontDialog1.Font);
 end;
 
 procedure TPropertiesForm.FontCheckBoxClick(Sender: TObject);
@@ -240,5 +298,25 @@ begin
   Button4.Enabled := FontCheckBox.Checked;
 end;
 
+procedure TPropertiesForm.ArrComboBoxDrawItem(Control: TWinControl;
+  Index: Integer; Rect: TRect; State: TOwnerDrawState);
+begin
+  with (Control as TComboBox).Canvas do
+  begin
+    FillRect(Rect);
+    TextOut(Rect.Left + 50, Rect.Top, ComboBox8.Items[Index]);
+    Rect.Right := Rect.Left + 46;
+    Brush.Color := clWhite;
+    FillRect(Rect);
+    ArrImageList.Draw((Control as TComboBox).Canvas, Rect.Left,
+      Rect.Top + 2, Index);
+  end;
+end;
+
+initialization
+{$IFDEF VER140}
+{$ELSE}
+{$I Propert.lrs}
+{$ENDIF}
 end.
 

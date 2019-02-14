@@ -21,6 +21,9 @@
  * Create 2000.09.14
  *
  *}
+{$IFDEF LAZ_POWERPDF}
+{$H+}
+{$ENDIF}
 unit PdfFonts;
 
 interface
@@ -872,6 +875,22 @@ end;
 
 initialization
 
+  {$IFDEF LAZ_POWERPDF}
+  PdfLazRegisterClassAlias(TPdfFixedWidth, 'FixedWidth');
+  PdfLazRegisterClassAlias(TPdfFixedWidthBold, 'FixedWidth-Bold');
+  PdfLazRegisterClassAlias(TPdfFixedWidthBoldItalic, 'FixedWidth-BoldItalic');
+  PdfLazRegisterClassAlias(TPdfFixedWidthItalic, 'FixedWidth-Italic');
+  PdfLazRegisterClassAlias(TPdfArial, 'Arial');
+  PdfLazRegisterClassAlias(TPdfArialBold, 'Arial-Bold');
+  PdfLazRegisterClassAlias(TPdfArialBoldItalic, 'Arial-BoldItalic');
+  PdfLazRegisterClassAlias(TPdfArialItalic, 'Arial-Italic');
+  PdfLazRegisterClassAlias(TPdfTimesRoman, 'Times-Roman');
+  PdfLazRegisterClassAlias(TPdfTimesBold, 'Times-Bold');
+  PdfLazRegisterClassAlias(TPdfTimesItalic, 'Times-Italic');
+  PdfLazRegisterClassAlias(TPdfTimesBoldItalic, 'Times-BoldItalic');
+//  PdfLazRegisterClassAlias(TPdfScript, 'Script');
+//  PdfLazRegisterClassAlias(TPdfSymbol, 'Symbol');
+  {$ELSE}
   RegisterClassAlias(TPdfFixedWidth, 'FixedWidth');
   RegisterClassAlias(TPdfFixedWidthBold, 'FixedWidth-Bold');
   RegisterClassAlias(TPdfFixedWidthBoldItalic, 'FixedWidth-BoldItalic');
@@ -886,6 +905,7 @@ initialization
   RegisterClassAlias(TPdfTimesBoldItalic, 'Times-BoldItalic');
 //  RegisterClassAlias(TPdfScript, 'Script');
 //  RegisterClassAlias(TPdfSymbol, 'Symbol');
+  {$ENDIF}
 
 finalization
 
