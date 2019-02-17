@@ -8,6 +8,6 @@ into LaTeX files in publication-ready form. It can also be used as a stand-alone
 vector graphics. Up to version 1.5 it has been developed by Alexander Tsyplakov.
 
 Links:
-http://tpx.sourceforge.net/
-https://sourceforge.net/projects/tpx/
-https://ctan.org/pkg/tpx?lang=de
+* http://tpx.sourceforge.net/
+* https://sourceforge.net/projects/tpx/
+* https://ctan.org/pkg/tpx?lang=de
