@@ -5,4 +5,5 @@ obj/
 misc/
 *~
 .DS_Store
+*.lps
 
