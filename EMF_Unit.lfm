@@ -12,14 +12,12 @@ object EMF_Form: TEMF_Form
   Font.Style = []
   KeyPreview = True
   Menu = MainMenu1
-  OldCreateOrder = False
   Position = poScreenCenter
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   OnKeyUp = FormKeyUp
   OnShow = FormShow
   PixelsPerInch = 120
-  TextHeight = 16
   object ScrollBox1: TScrollBox
     Left = 185
     Top = 29
@@ -94,8 +92,8 @@ object EMF_Form: TEMF_Form
       Caption = ' '
       TabOrder = 0
       object CheckBox1: TCheckBox
-        Left = 7
-        Top = 3
+        Left = 5
+        Top = 1
         Width = 97
         Height = 17
         Action = FitWindow
@@ -135,7 +133,7 @@ object EMF_Form: TEMF_Form
     TabOrder = 2
     object ListView1: TListView
       Left = 0
-      Top = 33
+      Top = 31
       Width = 185
       Height = 416
       Align = alClient
@@ -160,12 +158,10 @@ object EMF_Form: TEMF_Form
       Align = alTop
       BevelOuter = bvNone
       Caption = ' '
-      Ctl3D = True
-      ParentCtl3D = False
       TabOrder = 1
       object SpeedButton1: TSpeedButton
-        Left = 166
-        Top = 4
+        Left = 164
+        Top = 2
         Width = 17
         Height = 17
         Flat = True
@@ -183,7 +179,7 @@ object EMF_Form: TEMF_Form
       end
       object Button5: TButton
         Left = 0
-        Top = 4
+        Top = 2
         Width = 85
         Height = 25
         Caption = 'Contents'
@@ -191,8 +187,8 @@ object EMF_Form: TEMF_Form
         OnClick = ListEmfContentsExecute
       end
       object Button6: TButton
-        Left = 88
-        Top = 4
+        Left = 86
+        Top = 2
         Width = 75
         Height = 25
         Caption = '>>'

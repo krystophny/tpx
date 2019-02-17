@@ -1,5 +1,7 @@
 unit GObjBase;
 
+{$MODE Delphi}
+
 // A module for basic graphical objects, lists of objects and layers
 
 interface
@@ -8,7 +10,7 @@ uses Classes, SysUtils,
 {$IFDEF VER140}
   WinBasic,
 {$ELSE}
-  LCLIntf, LMessages, LCLType, LazBasic,
+  LCLIntf, LMessages, LCLType, {LazBasic,}
 {$ENDIF}
   Geometry, Devices, SysBasic
   ;
@@ -447,7 +449,7 @@ type
     function Find(const ID: Integer): TGraphicObject;
 // Replace current object with another object
     procedure ReplaceDeleteCurrent(const Obj: TGraphicObject);
-{: This method remove all the objectû from the list.
+{: This method remove all the objectÃ» from the list.
    The objects will be deleted if the property FreeOnDelete
    is set to True.
 }
@@ -1217,7 +1219,7 @@ begin
   if fEnabled then BitMask := BitMask or 2;
   if not fToBeSaved then
     BitMask := BitMask or 4;
-      // Uso il not per compatibilità con le versioni precedenti.
+      // Uso il not per compatibilitÃ  con le versioni precedenti.
   with Stream do
   begin
     Write(fID, SizeOf(fID));

@@ -48,10 +48,10 @@ interface
 
 uses
   SysUtils, Classes, PdfTypes
-  {$IFDEF LINUX}
-  , Types
+  {$IFDEF WINDOWS}
+    , Windows
   {$ELSE}
-  , Windows
+    , Types
   {$ENDIF}
   ;
 

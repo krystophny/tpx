@@ -10,7 +10,7 @@ uses
 {$IFDEF VER140}
   Windows, Variants,
 {$ELSE}
-  LCLIntf, LResources, Buttons,
+  LCLIntf, LResources, Buttons, LCLType,
 {$ENDIF}
   Messages, SysUtils, Classes, Graphics, Controls, Forms,
   Dialogs, Grids, StdCtrls, Spin, GObjects, ExtCtrls, ActnList,
@@ -94,7 +94,7 @@ implementation
 uses Drawings, Geometry, SysBasic;
 
 {$IFDEF VER140}
-{$R *.dfm}
+{$R *.lfm}
 {$ENDIF}
 
 procedure TTableForm.FormCreate(Sender: TObject);

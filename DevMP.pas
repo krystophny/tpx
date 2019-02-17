@@ -43,6 +43,7 @@ type
     procedure RotText(P: TPoint2D; H, ARot: TRealType;
       WideText: WideString; TeXText: AnsiString;
       const HAlignment: THAlignment;
+      const VAlignment: TVAlignment;
       const LineColor: TColor;
       const FaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
@@ -312,6 +313,7 @@ procedure T_MetaPost_Device.RotText(P: TPoint2D;
   H, ARot: TRealType;
   WideText: WideString; TeXText: AnsiString;
   const HAlignment: THAlignment;
+  const VAlignment: TVAlignment;
   const LineColor: TColor;
   const FaceName: AnsiString;
   const Charset: TFontCharSet; const Style: TFontStyles);

@@ -19,9 +19,9 @@ var
 
 implementation
 
-uses Output, Input, Drawings, Preview
+uses Output, Input, Drawings, Preview, SysBasic, Bitmaps
 {$IFDEF VER140}
-  , EMF_Unit, Modes, Bitmaps, SysBasic
+  , EMF_Unit, Modes
 {$ENDIF}
   ;
 

@@ -1,0 +1,42 @@
+object InfoBox: TInfoBox
+  Left = 200
+  Top = 108
+  BorderIcons = [biSystemMenu, biMinimize]
+  BorderStyle = bsDialog
+  Caption = 'About'
+  ClientHeight = 373
+  ClientWidth = 409
+  Color = clBtnFace
+  Font.Charset = DEFAULT_CHARSET
+  Font.Color = clWindowText
+  Font.Height = -14
+  Font.Name = 'MS Sans Serif'
+  Font.Style = []
+  Position = poScreenCenter
+  PixelsPerInch = 120
+  object OKButton: TButton
+    Left = 312
+    Top = 344
+    Width = 75
+    Height = 25
+    Cancel = True
+    Caption = 'OK'
+    Default = True
+    ModalResult = 1
+    TabOrder = 0
+  end
+  object InfoEdit: TMemo
+    Left = 0
+    Top = 0
+    Width = 409
+    Height = 337
+    Align = alTop
+    Color = clBtnFace
+    Lines.Strings = (
+      'InfoEdit'
+    )
+    ReadOnly = True
+    ScrollBars = ssBoth
+    TabOrder = 1
+  end
+end

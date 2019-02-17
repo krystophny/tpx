@@ -79,6 +79,7 @@ type
   TRotTextProc = procedure(P: TPoint2D; H, ARot: TRealType;
     WideText: WideString; TeXText: AnsiString;
     const HAlignment: THAlignment;
+    const VAlignment: TVAlignment;
     const LineColor: TColor;
     const AFaceName: AnsiString;
     const Charset: TFontCharSet; const Style: TFontStyles) of
@@ -195,6 +196,7 @@ type
     procedure TextCh(const P: TPoint2D; H, ARot: TRealType;
       WideText: WideString; TeXText: AnsiString;
       const HAlignment: THAlignment;
+      const VAlignment: TVAlignment;
       const LineColor: TColor;
       const AFaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles;
@@ -258,7 +260,7 @@ function FF_N(const X: TRealType; const Prec: Integer): string;
 
 implementation
 
-uses Drawings, GObjects, SysBasic, PreView, Pieces;
+uses Drawings, GObjects, SysBasic, Preview, Pieces;
 
 function FF_N(const X: TRealType; const Prec: Integer): string;
 begin
@@ -335,7 +337,8 @@ begin
         (APiece as TTextPiece).ARot,
         (APiece as TTextPiece).WideText,
         (APiece as TTextPiece).TeXText,
-        (APiece as TTextPiece).HAlignment,
+        (APiece as TTextPiece).HAlignment, 
+        (APiece as TTextPiece).VAlignment,
         LineColor,
         (APiece as TTextPiece).FaceName,
         (APiece as TTextPiece).Charset,
@@ -692,7 +695,8 @@ end;
 procedure TDevice.TextCh(
   const P: TPoint2D; H, ARot: TRealType;
   WideText: WideString; TeXText: AnsiString;
-  const HAlignment: THAlignment;
+  const HAlignment: THAlignment;    
+  const VAlignment: TVAlignment;
   const LineColor: TColor;
   const AFaceName: AnsiString;
   const Charset: TFontCharSet; const Style: TFontStyles;
@@ -709,7 +713,7 @@ begin
   end;
   OnRotText(TransformPoint2D(P, MultTransf(Transf)),
     H * fTScale, ARot, WideText, TeXText,
-    HAlignment, 
+    HAlignment, VAlignment,
     LineColor, AFaceName, Charset, Style);
 end;
 

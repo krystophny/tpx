@@ -1,11 +1,13 @@
 unit PrintEpsOpt;
 
+{$MODE Delphi}
+
 interface
 
 uses
-  Windows, Messages, SysUtils, Variants, Classes, Graphics,
+  LCLIntf, LCLType, LMessages, Messages, SysUtils, Variants, Classes, Graphics,
     Controls, Forms,
-  Dialogs, StdCtrls, ExtCtrls, Printers, Spin;
+  Dialogs, StdCtrls, ExtCtrls, Printers, Spin, PrintersDlgs;
 
 type
   TPrintEpsOptForm = class(TForm)
@@ -34,7 +36,7 @@ var
 
 implementation
 
-{$R *.dfm}
+{$R *.lfm}
 
 procedure TPrintEpsOptForm.Button1Click(Sender: TObject);
 var
@@ -53,7 +55,8 @@ begin
     GetMem(Device, cchDeviceName);
     GetMem(Driver, MAX_PATH);
     GetMem(Port, MAX_PATH);
-    Printer.GetPrinter(Device, Driver, Port, deviceMode);
+    // TODO: not working on non-Windows
+    // Printer.GetPrinter(Device, Driver, Port, deviceMode);
     PrinterEdit.Text := string(Device);
   end;
 end;

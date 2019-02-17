@@ -14,7 +14,7 @@ uses Types, SysUtils, Classes, Graphics, Controls,
 {$IFDEF VER140}
   WinBasic,
 {$ELSE}
-  LMessages, LCLType, LazBasic,
+  LMessages, LCLType, {LazBasic,}
 {$ENDIF}
   Devices, GObjBase, SysBasic;
 

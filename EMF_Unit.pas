@@ -1,13 +1,15 @@
 unit EMF_Unit;
 
+{$MODE Delphi}
+
 interface
 
 uses
-  Windows, Messages, SysUtils, Variants, Classes, Graphics,
+  LCLIntf, LCLType, LMessages, Messages, SysUtils, Variants, Classes, Graphics,
     Controls, Forms,
   Dialogs, ExtDlgs, ExtCtrls, StdCtrls, Clipbrd, CheckLst,
     ComCtrls,
-  ActnList, Menus, ToolWin, Printers, Buttons, Spin;
+  ActnList, Menus, ToolWin, Printers, Buttons, Spin, PrintersDlgs;
 
 type
   TFigPathKind = (fpk_Path, fpk_FileName, fpk_Dir_FileName);
@@ -108,9 +110,9 @@ var
 
 implementation
 
-uses MprtEMF, EMF_Add, MainUnit, Math, pngimage, PrintEpsOpt;
+uses MprtEMF, EMF_Add, MainUnit, Math, PrintEpsOpt;
 
-{$R *.dfm}
+{$R *.lfm}
 
 // Convert Graphic to EPS
 // Graphic: Graphic (Metafile or bitmap) to be converted

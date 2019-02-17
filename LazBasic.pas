@@ -1,10 +1,11 @@
-unit WinBasic;
+unit LazBasic;
 
-{$MODE Delphi}
+{$mode objfpc}{$H+}
 
 interface
 
-uses LCLIntf, LCLType, LMessages, Graphics, Classes;
+uses
+  Classes, SysUtils, Graphics, LCLIntf, LCLType, LMessages, LCLProc;
 
 type
 
@@ -162,70 +163,48 @@ type
       SetFaceName;
   end;
 
-  TEnhMetaHeader = Windows.TEnhMetaHeader;
+{ Syncronization object to prevent linking of Delphi's packages. }
+{: For Internal use of CADSys library.
+}
+  TTpXSynchroObject = class(TObject)
+  public
+    procedure Acquire; virtual;
+    procedure Release; virtual;
+  end;
 
-function GetLongPath(const ShortName: string): string;
-function GetLongPathName(lpszShortName: LPCTSTR;
-  lpszLongName: LPTSTR; cchBuffer: DWORD): DWORD; stdcall;
+{: For Internal use of CADSys library.
+}
+  TTpXCriticalSection = class(TTpXSynchroObject)
+  private
+    FSection: TRTLCriticalSection;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    procedure Acquire; override;
+    procedure Release; override;
+    procedure Enter;
+    procedure Leave;
+  end;
+
 function HasFontFamily(const FontName: string): Boolean;
-procedure SetBkMode(Canvas: TCanvas; const OPAQUE: Boolean);
-procedure GetCanvasResolution(Canvas: TCanvas; var LogHeight,
-  LogWidth: Double);
-procedure ChangeCanvasResolution(Canvas: TCanvas; const WX, WY, VX,
-  VY: Integer);
-// Resolution in points per mm
-procedure GetMetaFileResolution(Metafile: TMetaFile; var PpMM_X,
-  PpMM_Y: Double);
-function SetWindowLong(HWnd: LongWord; dwNewLong: Longint):
-  Longint;
+function AnsiDequotedStr(const Value: string;
+  const Quote: Char): string;
 
 implementation
 
-function GetLongPathName; external kernel32 name 'GetLongPathNameA';
-
-function GetLongPath(const ShortName: string): string;
-begin
-  SetLength(Result, MAX_PATH + 1);
-  SetLength(Result, GetLongPathName(PChar(ShortName), PChar(Result),
-MAX_PATH));
-end;
-
-procedure Set_FaceName(
-  var LogFont: TLOGFONT; const Value: TFaceName);
-var
-  I: Byte;
-begin
-  for I := 1 to Length(Value) do
-    LogFont.lfFaceName[I - 1] := Value[I];
-  LogFont.lfFaceName[Length(Value)] := #0;
-end;
-
-function EnumFontsProc(var LogFont: TLOGFONT;
-  var TextMetric: TTextMetric;
-  FontType: Integer; Data: Pointer): Integer; stdcall;
-begin
-  //LogFont.lfFaceName;
-  Boolean(Data^) := True;
-  Result := 0;
-end;
-
 function HasFontFamily(const FontName: string): Boolean;
-var
-  DC: HDC;
-  LFont: TLOGFONT;
 begin
   Result := False;
-  if FontName = '' then Exit;
-  FillChar(LFont, sizeof(LFont), 0);
-  LFont.lfCharset := DEFAULT_CHARSET;
-  Set_FaceName(LFont, FontName);
-  try
-    DC := GetDC(0);
-    EnumFontFamiliesEx(DC, LFont, @EnumFontsProc,
-      Longint(@Result), 0);
-  finally
-    ReleaseDC(0, DC);
-  end;
+end;
+
+function AnsiDequotedStr(const Value: string;
+  const Quote: Char): string;
+begin
+  Result := Value;
+  while (Result <> '') and (Result[1] = Quote) do
+    Delete(Result,1,1);
+  while (Result <> '') and (Result[Length(Result)] = Quote) do
+    Delete(Result,Length(Result),1);
 end;
 
 // =====================================================================
@@ -440,47 +419,60 @@ begin
   end;
 end;
 
-procedure SetBkMode(Canvas: TCanvas; const OPAQUE: Boolean);
+// =====================================================================
+// TTpXSynchroObject
+// =====================================================================
+
+procedure TTpXSynchroObject.Acquire;
 begin
-  if not OPAQUE then
-    Windows.SetBkMode(Canvas.Handle, Windows.TRANSPARENT)
-  else
-    Windows.SetBkMode(Canvas.Handle, Windows.OPAQUE);
 end;
 
-  // Questa è la dimensione di un pixel in mm.
-
-procedure GetCanvasResolution(Canvas: TCanvas; var LogHeight,
-  LogWidth: Double);
+procedure TTpXSynchroObject.Release;
 begin
-  LogHeight := GetDeviceCaps(Canvas.Handle, VERTSIZE) /
-    GetDeviceCaps(Canvas.Handle, VERTRES);
-  LogWidth := GetDeviceCaps(Canvas.Handle, HORZSIZE) /
-    GetDeviceCaps(Canvas.Handle, HORZRES);
 end;
 
-procedure ChangeCanvasResolution(Canvas: TCanvas; const WX, WY, VX,
-  VY: Integer);
+// =====================================================================
+// TTpXCriticalSection
+// =====================================================================
+
+constructor TTpXCriticalSection.Create;
 begin
-  SetMapMode(Canvas.Handle, MM_ISOTROPIC);
-  SetWindowExtEx(Canvas.Handle, WX, WY, nil);
-  SetViewportExtEx(Canvas.Handle, VX, VY, nil);
+  inherited Create;
+{$IFDEF DELPHI}
+  InitializeCriticalSection(FSection);
+{$ENDIF}
 end;
 
-procedure GetMetaFileResolution(Metafile: TMetaFile; var PpMM_X,
-  PpMM_Y: Double);
-var EMFHeader: TEnhMetaHeader;
+destructor TTpXCriticalSection.Destroy;
 begin
-  GetEnhMetaFileHeader(Metafile.Handle, sizeof(EMFHeader),
-    @EMFHeader);
-  PpMM_X := EMFHeader.szlDevice.CX / EMFHeader.szlMillimeters.CX;
-  PpMM_Y := EMFHeader.szlDevice.CY / EMFHeader.szlMillimeters.CY;
+{$IFDEF DELPHI}
+  DeleteCriticalSection(FSection);
+{$ENDIF}
+  inherited Destroy;
 end;
 
-function SetWindowLong(HWnd: LongWord; dwNewLong: Longint):
-  Longint;
+procedure TTpXCriticalSection.Acquire;
 begin
-  Result := Windows.SetWindowLong(HWnd, gwl_wndProc, dwNewLong);
+{$IFDEF DELPHI}
+  EnterCriticalSection(FSection);
+{$ENDIF}
+end;
+
+procedure TTpXCriticalSection.Release;
+begin
+{$IFDEF DELPHI}
+  LeaveCriticalSection(FSection);
+{$ENDIF}
+end;
+
+procedure TTpXCriticalSection.Enter;
+begin
+  Acquire;
+end;
+
+procedure TTpXCriticalSection.Leave;
+begin
+  Release;
 end;
 
 end.

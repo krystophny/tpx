@@ -12,9 +12,9 @@ uses Types, SysUtils, Classes,
 {$IFDEF VER140}
   Windows, WinBasic
 {$ELSE}
-  LCLIntf, LCLType, LMessages, LCLProc, LazBasic
+  LCLIntf, LCLType, LMessages, LCLProc, {LazBasic}
 {$ENDIF}
-  , Graphics, Drawings, Geometry, Contnrs,
+  {,} Graphics, Drawings, Geometry, Contnrs,
   Pieces, Devices, GObjBase, Bitmaps;
 
 type
@@ -624,7 +624,7 @@ type
        and Points[1] the right-up corner.
 
        The <I=width> of the text is set to the width of <I=Rect1>.
-       If you don’t know the dimension of the Text on screen, set
+       If you donÂ’t know the dimension of the Text on screen, set
        the <See Property=TText2D@AutoSize> property to <B=True>.
        The first time the text will be drawed the bounding box will
        be adjusted automatically.

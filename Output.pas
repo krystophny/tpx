@@ -342,7 +342,7 @@ var
 
 implementation
 
-uses Math, StrUtils, ColorEtc, PreView,
+uses Math, StrUtils, ColorEtc, Preview,
   Settings0, Input, SysBasic,
 {$IFDEF VER140}
   Gr32Add, DevGr32,

@@ -53,7 +53,7 @@ implementation
 uses Drawings;
 
 {$IFDEF VER140}
-{$R *.dfm}
+{$R *.lfm}
 {$ENDIF}
 
 procedure TOptionsForm.FormShow(Sender: TObject);

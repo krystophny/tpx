@@ -47,7 +47,7 @@ implementation
 uses Drawings;
 
 {$IFDEF VER140}
-{$R *.dfm}
+{$R *.lfm}
 {$ENDIF}
 
 procedure TScaleStandardForm.FormShow(Sender: TObject);

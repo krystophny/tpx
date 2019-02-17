@@ -13,7 +13,6 @@ object MainForm: TMainForm
   Font.Name = 'MS Sans Serif'
   Font.Style = []
   Menu = MainMenu1
-  OldCreateOrder = True
   Position = poDefault
   OnCloseQuery = FormCloseQuery
   OnCreate = FormCreate
@@ -22,7 +21,6 @@ object MainForm: TMainForm
   OnMouseWheel = FormMouseWheel
   OnShow = FormShow
   PixelsPerInch = 120
-  TextHeight = 13
   object Image1: TImage
     Left = 233
     Top = 2
@@ -81,13 +79,12 @@ object MainForm: TMainForm
     BevelOuter = bvNone
     TabOrder = 2
     object ToolBar1: TToolBar
-      Left = 1
-      Top = 1
+      Left = 0
+      Top = 0
       Width = 652
       Height = 22
       Anchors = [akLeft, akTop, akRight, akBottom]
       AutoSize = True
-      Customizable = True
       DragKind = dkDock
       EdgeBorders = [ebTop, ebBottom]
       EdgeInner = esNone
@@ -278,13 +275,12 @@ object MainForm: TMainForm
       end
     end
     object PropertiesToolbar1: TToolBar
-      Left = 1
-      Top = 23
+      Left = 0
+      Top = 21
       Width = 652
       Height = 22
       AutoSize = True
       Caption = 'PropertiesToolbar1'
-      Customizable = True
       DragKind = dkDock
       EdgeInner = esNone
       EdgeOuter = esNone
@@ -499,13 +495,12 @@ object MainForm: TMainForm
       end
     end
     object PropertiesToolbar2: TToolBar
-      Left = 1
-      Top = 45
+      Left = 0
+      Top = 43
       Width = 652
       Height = 22
       ButtonHeight = 21
       Caption = 'PropertiesToolbar2'
-      Customizable = True
       DragKind = dkDock
       EdgeInner = esNone
       EdgeOuter = esNone
@@ -834,13 +829,12 @@ object MainForm: TMainForm
       BevelOuter = bvNone
       TabOrder = 0
       object ToolBar2: TToolBar
-        Left = 1
-        Top = 1
+        Left = 0
+        Top = 0
         Width = 23
         Height = 424
         Align = alLeft
         AutoSize = True
-        Customizable = True
         DragKind = dkDock
         EdgeBorders = [ebTop, ebBottom]
         EdgeInner = esNone
@@ -966,7 +960,7 @@ object MainForm: TMainForm
       end
     end
     object Panel32: TPanel
-      Left = 25
+      Left = 23
       Top = 0
       Width = 629
       Height = 426
@@ -975,7 +969,7 @@ object MainForm: TMainForm
       Caption = ' '
       TabOrder = 1
       object Panel33: TPanel
-        Left = 57
+        Left = 55
         Top = 0
         Width = 572
         Height = 426
@@ -995,14 +989,12 @@ object MainForm: TMainForm
           TabOrder = 0
           object Panel2: TPanel
             Left = 0
-            Top = 383
+            Top = 381
             Width = 572
             Height = 26
             Align = alBottom
             BevelOuter = bvNone
             Caption = ' '
-            Ctl3D = False
-            ParentCtl3D = False
             TabOrder = 0
             Visible = False
           end
@@ -1016,16 +1008,14 @@ object MainForm: TMainForm
             Caption = ' '
             TabOrder = 1
             object VScrollBar: TScrollBar
-              Left = 555
+              Left = 553
               Top = 0
               Width = 17
               Height = 383
               Align = alRight
-              Ctl3D = False
               Kind = sbVertical
               LargeChange = 4
               PageSize = 0
-              ParentCtl3D = False
               Position = 50
               TabOrder = 0
               TabStop = False
@@ -1035,14 +1025,12 @@ object MainForm: TMainForm
         end
         object HScrollBar: TScrollBar
           Left = 0
-          Top = 409
+          Top = 407
           Width = 572
           Height = 17
           Align = alBottom
-          Ctl3D = False
           LargeChange = 4
           PageSize = 0
-          ParentCtl3D = False
           Position = 50
           TabOrder = 1
           TabStop = False
@@ -1057,15 +1045,12 @@ object MainForm: TMainForm
         Align = alLeft
         BevelOuter = bvNone
         Caption = ' '
-        Ctl3D = False
-        ParentCtl3D = False
         TabOrder = 1
         Visible = False
       end
     end
   end
   object MainMenu1: TMainMenu
-    AutoHotkeys = maManual
     Images = ImageList2
     Left = 57
     Top = 128
@@ -1082,8 +1067,6 @@ object MainForm: TMainForm
       end
       object Recentfiles1: TMenuItem
         Caption = 'Recent files'
-        object TMenuItem
-        end
       end
       object Save1: TMenuItem
         Action = SaveDoc
@@ -1547,7 +1530,6 @@ object MainForm: TMainForm
     end
   end
   object LocalPopUp: TPopupMenu
-    AutoHotkeys = maManual
     AutoPopup = False
     Images = ImageList2
     Left = 87
@@ -1587,8 +1569,6 @@ object MainForm: TMainForm
       Hint = 'Undo'
       ImageIndex = 50
       ShortCut = 16474
-      SecondaryShortCuts.Strings = (
-        'Alt+BkSp')
       OnExecute = UserEventExecute
     end
     object Redo: TAction
@@ -1597,8 +1577,6 @@ object MainForm: TMainForm
       Hint = 'Redo'
       ImageIndex = 51
       ShortCut = 24666
-      SecondaryShortCuts.Strings = (
-        'Shift+Alt+BkSp')
       OnExecute = UserEventExecute
     end
     object ClipboardCopy: TAction
@@ -1607,8 +1585,6 @@ object MainForm: TMainForm
       Hint = 'Copy to clipboard'
       ImageIndex = 37
       ShortCut = 16451
-      SecondaryShortCuts.Strings = (
-        'ctrl+ins')
       OnExecute = UserEventExecute
     end
     object ClipboardPaste: TAction
@@ -1617,8 +1593,6 @@ object MainForm: TMainForm
       Hint = 'Paste from clipboard'
       ImageIndex = 38
       ShortCut = 16470
-      SecondaryShortCuts.Strings = (
-        'shift+ins')
       OnExecute = UserEventExecute
     end
     object ClipboardCut: TAction
@@ -1627,8 +1601,6 @@ object MainForm: TMainForm
       Hint = 'Cut to clipboard'
       ImageIndex = 36
       ShortCut = 16472
-      SecondaryShortCuts.Strings = (
-        'Shift+Del')
       OnExecute = UserEventExecute
     end
     object ShowCrossHair: TAction
@@ -1643,8 +1615,6 @@ object MainForm: TMainForm
       Hint = 'Delete selected'
       ImageIndex = 23
       ShortCut = 46
-      SecondaryShortCuts.Strings = (
-        'Ctrl+Del')
       OnExecute = UserEventExecute
     end
     object DuplicateSelected: TAction
@@ -1711,8 +1681,6 @@ object MainForm: TMainForm
       Caption = 'Flip vertically'
       ImageIndex = 29
       ShortCut = 40998
-      SecondaryShortCuts.Strings = (
-        'Alt+Shift+Down')
       OnExecute = UserEventExecute
     end
     object SelectAll: TAction
@@ -1741,8 +1709,6 @@ object MainForm: TMainForm
       Caption = 'Flip horizontally'
       ImageIndex = 28
       ShortCut = 40999
-      SecondaryShortCuts.Strings = (
-        'Alt+Shift+Left')
       OnExecute = UserEventExecute
     end
     object ConvertToGrayScale: TAction
@@ -1972,8 +1938,6 @@ object MainForm: TMainForm
       Hint = 'Zoom in'
       ImageIndex = 17
       ShortCut = 107
-      SecondaryShortCuts.Strings = (
-        'Alt+=')
       OnExecute = UserEventExecute
     end
     object ZoomOut: TAction
@@ -1982,8 +1946,6 @@ object MainForm: TMainForm
       Hint = 'Zoom out'
       ImageIndex = 18
       ShortCut = 109
-      SecondaryShortCuts.Strings = (
-        'Alt+-')
       OnExecute = UserEventExecute
     end
     object ZoomAll: TAction
@@ -1992,8 +1954,6 @@ object MainForm: TMainForm
       Hint = 'Zoom all'
       ImageIndex = 19
       ShortCut = 106
-      SecondaryShortCuts.Strings = (
-        'Alt+0')
       OnExecute = UserEventExecute
     end
     object HandTool: TAction
@@ -2293,8 +2253,6 @@ object MainForm: TMainForm
       Category = 'Edit'
       Caption = 'Object properties'
       ShortCut = 13
-      SecondaryShortCuts.Strings = (
-        'f3')
       OnExecute = UserEventExecute
     end
     object TeXFormat: TAction
@@ -2447,8 +2405,6 @@ object MainForm: TMainForm
       Caption = 'Ungroup'
       Hint = 'Ungroup'
       ShortCut = 24647
-      SecondaryShortCuts.Strings = (
-        'Ctrl+U')
       OnExecute = UserEventExecute
     end
     object MakeCompound: TAction
@@ -5329,7 +5285,6 @@ object MainForm: TMainForm
     Top = 132
   end
   object ConvertPopup: TPopupMenu
-    AutoHotkeys = maManual
     AutoPopup = False
     Left = 156
     Top = 172

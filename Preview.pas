@@ -1,4 +1,4 @@
-unit PreView;
+unit Preview;
 
 {$IFNDEF VER140}
 {$MODE Delphi}

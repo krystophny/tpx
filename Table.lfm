@@ -11,13 +11,11 @@ object TableForm: TTableForm
   Font.Height = -13
   Font.Name = 'MS Sans Serif'
   Font.Style = []
-  OldCreateOrder = False
   Position = poMainFormCenter
   OnClose = FormClose
   OnCreate = FormCreate
   OnShow = FormShow
   PixelsPerInch = 120
-  TextHeight = 16
   object Button1: TButton
     Left = 420
     Top = 8
@@ -46,16 +44,16 @@ object TableForm: TTableForm
     Caption = ' '
     TabOrder = 2
     object Button3: TButton
-      Left = 5
-      Top = 8
+      Left = 3
+      Top = 6
       Width = 75
       Height = 25
       Action = AddPoints
       TabOrder = 0
     end
     object RadioButton1: TRadioButton
-      Left = 5
-      Top = 71
+      Left = 3
+      Top = 69
       Width = 73
       Height = 17
       Caption = 'above'
@@ -64,24 +62,24 @@ object TableForm: TTableForm
       TabStop = True
     end
     object RadioButton2: TRadioButton
-      Left = 5
-      Top = 91
+      Left = 3
+      Top = 89
       Width = 73
       Height = 17
       Caption = 'below'
       TabOrder = 1
     end
     object Edit2: TEdit
-      Left = 7
-      Top = 43
+      Left = 5
+      Top = 41
       Width = 66
       Height = 24
       TabOrder = 3
       Text = '1'
     end
     object UpDown1: TUpDown
-      Left = 73
-      Top = 43
+      Left = 71
+      Top = 41
       Width = 19
       Height = 24
       Associate = Edit2
@@ -112,8 +110,8 @@ object TableForm: TTableForm
     Caption = 'Panel2'
     TabOrder = 4
     object Grid: TStringGrid
-      Left = 1
-      Top = 25
+      Left = 0
+      Top = 23
       Width = 399
       Height = 447
       Align = alClient
@@ -127,7 +125,6 @@ object TableForm: TTableForm
       OnClick = GridClick
       OnKeyPress = GridKeyPress
       OnKeyUp = GridKeyUp
-      OnRowMoved = GridRowMoved
       OnSelectCell = GridSelectCell
       OnSetEditText = GridSetEditText
       ColWidths = (
@@ -136,8 +133,8 @@ object TableForm: TTableForm
         110)
     end
     object Panel3: TPanel
-      Left = 1
-      Top = 1
+      Left = 0
+      Top = 0
       Width = 399
       Height = 24
       Align = alTop
@@ -180,15 +177,11 @@ object TableForm: TTableForm
     object Copy: TAction
       Caption = 'Copy'
       ShortCut = 16451
-      SecondaryShortCuts.Strings = (
-        'ctrl+ins')
       OnExecute = CopyExecute
     end
     object Paste: TAction
       Caption = 'Paste'
       ShortCut = 16470
-      SecondaryShortCuts.Strings = (
-        'shift+ins')
       OnExecute = PasteExecute
     end
     object SelectAll: TAction

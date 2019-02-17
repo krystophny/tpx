@@ -12,7 +12,7 @@ uses Messages, SysUtils, Classes, Graphics, Controls, Forms,
 {$ELSE}
   LCLIntf, Buttons, LResources,
 {$ENDIF}
-  Dialogs, ExtCtrls, StdCtrls, SysBasic, PreView;
+  Dialogs, ExtCtrls, StdCtrls, SysBasic, Preview;
 
 {$IFDEF VER140}
 {$ELSE}
@@ -46,7 +46,7 @@ var
 implementation
 
 {$IFDEF VER140}
-{$R *.dfm}
+{$R *.lfm}
 {$ENDIF}
 
 {$I tpx.inc}

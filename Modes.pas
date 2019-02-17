@@ -49,7 +49,7 @@ type
   TOpenAnyPictureDialog = class(TOpenPictureDialog)
   protected
     procedure DoSelectionChange; override;
-    procedure PreviewClick(Sender: TObject); override;
+    procedure PreviewClick(Sender: TObject);
   end;
 
   TTpXMode = class(TMode)
@@ -466,7 +466,7 @@ const Drag_Aperture = 4;
 
 implementation
 
-uses MainUnit, SysBasic, Propert, Options, TransForm, PreView,
+uses MainUnit, SysBasic, Propert, Options, TransForm, Preview,
 {$IFDEF VER140}
   EMF_Unit, WinBasic, ClpbrdOp,
 {$ELSE}
@@ -585,7 +585,7 @@ begin
   Ext := LowerCase(ExtractFileExt(FileName));
   Delete(Ext, 1, 1);
   if ((Ext = 'emf') or (Ext = 'wmf')) then
-    inherited PreviewClick(Sender)
+    PreviewClick(Sender)
   else if ((Ext = 'eps') or (Ext = 'ps')) then
     OpenOrExec(PSViewerPath, FileName)
   else

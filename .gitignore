@@ -1,0 +1,8 @@
+backup/
+lib/
+_tmp/
+obj/
+misc/
+*~
+.DS_Store
+

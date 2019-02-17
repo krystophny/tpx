@@ -1,5 +1,7 @@
 unit TpXSaver;
 
+{$MODE Delphi}
+
 interface
 
 uses GObjBase, GObjects, Drawings, Output, XmlOut, Classes,

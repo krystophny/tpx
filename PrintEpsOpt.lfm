@@ -11,10 +11,8 @@ object PrintEpsOptForm: TPrintEpsOptForm
   Font.Height = -14
   Font.Name = 'MS Sans Serif'
   Font.Style = []
-  OldCreateOrder = True
   Position = poScreenCenter
   PixelsPerInch = 120
-  TextHeight = 16
   object Label1: TLabel
     Left = 12
     Top = 33

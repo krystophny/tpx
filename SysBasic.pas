@@ -15,7 +15,7 @@ uses Types,
 {$ELSE}
   LCLIntf, LCLType, LazBasic,
 {$IFDEF LINUX}
-  oldlinux,
+  {oldlinux,}
 {$ENDIF}
 {$ENDIF}
   SysUtils, Forms, Graphics;
@@ -230,8 +230,8 @@ begin
         Result := False;
       end;
     end;
-    CloseHandle(ProcessInfo.hProcess);
-    CloseHandle(ProcessInfo.hThread);
+    FileClose(ProcessInfo.hProcess); { *Converted from CloseHandle* }
+    FileClose(ProcessInfo.hThread); { *Converted from CloseHandle* }
   finally
     if OutFile <> '' then FileClose(aOutput);
     if InFile <> '' then FileClose(aInput);
