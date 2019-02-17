@@ -34,7 +34,7 @@
         <PackageName Value="LCL"/>
       </Item2>
     </RequiredPackages>
-    <Units Count="53">
+    <Units Count="54">
       <Unit0>
         <Filename Value="TpX.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -46,7 +46,9 @@
       <Unit2>
         <Filename Value="MainUnit.pas"/>
         <IsPartOfProject Value="True"/>
+        <ComponentName Value="MainForm"/>
         <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
       </Unit2>
       <Unit3>
         <Filename Value="Output.pas"/>
@@ -250,13 +252,17 @@
         <HasResources Value="True"/>
       </Unit50>
       <Unit51>
-        <Filename Value="../tpx1.4/TpX_Source1_4/Lib/XML/XUtils.pas"/>
+        <Filename Value="Lib/XML/XUtils.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit51>
       <Unit52>
-        <Filename Value="../tpx1.4/TpX_Source1_4/Lib/XML/XXmlDom.pas"/>
+        <Filename Value="Lib/XML/XXmlDom.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit52>
+      <Unit53>
+        <Filename Value="misc/notes.txt"/>
+        <IsPartOfProject Value="True"/>
+      </Unit53>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

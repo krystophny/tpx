@@ -911,7 +911,7 @@ begin
   ExtractStrings(['|'], [' ', '*', '.'],
     PChar(AnsiReplaceStr(Save_Filter_Str, '.*',
     '.???')), List);
-{$IFNDEF Linux}
+{$IFDEF WINDOWS}
   MainForm.DrawingSaveDlg.DefaultExt :=
     List[MainForm.DrawingSaveDlg.FilterIndex * 2 - 1];
   if MainForm.DrawingSaveDlg.DefaultExt = '???'

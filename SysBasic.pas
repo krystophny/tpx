@@ -243,7 +243,7 @@ begin
   OldDir := GetCurrentDir;
   SetCurrentDir(Directory);
 {$IFDEF LINUX}
-  Result := Shell(aCmdLine) = 0;
+//  Result := Shell(aCmdLine) = 0; TODO: doesn't work
 {$ELSE}
   Result := ExecuteProcess(aCmdLine, '') = 0;
 {$ENDIF}
