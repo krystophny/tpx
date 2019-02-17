@@ -26,9 +26,9 @@ uses
   DevCanvas in 'DevCanvas.pas',
   Input in 'Input.pas',
   ClpbrdOp in 'ClpbrdOp.pas',
-  {$IFDEF WINDOWS}            
-  EMF_Unit in 'EMF_Unit.pas' {EMF_Form},
+  {$IFDEF DELPHI}
   WinBasic in 'WinBasic.pas',
+  EMF_Unit in 'EMF_Unit.pas' {EMF_Form},
   Gr32Add in 'Gr32Add.pas',   
   DevGr32 in 'DevGr32.pas',
   {$ELSE}
@@ -61,7 +61,7 @@ uses
 {$R *.res}
 {$R Options.lfm} 
 {$R AboutUnit.lfm}  
-{$IFDEF WINDOWS}
+{$IFDEF DELPHI}
   {$R EMF_Unit.lfm}  
   {$R PrintEpsOpt.lfm}  
   {$R Table.lfm}  
@@ -76,7 +76,6 @@ uses
 
 begin
   if not CheckCommandLine then Exit;
-  Application.Title := 'TpX';          
   RequireDerivedFormResource := True;
   Application.Initialize;
   Application.CreateForm(TMainForm, MainForm);
@@ -85,7 +84,7 @@ begin
   Application.CreateForm(TAboutForm, AboutForm);
   Application.CreateForm(TTransfForm, TransfForm);
   Application.CreateForm(TTableForm, TableForm);  
-  {$IFDEF WINDOWS}
+  {$IFDEF DELPHI}
   Application.CreateForm(TEMF_Form, EMF_Form);
   {$ENDIF}
   Application.CreateForm(TPrintEpsOptForm, PrintEpsOptForm);
