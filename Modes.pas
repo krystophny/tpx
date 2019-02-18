@@ -534,7 +534,7 @@ begin
   ValidPicture := FileExists(FileName) and ValidFile(FileName)
     and ((Ext = 'emf') or (Ext = 'wmf')
     or (Ext = 'eps') or (Ext = 'ps') or (Ext = 'pdf'));
-  (ImageCtrl.Parent as TPanel).Caption := '';
+  //(ImageCtrl.Parent as TPanel).Caption := '';
   if ValidPicture then
   try
     if (Ext = 'emf') or (Ext = 'wmf') then
@@ -557,7 +557,7 @@ begin
       else
       begin
         SetCaption('');
-        (ImageCtrl.Parent as TPanel).Caption := '*no preview*';
+        //(ImageCtrl.Parent as TPanel).Caption := '*no preview*';
         ImageCtrl.Picture := nil;
       end;
     end;
@@ -569,7 +569,7 @@ begin
   if not ValidPicture then
   begin
     SetCaption({SPictureLabel}'');
-    (ImageCtrl.Parent as TPanel).Caption := '*no preview*';
+    //(ImageCtrl.Parent as TPanel).Caption := '*no preview*';
     //FPreviewButton.Enabled := False;
     ImageCtrl.Picture := nil;
     //FPaintPanel.Caption := srNone;
