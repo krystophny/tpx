@@ -6,29 +6,27 @@ sudo: required
 dist: xenial
 
 os:
-  - linux
-  - osx
+  #- linux
+  #- osx
+  - windows # TODO, check if an automated build is possible on a Windows machine
 
 env:
   global:
-    - WINEPREFIX=~/.winelaz
     - DISPLAY=:99.0
   matrix:
     #- LAZ_PKG=true  # Use the latest version from the default package manager
-    - LAZ_VER=1.8.2
-    - LAZ_VER=2.0.0
-
-before_install:
-  # Start virtual display server
-  - Xvfb $DISPLAY &
+    - LAZ_VER=1.8.4  # Current version in Ubuntu 18.10 Cosmic and on Chocolatey
+    #- LAZ_VER=2.0.0 # Disabled, since 2.0 is checked anyway on development machines
 
 install:
-  # Install prerequisites (fpc/lazarus/wine/qemu)
-  - travis-lazarus/.travis.install.py
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; travis-lazarus/.travis.install.py
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; travis-lazarus/.travis.install.py
+  - if [[ "$TRAVIS_OS_NAME" == "windows" ]]; travis-lazarus\\.travis.install.windows.bat
 
 script:
-  - lazbuild $LAZ_OPT TpX.lpi               # Build Lazarus project
-  # - $LAZ_ENV ./bin/my_lazarus_tests --all --format=plain # TODO: run testsuite
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; lazbuild $LAZ_OPT TpX.lpi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; lazbuild $LAZ_OPT TpX.lpi
+  - if [[ "$TRAVIS_OS_NAME" == "windows" ]]; C:\\lazarus\\lazbuild.exe TpX.lpi
 
 notifications:
   email:
