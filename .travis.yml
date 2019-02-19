@@ -1,7 +1,7 @@
 # Adapted from `travis-lazarus` (https://github.com/nielsAD/travis-lazarus)
 # License: MIT
 
-language: generic
+language: c     # Pascal not supported, this is currently needed for Windows build
 sudo: required
 dist: xenial
 
