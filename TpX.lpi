@@ -40,223 +40,223 @@
         <IsPartOfProject Value="True"/>
       </Unit0>
       <Unit1>
-        <Filename Value="Settings0.pas"/>
+        <Filename Value="src/Settings0.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit1>
       <Unit2>
-        <Filename Value="MainUnit.pas"/>
+        <Filename Value="src/MainUnit.pas"/>
         <IsPartOfProject Value="True"/>
         <ComponentName Value="MainForm"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
       </Unit2>
       <Unit3>
-        <Filename Value="Output.pas"/>
+        <Filename Value="src/Output.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit3>
       <Unit4>
-        <Filename Value="MprtEMF.pas"/>
+        <Filename Value="src/MprtEMF.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit4>
       <Unit5>
-        <Filename Value="EMF_Add.pas"/>
+        <Filename Value="src/EMF_Add.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit5>
       <Unit6>
-        <Filename Value="Propert.pas"/>
+        <Filename Value="src/Propert.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit6>
       <Unit7>
-        <Filename Value="Options0.pas"/>
+        <Filename Value="src/Options0.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit7>
       <Unit8>
-        <Filename Value="GObjects.pas"/>
+        <Filename Value="src/GObjects.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit8>
       <Unit9>
-        <Filename Value="Drawings.pas"/>
+        <Filename Value="src/Drawings.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit9>
       <Unit10>
-        <Filename Value="Options.pas"/>
+        <Filename Value="src/Options.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit10>
       <Unit11>
-        <Filename Value="AboutUnit.pas"/>
+        <Filename Value="src/AboutUnit.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit11>
       <Unit12>
-        <Filename Value="TransForm.pas"/>
+        <Filename Value="src/TransForm.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit12>
       <Unit13>
-        <Filename Value="ColorEtc.pas"/>
+        <Filename Value="src/ColorEtc.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit13>
       <Unit14>
-        <Filename Value="Preview.pas"/>
+        <Filename Value="src/Preview.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit14>
       <Unit15>
-        <Filename Value="Lib/PowerPdf/PdfFonts.pas"/>
+        <Filename Value="src/lib/PowerPdf/PdfFonts.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit15>
       <Unit16>
-        <Filename Value="Table.pas"/>
+        <Filename Value="src/Table.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit16>
       <Unit17>
-        <Filename Value="EMF_Unit.pas"/>
+        <Filename Value="src/EMF_Unit.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit17>
       <Unit18>
-        <Filename Value="Geometry.pas"/>
+        <Filename Value="src/Geometry.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit18>
       <Unit19>
-        <Filename Value="PrintEpsOpt.pas"/>
+        <Filename Value="src/PrintEpsOpt.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit19>
       <Unit20>
-        <Filename Value="ScaleStandardUnit.pas"/>
+        <Filename Value="src/ScaleStandardUnit.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit20>
       <Unit21>
-        <Filename Value="DevCanvas.pas"/>
+        <Filename Value="src/DevCanvas.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit21>
       <Unit22>
-        <Filename Value="Input.pas"/>
+        <Filename Value="src/Input.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit22>
       <Unit23>
-        <Filename Value="ClpbrdOp.pas"/>
+        <Filename Value="src/ClpbrdOp.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit23>
       <Unit24>
-        <Filename Value="WinBasic.pas"/>
+        <Filename Value="src/WinBasic.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit24>
       <Unit25>
-        <Filename Value="SysBasic.pas"/>
+        <Filename Value="src/SysBasic.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit25>
       <Unit26>
-        <Filename Value="Gr32Add.pas"/>
+        <Filename Value="src/Gr32Add.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit26>
       <Unit27>
-        <Filename Value="MiscUtils.pas"/>
+        <Filename Value="src/MiscUtils.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit27>
       <Unit28>
-        <Filename Value="PrimSAX.pas"/>
+        <Filename Value="src/PrimSAX.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit28>
       <Unit29>
-        <Filename Value="Numeric.pas"/>
+        <Filename Value="src/Numeric.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit29>
       <Unit30>
-        <Filename Value="Manage.pas"/>
+        <Filename Value="src/Manage.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit30>
       <Unit31>
-        <Filename Value="Modes.pas"/>
+        <Filename Value="src/Modes.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit31>
       <Unit32>
-        <Filename Value="ViewPort.pas"/>
+        <Filename Value="src/ViewPort.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit32>
       <Unit33>
-        <Filename Value="Pieces.pas"/>
+        <Filename Value="src/Pieces.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit33>
       <Unit34>
-        <Filename Value="Devices.pas"/>
+        <Filename Value="src/Devices.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit34>
       <Unit35>
-        <Filename Value="XmlOut.pas"/>
+        <Filename Value="src/XmlOut.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit35>
       <Unit36>
-        <Filename Value="DevSVG.pas"/>
+        <Filename Value="src/DevSVG.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit36>
       <Unit37>
-        <Filename Value="DevTikZ.pas"/>
+        <Filename Value="src/DevTikZ.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit37>
       <Unit38>
-        <Filename Value="DevPGF.pas"/>
+        <Filename Value="src/DevPGF.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit38>
       <Unit39>
-        <Filename Value="DevTeXPc.pas"/>
+        <Filename Value="src/DevTeXPc.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit39>
       <Unit40>
-        <Filename Value="TpXSaver.pas"/>
+        <Filename Value="src/TpXSaver.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit40>
       <Unit41>
-        <Filename Value="DevPS.pas"/>
+        <Filename Value="src/DevPS.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit41>
       <Unit42>
-        <Filename Value="DevPDF.pas"/>
+        <Filename Value="src/DevPDF.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit42>
       <Unit43>
-        <Filename Value="DevPSTr.pas"/>
+        <Filename Value="src/DevPSTr.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit43>
       <Unit44>
-        <Filename Value="DevMP.pas"/>
+        <Filename Value="src/DevMP.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit44>
       <Unit45>
-        <Filename Value="DevGr32.pas"/>
+        <Filename Value="src/DevGr32.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit45>
       <Unit46>
-        <Filename Value="MprtSVG.pas"/>
+        <Filename Value="src/MprtSVG.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit46>
       <Unit47>
-        <Filename Value="Modify.pas"/>
+        <Filename Value="src/Modify.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit47>
       <Unit48>
-        <Filename Value="GObjBase.pas"/>
+        <Filename Value="src/GObjBase.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit48>
       <Unit49>
-        <Filename Value="Bitmaps.pas"/>
+        <Filename Value="src/Bitmaps.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit49>
       <Unit50>
-        <Filename Value="InfoForm.pas"/>
+        <Filename Value="src/InfoForm.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit50>
       <Unit51>
-        <Filename Value="Lib/XML/XUtils.pas"/>
+        <Filename Value="src/lib/XML/XUtils.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit51>
       <Unit52>
-        <Filename Value="Lib/XML/XXmlDom.pas"/>
+        <Filename Value="src/lib/XML/XXmlDom.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit52>
       <Unit53>
@@ -268,8 +268,8 @@
   <CompilerOptions>
     <Version Value="11"/>
     <SearchPaths>
-      <IncludeFiles Value="Lib/PowerPdf;Lib/XML;$(ProjOutDir)"/>
-      <OtherUnitFiles Value="Lib/PowerPdf;Lib/XML"/>
+      <IncludeFiles Value="src/lib/PowerPdf;src/lib/XML;$(ProjOutDir)"/>
+      <OtherUnitFiles Value="src/lib/PowerPdf;src/lib/XML"/>
       <UnitOutputDirectory Value="obj/$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Parsing>
