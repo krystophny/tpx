@@ -5,11 +5,6 @@ language: c     # Pascal not supported, this is currently needed for Windows bui
 sudo: required
 dist: xenial
 
-os:
-  #- linux
-  #- osx
-  - windows # TODO, check if an automated build is possible on a Windows machine
-
 env:
   global:
     - DISPLAY=:99.0
@@ -18,15 +13,16 @@ env:
     - LAZ_VER=1.8.4  # Current version in Ubuntu 18.10 Cosmic and on Chocolatey
     #- LAZ_VER=2.0.0 # Disabled, since 2.0 is checked anyway on development machines
 
-install:
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; travis-lazarus/.travis.install.py
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; travis-lazarus/.travis.install.py
-  - if [[ "$TRAVIS_OS_NAME" == "windows" ]]; travis-lazarus\\.travis.install.windows.bat
-
-script:
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; lazbuild $LAZ_OPT TpX.lpi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; lazbuild $LAZ_OPT TpX.lpi
-  - if [[ "$TRAVIS_OS_NAME" == "windows" ]]; C:\\lazarus\\lazbuild.exe TpX.lpi
+matrix:
+  os: linux
+      install: travis-lazarus/.travis.install.py
+      script: lazbuild $LAZ_OPT TpX.lpi
+  os: osx
+      install: travis-lazarus/.travis.install.py
+      script: lazbuild $LAZ_OPT TpX.lpi
+  os: windows
+      install: choco install lazarus 
+      script: /c/lazarus/lazbuild TpX.lpi
 
 notifications:
   email:
