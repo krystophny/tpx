@@ -32,6 +32,7 @@ uses
   Gr32Add in 'src\Gr32Add.pas',   
   DevGr32 in 'src\DevGr32.pas',
   {$ELSE}
+  LazBasic in 'src\LazBasic.pas',
   SysBasic in 'src\SysBasic.pas',
   {$ENDIF}
   MiscUtils in 'src\MiscUtils.pas',
