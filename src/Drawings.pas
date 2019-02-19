@@ -50,8 +50,8 @@ const
   TeXFigure_Choice = 'none;figure;floatingfigure;wrapfigure';
 
 var
-  TeXFormat_Default: TeXFormatKind = tex_eps;
-  PdfTeXFormat_Default: PdfTeXFormatKind = pdftex_pdf;
+  TeXFormat_Default: TeXFormatKind = tex_tikz;
+  PdfTeXFormat_Default: PdfTeXFormatKind = pdftex_tikz;
   ArrowsSize_Default: TRealType = 0.7;
   StarsSize_Default: TRealType = 1;
   DefaultFontHeight_Default: TRealType = 5;
