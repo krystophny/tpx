@@ -15,7 +15,6 @@ vector graphics. Up to version 1.5 it has been developed by Alexander Tsyplakov.
 
 [![Build Status](https://travis-ci.org/krystophny/tpx.svg?branch=master)](https://travis-ci.org/krystophny/tpx)
 
-## Screenshot
 This is a screenshot of the v1.6.alpha.1 on Linux/GTK2
 ![Screenshot](/doc/screenshot_v1.6alpha1.png?raw=true "Screenshot")
 
