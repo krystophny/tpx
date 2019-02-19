@@ -65,8 +65,8 @@ var
   DottedSize_Default: TRealType = 0.5;
   DashSize_Default: TRealType = 1;
   FontName_Default: string = 'Times New Roman';
-  TeXCenterFigure_Default: Boolean = True;
-  TeXFigure_Default: TeXFigureEnvKind = fig_figure;
+  TeXCenterFigure_Default: Boolean = False;
+  TeXFigure_Default: TeXFigureEnvKind = fig_none;
   LineWidthBase_Default: TRealType = 0.3;
   Border_Default: TRealType = 2;
   PicMagnif_Default: TRealType = 1;

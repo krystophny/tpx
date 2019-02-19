@@ -260,7 +260,7 @@ begin
 {$IFDEF VER140}
   SettingsList.Add(
     TTpXExtAssocOption.Create('ExtAssoc', nil,
-    'Associate ".TpX" extension with TpX'));
+    'Associate ".tpx" extension with TpX'));
 {$ENDIF}
   SettingsList.AddBoolean('ShowGrid',
     @(MainForm.LocalView.ShowGrid), 'Show grid');

@@ -836,27 +836,16 @@ begin
   try
     OpenDialog.FilterIndex := OpenDialog_FilterIndex;
     if PsToEditPath <> '' then
-      OpenDialog.Filter :=
-{$IFDEF VER140}
-      'All supported formats|*.TpX;*.emf;*.wmf;*.svg;*.svgz;*.eps;*.ps;*.pdf'
+      OpenDialog.Filter := 
+{$IFDEF LCLGtk2} // TODO: add case-insensitive variant for all file types
+       'All supported formats|*.[Tt][Pp][Xx];*.emf;*.wmf;*.svg;*.svgz;*.eps;*.ps;*.pdf'+
+       '|TpX drawing|*.[Tt][Pp][Xx]'+
 {$ELSE}
-      'All supported formats|*.TpX;*.emf;*.svg;*.svgz;*.eps;*.ps;*.pdf'
+       'All supported formats|*.tpx;*.emf;*.wmf;*.svg;*.svgz;*.eps;*.ps;*.pdf'+
+       '|TpX drawing|*.tpx'+
 {$ENDIF}
-    else
-      OpenDialog.Filter :=
-{$IFDEF VER140}
-      'All supported formats|*.TpX;*.emf;*.wmf;*.svg;*.svgz';
-{$ELSE}
-      'All supported formats|*.TpX;*.emf;*.svg;*.svgz';
-{$ENDIF}
-    OpenDialog.Filter := OpenDialog.Filter +
-      '|TpX drawing|*.TpX' +
-{$IFDEF VER140}
-    '|Windows (Enhanced) Metafiles (*.emf,*.wmf)|*.emf;*.wmf' +
-{$ELSE}
-    '|Windows Enhanced Metafiles (*.emf)|*.emf' +
-{$ENDIF}
-    '|Scalable Vector Graphics (*.svg;*.svgz)|*.svg;*.svgz';
+       '|Windows (Enhanced) Metafiles (*.emf,*.wmf)|*.emf;*.wmf' +
+       '|Scalable Vector Graphics (*.svg;*.svgz)|*.svg;*.svgz';
     if PsToEditPath <> '' then
       OpenDialog.Filter := OpenDialog.Filter +
         '|Encapsulated Postscript (*.eps)|*.eps' +
@@ -875,8 +864,8 @@ end;
 
 procedure TTpXMode.DoSaveDrawing(FileName: string);
 begin
-  if not SameText(ExtractFileExt(FileName), '.TpX') then
-    FileName := ChangeFileExt(FileName, '.TpX');
+  if not SameText(ExtractFileExt(FileName), '.tpx') then
+    FileName := ChangeFileExt(FileName, '.tpx');
   Drawing.FileName := FileName;
   StoreToFile_TpX(Drawing, FileName, False);
   MainForm.Caption := ExtractFileName(Drawing.FileName);
@@ -886,7 +875,7 @@ begin
 end;
 
 const
-  Save_Filter_Str = 'TpX drawing|*.TpX'
+  Save_Filter_Str = 'TpX drawing|*.tpx'
     + '|Scalable vector graphics (SVG)|*.svg'
     + '|Enhanced metafile (EMF)|*.emf'
     + '|Encapsulated PostScript (EPS)|*.eps'
