@@ -1,4 +1,4 @@
-unit PreView;
+unit Preview;
 
 interface
 uses
@@ -203,7 +203,7 @@ var
   TempDir, TempTpX, TempTeX, TempTeXLog: string;
   LatexCompPath: string;
 const
-  TempTpX0 = '(tpx)TpX.TpX';
+  TempTpX0 = '(tpx)TpX.tpx';
 begin
   Result := False;
   TempDir := GetTempDir;
@@ -381,7 +381,7 @@ var
   DlgResult: Word;
   ShowCurrent: Boolean;
 const
-  TempTpX0 = '(tpx)TpX.TpX';
+  TempTpX0 = '(tpx)TpX.tpx';
 begin
   ShowCurrent := Drawing.FileName = Drawing_NewFileName;
   if (not ShowCurrent) and Drawing.History.IsChanged then
@@ -429,7 +429,7 @@ var
   TpXFileName: string;
 begin
   TpXFileName := ExtractFilePath(FileName)
-    + ChangeFileExt(ExtractFileName(FileName), '') + '(TpX).TpX';
+    + ChangeFileExt(ExtractFileName(FileName), '') + '(TpX).tpx';
   WritePreviewSource(
     Drawing, PreviewKind, False, FileName, TpXFileName);
 end;

@@ -31,11 +31,11 @@ interface
 
 // if use "FlateDecode" compression, comment out the next line.
 // (this unit and PdfDoc.pas)
-//{$DEFINE NOZLIB}
+{$DEFINE NOZLIB}
 
 uses
   SysUtils, Classes
-{$IFNDEF LINUX}
+{$IFDEF WINDOWS}
   , Windows
 {$ENDIF}
 {$IFNDEF NOZLIB}
@@ -986,7 +986,7 @@ var
   i: integer;
 begin
   result := '';
-  {$IFNDEF LINUX}
+  {$IFDEF WINDOWS}
   Len := MultiByteToWideChar(0, CP_ACP,
     PAnsiChar(Value), Length(Value), nil, 0);
   GetMem(PW, Len * 2);

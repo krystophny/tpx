@@ -1,8 +1,10 @@
 unit WinBasic;
 
+{$MODE Delphi}
+
 interface
 
-uses Windows, Graphics, Classes;
+uses LCLIntf, LCLType, LMessages, Graphics, Classes;
 
 type
 
@@ -446,7 +448,7 @@ begin
     Windows.SetBkMode(Canvas.Handle, Windows.OPAQUE);
 end;
 
-  // Questa è la dimensione di un pixel in mm.
+  // Questa Ã¨ la dimensione di un pixel in mm.
 
 procedure GetCanvasResolution(Canvas: TCanvas; var LogHeight,
   LogWidth: Double);

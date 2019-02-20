@@ -1,0 +1,32 @@
+# Adapted from `travis-lazarus` (https://github.com/nielsAD/travis-lazarus)
+# License: MIT
+
+language: c     # Pascal not supported, language: generic currently unsupported for Windows
+sudo: required
+dist: xenial
+
+env:
+  global:
+    - DISPLAY=:99.0
+  matrix:
+    #- LAZ_PKG=true  # Use the latest version from the default package manager
+    - LAZ_VER=1.8.4  # Current version in Ubuntu 18.10 Cosmic and on Chocolatey
+    #- LAZ_VER=2.0.0 # Disabled, since 2.0 is checked anyway on development machines
+
+# from https://www.scivision.co/travis-ci-osx-python/
+matrix:
+  include:
+  - os: linux
+    install: travis-lazarus/.travis.install.py
+    script: lazbuild $LAZ_OPT TpX.lpi
+  - os: osx
+    install: travis-lazarus/.travis.install.py
+    script: lazbuild $LAZ_OPT TpX.lpi
+  - os: windows
+    install: choco install lazarus 
+    script: /c/lazarus/lazbuild TpX.lpi
+
+notifications:
+  email:
+    on_success: false
+    on_failure: change

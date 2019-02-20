@@ -620,7 +620,7 @@ type
        and Points[1] the right-up corner.
 
        The <I=width> of the text is set to the width of <I=Rect1>.
-       If you don’t know the dimension of the Text on screen, set
+       If you donÂ’t know the dimension of the Text on screen, set
        the <See Property=TText2D@AutoSize> property to <B=True>.
        The first time the text will be drawed the bounding box will
        be adjusted automatically.

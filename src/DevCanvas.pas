@@ -34,7 +34,8 @@ type
       const Closed: Boolean); virtual;
     procedure RotText(P: TPoint2D; H, ARot: TRealType;
       WideText: WideString; TeXText: AnsiString;
-      const HAlignment: THAlignment;
+      const HAlignment: THAlignment;  
+      const VAlignment: TVAlignment;
       const LineColor: TColor;
       const AFaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
@@ -323,12 +324,6 @@ begin
   if Length(Pnts) = 4 then
 // Is there some bug in Lazarus code of PolyBezier
 //   for 1 segment and Continuous path? (Under Windows only?)
-    Cnv.PolyBezier(Pnts, Length(Pnts), Closed, False)
-  else if Closed then
-    Cnv.PolyBezier(Pnts, Length(Pnts) - 1, True, True)
-  else
-    Cnv.PolyBezier(Pnts, Length(Pnts), False, True)
-      ;
 {$ENDIF}
 end;
 
@@ -1184,6 +1179,7 @@ procedure TCanvasDevice.RotText(
   P: TPoint2D; H, ARot: TRealType;
   WideText: WideString; TeXText: AnsiString;
   const HAlignment: THAlignment;
+  const VAlignment: TVAlignment;
   const LineColor: TColor;
   const AFaceName: AnsiString;
   const Charset: TFontCharSet; const Style: TFontStyles);

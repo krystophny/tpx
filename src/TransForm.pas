@@ -51,7 +51,7 @@ var
 implementation
 
 {$IFDEF VER140}
-{$R *.dfm}
+{$R *.lfm}
 {$ENDIF}
 
 procedure TTransfForm.FormCreate(Sender: TObject);

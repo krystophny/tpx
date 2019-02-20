@@ -134,7 +134,8 @@ type
     WideText: WideString;
     TeXText: AnsiString;
     Height: TRealType;
-    HAlignment: THAlignment;
+    HAlignment: THAlignment;  
+    VAlignment: TVAlignment;
     FaceName: AnsiString;
     Style: TFontStyles;
     Charset: TFontCharSet;

@@ -38,7 +38,8 @@ type
       const Closed: Boolean);
     procedure RotText(P: TPoint2D; H, ARot: TRealType;
       WideText: WideString; TeXText: AnsiString;
-      const HAlignment: THAlignment;
+      const HAlignment: THAlignment;     
+      const VAlignment: TVAlignment;
       const LineColor: TColor;
       const FaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
@@ -61,7 +62,7 @@ type
 implementation
 
 uses ColorEtc, SysBasic, Output, PdfTypes, PdfFonts, PdfImages,
-  PdfJpegImage, Bitmaps, Jpeg;
+  PdfJpegImage, Bitmaps;
 
 procedure SetPDF_Dash(PDF: TPdfCanvas;
   aarray: array of Double; phase: Double);
@@ -255,6 +256,7 @@ procedure TPdfDevice.RotText(
   P: TPoint2D; H, ARot: TRealType;
   WideText: WideString; TeXText: AnsiString;
   const HAlignment: THAlignment;
+  const VAlignment: TVAlignment;
   const LineColor: TColor;
   const FaceName: AnsiString;
   const Charset: TFontCharSet; const Style: TFontStyles);

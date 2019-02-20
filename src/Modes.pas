@@ -44,7 +44,7 @@ type
   TOpenAnyPictureDialog = class(TOpenPictureDialog)
   protected
     procedure DoSelectionChange; override;
-    procedure PreviewClick(Sender: TObject); override;
+    procedure PreviewClick(Sender: TObject);
   end;
 
   TTpXMode = class(TMode)
@@ -529,7 +529,9 @@ begin
   ValidPicture := FileExists(FileName) and ValidFile(FileName)
     and ((Ext = 'emf') or (Ext = 'wmf')
     or (Ext = 'eps') or (Ext = 'ps') or (Ext = 'pdf'));
+  {$IFNDEF FPC}
   (ImageCtrl.Parent as TPanel).Caption := '';
+  {$ENDIF}
   if ValidPicture then
   try
     if (Ext = 'emf') or (Ext = 'wmf') then
@@ -552,7 +554,9 @@ begin
       else
       begin
         SetCaption('');
+        {$IFNDEF FPC}
         (ImageCtrl.Parent as TPanel).Caption := '*no preview*';
+        {$ENDIF}
         ImageCtrl.Picture := nil;
       end;
     end;
@@ -564,7 +568,9 @@ begin
   if not ValidPicture then
   begin
     SetCaption({SPictureLabel}'');
+    {$IFNDEF FPC}
     (ImageCtrl.Parent as TPanel).Caption := '*no preview*';
+    {$ENDIF}
     //FPreviewButton.Enabled := False;
     ImageCtrl.Picture := nil;
     //FPaintPanel.Caption := srNone;
@@ -580,7 +586,11 @@ begin
   Ext := LowerCase(ExtractFileExt(FileName));
   Delete(Ext, 1, 1);
   if ((Ext = 'emf') or (Ext = 'wmf')) then
+    {$IFNDEF FPC}
+    PreviewClick(Sender)
+    {$ELSE}
     inherited PreviewClick(Sender)
+    {$ENDIF}
   else if ((Ext = 'eps') or (Ext = 'ps')) then
     OpenOrExec(PSViewerPath, FileName)
   else
@@ -831,27 +841,16 @@ begin
   try
     OpenDialog.FilterIndex := OpenDialog_FilterIndex;
     if PsToEditPath <> '' then
-      OpenDialog.Filter :=
-{$IFDEF VER140}
-      'All supported formats|*.TpX;*.emf;*.wmf;*.svg;*.svgz;*.eps;*.ps;*.pdf'
+      OpenDialog.Filter := 
+{$IFDEF LCLGtk2} // TODO: add case-insensitive variant for all file types
+       'All supported formats|*.[Tt][Pp][Xx];*.emf;*.wmf;*.svg;*.svgz;*.eps;*.ps;*.pdf'+
+       '|TpX drawing|*.[Tt][Pp][Xx]'+
 {$ELSE}
-      'All supported formats|*.TpX;*.emf;*.svg;*.svgz;*.eps;*.ps;*.pdf'
+       'All supported formats|*.tpx;*.emf;*.wmf;*.svg;*.svgz;*.eps;*.ps;*.pdf'+
+       '|TpX drawing|*.tpx'+
 {$ENDIF}
-    else
-      OpenDialog.Filter :=
-{$IFDEF VER140}
-      'All supported formats|*.TpX;*.emf;*.wmf;*.svg;*.svgz';
-{$ELSE}
-      'All supported formats|*.TpX;*.emf;*.svg;*.svgz';
-{$ENDIF}
-    OpenDialog.Filter := OpenDialog.Filter +
-      '|TpX drawing|*.TpX' +
-{$IFDEF VER140}
-    '|Windows (Enhanced) Metafiles (*.emf,*.wmf)|*.emf;*.wmf' +
-{$ELSE}
-    '|Windows Enhanced Metafiles (*.emf)|*.emf' +
-{$ENDIF}
-    '|Scalable Vector Graphics (*.svg;*.svgz)|*.svg;*.svgz';
+       '|Windows (Enhanced) Metafiles (*.emf,*.wmf)|*.emf;*.wmf' +
+       '|Scalable Vector Graphics (*.svg;*.svgz)|*.svg;*.svgz';
     if PsToEditPath <> '' then
       OpenDialog.Filter := OpenDialog.Filter +
         '|Encapsulated Postscript (*.eps)|*.eps' +
@@ -870,8 +869,8 @@ end;
 
 procedure TTpXMode.DoSaveDrawing(FileName: string);
 begin
-  if not SameText(ExtractFileExt(FileName), '.TpX') then
-    FileName := ChangeFileExt(FileName, '.TpX');
+  if not SameText(ExtractFileExt(FileName), '.tpx') then
+    FileName := ChangeFileExt(FileName, '.tpx');
   Drawing.FileName := FileName;
   StoreToFile_TpX(Drawing, FileName, False);
   MainForm.Caption := ExtractFileName(Drawing.FileName);
@@ -881,7 +880,7 @@ begin
 end;
 
 const
-  Save_Filter_Str = 'TpX drawing|*.TpX'
+  Save_Filter_Str = 'TpX drawing|*.tpx'
     + '|Scalable vector graphics (SVG)|*.svg'
     + '|Enhanced metafile (EMF)|*.emf'
     + '|Encapsulated PostScript (EPS)|*.eps'
@@ -906,7 +905,7 @@ begin
   ExtractStrings(['|'], [' ', '*', '.'],
     PChar(AnsiReplaceStr(Save_Filter_Str, '.*',
     '.???')), List);
-{$IFNDEF Linux}
+{$IFDEF WINDOWS}
   MainForm.DrawingSaveDlg.DefaultExt :=
     List[MainForm.DrawingSaveDlg.FilterIndex * 2 - 1];
   if MainForm.DrawingSaveDlg.DefaultExt = '???'

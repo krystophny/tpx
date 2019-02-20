@@ -111,7 +111,7 @@ implementation
 uses ColorEtc, Table, Geometry, Devices, Modify;
 
 {$IFDEF VER140}
-{$R *.dfm}
+{$R *.lfm}
 {$ENDIF}
 
 procedure TPropertiesForm.FormCreate(Sender: TObject);

@@ -337,7 +337,7 @@ var
 
 implementation
 
-uses Math, StrUtils, ColorEtc, PreView,
+uses Math, StrUtils, ColorEtc, Preview,
   Settings0, Input, SysBasic,
 {$IFDEF VER140}
   Gr32Add, DevGr32,
@@ -2285,8 +2285,8 @@ begin
       try
         if Ext = '' then
         begin
-          Ext := '.TpX';
-          FileName := ChangeFileExt(FileName, '.TpX');
+          Ext := '.tpx';
+          FileName := ChangeFileExt(FileName, '.tpx');
         end;
         Loader.LoadFromFile(FileName);
       finally
@@ -2319,7 +2319,7 @@ begin
       SetOutputFormats(OutputFormats, ADrawing);
       if (OutputFile = '') or (OutputFile = '$Default') or
         (Ext = '') then
-        OutputFile := ChangeFileExt(FileName, '.TpX');
+        OutputFile := ChangeFileExt(FileName, '.tpx');
       ADrawing.FileName := OutputFile;
       StoreToFile_TpX(ADrawing, OutputFile, False);
     end;

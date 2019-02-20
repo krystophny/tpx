@@ -525,9 +525,11 @@ type
     procedure ShowPropertiesToolbar2Execute(Sender: TObject);
   private
     { Private declarations }
-    ScrollPos0: Integer;
+    ScrollPos0: Integer;             
+{$IFDEF VER140}
     procedure SetFormPosition;
     procedure GetFormPosition;
+{$ENDIF}
   public
     { Public declarations }
     TheDrawing: TDrawing2D;
@@ -573,12 +575,11 @@ const
 implementation
 
 uses Output, Input, Settings0, ColorEtc, Geometry, Options,
-  PreView,
+  Preview,
   SysBasic, Modify, Propert;
 
 {$IFDEF VER140}
-{$R *.DFM}
-{$ENDIF}
+{$R *.lfm}
 
 procedure TMainForm.SetFormPosition;
 var
@@ -612,6 +613,10 @@ begin
   FormPos_Width := R.Right - R.Left;
   FormPos_Height := R.Bottom - R.Top;
 end;
+
+{$ENDIF}
+
+
 
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
@@ -803,8 +808,10 @@ begin
   ImageTool.Visible := False;
 {$ENDIF}
 
-  EventManager.SendMessage(Msg_StartProgram, Self);
-  SetFormPosition;
+  EventManager.SendMessage(Msg_StartProgram, Self);   
+{$IFDEF VER140}
+  SetFormPosition;    
+{$ENDIF}
 end;
 
 procedure TMainForm.AreaSelectExecute(Sender: TObject);
@@ -931,8 +938,10 @@ begin
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
-begin
-  GetFormPosition;
+begin        
+{$IFDEF VER140}
+  GetFormPosition;        
+{$ENDIF}
   EventManager.SendMessage(Msg_Stop, Sender);
   //TpXExtAssoc.Free;
 {$IFDEF VER140}

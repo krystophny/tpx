@@ -25,7 +25,7 @@ unit PdfJpegImage;
 interface
 
 uses
-  SysUtils, Classes, Graphics, PdfTypes, PdfDoc, PdfImages, JPEG;
+  SysUtils, Classes, Graphics, PdfTypes, PdfDoc, PdfImages;
 
 type
   { TPdfJpegImage }

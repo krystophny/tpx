@@ -10,7 +10,7 @@ uses Types, SysUtils, Classes, Graphics, Controls,
 {$IFNDEF FPC}
   WinBasic,
 {$ELSE}
-  LMessages, LCLType, LazBasic,
+  LMessages, LCLType, {LazBasic,}
 {$ENDIF}
   Devices, GObjBase, SysBasic;
 
@@ -46,8 +46,8 @@ const
   TeXFigure_Choice = 'none;figure;floatingfigure;wrapfigure';
 
 var
-  TeXFormat_Default: TeXFormatKind = tex_eps;
-  PdfTeXFormat_Default: PdfTeXFormatKind = pdftex_pdf;
+  TeXFormat_Default: TeXFormatKind = tex_tikz;
+  PdfTeXFormat_Default: PdfTeXFormatKind = pdftex_tikz;
   ArrowsSize_Default: TRealType = 0.7;
   StarsSize_Default: TRealType = 1;
   DefaultFontHeight_Default: TRealType = 5;
@@ -61,8 +61,8 @@ var
   DottedSize_Default: TRealType = 0.5;
   DashSize_Default: TRealType = 1;
   FontName_Default: string = 'Times New Roman';
-  TeXCenterFigure_Default: Boolean = True;
-  TeXFigure_Default: TeXFigureEnvKind = fig_figure;
+  TeXCenterFigure_Default: Boolean = False;
+  TeXFigure_Default: TeXFigureEnvKind = fig_none;
   LineWidthBase_Default: TRealType = 0.3;
   Border_Default: TRealType = 2;
   PicMagnif_Default: TRealType = 1;

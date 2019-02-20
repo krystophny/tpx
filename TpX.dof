@@ -45,10 +45,14 @@ OutputDir=
 UnitOutputDir=_tmp
 PackageDLLOutputDir=
 PackageDCPOutputDir=
+<<<<<<< HEAD
 SearchPath=$(DELPHI)\Lib\Debug;$(DELPHI)\Lib;src\lib\Graphics32\;src\lib\HtmlHelp;Lib\PNG;src\lib\PowerPdf;src\lib\XML;src\lib\md5;Lib\StitchSAX;src\lib\paszlib
+=======
+SearchPath=$(DELPHI)\Lib\Debug;$(DELPHI)\Lib;src\lib\Graphics32\;src\lib\HtmlHelp;src\lib\PNG;src\lib\PowerPdf;src\lib\XML;src\lib\md5;src\lib\StitchSAX;src\lib\paszlib
+>>>>>>> origin/master
 Packages=vclx30;VCL30;vcldb30;vcldbx30;VclSmp30;Qrpt30;teeui30;teedb30;tee30;IBEVNT30;CADSys;vcl;VclSmp;TpXPack
 Conditionals=
-DebugSourceDirs=C:\WRK\Delphi\TpX\Lib\PowerPdf\
+DebugSourceDirs=C:\WRK\Delphi\TpX\src\lib\PowerPdf\
 UsePackages=0
 [Parameters]
 RunParams=
@@ -97,11 +101,19 @@ Count=1
 Item0=WinTypes=Windows;WinProcs=Windows;DbiTypes=BDE;DbiProcs=BDE;DbiErrs=BDE;
 [HistoryLists\hlSearchPath]
 Count=5
+<<<<<<< HEAD
 Item0=$(DELPHI)\Lib\Debug;$(DELPHI)\Lib;Lib\Graphics32\;Lib\HtmlHelp;Lib\PNG;Lib\PowerPdf;Lib\XML;Lib\md5;Lib\StitchSAX;Lib\paszlib
 Item1=$(DELPHI)\Lib\Debug;$(DELPHI)\Lib;Lib\Graphics32\;Lib\HtmlHelp;Lib\PNG;Lib\PowerPdf;Lib\XML;Lib\md5;Lib\StitchSAX
 Item2=src/lib/PNG/;src/lib\Graphics32;Lib\md5;src/lib\XML;src/lib\PowerPdf
 Item3=src/lib/PNG/;src/lib\Graphics32;Lib\md5;src/lib\XML;src/lib\PowerPdf\
 Item4=src/lib/PNG/;src/lib\Graphics32;Lib\md5;src/lib\XML
+=======
+Item0=$(DELPHI)\Lib\Debug;$(DELPHI)\Lib;src\lib\Graphics32\;src\lib\HtmlHelp;src\lib\PNG;src\lib\PowerPdf;src\lib\XML;src\lib\md5;src\lib\StitchSAX;src\lib\paszlib
+Item1=$(DELPHI)\Lib\Debug;$(DELPHI)\Lib;src\lib\Graphics32\;src\lib\HtmlHelp;src\lib\PNG;src\lib\PowerPdf;src\lib\XML;src\lib\md5;src\lib\StitchSAX
+Item2=Lib/PNG/;src\lib\Graphics32;src\lib\md5;src\lib\XML;src\lib\PowerPdf
+Item3=Lib/PNG/;src\lib\Graphics32;src\lib\md5;src\lib\XML;src\lib\PowerPdf\
+Item4=Lib/PNG/;src\lib\Graphics32;src\lib\md5;src\lib\XML
+>>>>>>> origin/master
 [HistoryLists\hlUnitOutputDirectory]
 Count=1
 Item0=_tmp

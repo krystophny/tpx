@@ -59,7 +59,7 @@ begin
     MF.Assign(Clipboard);
     EMF_Import.LoadFromMF(MF);
     EMF_Import.ParseEmf;
-//    TpX_Loader.XMLDoc.Save('--.TpX');
+//    TpX_Loader.XMLDoc.Save('--.tpx');
   finally
     MF.Free;
     EMF_Import.Free;

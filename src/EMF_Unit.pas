@@ -1,5 +1,7 @@
 unit EMF_Unit;
 
+{$MODE Delphi}
+
 interface
 
 uses
@@ -110,7 +112,11 @@ implementation
 
 uses MprtEMF, EMF_Add, MainUnit, Math, Imaging.pngimage, PrintEpsOpt;
 
+{$IFDEF FPC}
+{$R *.lfm}
+{$ELSE}
 {$R *.dfm}
+{$ENDIF}
 
 // Convert Graphic to EPS
 // Graphic: Graphic (Metafile or bitmap) to be converted

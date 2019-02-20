@@ -27,7 +27,7 @@ unit PdfImages;
 
 interface
 
-{$IFDEF LINUX}
+{$IFNDEF WINDOWS}
   {$DEFINE USE_CLX}
 {$ENDIF}
 
@@ -36,7 +36,7 @@ uses
   {$IFNDEF USE_CLX}
   Windows, Graphics,
   {$ELSE}
-  QGraphics, Qt,
+  Graphics,// QGraphics, Qt,
   {$ENDIF}
   Classes, PdfTypes, PdfDoc;
 
@@ -82,7 +82,7 @@ end;
 
 {$IFDEF USE_CLX}
 type
-  TColorTable = array[0..MaxInt div SizeOf(QRgb)-1] of QRgb;
+  TColorTable = array[0..MaxInt div SizeOf(LongWord)-1] of LongWord;
   PColorTable = ^TColorTable;
 {$ENDIF}
 
@@ -110,7 +110,7 @@ begin
   if GetPaletteEntries(ABitmap.Palette, 0, NumOfColors + 1, PalEntries) = 0 then
     raise EPdfInvalidImageFormat.Create('failed to get Palette..');
   {$ELSE}
-  PalEntries := PColorTable(ABitmap.ColorTable);
+  //PalEntries := PColorTable(ABitmap.ColorTable);
   {$ENDIF}
   ColorTable := TPdfBinary.Create;
   S := '<';

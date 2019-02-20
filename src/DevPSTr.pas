@@ -37,7 +37,8 @@ type
       const Hatching: THatching; const Kind: TCircularKind);
     procedure RotText(P: TPoint2D; H, ARot: TRealType;
       WideText: WideString; TeXText: AnsiString;
-      const HAlignment: THAlignment;
+      const HAlignment: THAlignment;  
+      const VAlignment: TVAlignment;
       const LineColor: TColor;
       const FaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
@@ -325,6 +326,7 @@ procedure T_PSTricks_Device.RotText(P: TPoint2D; H, ARot:
   TRealType;
   WideText: WideString; TeXText: AnsiString;
   const HAlignment: THAlignment;
+  const VAlignment: TVAlignment;
   const LineColor: TColor;
   const FaceName: AnsiString;
   const Charset: TFontCharSet; const Style: TFontStyles);

@@ -7,9 +7,9 @@ uses Types, SysUtils, Classes, Messages, Graphics, Controls,
 {$IFNDEF FPC}
   WinBasic
 {$ELSE}
-  LCLIntf, LMessages, LCLType, LazBasic
+  LCLIntf, LMessages, LCLType, {LazBasic}
 {$ENDIF}
-  , GObjBase, Drawings, Devices;
+  {,} GObjBase, Drawings, Devices;
 
 type
 
@@ -823,13 +823,13 @@ end;
 procedure TViewport.CopyBitmapOnCanvas(const DestCnv:
   TCanvas; const BMP: TBitmap; IRect: TRect);
 begin
-{$IFDEF LINUX}
+{$IFNDEF WINDOWS}
   DestCnv.Pen.Mode := pmCopy;
   DestCnv.CopyMode := 0; //??
 {$ELSE}
 {$ENDIF}
   DestCnv.CopyRect(IRect, BMP.Canvas, IRect);
-{$IFDEF LINUX}
+{$IFNDEF WINDOWS}
   DestCnv.CopyRect(IRect, BMP.Canvas, IRect);
 {$ELSE}
 {$ENDIF}

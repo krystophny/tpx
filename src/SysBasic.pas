@@ -6,7 +6,7 @@ uses Types,
 {$IFDEF FPC}
   LCLIntf, LCLType, LazBasic,
 {$IFDEF LINUX}
-  oldlinux,
+  {oldlinux,}
 {$ENDIF}
 {$ELSE}
   Windows, ShellAPI, WinBasic,
@@ -223,8 +223,8 @@ begin
         Result := False;
       end;
     end;
-    CloseHandle(ProcessInfo.hProcess);
-    CloseHandle(ProcessInfo.hThread);
+    FileClose(ProcessInfo.hProcess); { *Converted from CloseHandle* }
+    FileClose(ProcessInfo.hThread); { *Converted from CloseHandle* }
   finally
     if OutFile <> '' then FileClose(aOutput);
     if InFile <> '' then FileClose(aInput);
@@ -236,7 +236,7 @@ begin
   OldDir := GetCurrentDir;
   SetCurrentDir(Directory);
 {$IFDEF LINUX}
-  Result := Shell(aCmdLine) = 0;
+//  Result := Shell(aCmdLine) = 0; TODO: doesn't work
 {$ELSE}
   Result := ExecuteProcess(aCmdLine, '') = 0;
 {$ENDIF}

@@ -57,7 +57,8 @@ type
       const Hatching: THatching);
     procedure RotText(P: TPoint2D; H, ARot: TRealType;
       WideText: WideString; TeXText: AnsiString;
-      const HAlignment: THAlignment;
+      const HAlignment: THAlignment;            
+      const VAlignment: TVAlignment;
       const LineColor: TColor;
       const FaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
@@ -365,7 +366,8 @@ end;
 
 procedure T_PGF_Device.RotText(P: TPoint2D; H, ARot: TRealType;
   WideText: WideString; TeXText: AnsiString;
-  const HAlignment: THAlignment;
+  const HAlignment: THAlignment;   
+  const VAlignment: TVAlignment;
   const LineColor: TColor;
   const FaceName: AnsiString;
   const Charset: TFontCharSet; const Style: TFontStyles);
