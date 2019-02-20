@@ -1,7 +1,5 @@
 unit Modify;
 
-{$MODE Delphi}
-
 // This module contains various routines for modification of
 // a drawing and its objects
 

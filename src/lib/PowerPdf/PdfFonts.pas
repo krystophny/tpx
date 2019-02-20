@@ -23,8 +23,6 @@
  *}
 unit PdfFonts;
 
-{$MODE Delphi}
-
 interface
 
 uses

@@ -1,6 +1,4 @@
-unit GObjBase;
-
-{$MODE Delphi}
+﻿unit GObjBase;
 
 // A module for basic graphical objects, lists of objects and layers
 

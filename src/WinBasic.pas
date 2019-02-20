@@ -1,10 +1,13 @@
-unit WinBasic;
-
-{$MODE Delphi}
+﻿unit WinBasic;
 
 interface
 
-uses LCLIntf, LCLType, LMessages, Graphics, Classes;
+{$IFDEF FPC}
+uses LCLIntf, LCLType, LMessages,
+{$ELSE}
+uses Windows,
+{$ENDIF}
+Graphics, Classes;
 
 type
 

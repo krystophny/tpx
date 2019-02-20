@@ -12,7 +12,7 @@ uses
 {$ELSE}
   LCLIntf, LCLType, LResources
 {$ENDIF}
-  , Devices, Modes;
+  , Devices, Modes, System.ImageList, System.Actions;
 
 type
 

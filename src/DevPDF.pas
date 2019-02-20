@@ -2,7 +2,11 @@ unit DevPDF;
 
 interface
 
-uses Classes, SysUtils, StrUtils, Geometry, Drawings, Math,
+uses
+{$IFNDEF FPC}
+Jpeg,
+{$ENDIF}
+Classes, SysUtils, StrUtils, Geometry, Drawings, Math,
   Pieces, GObjects, Graphics, Devices, PdfDoc;
 
 

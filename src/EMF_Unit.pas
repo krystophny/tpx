@@ -1,7 +1,5 @@
 unit EMF_Unit;
 
-{$MODE Delphi}
-
 interface
 
 uses

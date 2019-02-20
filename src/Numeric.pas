@@ -1,7 +1,5 @@
 unit Numeric;
 
-{$MODE Delphi}
-
 interface
 
 type

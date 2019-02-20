@@ -1,13 +1,15 @@
 unit PrintEpsOpt;
 
-{$MODE Delphi}
-
 interface
 
 uses
-  LCLIntf, LCLType, LMessages, Messages, SysUtils, Variants, Classes, Graphics,
-    Controls, Forms,
-  Dialogs, StdCtrls, ExtCtrls, Printers, Spin, PrintersDlgs;
+  {$IFDEF FPC}
+  LCLIntf, LCLType, LMessages, PrintersDlgs,
+  {$ELSE}
+  Messages, SysUtils, Variants, Classes, Graphics,
+    Controls, Forms, Windows,
+  {$ENDIF}
+  Dialogs, StdCtrls, ExtCtrls, Printers, Spin;
 
 type
   TPrintEpsOptForm = class(TForm)
@@ -36,7 +38,11 @@ var
 
 implementation
 
+{$IFDEF FPC}
 {$R *.lfm}
+{$ELSE}
+{$R *.dfm}
+{$ENDIF}
 
 procedure TPrintEpsOptForm.Button1Click(Sender: TObject);
 var

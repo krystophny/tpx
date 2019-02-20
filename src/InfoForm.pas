@@ -1,12 +1,14 @@
 unit InfoForm;
 
-{$MODE Delphi}
-
 interface
 
-uses LCLIntf, LCLType, LMessages, SysUtils, Classes, Graphics, Forms, Controls,
+uses
+  {$IFDEF FPC}
+  LCLIntf, LCLType, LMessages,
+  {$ELSE}
+  SysUtils, Classes, Graphics, Forms, Controls,
   StdCtrls, Buttons, ExtCtrls;
-
+  {$ENDIF}
 type
   TInfoBox = class(TForm)
     OKButton: TButton;

@@ -1,7 +1,5 @@
 unit Bitmaps;
 
-{$MODE Delphi}
-
 interface
 
 uses
@@ -129,10 +127,18 @@ end;
 function StoreBitmapToPNG(BMP: Graphics.TBitmap;
   const FileName: string): Boolean;
 var
+  {$IFDEF FPC}
   PNG: TPortableNetworkGraphic;
+  {$ELSE}
+  PNG: TPNGObject;
+  {$ENDIF}
 begin
   Result := False;
+  {$IFDEF FPC}
   PNG := TPortableNetworkGraphic.Create;
+  {$ELSE}
+  PNG := TPNGObject.Create;
+  {$ENDIF}
   try
     PNG.Assign(BMP);
     PNG.SaveToFile(FileName);
@@ -145,11 +151,19 @@ end;
 function LoadPng(BMP: Graphics.TBitmap; const FileName: string):
   Boolean;
 var
+  {$IFDEF FPC}
   PNG: TPortableNetworkGraphic;
+  {$ELSE}
+  PNG: TPNGObject;
+  {$ENDIF}
 begin
   Result := False;
   if not FileExists(FileName) then Exit;
+  {$IFDEF FPC}
   PNG := TPortableNetworkGraphic.Create;
+  {$ELSE}
+  PNG := TPNGObject.Create;
+  {$ENDIF}
   try
     PNG.LoadFromFile(FileName);
     BMP.Assign(PNG);

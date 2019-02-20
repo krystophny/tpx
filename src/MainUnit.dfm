@@ -1,11 +1,11 @@
 object MainForm: TMainForm
   Left = 362
   Top = 196
-  Width = 662
-  Height = 572
   HelpType = htKeyword
   HelpContext = 101
   Caption = 'TpX Editor'
+  ClientHeight = 513
+  ClientWidth = 646
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -43,8 +43,8 @@ object MainForm: TMainForm
   end
   object StatusBar1: TStatusBar
     Left = 0
-    Top = 500
-    Width = 654
+    Top = 498
+    Width = 646
     Height = 15
     Panels = <
       item
@@ -54,17 +54,14 @@ object MainForm: TMainForm
         Width = 50
       end>
     ParentFont = True
-    SimplePanel = False
     UseSystemFont = False
   end
   object ProgressBar1: TProgressBar
     Left = 0
-    Top = 494
-    Width = 654
+    Top = 492
+    Width = 646
     Height = 6
     Align = alBottom
-    Min = 0
-    Max = 100
     Position = 50
     Smooth = True
     Step = 1
@@ -73,7 +70,7 @@ object MainForm: TMainForm
   object Panel30: TPanel
     Left = 0
     Top = 0
-    Width = 654
+    Width = 646
     Height = 68
     Align = alTop
     AutoSize = True
@@ -83,7 +80,7 @@ object MainForm: TMainForm
     object ToolBar1: TToolBar
       Left = 1
       Top = 1
-      Width = 652
+      Width = 644
       Height = 22
       Anchors = [akLeft, akTop, akRight, akBottom]
       AutoSize = True
@@ -92,7 +89,6 @@ object MainForm: TMainForm
       EdgeBorders = [ebTop, ebBottom]
       EdgeInner = esNone
       EdgeOuter = esNone
-      Flat = True
       Images = ImageList2
       ParentShowHint = False
       ShowHint = True
@@ -280,7 +276,7 @@ object MainForm: TMainForm
     object PropertiesToolbar1: TToolBar
       Left = 1
       Top = 23
-      Width = 652
+      Width = 644
       Height = 22
       AutoSize = True
       Caption = 'PropertiesToolbar1'
@@ -288,7 +284,6 @@ object MainForm: TMainForm
       DragKind = dkDock
       EdgeInner = esNone
       EdgeOuter = esNone
-      Flat = True
       Images = ImageList2
       ParentShowHint = False
       ShowHint = True
@@ -350,7 +345,6 @@ object MainForm: TMainForm
         Width = 63
         Height = 21
         Style = csDropDownList
-        ItemHeight = 13
         TabOrder = 0
         OnSelect = ChangeProperties
         Items.Strings = (
@@ -365,7 +359,6 @@ object MainForm: TMainForm
         Width = 72
         Height = 22
         Style = csOwnerDrawFixed
-        ItemHeight = 16
         TabOrder = 1
         OnDrawItem = ColorBox_DrawItem
         OnSelect = ChangeProperties
@@ -375,7 +368,6 @@ object MainForm: TMainForm
         Top = 0
         Width = 63
         Height = 21
-        ItemHeight = 13
         TabOrder = 5
         OnChange = ChangeProperties
         Items.Strings = (
@@ -425,7 +417,6 @@ object MainForm: TMainForm
         Width = 68
         Height = 21
         Style = csDropDownList
-        ItemHeight = 13
         ItemIndex = 0
         TabOrder = 2
         Text = 'None'
@@ -445,7 +436,6 @@ object MainForm: TMainForm
         Width = 72
         Height = 22
         Style = csOwnerDrawFixed
-        ItemHeight = 16
         TabOrder = 3
         OnDrawItem = ColorBox_DrawItem
         OnSelect = ChangeProperties
@@ -492,7 +482,6 @@ object MainForm: TMainForm
         Width = 72
         Height = 22
         Style = csOwnerDrawFixed
-        ItemHeight = 16
         TabOrder = 4
         OnDrawItem = ColorBox_DrawItem
         OnSelect = ChangeProperties
@@ -501,7 +490,7 @@ object MainForm: TMainForm
     object PropertiesToolbar2: TToolBar
       Left = 1
       Top = 45
-      Width = 652
+      Width = 644
       Height = 22
       ButtonHeight = 21
       Caption = 'PropertiesToolbar2'
@@ -509,7 +498,6 @@ object MainForm: TMainForm
       DragKind = dkDock
       EdgeInner = esNone
       EdgeOuter = esNone
-      Flat = True
       ParentShowHint = False
       ShowHint = True
       TabOrder = 2
@@ -547,7 +535,6 @@ object MainForm: TMainForm
         Width = 97
         Height = 22
         Style = csOwnerDrawFixed
-        ItemHeight = 16
         ItemIndex = 0
         TabOrder = 0
         Text = 'none'
@@ -612,7 +599,6 @@ object MainForm: TMainForm
         Width = 96
         Height = 22
         Style = csOwnerDrawFixed
-        ItemHeight = 16
         ItemIndex = 0
         TabOrder = 1
         Text = 'none'
@@ -730,7 +716,6 @@ object MainForm: TMainForm
         Width = 64
         Height = 21
         Style = csDropDownList
-        ItemHeight = 13
         ItemIndex = 0
         TabOrder = 5
         Text = 'Left'
@@ -782,7 +767,6 @@ object MainForm: TMainForm
         Width = 54
         Height = 22
         Style = csOwnerDrawFixed
-        ItemHeight = 16
         TabOrder = 8
         OnDrawItem = ComboBox10DrawItem
         OnSelect = ChangeProperties
@@ -817,8 +801,8 @@ object MainForm: TMainForm
   object Panel31: TPanel
     Left = 0
     Top = 68
-    Width = 654
-    Height = 426
+    Width = 646
+    Height = 424
     Align = alClient
     BevelOuter = bvNone
     Caption = ' '
@@ -827,7 +811,7 @@ object MainForm: TMainForm
       Left = 0
       Top = 0
       Width = 25
-      Height = 426
+      Height = 424
       Align = alLeft
       AutoSize = True
       BevelInner = bvRaised
@@ -837,7 +821,7 @@ object MainForm: TMainForm
         Left = 1
         Top = 1
         Width = 23
-        Height = 424
+        Height = 422
         Align = alLeft
         AutoSize = True
         Customizable = True
@@ -845,7 +829,6 @@ object MainForm: TMainForm
         EdgeBorders = [ebTop, ebBottom]
         EdgeInner = esNone
         EdgeOuter = esNone
-        Flat = True
         Images = ImageList2
         ParentShowHint = False
         ShowHint = True
@@ -968,8 +951,8 @@ object MainForm: TMainForm
     object Panel32: TPanel
       Left = 25
       Top = 0
-      Width = 629
-      Height = 426
+      Width = 621
+      Height = 424
       Align = alClient
       BevelOuter = bvNone
       Caption = ' '
@@ -977,8 +960,8 @@ object MainForm: TMainForm
       object Panel33: TPanel
         Left = 57
         Top = 0
-        Width = 572
-        Height = 426
+        Width = 564
+        Height = 424
         Align = alClient
         BevelOuter = bvNone
         Caption = ' '
@@ -987,16 +970,16 @@ object MainForm: TMainForm
         object Panel34: TPanel
           Left = 0
           Top = 0
-          Width = 572
-          Height = 409
+          Width = 564
+          Height = 407
           Align = alClient
           BevelOuter = bvNone
           Caption = ' '
           TabOrder = 0
           object Panel2: TPanel
             Left = 0
-            Top = 383
-            Width = 572
+            Top = 381
+            Width = 564
             Height = 26
             Align = alBottom
             BevelOuter = bvNone
@@ -1009,17 +992,17 @@ object MainForm: TMainForm
           object Panel1: TPanel
             Left = 0
             Top = 0
-            Width = 572
-            Height = 383
+            Width = 564
+            Height = 381
             Align = alClient
             BevelOuter = bvNone
             Caption = ' '
             TabOrder = 1
             object VScrollBar: TScrollBar
-              Left = 555
+              Left = 547
               Top = 0
               Width = 17
-              Height = 383
+              Height = 381
               Align = alRight
               Ctl3D = False
               Kind = sbVertical
@@ -1035,8 +1018,8 @@ object MainForm: TMainForm
         end
         object HScrollBar: TScrollBar
           Left = 0
-          Top = 409
-          Width = 572
+          Top = 407
+          Width = 564
           Height = 17
           Align = alBottom
           Ctl3D = False
@@ -1053,7 +1036,7 @@ object MainForm: TMainForm
         Left = 0
         Top = 0
         Width = 57
-        Height = 426
+        Height = 424
         Align = alLeft
         BevelOuter = bvNone
         Caption = ' '
@@ -1586,9 +1569,9 @@ object MainForm: TMainForm
       Caption = 'Undo'
       Hint = 'Undo'
       ImageIndex = 50
-      ShortCut = 16474
       SecondaryShortCuts.Strings = (
         'Alt+BkSp')
+      ShortCut = 16474
       OnExecute = UserEventExecute
     end
     object Redo: TAction
@@ -1596,9 +1579,9 @@ object MainForm: TMainForm
       Caption = 'Redo'
       Hint = 'Redo'
       ImageIndex = 51
-      ShortCut = 24666
       SecondaryShortCuts.Strings = (
         'Shift+Alt+BkSp')
+      ShortCut = 24666
       OnExecute = UserEventExecute
     end
     object ClipboardCopy: TAction
@@ -1606,9 +1589,9 @@ object MainForm: TMainForm
       Caption = 'Copy'
       Hint = 'Copy to clipboard'
       ImageIndex = 37
-      ShortCut = 16451
       SecondaryShortCuts.Strings = (
         'ctrl+ins')
+      ShortCut = 16451
       OnExecute = UserEventExecute
     end
     object ClipboardPaste: TAction
@@ -1616,9 +1599,9 @@ object MainForm: TMainForm
       Caption = 'Paste'
       Hint = 'Paste from clipboard'
       ImageIndex = 38
-      ShortCut = 16470
       SecondaryShortCuts.Strings = (
         'shift+ins')
+      ShortCut = 16470
       OnExecute = UserEventExecute
     end
     object ClipboardCut: TAction
@@ -1626,9 +1609,9 @@ object MainForm: TMainForm
       Caption = 'Cut'
       Hint = 'Cut to clipboard'
       ImageIndex = 36
-      ShortCut = 16472
       SecondaryShortCuts.Strings = (
         'Shift+Del')
+      ShortCut = 16472
       OnExecute = UserEventExecute
     end
     object ShowCrossHair: TAction
@@ -1642,9 +1625,9 @@ object MainForm: TMainForm
       Caption = 'Delete selected'
       Hint = 'Delete selected'
       ImageIndex = 23
-      ShortCut = 46
       SecondaryShortCuts.Strings = (
         'Ctrl+Del')
+      ShortCut = 46
       OnExecute = UserEventExecute
     end
     object DuplicateSelected: TAction
@@ -1710,9 +1693,9 @@ object MainForm: TMainForm
       Category = 'Transform'
       Caption = 'Flip vertically'
       ImageIndex = 29
-      ShortCut = 40998
       SecondaryShortCuts.Strings = (
         'Alt+Shift+Down')
+      ShortCut = 40998
       OnExecute = UserEventExecute
     end
     object SelectAll: TAction
@@ -1740,9 +1723,9 @@ object MainForm: TMainForm
       Category = 'Transform'
       Caption = 'Flip horizontally'
       ImageIndex = 28
-      ShortCut = 40999
       SecondaryShortCuts.Strings = (
         'Alt+Shift+Left')
+      ShortCut = 40999
       OnExecute = UserEventExecute
     end
     object ConvertToGrayScale: TAction
@@ -1971,9 +1954,9 @@ object MainForm: TMainForm
       Caption = 'Zoom in'
       Hint = 'Zoom in'
       ImageIndex = 17
-      ShortCut = 107
       SecondaryShortCuts.Strings = (
         'Alt+=')
+      ShortCut = 107
       OnExecute = UserEventExecute
     end
     object ZoomOut: TAction
@@ -1981,9 +1964,9 @@ object MainForm: TMainForm
       Caption = 'Zoom out'
       Hint = 'Zoom out'
       ImageIndex = 18
-      ShortCut = 109
       SecondaryShortCuts.Strings = (
         'Alt+-')
+      ShortCut = 109
       OnExecute = UserEventExecute
     end
     object ZoomAll: TAction
@@ -1991,9 +1974,9 @@ object MainForm: TMainForm
       Caption = 'Zoom all'
       Hint = 'Zoom all'
       ImageIndex = 19
-      ShortCut = 106
       SecondaryShortCuts.Strings = (
         'Alt+0')
+      ShortCut = 106
       OnExecute = UserEventExecute
     end
     object HandTool: TAction
@@ -2292,9 +2275,9 @@ object MainForm: TMainForm
     object ObjectProperties: TAction
       Category = 'Edit'
       Caption = 'Object properties'
-      ShortCut = 13
       SecondaryShortCuts.Strings = (
         'f3')
+      ShortCut = 13
       OnExecute = UserEventExecute
     end
     object TeXFormat: TAction
@@ -2446,9 +2429,9 @@ object MainForm: TMainForm
       Category = 'Modify'
       Caption = 'Ungroup'
       Hint = 'Ungroup'
-      ShortCut = 24647
       SecondaryShortCuts.Strings = (
         'Ctrl+U')
+      ShortCut = 24647
       OnExecute = UserEventExecute
     end
     object MakeCompound: TAction

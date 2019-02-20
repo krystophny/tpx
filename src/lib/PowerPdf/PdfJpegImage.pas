@@ -25,6 +25,9 @@ unit PdfJpegImage;
 interface
 
 uses
+{$IFNDEF FPC}
+  JPEG,
+{$ENDIF}
   SysUtils, Classes, Graphics, PdfTypes, PdfDoc, PdfImages;
 
 type
