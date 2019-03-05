@@ -2,7 +2,13 @@ unit DevPSTr;
 
 interface
 
-uses SysUtils, Classes, Geometry, Graphics, Devices;
+uses
+{$IFNDEF USE_FMX}
+Graphics,
+{$ELSE}
+FMX.Graphics, System.UITypes,
+{$ENDIF}
+SysUtils, Classes, Geometry, Devices;
 
 type
 

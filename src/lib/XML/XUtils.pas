@@ -91,7 +91,9 @@ implementation
 uses
 	Math,
 {$IFNDEF FPC}
+{$IFNDEF NEXTGEN}
   Windows,
+{$ENDIF NEXTGEN}
 {$ELSE}
   LCLIntf,
 {$ENDIF}

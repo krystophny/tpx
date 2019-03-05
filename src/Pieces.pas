@@ -2,7 +2,18 @@ unit Pieces;
 
 interface
 
-uses SysUtils, Classes, Contnrs, Graphics, Geometry, Devices, Math;
+uses
+{$IFNDEF USE_FMX}
+Graphics,
+{$ELSE}
+FMX.Graphics, System.UITypes,
+{$ENDIF}
+{$IFNDEF NEXTGEN}
+Contnrs,
+{$ELSE}
+System.Generics.Collections,
+{$ENDIF}
+SysUtils, Classes, Geometry, Devices, Math;
 
 type
 
@@ -202,7 +213,11 @@ type
     function CreateFromSvgPath(const SvgPath: string): TPiece;
   end;
 
+{$IFNDEF NEXTGEN}
   TArrayOfPiece = class(TObjectList)
+{$ELSE NEXTGEN}
+  TArrayOfPiece = class(TObjectList<TPiece>)
+{$ENDIF NEXTGEN}
   protected
     function GetItem(I: Integer): TPiece;
   public
@@ -225,7 +240,13 @@ type
 
 implementation
 
-uses GObjects, Drawings, Bitmaps, SysBasic;
+uses
+{$IFDEF FPC}
+Bitmaps,
+{$ELSE}
+ColorEtc,
+{$ENDIF}
+GObjects, Drawings, SysBasic;
 
 // =====================================================================
 // TPiece
@@ -599,10 +620,12 @@ procedure TTextPiece.MeasureTextRectangle(
 var
   V: TVector2D;
 begin
+  {$IFDEF FPC}
   GetTextDimension(WideText, FaceName, Style, Charset,
     Size.X, V.Y);
   Size.X := Size.X * Height;
   Size.Y := Height;
+  {$ENDIF}
   case HAlignment of
     ahLeft: V.X := 0;
     ahCenter: V.X := -Size.X / 2;
@@ -816,7 +839,11 @@ end;
 
 function TArrayOfPiece.GetItem(I: Integer): TPiece;
 begin
+{$IFNDEF NEXTGEN}
   Result := inherited GetItem(I) as TPiece;
+{$ELSE}
+  Result := inherited Items[I] as TPiece;
+{$ENDIF}
 end;
 
 procedure TArrayOfPiece.TransForm(const T: TTransf2D);

@@ -4,14 +4,18 @@ interface
 
 uses Types,
 {$IFDEF FPC}
-  LCLIntf, LCLType, LazBasic,
+  LCLIntf, LCLType, LazBasic, Forms, Graphics
 {$IFDEF LINUX}
   {oldlinux,}
 {$ENDIF}
 {$ELSE}
-  Windows, ShellAPI, WinBasic,
+{$IFNDEF USE_FMX}
+  Windows, ShellAPI,
+{$ELSE}
+  FMX.Forms, FMX.Graphics, System.UITypes,
 {$ENDIF}
-  SysUtils, Forms, Graphics;
+{$ENDIF}
+  SysUtils;
 
 function CheckFilePath(var FilePath: string;
   const FileDescription: string): Boolean;
@@ -22,10 +26,12 @@ procedure OpenOrExec(const ViewerPath, FileName: string);
 function TryDeleteFile(const FileName: string): Boolean;
 function RenameFile(const FileName1, FileName2: string): Boolean;
 function CopyFile(const FileName1, FileName2: string): Boolean;
+{$IFDEF FPC}
 function GetTempDir: string;
 procedure MessageBoxInfo(MsgStr: string);
 procedure MessageBoxError(MsgStr: string);
 function MessageBoxErrorAsk(MsgStr: string): Boolean;
+{$ENDIF}
 function GetFontDescent(
   const FaceName: string;
   const Style: TFontStyles;
@@ -35,6 +41,7 @@ function GetFontInternalLeading(
   const Style: TFontStyles;
   const Charset: TFontCharSet): Single;
 // Get text width end descent as a percentage of em height
+{$IFDEF FPC}
 procedure GetTextDimension(
   const WideText: Widestring;
   const FaceName: string;
@@ -42,11 +49,9 @@ procedure GetTextDimension(
   const Charset: TFontCharSet;
   out Width, Descent: Single);
 procedure ShowProgress(Percentage: Double);
+{$ENDIF}
 function MulDiv(Number, Numerator, Denominator: Integer): Integer;
 function SmallPointToPoint(const P: TSmallPoint): TPoint;
-{$IFNDEF FPC}
-procedure FastAntiAliasPicture(big_bmp, out_bmp: TBitmap);
-{$ENDIF}
 procedure StartTimer;
 function GetTimer: Extended;
 
@@ -98,7 +103,9 @@ begin
     TmpFilePath := AnsiDequotedStr(TmpFilePath, TmpFilePath[1]);
   if TmpFilePath = '' then
   begin
+  {$IFDEF FPC}
     MessageBoxError(FileDescription + ' path is empty');
+  {$ENDIF}
     FilePath := ' ';
     Exit;
   end;
@@ -110,8 +117,10 @@ begin
       GetEnvironmentVariable('PATH'));
   if not FileExists(TmpFilePath) then
   begin
+  {$IFDEF FPC}
     MessageBoxError(
       FileDescription + ' path not found: ' + FilePath);
+  {$ENDIF}
     FilePath := ' ' + FilePath;
     Exit;
   end;
@@ -144,8 +153,10 @@ function FileExec(const aCmdLine, InFile, OutFile, Directory:
   string; aHide, aWait: Boolean): Boolean;
 {$IFNDEF FPC}
 var
+{$IFNDEF USE_FMX}
   StartupInfo: TSTARTUPINFO;
   ProcessInfo: TPROCESSINFORMATION;
+{$ENDIF}
   aInput, aOutput: Integer;
   PDirectory: PChar;
   exitCode: DWORD;
@@ -157,6 +168,7 @@ var
 begin
 //  MessageBoxInfo(aCmdLine);
 {$IFNDEF FPC}
+{$IFNDEF USE_FMX}
   FillChar(StartupInfo, SizeOf(TSTARTUPINFO), 0);
   try
     //if aWait then aHide := False;
@@ -232,6 +244,7 @@ begin
 {  if Result then
     Application.MessageBox('App successful',
       'Error', MB_OK);}
+{$ENDIF}
 {$ELSE}
   OldDir := GetCurrentDir;
   SetCurrentDir(Directory);
@@ -300,7 +313,7 @@ begin
       finally
         FreeMem(Buffer, 16384);
       end;
-      FileSetDate(FHandle2, FileGetDate(FHandle1));
+      {$IFDEF WINDOWS}FileSetDate(FHandle2, FileGetDate(FHandle1));{$ENDIF}
     finally
       FileClose(FHandle2);
     end;
@@ -309,47 +322,30 @@ begin
   end;
 end;
 
+{$IFDEF FPC}
 function GetTempDir: string;
 var
   Buffer: array[0..1023] of Char;
 begin
-{$IFNDEF FPC}
-  GetTempPath(SizeOf(Buffer) - 1, Buffer);
-  SetString(Result, Buffer, StrLen(Buffer));
-  Result := GetLongPath(Result);
-{$ELSE}
   Result := SysUtils.GetTempDir;
-{$ENDIF}
   Result := IncludeTrailingPathDelimiter(Result);
 end;
 
 procedure MessageBoxInfo(MsgStr: string);
 begin
-{$IFDEF VER140}
-  Application.MessageBox(PChar(MsgStr), 'Info', MB_OK);
-{$ELSE}
   Application.MessageBox(PChar(MsgStr), 'Info', 0);
-{$ENDIF}
 end;
 
 procedure MessageBoxError(MsgStr: string);
 begin
-{$IFDEF VER140}
-  Application.MessageBox(PChar(MsgStr), 'Error', MB_OK);
-{$ELSE}
   Application.MessageBox(PChar(MsgStr), 'Error', 0);
-{$ENDIF}
 end;
 
 function MessageBoxErrorAsk(MsgStr: string): Boolean;
 begin
-{$IFDEF VER140}
-  Result := Application.MessageBox(PChar(MsgStr), 'Error',
-    MB_OKCANCEL) = idOK;
-{$ELSE}
   Result := Application.MessageBox(PChar(MsgStr), 'Error', 1) = 1;
-{$ENDIF}
 end;
+{$ENDIF}
 
 function GetFontDescent(
   const FaceName: string;
@@ -417,6 +413,7 @@ begin
 {$ENDIF}
 end;
 
+{$IFDEF FPC}
 procedure GetTextDimension(
   const WideText: Widestring;
   const FaceName: string;
@@ -443,12 +440,7 @@ begin
     GetTextMetrics(ExtendedFont.Canvas.Handle, Text_Metric);
     Descent := Text_Metric.tmDescent / TmpH;
     //tmAscent tmDescent
-{$IFDEF VER140}
-    Windows.GetTextExtentPoint32W(ExtendedFont.Canvas.Handle,
-      PWideChar(WideText), Length(WideText), S);
-{$ELSE}
     S := ExtendedFont.Canvas.TextExtent(WideText);
-{$ENDIF}
     Width := S.CX / TmpH;
     //if S.CY <> 0 then Width := S.CX / S.CY    else Width := 1;
   finally
@@ -465,11 +457,14 @@ begin
     Application.ProcessMessages;
   end;
 end;
+{$ENDIF}
 
 function MulDiv(Number, Numerator, Denominator: Integer): Integer;
 begin
 {$IFNDEF FPC}
+{$IFNDEF USE_FMX}
   Result := Windows.MulDiv(Number, Numerator, Denominator);
+{$ENDIF}
 {$ELSE}
   Result := LCLType.MulDiv(Number, Numerator, Denominator);
 {$ENDIF}
@@ -487,78 +482,19 @@ end;
 
 const
   MaxPixelCount = 32768;
-
+             {$IFNDEF USE_FMX}
 type
   pRGBArray = ^TRGBArray;
-  TRGBArray = array[0..MaxPixelCount - 1] of TRGBTriple;
-
-{$IFNDEF FPC}
-
-procedure FastAntiAliasPicture(big_bmp, out_bmp: TBitmap);
-var
-  X, Y, CX, CY: Integer;
-  totr, totg, totb: Integer;
-  Row1, Row2, Row3, DestRow: pRGBArray;
-  I: Integer;
-begin
-  // For each row
-  for Y := 0 to out_bmp.Height - 1 do
-  begin
-    // We compute samples of 3 x 3 pixels
-    CY := Y * 3;
-    // Get pointers to actual, previous and next rows in supersampled bitmap
-    Row1 := big_bmp.ScanLine[CY];
-    Row2 := big_bmp.ScanLine[CY + 1];
-    Row3 := big_bmp.ScanLine[CY + 2];
-
-    // Get a pointer to destination row in output bitmap
-    DestRow := out_bmp.ScanLine[Y];
-
-    // For each column...
-    for X := 0 to out_bmp.Width - 1 do
-    begin
-      // We compute samples of 3 x 3 pixels
-      CX := 3 * X;
-
-      // Initialize result color
-      totr := 0;
-      totg := 0;
-      totb := 0;
-
-      // For each pixel in sample
-      for I := 0 to 2 do
-      begin
-        // New red value
-        totr := totr + Row1[CX + I].rgbtRed
-          + Row2[CX + I].rgbtRed
-          + Row3[CX + I].rgbtRed;
-        // New green value
-        totg := totg + Row1[CX + I].rgbtGreen
-          + Row2[CX + I].rgbtGreen
-          + Row3[CX + I].rgbtGreen;
-        // New blue value
-        totb := totb + Row1[CX + I].rgbtBlue
-          + Row2[CX + I].rgbtBlue
-          + Row3[CX + I].rgbtBlue;
-      end;
-
-      // Set output pixel colors
-      DestRow[X].rgbtRed := totr div 9;
-      DestRow[X].rgbtGreen := totg div 9;
-      DestRow[X].rgbtBlue := totb div 9;
-    end;
-  end;
-end;
-{$ENDIF}
+TRGBArray = array[0..MaxPixelCount - 1] of TRGBTriple;  {$ENDIF}
 
 procedure StartTimer;
 begin
-  StartTime := GetTickCount;
+  {$IFNDEF USE_FMX}StartTime := GetTickCount;   {$ENDIF}
 end;
 
 function GetTimer: Extended;
 begin
-  GetTimer := (GetTickCount - StartTime) / 1000;
+  {$IFNDEF USE_FMX}GetTimer := (GetTickCount - StartTime) / 1000;     {$ENDIF}
   //(Time - StartTime) * 24 * 60 * 60;
 end;
 

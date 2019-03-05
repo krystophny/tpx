@@ -15,9 +15,13 @@ var
 
 implementation
 
-uses Output, Input, Drawings, Preview
+uses Output, Input, Drawings
+{$IFNDEF USE_FMX}
+  , Preview
 {$IFNDEF FPC}
   , EMF_Unit, Modes, Bitmaps, SysBasic
+{$ENDIF}
+{$ELSE}
 {$ENDIF}
   ;
 
@@ -75,8 +79,10 @@ begin
     //Strings.Values[Data.Key] := Data.AsString;
     //Application.MessageBox(PChar(IntToStr(Strings.Count) + ' >>' + Data.AsString + '<<'), nil);
   end;
+  {$IFNDEF USE_FMX}
   if not Result then
     MessageBoxError('Bad settings were not saved to ini file');
+  {$ENDIF}
 end;
 
 procedure SaveSettings;
@@ -166,6 +172,7 @@ begin
   {SettingsList.AddBoolean('ScalePhysicalUnits',
     @(MainForm.ScalePhysical.Checked),
     'Scale physical units when transforming the whole picture');}
+  {$IFNDEF USE_FMX}
   SettingsList.AddFilePath('LatexPath', @(LatexPath),
     '*.exe|*.exe', 'Path to LaTeX (latex.exe)');
   SettingsList.AddFilePath('PdfLatexPath', @(PdfLatexPath),
@@ -204,6 +211,7 @@ begin
     '*.exe|*.exe',
     'Path to HTML viewer. Leave this blank to use the default viewer');
 {$ENDIF}
+{$ENDIF}
 
   SettingsList.AddFilePath('MetaPostPath', @(MetaPostPath),
     '*.exe|*.exe',
@@ -220,6 +228,7 @@ begin
     ' Format can be emf or one of the better implementations (wemf, wemfc, wemfnss)' +
     ' which are available in registered version of PsToEdit.' +
     ' For SVG set plot-svg (free version) or svg (registered version)');
+  {$IFNDEF USE_FMX}
   SettingsList.AddFilePath('GhostscriptPath', @(GhostscriptPath),
     '*.exe|*.exe',
     'Path to Ghostscript program (gswin32c.exe).' +
@@ -247,10 +256,12 @@ begin
     'Path to a program (like sam2p or bmeps)' +
     ' which converts bitmaps to EPS files.' +
     ' (It is used for including bitmaps into output graphics).');
+  {$ENDIF}
 end;
 
 procedure LoadSettings_Ex(MainForm: TMainForm);
 begin
+{$IFNDEF USE_FMX}
   SettingsList.AddStringList('RecentFiles',
     MainForm.EventManager.RecentFiles, 'List of recent files');
 {$IFDEF VER140}
@@ -292,7 +303,7 @@ begin
     @(MainForm.FormPos_Height), 1, 2000, 'Main window height');
   SettingsList.AddBoolean('Mainform.Maximized',
     @(MainForm.FormPos_Maximized), 'Main window state');
-
+{$ENDIF}
   LoadSettings;
 end;
 

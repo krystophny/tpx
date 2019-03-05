@@ -3,7 +3,12 @@ unit Bitmaps;
 interface
 
 uses
-  Graphics, Geometry, StrUtils, Classes;
+{$IFDEF FPC}
+Graphics,
+{$ELSE}
+FMX.Graphics, System.UITypes,
+{$ENDIF}
+Geometry, StrUtils, Classes;
 
 type
 
@@ -12,7 +17,7 @@ type
   TBitmapEntry = class(TObject)
   protected
     fImageLink: string;
-    fBitmap: Graphics.TBitmap;
+    fBitmap: TBitmap;
     fKind: TBitmapEntryKind;
     fParentFileName: string;
     fImageFiles: TStringList;
@@ -38,7 +43,7 @@ type
       const IncludePath: string): string;
     property Kind: TBitmapEntryKind read fKind;
     property ImageLink: string read fImageLink;
-    property Bitmap: Graphics.TBitmap read fBitmap;
+    property Bitmap: TBitmap read fBitmap;
   end;
 
 function BitmapToEps(const BitmapFileName: string;
@@ -53,7 +58,7 @@ implementation
 uses
   SysBasic,
 {$IFNDEF FPC}
-   Imaging.pngimage, Imaging.jpeg,
+
 {$ENDIF}
   SysUtils;
 

@@ -1,7 +1,16 @@
 unit Options0;
 
 interface
-uses SysUtils, Contnrs, Classes, StrUtils, Dialogs, md5;
+uses
+{$IFDEF FPC}
+Dialogs,
+{$ENDIF}
+{$IFNDEF NEXTGEN}
+Contnrs,
+{$ELSE}
+System.Generics.Collections,
+{$ENDIF}
+SysUtils, Classes, StrUtils, md5;
 
 {$I tpx.inc}
 
@@ -98,7 +107,11 @@ type
   TCheckSum = MD5Digest;
 {$ENDIF}
 
+{$IFNDEF NEXTGEN}
   TOptionsList = class(TObjectList)
+{$ELSE}
+  TOptionsList = class(TObjectList<TOptionData>)
+{$ENDIF}
     constructor Create; overload;
     procedure AddInteger(Key0: string;
       PData0: Pointer; MinValue0, MaxValue0: Integer;

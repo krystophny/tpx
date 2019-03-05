@@ -208,9 +208,11 @@ begin
   SetLength(B, 3, 1);
   SetLength(E, 4, 1);
   OLS_Householder(Y, X, 4, 1, 3, RSS, B, E);
+{$IFDEF FPC}
   MessageBoxInfo(FloatToStr(RSS));
   MessageBoxInfo(MatToStr(B, 3, 1));
   MessageBoxInfo(MatToStr(E, 4, 1));
+{$ENDIF FPC}
 //  Householder(A, 7, 4, 3);
 //  MessageBoxInfo(MatToStr(A, 7, 4));
 end;

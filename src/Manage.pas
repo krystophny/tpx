@@ -3,7 +3,17 @@ unit Manage;
 interface
 
 uses
-  Types, Classes, Controls, Contnrs;
+{$IFNDEF USE_FMX}
+Controls,
+{$ELSE}
+FMX.Controls, System.UITypes,
+{$ENDIF}
+{$IFNDEF NEXTGEN}
+Contnrs,
+{$ELSE}
+System.Generics.Collections,
+{$ENDIF}
+Types, Classes;
 
 type
 
@@ -17,8 +27,13 @@ type
 
   TEventManager = class
   private
+{$IFNDEF NEXTGEN}
     fModeStack: TObjectStack;
     fDataStack: TStack;
+{$ELSE}
+    fModeStack: TStack<TMode>;
+    fDataStack: TStack<TObject>;
+{$ENDIF}
     fMode: TMode;
     fOnExit: TNotifyEvent;
     fLastMouseX, fLastMouseY: Integer;
@@ -44,7 +59,11 @@ type
     procedure KeyUp(Sender: TObject; var Key: Word;
       Shift: TShiftState); virtual;
     property Mode: TMode read fMode;
+    {$IFNDEF NEXTGEN}
     property DataStack: TStack read fDataStack;
+    {$ELSE}
+    property DataStack: TStack<TObject> read fDataStack;
+    {$ENDIF}
     property OnExit: TNotifyEvent read fOnExit write fOnExit;
   end;
 
@@ -93,8 +112,13 @@ implementation
 constructor TEventManager.Create;
 begin
   inherited Create;
+  {$IFNDEF NEXTGEN}
   fModeStack := TObjectStack.Create;
   fDataStack := TObjectStack.Create;
+  {$ELSE NEXTGEN}
+  fModeStack := TStack<TMode>.Create;
+  fDataStack := TStack<TObject>.Create;
+  {$ENDIF NEXTGEN}
 end;
 
 destructor TEventManager.Destroy;
@@ -204,7 +228,11 @@ end;
 
 function TMode.PushData(Data: Pointer): Pointer;
 begin
+{$IFNDEF NEXTGEN}
   Result := fManager.DataStack.Push(Data);
+{$ELSE NEXTGEN}
+  fManager.DataStack.Push(Data);
+{$ENDIF NEXTGEN}
 end;
 
 procedure TMode.PopSelf;

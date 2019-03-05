@@ -5,13 +5,10 @@
 interface
 
 uses Classes, SysUtils,
-{$IFNDEF FPC}
-  WinBasic,
-{$ELSE}
-  LCLIntf, LMessages, LCLType, {LazBasic,}
+{$IFDEF FPC}
+  LCLIntf, LMessages, LCLType,
 {$ENDIF}
-  Geometry, Devices, SysBasic
-  ;
+  Geometry, Devices, SysBasic;
 
 const
   {:
@@ -948,7 +945,11 @@ type
 
 {: This type defines the string used to name a layer.
 }
+{$IFNDEF NEXTGEN}
   TLayerName = string[31];
+{$ELSE NEXTGEN}
+  TLayerName = String;
+{$ENDIF NEXTGEN}
 
 {: This type defines the layer used by the library.
 
@@ -1692,7 +1693,9 @@ begin
     begin
       Add(Obj);
       Inc(I);
+      {$IFDEF FPC}
       if I mod 100 = 0 then ShowProgress(I / Lst.Count);
+      {$ENDIF}
       Obj := Lst.NextObj;
     end;
   finally
@@ -2593,7 +2596,9 @@ initialization
   TpXRegisterClass(7, TArc2D);
   TpXRegisterClass(8, TEllipse2D);
   TpXRegisterClass(9, TText2D);
+  {$IFDEF FPC}
   TpXRegisterClass(10, TBitmap2D);
+  {$ENDIF}
   TpXRegisterClass(13, TCircle2D);
   TpXRegisterClass(14, TStar2D);
   TpXRegisterClass(15, TSector2D);
@@ -2603,7 +2608,9 @@ initialization
   TpXRegisterClass(22, TBezierPath2D);
   TpXRegisterClass(23, TClosedBezierPath2D);
   TpXRegisterClass(24, TSymbol2D);
+  {$IFDEF FPC}
   TpXRegisterClass(25, TBitmap2D);
+  {$ENDIF}
   TpXRegisterClass(26, TCompound2D);
 
 finalization

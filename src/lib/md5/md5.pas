@@ -40,7 +40,11 @@ INTERFACE
 // -----------------------------------------------------------------------------------------------
 
 uses
+{$IFNDEF NEXTGEN}
 	Windows;
+{$ELSE}
+  System.Types;
+{$ENDIF}
 
 type
 	MD5Count = array[0..1] of DWORD;
@@ -60,7 +64,7 @@ procedure MD5Update(var Context: MD5Context; Input: pChar; Length: longword);
 procedure MD5Final(var Context: MD5Context; var Digest: MD5Digest);
 
 function MD5String(M: string): MD5Digest;
-function MD5File(N: string): MD5Digest;
+{$IFNDEF NEXTGEN}function MD5File(N: string): MD5Digest;{$ENDIF}
 function MD5Print(D: MD5Digest): string;
 
 function MD5Match(D1, D2: MD5Digest): boolean;
@@ -273,7 +277,12 @@ begin
 		State[3] := $10325476;
 		Count[0] := 0;
 		Count[1] := 0;
+    {$IFNDEF NEXTGEN}
 		ZeroMemory(@Buffer, SizeOf(MD5Buffer));
+    {$ELSE}
+    FillChar(Buffer, SizeOf(MD5Buffer), 0);
+    {$ENDIF}
+
 	end;
 end;
 
@@ -292,7 +301,11 @@ begin
 	end;
 	PartLen := 64 - Index;
 	if Length >= PartLen then begin
+  {$IFNDEF NEXTGEN}
 		CopyMemory(@Context.Buffer[Index], Input, PartLen);
+  {$ELSE}
+		Move(Input, Context.Buffer[Index], PartLen);
+  {$ENDIF}
 		Transform(@Context.Buffer, Context.State);
 		I := PartLen;
 		while I + 63 < Length do begin
@@ -301,7 +314,11 @@ begin
 		end;
 		Index := 0;
 	end else I := 0;
+  {$IFNDEF NEXTGEN}
 	CopyMemory(@Context.Buffer[Index], @Input[I], Length - I);
+  {$ELSE}
+	Move(Input[I], Context.Buffer[Index], Length - I);
+  {$ENDIF}
 end;
 
 // Finalize given Context, create Digest and zeroize Context
@@ -317,7 +334,11 @@ begin
 	MD5Update(Context, @PADDING, PadLen);
 	MD5Update(Context, @Bits, 8);
 	Decode(@Context.State, @Digest, 4);
+  {$IFNDEF NEXTGEN}
 	ZeroMemory(@Context, SizeOf(MD5Context));
+  {$ELSE}
+	FillChar(Context, SizeOf(MD5Context),0);
+  {$ENDIF}
 end;
 
 // -----------------------------------------------------------------------------------------------
@@ -331,7 +352,7 @@ begin
 	MD5Update(Context, pChar(M), length(M));
 	MD5Final(Context, Result);
 end;
-
+{$IFNDEF NEXTGEN}
 // Create digest of file with given Name
 function MD5File(N: string): MD5Digest;
 var
@@ -360,7 +381,7 @@ begin
 	end;
 	MD5Final(Context, Result);
 end;
-
+{$ENDIF}
 // Create hex representation of given Digest
 function MD5Print(D: MD5Digest): string;
 var

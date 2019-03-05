@@ -2,8 +2,15 @@ unit DevPS;
 
 interface
 
-uses Classes, SysUtils, StrUtils, Geometry, Drawings, Math,
-  Pieces, GObjects, Graphics, Devices;
+uses
+{$IFDEF USE_FMX}
+FMX.Graphics, System.UITypes,
+{$ELSE}
+Graphics,
+{$ENDIF}
+
+Classes, SysUtils, StrUtils, Geometry, Drawings, Math,
+  Pieces, GObjects, Devices;
 
 type
 
@@ -48,8 +55,10 @@ type
       const LineColor: TColor;
       const FaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
+{$IFNDEF USE_FMX}
     procedure Bitmap(P: TPoint2D; W, H: TRealType;
       const KeepAspectRatio: Boolean; BitmapEntry: TObject);
+{$ENDIF}
     procedure GenPath(const GP: TGenericPath;
       const LineColor, HatchColor, FillColor: TColor;
       const LineStyle: TLineStyle; const LineWidth: TRealType;
@@ -72,7 +81,11 @@ type
 
 implementation
 
-uses ColorEtc, SysBasic, Output, Bitmaps;
+uses
+{$IFNDEF USE_FMX}
+Bitmaps,
+{$ENDIF}
+ColorEtc, SysBasic, Output;
 
 procedure pfb2pfa_Stream(Stream_pfb, Stream_pfa: TStream;
   var FontName: string);
@@ -182,7 +195,7 @@ begin
   OnCircle := Circle;
   OnCircular := Circular;
   OnRotText := RotText;
-  OnBitmap := Bitmap;
+{$IFNDEF USE_FMX}  OnBitmap := Bitmap;   {$ENDIF}
   OnGenPath := GenPath;
   fHasBezier := True;
   fHasClosedBezier := True;
@@ -207,8 +220,8 @@ begin
   if Font_pfb_Path = '' then Exit;
   if not FileExists(Font_pfb_Path) then
   begin
-    MessageBoxError(Format('Can not find font file %s',
-      [Font_pfb_Path]));
+    {$IFNDEF USE_FMX}MessageBoxError(Format('Can not find font file %s',
+      [Font_pfb_Path]));                {$ENDIF}
     Exit;
   end;
   Stream_pfb :=
@@ -517,6 +530,7 @@ begin
     WriteStream('initmatrix ');
 end;
 
+{$IFNDEF USE_FMX}
 procedure TPostScriptDevice.Bitmap(P: TPoint2D; W, H: TRealType;
   const KeepAspectRatio: Boolean; BitmapEntry: TObject);
 var
@@ -569,6 +583,7 @@ begin
     CloseFile(FEps);
   end;
 end;
+{$ENDIF}
 
 procedure TPostScriptDevice.GenPath(const GP: TGenericPath;
   const LineColor, HatchColor, FillColor: TColor;

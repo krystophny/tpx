@@ -1,22 +1,113 @@
+{$A8,B-,C+,D+,E-,F-,G+,H+,I+,J-,K-,L+,M-,N-,O+,P+,Q-,R-,S-,T-,U-,V+,W-,X+,Y+,Z1}
+{$MINSTACKSIZE $00004000}
+{$MAXSTACKSIZE $00100000}
+{$IMAGEBASE $00400000}
+{$APPTYPE GUI}
+{$WARN SYMBOL_DEPRECATED ON}
+{$WARN SYMBOL_LIBRARY ON}
+{$WARN SYMBOL_PLATFORM ON}
+{$WARN SYMBOL_EXPERIMENTAL ON}
+{$WARN UNIT_LIBRARY ON}
+{$WARN UNIT_PLATFORM ON}
+{$WARN UNIT_DEPRECATED ON}
+{$WARN UNIT_EXPERIMENTAL ON}
+{$WARN HRESULT_COMPAT ON}
+{$WARN HIDING_MEMBER ON}
+{$WARN HIDDEN_VIRTUAL ON}
+{$WARN GARBAGE ON}
+{$WARN BOUNDS_ERROR ON}
+{$WARN ZERO_NIL_COMPAT ON}
+{$WARN STRING_CONST_TRUNCED ON}
+{$WARN FOR_LOOP_VAR_VARPAR ON}
+{$WARN TYPED_CONST_VARPAR ON}
+{$WARN ASG_TO_TYPED_CONST ON}
+{$WARN CASE_LABEL_RANGE ON}
+{$WARN FOR_VARIABLE ON}
+{$WARN CONSTRUCTING_ABSTRACT ON}
+{$WARN COMPARISON_FALSE ON}
+{$WARN COMPARISON_TRUE ON}
+{$WARN COMPARING_SIGNED_UNSIGNED ON}
+{$WARN COMBINING_SIGNED_UNSIGNED ON}
+{$WARN UNSUPPORTED_CONSTRUCT ON}
+{$WARN FILE_OPEN ON}
+{$WARN FILE_OPEN_UNITSRC ON}
+{$WARN BAD_GLOBAL_SYMBOL ON}
+{$WARN DUPLICATE_CTOR_DTOR ON}
+{$WARN INVALID_DIRECTIVE ON}
+{$WARN PACKAGE_NO_LINK ON}
+{$WARN PACKAGED_THREADVAR ON}
+{$WARN IMPLICIT_IMPORT ON}
+{$WARN HPPEMIT_IGNORED ON}
+{$WARN NO_RETVAL ON}
+{$WARN USE_BEFORE_DEF ON}
+{$WARN FOR_LOOP_VAR_UNDEF ON}
+{$WARN UNIT_NAME_MISMATCH ON}
+{$WARN NO_CFG_FILE_FOUND ON}
+{$WARN IMPLICIT_VARIANTS ON}
+{$WARN UNICODE_TO_LOCALE ON}
+{$WARN LOCALE_TO_UNICODE ON}
+{$WARN IMAGEBASE_MULTIPLE ON}
+{$WARN SUSPICIOUS_TYPECAST ON}
+{$WARN PRIVATE_PROPACCESSOR ON}
+{$WARN UNSAFE_TYPE OFF}
+{$WARN UNSAFE_CODE OFF}
+{$WARN UNSAFE_CAST OFF}
+{$WARN OPTION_TRUNCATED ON}
+{$WARN WIDECHAR_REDUCED ON}
+{$WARN DUPLICATES_IGNORED ON}
+{$WARN UNIT_INIT_SEQ ON}
+{$WARN LOCAL_PINVOKE ON}
+{$WARN MESSAGE_DIRECTIVE ON}
+{$WARN TYPEINFO_IMPLICITLY_ADDED ON}
+{$WARN RLINK_WARNING ON}
+{$WARN IMPLICIT_STRING_CAST ON}
+{$WARN IMPLICIT_STRING_CAST_LOSS ON}
+{$WARN EXPLICIT_STRING_CAST OFF}
+{$WARN EXPLICIT_STRING_CAST_LOSS OFF}
+{$WARN CVT_WCHAR_TO_ACHAR ON}
+{$WARN CVT_NARROWING_STRING_LOST ON}
+{$WARN CVT_ACHAR_TO_WCHAR ON}
+{$WARN CVT_WIDENING_STRING_LOST ON}
+{$WARN NON_PORTABLE_TYPECAST ON}
+{$WARN XML_WHITESPACE_NOT_ALLOWED ON}
+{$WARN XML_UNKNOWN_ENTITY ON}
+{$WARN XML_INVALID_NAME_START ON}
+{$WARN XML_INVALID_NAME ON}
+{$WARN XML_EXPECTED_CHARACTER ON}
+{$WARN XML_CREF_NO_RESOLVE ON}
+{$WARN XML_NO_PARM ON}
+{$WARN XML_NO_MATCHING_PARM ON}
+{$WARN IMMUTABLE_STRINGS OFF}
 unit Drawings;
 
 // This unit defines classes for virtual drawings
 
 interface
 
-uses Types, SysUtils, Classes, Graphics, Controls,
-  Contnrs, StrUtils, md5, Options0, Geometry, Pieces,
-  Bitmaps,
-{$IFNDEF FPC}
-  WinBasic,
+uses
+{$IFNDEF USE_FMX}
+  LMessages, LCLType, Graphics, Controls, Bitmaps,
 {$ELSE}
-  LMessages, LCLType, {LazBasic,}
+  FMX.Graphics, FMX.Controls, System.UITypes,
 {$ENDIF}
-  Devices, GObjBase, SysBasic;
+{$IFNDEF NEXTGEN}
+  Contnrs,
+{$ELSE}
+  System.Generics.Collections,
+{$ENDIF}
+  Types, SysUtils, Classes, Devices, GObjBase, SysBasic,
+  StrUtils, md5, Options0, Geometry, Pieces;
+
 
 const
   Drawing_NewFileName = ': Unnamed drawing :';
 {$I tpx.inc}
+
+{$IFNDEF FPC}
+clDefault = TColorRec.SysDefault;
+clNone = TColorRec.Null;
+type TCustomControl = TControl;
+{$ENDIF}
 
 type
   TeXFormatKind = (tex_tex, tex_pgf, tex_pstricks, tex_eps,
@@ -647,7 +738,11 @@ type
   TCheckSum = TMD5Digest;
 {$ENDIF}
 
+{$IFNDEF NEXTGEN}
   TDrawHistory = class(TObjectList)
+{$ELSE NEXTGEN}
+  TDrawHistory = class(TObjectList<TMemoryStream>)
+{$ENDIF NEXTGEN}
   private
     fDrawing: TDrawing2D;
     fPosition: Integer;
@@ -662,7 +757,11 @@ type
     procedure Save;
     procedure Undo;
     procedure Redo;
+{$IFNDEF NEXTGEN}
     procedure Clear; override;
+{$ELSE NEXTGEN}
+    procedure Clear;
+{$ENDIF NEXTGEN}
     procedure SaveCheckSum;
     procedure SetPropertiesChanged;
     property CanUndo: Boolean read GetCanUndo;
@@ -685,7 +784,9 @@ type
     fStarsSize: TRealType;
     fFileName: string;
     function GetExtension: TRect2D;
+{$IFDEF FPC}
     procedure SetFileName(const NewFileName: string);
+{$ENDIF}
   public
     TeXFormat: TeXFormatKind;
     PdfTeXFormat: PdfTeXFormatKind;
@@ -743,8 +844,10 @@ type
     procedure SaveObjectsToStream(const Stream: TStream);
       override;
     procedure SaveSelectionToStream(const Stream: TStream);
+{$IFDEF FPC}
     procedure CopySelectionToClipboard;
     procedure PasteFromClipboard;
+{$ENDIF}
     procedure FillOptionsList;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -884,8 +987,10 @@ type
       const PickedObjects: TList; P: TPoint2D;
       const VisualRect: TRect2D; const PickFilter: TObject2DClass;
       Aperture: Word): Integer;
+    {$IFDEF FPC}
     procedure ClearBitmapRegistry;
     function RegisterBitmap(ImageLink: string): TBitmapEntry;
+    {$ENDIF}
     procedure PickUpProperties(Obj: TGraphicObject);
     procedure ApplyProperties(Obj: TGraphicObject);
     {: This property contains the extension of the drawing.
@@ -904,19 +1009,23 @@ type
       fArrowsSize;
     property StarsSize: TRealType read fStarsSize write
       fStarsSize;
+{$IFDEF FPC}
     property FileName: string read fFileName write SetFileName;
-  end;
+{$ELSE}
+    property FileName: string read fFileName;
+{$ENDIF}
+    end;
 
 function GetExtension0(Drawing2D: TDrawing2D;
   Objects: TGraphicObjList): TRect2D;
 
 implementation
 
-uses GObjects,
-{$IFNDEF FPC}
-  Imaging.pngimage,
+uses
+{$IFDEF FPC}
+ClpbrdOp,
 {$ENDIF}
-  ClpbrdOp, ColorEtc, ViewPort;
+GObjects, ColorEtc, ViewPort;
 
 
 function MD5Stream(const AStream: TStream): TCheckSum;
@@ -930,7 +1039,7 @@ var
   Len: Integer;
 begin
   MD5Init(Context);
-  AStream.Seek(0, soFromBeginning);
+  AStream.Seek(LongInt(0), soFromBeginning);
   repeat
     Len := AStream.Read(Buffer, 4096);
 {$IFNDEF FPC}
@@ -947,12 +1056,12 @@ var
   AStream: TStringStream;
   CheckSum: TCheckSum;
 begin
-  MessageBoxInfo(MD5Print(MD5String(St)));
+  {$IFDEF FPC}MessageBoxInfo(MD5Print(MD5String(St)));{$ENDIF}
   //Exit;
   AStream := TStringStream.Create(St);
   CheckSum := MD5Stream(AStream);
   AStream.Free;
-  MessageBoxError(MD5Print(CheckSum));
+  {$IFDEF FPC}MessageBoxError(MD5Print(CheckSum));{$ENDIF}
 end;
 
 // =====================================================================
@@ -1187,7 +1296,9 @@ var
           if Assigned(fOnAddObject) then
             fOnAddObject(Self, Obj);
         Inc(I);
+        {$IFDEF FPC}
         if I mod 100 = 0 then ShowProgress(I / Lst.Count);
+        {$ENDIF}
         Obj := ALst.NextObj;
       end;
     finally
@@ -1739,8 +1850,10 @@ destructor TDrawing2D.Destroy;
 begin
   History.Free;
   OptionsList.Free;
+{$IFDEF FPC}
   ClearBitmapRegistry;
   BitmapRegistry.Free;
+{$ENDIF}
   inherited Destroy;
 end;
 
@@ -1787,7 +1900,9 @@ begin
   DeleteAllObjects;
   DeleteSavedSourceBlocks;
   SetDefaults;
+{$IFDEF FPC}
   ClearBitmapRegistry;
+{$ENDIF}
 end;
 
 procedure TDrawing2D.SetDefaultProperties;
@@ -1864,7 +1979,7 @@ procedure TDrawing2D.SaveSelectionToStream(const Stream:
 begin
   SaveObjectsToStream0(Stream, fSelectedObjs);
 end;
-
+{$IFDEF FPC}
 procedure TDrawing2D.CopySelectionToClipboard;
 var
   MemStream: TMemoryStream;
@@ -1904,6 +2019,7 @@ begin
   end;
 end;
 
+{$ENDIF}
 {$WARNINGS OFF}
 
 procedure TDrawing2D.LoadObjectsFromStream(const Stream:
@@ -1941,7 +2057,7 @@ begin
         except
           on ETpX_ObjClassNotFound do
           begin
-            MessageBoxError('Object class not found. Object not load');
+            {$IFDEF FPC}MessageBoxError('Object class not found. Object not load');{$ENDIF}
             Break;
           end;
         end;
@@ -1950,7 +2066,7 @@ begin
           OnLoadProgress(Self, ObjPerc);
         if not (Obj is TObject2D) then
         begin
-          MessageBoxError('Not 2D Object. Object discarded.');
+          {$IFDEF FPC}MessageBoxError('Not 2D Object. Object discarded.');{$ENDIF}
           Obj.Free;
           Continue;
         end;
@@ -1960,7 +2076,7 @@ begin
         except
           on ETpX_ListObjNotFound do
           begin
-            MessageBoxError('Source block not found. The block will not be loaded');
+            {$IFDEF FPC}MessageBoxError('Source block not found. The block will not be loaded');{$ENDIF}
             Obj.Free;
             Continue;
           end;
@@ -1971,7 +2087,7 @@ begin
         except
           on ETpX_ListObjNotFound do
           begin
-            MessageBoxError('Source block not found. The block will not be loaded');
+            {$IFDEF FPC}MessageBoxError('Source block not found. The block will not be loaded');{$ENDIF}
             Obj.Free;
             Continue;
           end;
@@ -2017,9 +2133,9 @@ begin
     end;
     Obj := fListOfBlocks.NextObj as TSourceBlock2D;
   end;
-  Stream.Seek(TmpPos, soFromBeginning);
+  Stream.Seek(LongInt(TmpPos), soFromBeginning);
   Stream.Write(TmpLong, SizeOf(TmpLong));
-  Stream.Seek(0, soFromEnd);
+  Stream.Seek(LongInt(0), soFromEnd);
 end;
 
 {$WARNINGS OFF}
@@ -2047,7 +2163,7 @@ begin
       except
         on ETpX_ObjClassNotFound do
         begin
-          MessageBoxError('Object class not found. Object not load');
+          {$IFDEF FPC}MessageBoxError('Object class not found. Object not load');{$ENDIF}
           Continue;
         end;
       end;
@@ -2057,7 +2173,7 @@ begin
       except
         on ETpX_ListObjNotFound do
         begin
-          MessageBoxError('Source block not found. The block will not be loaded');
+          {$IFDEF FPC}MessageBoxError('Source block not found. The block will not be loaded');{$ENDIF}
           Obj.Free;
           Continue;
         end;
@@ -2374,6 +2490,7 @@ begin
   Result := GetExtension0(Self, fListOfObjects);
 end;
 
+{$IFDEF FPC}
 procedure TDrawing2D.SetFileName(const NewFileName: string);
 var
   I: Integer;
@@ -2417,6 +2534,7 @@ begin
   end
   else Result := BitmapRegistry.Objects[I] as TBitmapEntry;
 end;
+{$ENDIF}
 
 procedure TDrawing2D.PickUpProperties(Obj: TGraphicObject);
 var

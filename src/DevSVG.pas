@@ -2,8 +2,14 @@ unit DevSVG;
 
 interface
 
-uses Classes, SysUtils, StrUtils, Math, Geometry, Drawings,
-  Pieces, GObjBase, GObjects, Graphics, Devices, XmlOut;
+uses
+{$IFDEF USE_FMX}
+FMX.Graphics, System.UITypes,
+{$ELSE}
+Graphics,
+{$ENDIF}
+Classes, SysUtils, StrUtils, Math, Geometry, Drawings,
+  Pieces, GObjBase, GObjects, Devices, XmlOut;
 
 type
 
@@ -54,8 +60,10 @@ type
       const LineColor: TColor;
       const FaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
+      {$IFNDEF USE_FMX}
     procedure Bitmap(P: TPoint2D; W, H: TRealType;
       const KeepAspectRatio: Boolean; BitmapEntry: TObject);
+         {$ENDIF}
     procedure StartGroup;
     procedure FinishGroup;
     procedure GenPath(const GP: TGenericPath;
@@ -77,7 +85,11 @@ type
 
 implementation
 
-uses ColorEtc, Bitmaps, SysBasic;
+uses
+{$IFNDEF USE_FMX}
+Bitmaps,
+{$ENDIF}
+ColorEtc, SysBasic;
 
 function GetPattID(Hatching: THatching;
   HatchColor, FillColor: TColor): string;
@@ -120,7 +132,7 @@ begin
   OnRect := Rect;
   OnCircular := Circular;
   OnRotText := RotText;
-  OnBitmap := Bitmap;
+  {$IFNDEF USE_FMX}OnBitmap := Bitmap;  {$ENDIF}
   OnGenPath := GenPath;
   OnStartGroup := StartGroup;
   OnFinishGroup := FinishGroup;
@@ -255,9 +267,9 @@ procedure TSvgDevice.RegisterPatterns;
         end;
         TmpObj := Objects.NextObj;
         Inc(I);
-        if I mod 100 = 0 then ShowProgress(I / Objects.Count);
+        {$IFNDEF USE_FMX}if I mod 100 = 0 then ShowProgress(I / Objects.Count);{$ENDIF}
       except
-        MessageBoxError(TmpObj.ClassName);
+        {$IFNDEF USE_FMX}MessageBoxError(TmpObj.ClassName);{$ENDIF}
       end;
     end;
   end;
@@ -550,10 +562,12 @@ var
       AddFont := ', monospace';
     if FaceName <> 'Symbol' then
       fXML.AddAttribute('font-family', FaceName + AddFont);
+    {$IFNDEF USE_FMX}
     if fsBold in Style then
       fXML.AddAttribute('font-weight', 'bold');
     if fsItalic in Style then
       fXML.AddAttribute('font-style', 'italic');
+    {$ENDIF}
     if FaceName = 'Symbol' then
       fXML.AddAttribute('font-family', 'serif');
         //Times New Roman, Times,
@@ -691,6 +705,7 @@ begin
   fXML.CloseTag;
 end;
 
+{$IFNDEF USE_FMX}
 procedure TSvgDevice.Bitmap(P: TPoint2D; W, H: TRealType;
   const KeepAspectRatio: Boolean; BitmapEntry: TObject);
 var
@@ -724,6 +739,7 @@ begin
     fXML.AddAttribute('preserveAspectRatio', 'none');
   fXML.CloseTag;
 end;
+{$ENDIF}
 
 procedure TSvgDevice.StartGroup;
 begin

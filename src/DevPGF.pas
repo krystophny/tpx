@@ -2,7 +2,13 @@ unit DevPGF;
 
 interface
 
-uses SysUtils, Geometry, Graphics, Devices;
+uses
+{$IFDEF USE_FMX}
+FMX.Graphics, System.UITypes,
+{$ELSE}
+Graphics,
+{$ENDIF}
+SysUtils, Geometry, Devices;
 
 type
 
@@ -62,8 +68,10 @@ type
       const LineColor: TColor;
       const FaceName: AnsiString;
       const Charset: TFontCharSet; const Style: TFontStyles);
+    {$IFNDEF USE_FMX}
     procedure Bitmap(P: TPoint2D; W, H: TRealType;
       const KeepAspectRatio: Boolean; BitmapEntry: TObject);
+    {$ENDIF}
   public
     DvipsFixBB: Boolean;
     FontSizeInTeX: Boolean;
@@ -79,7 +87,11 @@ type
 
 implementation
 
-uses ColorEtc, Output, Bitmaps;
+uses
+{$IFNDEF USE_FMX}
+Bitmaps,
+{$ENDIF}
+ColorEtc, Output;
 
 // =====================================================================
 // T_PGF_Device
@@ -93,7 +105,7 @@ begin
   OnCircle := Circle;
   OnRotEllipse := RotEllipse;
   OnRotText := RotText;
-  OnBitmap := Bitmap;
+  {$IFNDEF USE_FMX}OnBitmap := Bitmap;{$ENDIF}
   fHasBezier := True;
   fHasClosedBezier := True;
   fHasArc := True;
@@ -383,6 +395,7 @@ begin
       HAlignment, Style, WideText, TeXText, FontSizeInTeX)]));
 end;
 
+{$IFNDEF USE_FMX}
 procedure T_PGF_Device.Bitmap(P: TPoint2D; W, H: TRealType;
   const KeepAspectRatio: Boolean; BitmapEntry: TObject);
 var
@@ -400,6 +413,7 @@ begin
     W / fFactorMM, H / fFactorMM, KeepAspectRatio,
     IncludePath) + '};');
 end;
+{$ENDIF USE_FMX}
 
 end.
 

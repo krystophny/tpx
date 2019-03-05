@@ -2,7 +2,13 @@ unit Devices;
 
 interface
 
-uses SysUtils, Classes, Graphics, Geometry;
+uses
+{$IFNDEF USE_FMX}
+Graphics,
+{$ELSE}
+FMX.Graphics, System.UITypes,
+{$ENDIF}
+SysUtils, Classes, Geometry;
 
 {$I tpx.inc}
 
@@ -11,6 +17,10 @@ const
   DRAWMODE_OutlineOnly = 64;
 
 type
+{$IFDEF NEXTGEN}
+AnsiString = String;
+WideString = String;
+{$ENDIF NEXTGEN}
 
   TLineStyle = (liNone, liSolid, liDotted, liDashed);
 
@@ -256,7 +266,13 @@ function FF_N(const X: TRealType; const Prec: Integer): string;
 
 implementation
 
-uses Drawings, GObjects, SysBasic, Preview, Pieces;
+uses
+{$IFDEF FPC}
+Preview,
+{$ELSE}
+ColorEtc,
+{$ENDIF}
+Drawings, GObjects, SysBasic, Pieces;
 
 function FF_N(const X: TRealType; const Prec: Integer): string;
 begin

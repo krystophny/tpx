@@ -1,4 +1,4 @@
-unit GObjects;
+﻿unit GObjects;
 
 // This unit comprises classes which represent drawing objects.
 
@@ -6,12 +6,17 @@ interface
 
 uses Types, SysUtils, Classes,
 {$IFDEF FPC}
-  LCLIntf, LCLType, LMessages, LCLProc, LazBasic
+  LCLIntf, LCLType, LMessages, LCLProc, LazBasic, Bitmaps,
 {$ELSE}
-  Windows, WinBasic
+  FMX.Graphics, System.UITypes,
+{$IFNDEF NEXTGEN}
+Windows,
+{$ELSE}
+
 {$ENDIF}
-  , Graphics, Drawings, Geometry, Contnrs,
-  Pieces, Devices, GObjBase, Bitmaps;
+{$ENDIF}
+  Drawings, Geometry,
+  Pieces, Devices, GObjBase;
 
 type
 
@@ -58,7 +63,7 @@ type
     arrO, arrOC, arrQQ);
 
 const
-  ArrowsIDs: array[0..52] of string[8] =
+  ArrowsIDs: array[0..52] of string =
   ('none', 'h40', 'h41', 'h42', 'h43', 'h44',
     'h45', 'h46', 'h47', 'h48', 't40', 't43', 't44', 't45',
     'h20', 'h21', 'h22', 'h23', 'h24', 't20', 't21', 't22', 't23',
@@ -317,7 +322,7 @@ type
     starFlower5, starFlower4, starStar4Arc, starMaltese);
 
 const
-  StarsIDs: array[0..14] of string[8] =
+  StarsIDs: array[0..14] of string =
   ('circle', 'square', 'diamond', 'triup', 'tridown',
     'penta', 'star4', 'star5', 'star6', 'cross', 'dcross',
     'flower5', 'flower4', 'star4arc', 'maltese');
@@ -678,7 +683,7 @@ type
     symCloud1, symSplash1, symSnowFlake1);
 
 const
-  SymbolsIDs: array[0..28] of string[15] =
+  SymbolsIDs: array[0..28] of string =
   ('process', 'decision', 'input-output',
     'preparation', 'punch-card', 'manual-op', 'keyboard',
     'punch-tape', 'document',
@@ -723,7 +728,7 @@ type
       fVAlignment write SetVAlignment;
   end;
 
-
+  {$IFDEF FPC}
   {: This class rapresents a scalable raster bitmap.}
   TBitmap2D = class(TPrimitive2D)
   protected
@@ -755,6 +760,7 @@ type
     property KeepAspectRatio: Boolean read fKeepAspectRatio
       write fKeepAspectRatio;
   end;
+  {$ENDIF}
 
 // Graphical object for generic path
 // It takes its shape from a list of child objects
@@ -798,17 +804,21 @@ const
   MAX_REGISTERED_FONTS = 512;
 
 const
-  GraphicObjectClasses: array[1..17] of TGraphicObjectClass
+  GraphicObjectClasses: array[1..{$IFDEF FPC}17{$ELSE}16{$ENDIF}] of TGraphicObjectClass
   = (TLine2D, TCircle2D, TRectangle2D, TEllipse2D,
     TArc2D, TSector2D, TSegment2D,
     TPolyline2D, TPolygon2D, TSmoothPath2D, TClosedSmoothPath2D,
     TBezierPath2D, TClosedBezierPath2D,
-    TText2D, TBitmap2D,
+    TText2D, {$IFDEF FPC}TBitmap2D,{$ENDIF}
     TStar2D, TSymbol2D);
 
 implementation
 
-uses Math, Dialogs;
+uses
+{$IFDEF FPC}
+Dialogs,
+{$ENDIF}
+Math;
 
 function GetLineStyleString(const LineStyle: TLineStyle): string;
 begin
@@ -3858,7 +3868,7 @@ begin
   fTeXText := '';
   fRot := 0;
   Font := TFont.Create;
-  Font.Name := ' ';
+  {$IFDEF FPC}Font.Name := ' ';{$ENDIF}
   fPoints.GrowingEnabled := False;
 end;
 
@@ -3894,9 +3904,9 @@ end;
 
 function TText2D.GetFaceName: string;
 begin
-  if Assigned(Font) and (Font.Name <> ' ') then
+  {$IFDEF FPC}if Assigned(Font) and (Font.Name <> ' ') then
     Result := Font.Name
-  else if Assigned(ParentDrawing)
+  else {$ENDIF}if Assigned(ParentDrawing)
     and ((ParentDrawing as TDrawing2D).FontName <> '') then
     Result := (ParentDrawing as TDrawing2D).FontName
   else if FontName_Default <> '' then
@@ -3907,7 +3917,7 @@ end;
 
 function TText2D.GetStyle: TFontStyles;
 begin
-  if Assigned(Font) and (Font.Name <> ' ') then
+  if Assigned(Font){$IFDEF FPC} and (Font.Name <> ' ') {$ENDIF} then
     Result := Font.Style
   else
     Result := [];
@@ -3915,10 +3925,15 @@ end;
 
 function TText2D.GetCharset: TFontCharSet;
 begin
-  if Assigned(Font) and (Font.Name <> ' ') then
+  {$IFDEF FPC} if Assigned(Font) and (Font.Name <> ' ') then
     Result := Font.Charset
-  else
+  else)
+  {$ENDIF}
+  {$IFNDEF NEXTGEN}
     Result := DEFAULT_CHARSET;
+  {$ELSE}
+    Result := 1;
+  {$ENDIF}
 end;
 
 constructor TText2D.CreateFromStream(const Stream: TStream);
@@ -3941,13 +3956,13 @@ begin
   Stream.Read(TmpInt, SizeOf(TmpInt));
   SetString(TmpSt, nil, TmpInt);
   Stream.Read(Pointer(TmpSt)^, TmpInt);
-  Font.Name := TmpSt;
+  {$IFDEF FPC}Font.Name := TmpSt;
   Stream.Read(TmpInt, SizeOf(TmpInt));
   if TmpInt = 1 then Font.Style := Font.Style + [fsItalic];
   Stream.Read(TmpInt, SizeOf(TmpInt));
   if TmpInt = 1 then Font.Style := Font.Style + [fsBold];
   Stream.Read(TmpInt, SizeOf(TmpInt));
-  Font.Charset := TmpInt;
+  Font.Charset := TmpInt;{$ENDIF}
 end;
 
 procedure TText2D.SaveToStream(const Stream: TStream);
@@ -3966,7 +3981,7 @@ begin
   Stream.Write(fHeight, SizeOf(fHeight));
   Stream.Write(fRot, SizeOf(fRot));
   Stream.Write(fHAlignment, SizeOf(fHAlignment));
-  TmpInt := Length(Font.Name);
+  {$IFDEF FPC}TmpInt := Length(Font.Name);
   Stream.Write(TmpInt, SizeOf(TmpInt));
   TmpSt := Font.Name;
   Stream.Write(Pointer(TmpSt)^, TmpInt);
@@ -3975,7 +3990,7 @@ begin
   TmpInt := Integer(fsBold in Font.Style);
   Stream.Write(TmpInt, SizeOf(TmpInt));
   TmpInt := Font.Charset;
-  Stream.Write(TmpInt, SizeOf(TmpInt));
+  Stream.Write(TmpInt, SizeOf(TmpInt));{$ENDIF}
 end;
 
 procedure TText2D.Assign(const Obj: TGraphicObject);
@@ -4335,7 +4350,7 @@ end;
 // =====================================================================
 // TBitmap2D
 // =====================================================================
-
+{$IFDEF FPC}
 class function TBitmap2D.GetName: string;
 begin
   Result := 'Bitmap';
@@ -4532,6 +4547,7 @@ begin
   fPoints[2] := ShiftPoint(fPoints[0], V2D(W, H));
   fPoints[3] := ShiftPoint(fPoints[0], V2D(W, 0));
 end;
+{$ENDIF}
 
 // =====================================================================
 // TCompound2D

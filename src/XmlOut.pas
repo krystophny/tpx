@@ -2,7 +2,13 @@ unit XmlOut;
 
 interface
 
-uses Classes, StrUtils, Contnrs;
+uses
+{$IFNDEF NEXTGEN}
+Contnrs,
+{$ELSE NEXTGEN}
+System.Generics.Collections,
+{$ENDIF NEXTGEN}
+Classes, StrUtils;
 
 // A class for generating simple XML files
 
@@ -18,7 +24,11 @@ type
     fStream: TStream;
     fIndentStep: Integer;
     fIndent: Integer;
+{$IFNDEF NEXTGEN}
     fElStack: TObjectStack;
+{$ELSE NEXTGEN}
+    fElStack: TStack<TXmlElData>;
+{$ENDIF NEXTGEN}
     fExpectEOL: Boolean;
     fPreserveSpace: Boolean;
     procedure Write(const Data: string);
@@ -62,7 +72,11 @@ begin
   fIndentStep := 2;
   fIndent := 0;
   fExpectEOL := False;
+{$IFNDEF NEXTGEN}
   fElStack := TObjectStack.Create;
+{$ELSE NEXTGEN}
+  fElStack := TStack<TXmlElData>.Create;
+{$ENDIF NEXTGEN}
   fPreserveSpace := False;
   fStream := nil;
 end;
@@ -86,7 +100,11 @@ begin
   fStream := AStream;
   fIndent := Indent;
   fElStack.Free;
+{$IFNDEF NEXTGEN}
   fElStack := TObjectStack.Create;
+{$ELSE NEXTGEN}
+  fElStack := TStack<TXmlElData>.Create;
+{$ENDIF NEXTGEN}
 end;
 
 procedure TXmlOutput.DataAdded;

@@ -1,7 +1,13 @@
 unit MiscUtils;
 
 interface
-uses Classes, SysUtils, StrUtils, TypInfo, Variants, Graphics;
+uses
+{$IFNDEF USE_FMX}
+Graphics,
+{$ELSE}
+FMX.Graphics,
+{$ENDIF}
+Classes, SysUtils, StrUtils, TypInfo, Variants;
 
 function CSV_Item(const CSV: string; const I: Integer): string;
 function CSV_Find(const CSV: string; const ID: string): Integer;
@@ -9,8 +15,10 @@ procedure ParseCmdLine(const CmdLine: string; OptList:
   TStringList);
 function XmlReplaceChars(const St: string): string;
 function XmlUnReplaceChars(const St: string): string;
+{$IFNDEF NEXTGEN}
 procedure StoreObjectProp(Obj: TPersistent; Data: TStrings);
 procedure LoadObjectProp(Obj: TPersistent; Data: TStrings);
+{$ENDIF NEXTGEN}
 
 type
 
@@ -369,6 +377,38 @@ begin
   fLen := Length(pSource^);
 end;
 
+// from https://gist.github.com/jpluimers/6397795#file-getshortstringstring-pas
+function GetShortStringString(const ShortStringPointer: PByte): string;
+var
+  ShortStringLength: Byte;
+  FirstShortStringCharacter: MarshaledAString;
+  ConvertedLength: Cardinal;
+  UnicodeCharacters: array[Byte] of Char; // cannot be more than 255 characters, reserve 1 character for terminating null
+begin
+  if not Assigned(ShortStringPointer) then
+    Result := ''
+  else
+  begin
+    ShortStringLength := ShortStringPointer^;
+    if ShortStringLength = 0 then
+      Result := ''
+    else
+    begin
+      FirstShortStringCharacter := MarshaledAString(ShortStringPointer+1);
+      ConvertedLength := UTF8ToUnicode(
+          UnicodeCharacters,
+          Length(UnicodeCharacters),
+          FirstShortStringCharacter,
+          ShortStringLength
+        );
+      // UTF8ToUnicode will always include the null terminator character in the Result:
+      ConvertedLength := ConvertedLength-1;
+      SetString(Result, UnicodeCharacters, ConvertedLength);
+    end;
+  end;
+end;
+
+{$IFNDEF NEXTGEN}
 procedure StoreObjectProp(Obj: TPersistent; Data: TStrings);
 var
   I, NProp: Integer;
@@ -431,10 +471,13 @@ begin
   //Data.Values['Name'] := 'Arial';
   LoadObjectProp(Font, Data);
   StoreObjectProp(Font, Data);
+{$IFDEF FPC}
   MessageBoxInfo(Trim(Data.Text));
+{$ENDIF}
   Data.Free;
   Font.Free;
 end;
+{$ENDIF NEXTGEN}
 
 
 initialization

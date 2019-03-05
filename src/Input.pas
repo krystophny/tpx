@@ -2,12 +2,21 @@ unit Input;
 
 interface
 
-uses Types, SysUtils, Classes, Graphics, Contnrs,
-  Drawings, GObjBase, GObjects,
-{$IFDEF VER140}
-  Variants,
+uses
+
+{$IFNDEF USE_FMX}
+Graphics,
+{$ELSE}
+FMX.Graphics, System.UITypes,
 {$ENDIF}
-  XUtils, XXmlDom, Geometry, Devices;
+{$IFNDEF NEXTGEN}
+Contnrs,
+{$ELSE NEXTGEN}
+System.Generics.Collections,
+{$ENDIF NEXTGEN}
+Types, SysUtils, Classes,
+Drawings, GObjBase, GObjects,
+XUtils, XXmlDom, Geometry, Devices;
 
 {$I tpx.inc}
 
@@ -47,7 +56,9 @@ type
     function ReadPolyline(XMLNode: TXMLDElement): TPrimitive2D;
     function ReadStar(XMLNode: TXMLDElement): TStar2D;
     function ReadSymbol(XMLNode: TXMLDElement): TSymbol2D;
+    {$IFDEF FPC}
     function ReadBitmap(XMLNode: TXMLDElement): TBitmap2D;
+    {$ENDIF}
     function ReadGroup(XMLNode: TXMLDElement): TGroup2D;
     function ReadCompound(XMLNode: TXMLDElement): TCompound2D;
     function ReadEntity(XMLNode: TXMLDElement): TObject2D;
@@ -70,7 +81,11 @@ type
     fCurrObj: TObject2D;
     fStream: TStream;
     fMainList, fCurrentList: TGraphicObjList;
+    {$IFNDEF NEXTGEN}
     fObjLists: TObjectStack;
+    {$ELSE NEXTGEN}
+    fObjLists: TStack<TObject>;
+    {$ENDIF NEXTGEN}
     function GetPrim(var Obj: TObject2D): Boolean;
     function GetGroup(var Obj: TObject2D): Boolean;
     function AddObj(
@@ -144,6 +159,7 @@ type
 
 procedure FillPoints(Primitive: TPrimitive2D;
   const Text: string; Pnts: TPointsSet2D);
+{$IFNDEF USE_FMX}
 procedure Import_Metafile(const Drawing: TDrawing2D;
   const MF_FileName: string;
   Lines: TStrings);
@@ -151,6 +167,7 @@ procedure Import_MetafileFromStream(const Drawing: TDrawing2D;
   const Stream: TStream; const IsOld: Boolean);
 procedure Import_Eps(const Drawing: TDrawing2D;
   const InputFileName: string);
+{$ENDIF}
 
 var
 {$IFNDEF LINUX}PsToEditPath: string = 'pstoedit.exe';
@@ -159,8 +176,12 @@ var
 
 implementation
 
-uses Math, Forms, StrUtils, ColorEtc, Output, SysBasic,
-  ClpbrdOp, MiscUtils, MprtEMF, Modify;
+uses
+{$IFNDEF USE_FMX}
+ClpbrdOp, MprtEMF,
+{$ENDIF}
+Math, StrUtils, ColorEtc, Output, SysBasic,
+  MiscUtils, Modify;
 
 { --================ T_TpX_Loader ==================-- }
 
@@ -206,13 +227,13 @@ begin
   else Obj.Hatching := haNone;
   if XMLNode.AttributeNode['lc'] <> nil then
     Obj.LineColor := HtmlToColor(XMLNode.AttributeValue['lc'])
-  else Obj.LineColor := Graphics.clDefault;
+  else Obj.LineColor := clDefault;
   if XMLNode.AttributeNode['hc'] <> nil then
     Obj.HatchColor := HtmlToColor(XMLNode.AttributeValue['hc'])
-  else Obj.HatchColor := Graphics.clDefault;
+  else Obj.HatchColor := clDefault;
   if XMLNode.AttributeNode['fill'] <> nil then
     Obj.FillColor := HtmlToColor(XMLNode.AttributeValue['fill'])
-  else Obj.FillColor := Graphics.clDefault;
+  else Obj.FillColor := clDefault;
 end;
 
 procedure T_TpX_Loader.ReadArrows(XMLNode: TXMLDElement;
@@ -362,6 +383,7 @@ var
     if XMLNodeF = nil then Exit;
     if XMLNodeF.TagName <> 'font' then Exit;
     Font := (Result as TText2D).Font;
+    {$IFDEF FPC}
     if XMLNodeF.AttributeNode['face'] <> nil then
       Font.Name := XMLNodeF.AttributeValueSt['face'];
     if XMLNodeF.AttributeNode['bf'] <> nil then
@@ -372,6 +394,7 @@ var
         then Font.Style := Font.Style + [fsItalic];
     if XMLNodeF.AttributeNode['charset'] <> nil then
       Font.Charset := XMLNodeF.AttributeValue['charset'];
+    {$ENDIF}
     {Data := TStringList.Create;
     try
       for I := 0 to XMLNodeF.Attributes.Count - 1 do
@@ -668,6 +691,7 @@ begin
   ReadPrimitiveAttr(Result, XMLNode);
 end;
 
+{$IFDEF FPC}
 function T_TpX_Loader.ReadBitmap(XMLNode: TXMLDElement): TBitmap2D;
 var
   X, Y, W, H: Single;
@@ -686,6 +710,7 @@ begin
       XMLNode.AttributeValue['keepaspectratio'] <> '0';
   end
 end;
+{$ENDIF}
 
 function T_TpX_Loader.ReadGroup(XMLNode: TXMLDElement): TGroup2D;
 begin
@@ -728,7 +753,7 @@ begin
     then Result := ReadPolyline(XMLNode)
   else if ID = 'star' then Result := ReadStar(XMLNode)
   else if ID = 'symbol' then Result := ReadSymbol(XMLNode)
-  else if ID = 'bitmap' then Result := ReadBitmap(XMLNode)
+  {$IFDEF FPC}else if ID = 'bitmap' then Result := ReadBitmap(XMLNode){$ENDIF}
   else if ID = 'group' then Result := ReadGroup(XMLNode)
   else if ID = 'compound' then Result := ReadCompound(XMLNode)
   else Result := nil;
@@ -799,10 +824,12 @@ begin
   with fXML.DocumentElement do
   begin
     fVersion := AttributeValue['v'];
+    {$IFNDEF USE_FMX}
     if fVersion > TpX_Format_Version then
       MessageBoxError(Format(
         'TpX file version (%d) is newer then TpX program can handle.' +
         ' Please, update the program', [fVersion]));
+    {$ENDIF}
     if AttributeNode['TeXFormat'] <> nil then
       fDrawing2D.TeXFormat :=
         TeXFormatKind(StringToChoice(TeXFormat_Choice,
@@ -936,8 +963,10 @@ begin
       Tmp := ReadEntity(Child as TXMLDElement);
     if Assigned(Tmp) then
       Objects.Add(Tmp);
+    {$IFNDEF USE_FMX}
     if I mod 100 = 0 then
       ShowProgress(I / fXML.DocumentElement.ChildNodes.Count);
+    {$ENDIF}
   end;
 end;
 
@@ -1019,7 +1048,7 @@ begin
   fStream := TMemoryStream.Create;
   try
     fStream.Position := 0;
-    GetStreamFromClipboardAsText(fStream);
+    {$IFNDEF USE_FMX}GetStreamFromClipboardAsText(fStream);{$ENDIF}
     LoadFromStream;
   //fXML.LoadXML('<TpX><line/></TpX>');
     ReadAll;
@@ -1036,8 +1065,10 @@ begin
   try
     fStream.Position := 0;
     LoadFromStream;
+    {$IFNDEF USE_FMX}
     if Assigned(fDrawing2D) then
       fDrawing2D.FileName := FileName;
+    {$ENDIF}
     ReadAll;
   finally
     fStream.Free;
@@ -1055,7 +1086,11 @@ begin
   fMainList := TGraphicObjList.Create;
   fMainList.FreeOnDelete := False;
   fCurrentList := fMainList;
+  {$IFNDEF NEXTGEN}
   fObjLists := TObjectStack.Create;
+  {$ELSE NEXTGEN}
+  fObjLists := TStack<TObject>.Create;
+  {$ENDIF NEXTGEN}
 end;
 
 destructor T_Import.Destroy;
@@ -1403,7 +1438,7 @@ procedure T_Import.Scale_LineWidth(const Scale: TRealType);
 begin
   _Scale_LineWidth(fMainList);
 end;
-
+{$IFNDEF USE_FMX}
 {===================== Import functions ===}
 
 procedure Import_Metafile(const Drawing: TDrawing2D;
@@ -1469,7 +1504,7 @@ begin
       TempFile, PsToEditFormat]), '', '',
         TempDir, True, True);
     if not FileExists(TempFile) then
-      MessageBoxError('PsToEdit file not created')
+      {$IFDEF FPC}MessageBoxError('PsToEdit file not created'){$ENDIF}
     else
     begin
       if Ext = 'emf' then
@@ -1482,6 +1517,6 @@ begin
     TryDeleteFile(TempFile);
   end;
 end;
-
+{$ENDIF}
 end.
 

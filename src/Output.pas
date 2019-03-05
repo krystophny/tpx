@@ -2,12 +2,22 @@ unit Output;
 
 interface
 
-uses SysUtils, Classes, Contnrs, Graphics, Drawings,
-  GObjBase, GObjects,
-{$IFDEF VER140}
-  Gr32, Gr32_Polygons, WinBasic,
+uses
+
+{$IFDEF FPC}
+Graphics,
+{$ELSE}
+FMX.Graphics, System.UITypes,
 {$ENDIF}
-  Geometry, Pieces, Devices;
+{$IFNDEF NEXTGEN}
+Contnrs,
+{$ENDIF NEXTGEN}
+SysUtils, Classes, Drawings,
+GObjBase, GObjects,
+{$IFDEF VER140}
+Gr32, Gr32_Polygons, WinBasic,
+{$ENDIF}
+Geometry, Pieces, Devices;
 
 type
 
@@ -61,7 +71,7 @@ type
       abstract;
     procedure WriteStar2D(Obj: TStar2D); virtual;
     procedure WriteSymbol2D(Obj: TSymbol2D); virtual;
-    procedure WriteBitmap2D(Obj: TBitmap2D); virtual;
+    {$IFDEF FPC}procedure WriteBitmap2D(Obj: TBitmap2D); virtual;{$ENDIF}
     procedure WriteGroup2D(Obj: TGroup2D); virtual;
     procedure StartGroup2D(Obj: TGroup2D); virtual;
     procedure FinishGroup2D(Obj: TGroup2D); virtual;
@@ -169,14 +179,13 @@ type
   public
     constructor Create(Drawing: TDrawing2D); override;
   end;
-
+{$IFNDEF USE_FMX}
   T_EpsToPdf_Export = class(T_PostScript_Export)
   public
     constructor Create(Drawing: TDrawing2D); override;
     function StoreToFile(const FileName: string): Boolean;
       override;
   end;
-
   T_EpsToPdf_Light_Export = class(T_EpsToPdf_Export)
   // uses "light" Postscript (without text):
   protected
@@ -268,6 +277,7 @@ type
   end;
 {$ENDIF}
 
+{$ENDIF}
 {$I tpx.inc}
 
 type
@@ -287,15 +297,19 @@ function StoreToFile_TpX0(const Drawing: TDrawing2D;
 function StoreToFile_TpX(const Drawing: TDrawing2D;
   const FileName: string;
   const DvipsFixBB: Boolean): Boolean;
+{$IFNDEF USE_FMX}
 function StoreToFile_MPS(const Drawing: TDrawing2D;
   const FileName: string): Boolean;
 procedure StoreToFile_LaTeX_EPS(const Drawing: TDrawing2D;
   const FileName: string);
 procedure StoreToFile_LaTeX_PDF(const Drawing: TDrawing2D;
   const FileName: string);
+{$ENDIF}
 procedure LaTeX_Custom_Parse(var Device, Ext, Ext2: string);
+{$IFNDEF USE_FMX}
 procedure StoreToFile_LaTeX_Custom(const Drawing: TDrawing2D;
   const FileName: string);
+{$ENDIF}
 procedure SetOutputFormats(const OutputFormats: string;
   ADrawing: TDrawing2D);
 function CheckCommandLine: Boolean;
@@ -337,13 +351,15 @@ var
 
 implementation
 
-uses Math, StrUtils, ColorEtc, Preview,
-  Settings0, Input, SysBasic,
+uses Math, StrUtils, ColorEtc,
 {$IFDEF VER140}
   Gr32Add, DevGr32,
 {$ENDIF}
-  MiscUtils, DevPGF, DevTeXPc, TpXSaver,
-  DevCanvas, DevSVG, DevTikZ, DevPS, DevPDF, DevPSTr, DevMP;
+{$IFNDEF USE_FMX}
+Preview, SysBasic,DevPDF, DevPSTr, DevMP,
+{$ENDIF}
+  Settings0, Input, MiscUtils, DevPGF, DevTeXPc, TpXSaver,
+  DevSVG, DevTikZ, DevPS;
 
 function GetColor(C, Default: TColor): TColor;
 begin
@@ -522,11 +538,15 @@ begin
     try
       WriteEntity(Obj as TObject2D);
       Inc(I);
+      {$IFDEF FPC}
       if I mod 100 = 0 then
         ShowProgress(I / ObjList.Count);
+      {$ENDIF}
     except
+      {$IFDEF FPC}
       if not HasError then
         MessageBoxError(Obj.ClassName);
+      {$ENDIF}
       HasError := True;
     end;
     Obj := ObjList.NextObj;
@@ -584,10 +604,12 @@ begin
   begin
     WriteText2D(Obj as TText2D);
   end
+  {$IFDEF FPC}
   else if Obj is TBitmap2D then
   begin
     WriteBitmap2D(Obj as TBitmap2D);
   end
+  {$ENDIF}
   else if Obj is TGroup2D then
   begin
     WriteGroup2D(Obj as TGroup2D);
@@ -632,10 +654,12 @@ begin
   WritePieces(Obj);
 end;
 
+{$IFDEF FPC}
 procedure TDrawingSaver.WriteBitmap2D(Obj: TBitmap2D);
 begin
   WritePieces(Obj);
 end;
+{$ENDIF}
 
 procedure TDrawingSaver.WriteGroup2D(Obj: TGroup2D);
 // Use recursion for groups
@@ -726,10 +750,12 @@ begin
   if LineColor <> clDefault then
     Result := GetTeXTextFontColor(LineColor) + '{' + Result + '}';
       //\strut
+{$IFNDEF USE_FMX}
   if fsBold in Style then
     Result := '\textbf{' + Result + '}';
   if fsItalic in Style then
     Result := '\textit{' + Result + '}';
+{$ENDIF}
 //  Result := '\fboxsep0pt\framebox{' + Result + '}';
 end;
 
@@ -911,6 +937,7 @@ begin
       StoreToFile_Saver(Drawing,
         FileName, T_BMP_Export);
 {$ENDIF}
+{$IFNDEF USE_FMX}
     export_PDF:
       StoreToFile_Saver(Drawing,
         FileName, T_PDF_Export);
@@ -933,6 +960,7 @@ begin
       StoreToFile_PreviewSource(Drawing, FileName, ltxview_Dvi);
     export_pdflatexsrc:
       StoreToFile_PreviewSource(Drawing, FileName, ltxview_Pdf);
+{$ENDIF}
   end;
 end;
 
@@ -1096,12 +1124,16 @@ begin
   case Drawing.TeXFormat of
     tex_pgf:
       AClass_TeX := T_PGF_Export;
+{$IFNDEF USE_FMX}
     tex_pstricks:
       AClass_TeX := T_PSTricks_Export;
+{$ENDIF}
     tex_eps:
       AClass_TeX := T_PostScript_Light_Export;
+{$IFNDEF USE_FMX}
     tex_metapost:
       AClass_TeX := T_MetaPost_Export;
+{$ENDIF}
     tex_tikz:
       AClass_TeX := T_TikZ_Export;
 {$IFDEF VER140}
@@ -1120,18 +1152,24 @@ begin
   case Drawing.PdfTeXFormat of
     pdftex_pgf:
       AClass_PdfTeX := T_PGF_Export;
+{$IFNDEF USE_FMX}
     pdftex_pdf:
       AClass_PdfTeX := T_PDF_Light_Export;
+{$ENDIF}
 {$IFDEF VER140}
     pdftex_png:
       AClass_PdfTeX := T_PNG_Export;
 {$ENDIF}
+{$IFNDEF USE_FMX}
     pdftex_metapost:
       AClass_PdfTeX := T_MetaPost_Export;
+{$ENDIF}
     pdftex_tikz:
       AClass_PdfTeX := T_TikZ_Export;
+{$IFNDEF USE_FMX}
     pdftex_epstopdf:
       AClass_PdfTeX := T_EpsToPdf_Light_Export;
+{$ENDIF}
     pdftex_none:
       AClass_PdfTeX := T_None_Saver;
   else
@@ -1451,10 +1489,12 @@ var
   EpsFileName: string;
 begin
   fStream := nil;
+{$IFNDEF USE_FMX}
   if (Self is T_EpsToPdf_Export) or
     (Self is T_EpsToPdf_Light_Export) then
     EpsFileName := ChangeFileExt(FileName, '.pdf')
   else
+{$ENDIF}
     EpsFileName := ChangeFileExt(FileName, '.eps');
   if not StoreToFile(EpsFileName) then Exit;
   fStream := Stream;
@@ -1489,6 +1529,7 @@ end;
 
 { --================ T_EpsToPdf_Export ==================-- }
 
+{$IFNDEF USE_FMX}
 function Run_EpsToPdf(
   const EpsFileName, PdfFileName: string): Boolean;
 begin
@@ -1752,6 +1793,7 @@ begin
   inherited Create(Drawing);
   (fDevice as TPdfDevice).Light := True;
 end;
+{$ENDIF}
 
 {$IFDEF VER140}
 
@@ -2009,6 +2051,7 @@ begin
 end;
 {$ENDIF}
 
+{$IFNDEF USE_FMX}
 function StoreToFile_LaTeX_EPS0(const Drawing: TDrawing2D;
   out TempEPS: string): Boolean;
 var
@@ -2098,11 +2141,12 @@ begin
   Run_EpsToPdf(TempEPS, FileName);
   TryDeleteFile(TempEPS);
 end;
+{$ENDIF}
 
 procedure LaTeX_Custom_Parse(var Device, Ext, Ext2:
   string);
 const
-  Devices: array[1..47] of string[8] =
+  Devices: array[1..47] of string =
   ('bmp16', 'bmp16m', 'bmp256', 'bmp32b', 'bmpgray',
     'bmpmono',
     'bmpsep1', 'bmpsep8', 'psdcmyk', 'psdrgb',
@@ -2118,7 +2162,7 @@ const
     'tiffg3',
     'tiffg4', 'tiffgray', 'tifflzw', 'tiffpack',
     'tiffsep');
-  Extensions: array[1..13] of string[4] =
+  Extensions: array[1..13] of string =
   ('bmp', 'psd', 'eps', 'jpeg', 'pbm', 'pcx',
     'pdf', 'pgm', 'pgnm', 'png', 'pnm', 'ps', 'tiff');
 var
@@ -2146,6 +2190,7 @@ begin
   end;
 end;
 
+{$IFNDEF USE_FMX}
 procedure StoreToFile_LaTeX_Custom(
   const Drawing: TDrawing2D; const FileName: string);
 var
@@ -2157,6 +2202,7 @@ begin
     FileName);
   //TryDeleteFile(TempEPS);
 end;
+{$ENDIF}
 
 
 procedure ParseParameters0(out FileName, IncludePath,
@@ -2169,7 +2215,7 @@ var
 const
   ShortOpt: array[1..6] of Char =
   ('f', 'i', 'l', 'o', 'm', 'x');
-  LongOpt: array[1..6] of ShortString =
+  LongOpt: array[1..6] of string =
   ('file', 'texinput', 'texline', 'output', 'format',
     'export');
 begin
@@ -2182,7 +2228,9 @@ begin
   TeXFileName := '';
   OptList := TStringList.Create;
   try
+  {$IFNDEF NEXTGEN}
     ParseCmdLine(System.CmdLine, OptList);
+  {$ENDIF}
     for I := 1 to High(ShortOpt) do
       if OptList.IndexOfName(LongOpt[I]) >= 0 then
         OptList[I] := ShortOpt[I] + '=' +
@@ -2198,8 +2246,10 @@ begin
       try
         LineNumber := StrToInt(OptList.Values['l']);
       except
+        {$IFNDEF USE_FMX}
         MessageBoxError('Line number: ' +
           OptList.Values['l']);
+        {$ENDIF}
       end
     end;
     if OptList.IndexOfName('o') >= 0 then
@@ -2274,12 +2324,14 @@ begin
   ADrawing.IncludePath := IncludePath;
   try
     Ext := LowerCase(ExtractFileExt(FileName));
+    {$IFNDEF USE_FMX}
     if (Ext = '.emf') or (Ext = '.wmf') then
       Import_Metafile(ADrawing, FileName, nil)
     else if (Ext = '.eps') or (Ext = '.ps') or (Ext =
       '.pdf') then
       Import_Eps(ADrawing, FileName)
     else
+    {$ENDIF}
     begin
       Loader := T_TpX_Loader.Create(ADrawing);
       try
@@ -2320,7 +2372,7 @@ begin
       if (OutputFile = '') or (OutputFile = '$Default') or
         (Ext = '') then
         OutputFile := ChangeFileExt(FileName, '.tpx');
-      ADrawing.FileName := OutputFile;
+      {$IFNDEF USE_FMX}ADrawing.FileName := OutputFile;{$ENDIF}
       StoreToFile_TpX(ADrawing, OutputFile, False);
     end;
   finally

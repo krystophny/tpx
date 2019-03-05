@@ -3,11 +3,17 @@ unit DevPDF;
 interface
 
 uses
+{$IFDEF USE_FMX}
+FMX.Graphics, System.UITypes,
+{$ELSE}
+Graphics,
 {$IFNDEF FPC}
 Jpeg,
 {$ENDIF}
+{$ENDIF}
+
 Classes, SysUtils, StrUtils, Geometry, Drawings, Math,
-  Pieces, GObjects, Graphics, Devices, PdfDoc;
+  Pieces, GObjects, Devices, PdfDoc;
 
 
 type
@@ -312,7 +318,7 @@ procedure TPdfDevice.Bitmap(P: TPoint2D; W, H: TRealType;
   const KeepAspectRatio: Boolean; BitmapEntry: TObject);
 var
   BE: TBitmapEntry;
-  Jpeg: TJPEGImage;
+  Jpeg: {$IFDEF USE_FMX}TBitmap{$ELSE}TJPEGImage{$ENDIF};
   ObjectName: string;
   function EscapeName(const Value: string): string;
   const EscapeChars =
@@ -341,7 +347,7 @@ begin
           CreatePdfImage(BE.Bitmap, 'Pdf-Bitmap'));
       bek_JPEG:
         begin
-          Jpeg := TJPEGImage.Create;
+          Jpeg := {$IFDEF USE_FMX}TBitmap{$ELSE}TJPEGImage{$ENDIF}.Create;
           try
             Jpeg.LoadFromFile(BE.GetFullLink);
             fPDF.AddXObject(ObjectName,

@@ -1,0 +1,62 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+	<Transactions>
+    <Transaction>1899.12.30 00:00:00.000.598,C:\Users\chral\Nextcloud\code\tpx_delphi\Unit1.pas=C:\Users\chral\Nextcloud\code\tpx_delphi\src\fmx\ViewPort.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.421,=C:\Users\chral\Nextcloud\code\tpx_delphi\Unit1.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.412,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\GObjBase.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.904,C:\Users\chral\Nextcloud\code\tpx_delphi\src\DevMP.pas=</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.164,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\DevTeXPc.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.262,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\Geometry.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.909,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\ColorEtc.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.662,C:\Users\chral\Nextcloud\code\tpx_delphi\src\DevPSTr.pas=</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.011,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\Manage.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.212,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\Pieces.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.182,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\DevPDF.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.779,C:\Users\chral\Nextcloud\code\tpx_delphi\src\DevPDF.pas=</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.154,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\DevPSTr.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.441,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\Preview.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.122,C:\Users\chral\Nextcloud\code\tpx_delphi\src\Preview.pas=</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.717,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\Preview.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.767,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\Options0.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.159,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\DevSVG.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.232,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\XmlOut.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.051,C:\Users\chral\Nextcloud\code\tpx_delphi\src\Preview.pas=</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.231,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\Settings0.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.420,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\SysBasic.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.176,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\DevMP.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.532,C:\Users\chral\Nextcloud\code\tpx_delphi\src\fmx\MainUnit.pas=C:\Users\chral\Documents\Embarcadero\Studio\Projekte\Unit1.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.893,C:\Users\chral\Nextcloud\code\tpx_delphi\TpX.dproj=C:\Users\chral\Documents\Embarcadero\Studio\Projekte\Project1.dproj</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.252,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\Input.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.170,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\DevTikZ.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.941,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\Bitmaps.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.392,C:\Users\chral\Nextcloud\code\tpx_delphi\src\ClpbrdOp.pas=</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.587,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\ClpbrdOp.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.815,C:\Users\chral\Nextcloud\code\tpx_delphi\src\Modes.pas=</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.042,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\GObjects.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.358,C:\Users\chral\Nextcloud\code\tpx_delphi\src\Bitmaps.pas=</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.334,C:\Users\chral\Nextcloud\code\tpx_delphi\src\DevCanvas.pas=</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.245,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\WinBasic.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.640,C:\Users\chral\Nextcloud\code\tpx_delphi\src\WinBasic.pas=</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.188,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\DevPGF.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.681,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\DevCanvas.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.905,C:\Users\chral\Nextcloud\code\tpx_delphi\src\DevCanvas.pas=</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.048,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\DevCanvas.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.525,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\TpXSaver.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.621,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\Drawings.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.194,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\DevPS.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.532,C:\Users\chral\Nextcloud\code\tpx_delphi\src\fmx\MainUnit.fmx=C:\Users\chral\Documents\Embarcadero\Studio\Projekte\Unit1.fmx</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.933,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\MiscUtils.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.261,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\Output.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.526,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\Devices.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.140,C:\Users\chral\Nextcloud\code\tpx_delphi\src\ViewPort.pas=</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.672,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\ViewPort.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.333,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\Modes.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.395,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\Modify.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.498,=C:\Users\chral\Documents\Embarcadero\Studio\Projekte\Unit1.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.833,=C:\Users\chral\Nextcloud\code\tpx_delphi\src\Numeric.pas</Transaction>
+  </Transactions>
+	<ActiveMobileDevice>
+		<NoProfile iOSSimulator="iPhone5"/>
+		<PPAServer iOSSimulator="iPad"/>
+	</ActiveMobileDevice>
+</BorlandProject>

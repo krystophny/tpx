@@ -2,11 +2,11 @@ unit ClpbrdOp;
 
 interface
 
-uses Drawings, Graphics, Clipbrd,
+uses Drawings, Clipbrd,
 {$IFNDEF FPC}
   Windows,
 {$ELSE}
-  LCLIntf,
+  LCLIntf, Graphics,
 {$ENDIF}
   Classes;
 

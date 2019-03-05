@@ -2,7 +2,13 @@ unit DevTeXPc;
 
 interface
 
-uses SysUtils, Geometry, Graphics, Devices, Math;
+uses
+{$IFDEF USE_FMX}
+FMX.Graphics, System.UITypes,
+{$ELSE}
+Graphics,
+{$ENDIF}
+SysUtils, Geometry, Devices, Math;
 
 type
 

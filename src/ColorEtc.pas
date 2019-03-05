@@ -2,13 +2,14 @@ unit ColorEtc; //Colors and miscellanea
 
 interface
 
-uses Types, Classes, SysUtils, Graphics, StdCtrls, Dialogs,
-{$IFDEF VER140}
-  Windows,
+uses
+{$IFNDEF USE_FMX}
+Graphics, StdCtrls, Dialogs,
 {$ELSE}
-//  LCLIntf,
+ FMX.StdCtrls, FMX.Dialogs, FMX.ListBox, System.UITypes,
+ System.UIConsts,
 {$ENDIF}
-  StrUtils;
+Types, Classes, SysUtils, StrUtils;
 
 type
   T_PS_RGB = record R, G, B: Single;
@@ -24,11 +25,13 @@ function ColorToHtml(Color: TColor): string; // TColor -> HTML-color
 function PS_RGB(Color: TColor): T_PS_RGB; //  for PostScript, PGF
 
 procedure MakeColorBox(ComboBox: TComboBox);
+{$IFDEF FPC}
 procedure ColorBoxDrawItem(ComboBox: TComboBox;
   Index: Integer; Rect: TRect; State: TOwnerDrawState);
 procedure ColorBoxSelect(ComboBox: TComboBox);
 procedure ColorBoxSet(ComboBox: TComboBox; Color: TColor);
 function ColorBoxGet(ComboBox: TComboBox): TColor;
+{$ENDIF}
 
 //function LaBoiteACouleursLoadWindow: Integer; cdecl stdcall;
 //function LaBoiteACouleursUnloadWindow: Integer; cdecl stdcall;
@@ -52,13 +55,31 @@ var
 
 const
 
-{$IFDEF VER140}
-{$ELSE}
-  clMoneyGreen = TColor($C0DCC0);
-  clSkyBlue = TColor($F0CAA6);
-  clCream = TColor($F0FBFF);
-  clMedGray = TColor($A4A0A0);
+{$IFNDEF FPC}
+clDefault = TColorRec.SysDefault;
+clNone = TColorRec.Null;
+clBlack = TColorRec.Black;
+clMaroon = TColorRec.Maroon;
+clGreen = TColorRec.Green;
+clOlive = TColorRec.Olive;
+clNavy = TColorRec.Navy;
+clPurple = TColorRec.Purple;
+clTeal = TColorRec.Teal;
+clGray = TColorRec.Gray;
+clSilver = TColorRec.Silver;
+clRed = TColorRec.Red;
+clLime = TColorRec.Lime;
+clYellow = TColorRec.Yellow;
+clBlue = TColorRec.Blue;
+clFuchsia = TColorRec.Fuchsia;
+clAqua = TColorRec.Aqua;
+clWhite = TColorRec.White;
+
 {$ENDIF}
+clMoneyGreen = TColor($C0DCC0);
+clSkyBlue = TColor($F0CAA6);
+clCream = TColor($F0FBFF);
+clMedGray = TColor($A4A0A0);
 
   BasicColors: array[1..16] of TColor = (
     clBlack, clMaroon, clGreen, clOlive, clNavy, clPurple, clTeal,
@@ -218,7 +239,7 @@ function T_HTMLColor.ColorToHtml(Color: TColor): string;
 var
   I: Integer;
 begin
-  Color := ColorToRGB(Color);
+  {$IFDEF FPC}Color := ColorToRGB(Color);{$ENDIF}
   I := IndexOfObject(TObject(SwapColor(Color)));
   if I = -1 then
     Result := '#' + IntToHex(Color and $FF, 2) +
@@ -424,6 +445,7 @@ begin
   ComboBox.ItemIndex := 0;
 end;
 
+{$IFDEF FPC}
 procedure ColorBoxDrawItem(ComboBox: TComboBox;
   Index: Integer; Rect: TRect; State: TOwnerDrawState);
 var
@@ -511,7 +533,7 @@ function ColorBoxGet(ComboBox: TComboBox): TColor;
 begin
   Result := Integer(ComboBox.Items.Objects[ComboBox.ItemIndex])
 end;
-
+{$ENDIF}
 //function LaBoiteACouleursLoadWindow: Integer; stdcall;
 //  external 'C:\WRK\Delphi\TpX\-\LaBoiteACouleurs.dll'
 //Name '_LoadWindow';

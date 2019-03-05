@@ -2,9 +2,14 @@ unit TpXSaver;
 
 interface
 
-uses GObjBase, GObjects, Drawings, Output, XmlOut, Classes,
-  SysUtils,
-  Graphics;
+uses
+{$IFDEF USE_FMX}
+FMX.Graphics, System.UITypes,
+{$ELSE}
+Graphics,
+{$ENDIF}
+
+GObjBase, GObjects, Drawings, Output, XmlOut, Classes, SysUtils;
 
 // A class for saving TpX drawing
 
@@ -25,7 +30,7 @@ type
     procedure WriteText2D(Obj: TText2D); override;
     procedure WriteStar2D(Obj: TStar2D); override;
     procedure WriteSymbol2D(Obj: TSymbol2D); override;
-    procedure WriteBitmap2D(Obj: TBitmap2D); override;
+    {$IFNDEF USE_FMX}procedure WriteBitmap2D(Obj: TBitmap2D); override;{$ENDIF}
     procedure StartGroup2D(Obj: TGroup2D); override;
     procedure FinishGroup2D(Obj: TGroup2D); override;
     procedure WriteCompound2D(Obj: TCompound2D); override;
@@ -429,6 +434,7 @@ var
     I: Integer;
     ID: string;
   begin
+    {$IFNDEF USE_FMX}
     if Obj.Font.Name = ' ' then Exit;
     fXML.OpenTag('font');
     begin
@@ -440,6 +446,7 @@ var
       fXML.AddAttribute('charset',
         IntToStr(Integer(Obj.Font.Charset)));
     end;
+    {$ENDIF}
     fXML.CloseTag;
     {Data := TStringList.Create;
     try
@@ -515,6 +522,7 @@ begin
   fXML.CloseTag;
 end;
 
+{$IFNDEF USE_FMX}
 procedure T_TpX_Saver.WriteBitmap2D(Obj: TBitmap2D);
 var
   P: TPoint2D;
@@ -534,6 +542,7 @@ begin
   end;
   fXML.CloseTag;
 end;
+{$ENDIF}
 
 procedure T_TpX_Saver.StartGroup2D(Obj: TGroup2D);
 begin

@@ -2,8 +2,15 @@ unit Modes;
 
 interface
 
-uses SysUtils, StrUtils, Classes, Controls, ExtCtrls, Graphics,
-  Forms, Dialogs, ExtDlgs, Registry, Math,
+uses
+{$IFDEF FPC}
+Controls, ExtCtrls, Graphics,
+  Forms, Dialogs, ExtDlgs,
+{$ELSE}
+FMX.Controls, FMX.ExtCtrls, FMX.Graphics,
+  FMX.Forms, FMX.Dialogs, System.UITypes,
+{$ENDIF}
+SysUtils, StrUtils, Classes, Registry, Math,
   Manage, Options0, Geometry, Drawings, ViewPort, GObjBase,
   GObjects,
 {$IFNDEF FPC}
@@ -41,7 +48,7 @@ type
     property RecentShort[I: Integer]: string read GetRecentShort;
   end;
 
-  TOpenAnyPictureDialog = class(TOpenPictureDialog)
+  TOpenAnyPictureDialog = class({$IFDEF FPC}TOpenPictureDialog{$ELSE}TOpenDialog{$ENDIF})
   protected
     procedure DoSelectionChange; override;
     procedure PreviewClick(Sender: TObject);
@@ -461,13 +468,15 @@ const Drag_Aperture = 4;
 
 implementation
 
-uses MainUnit, SysBasic, Propert, Options, TransForm, PreView,
-{$IFNDEF FPC}
-  EMF_Unit, WinBasic, ClpbrdOp,
+uses MainUnit, SysBasic,
+{$IFNDEF USE_FMX}
+  Propert, Options, TransForm, AboutUnit, InfoForm, PreView,
+  Settings0, ScaleStandardUnit, Graphics,
 {$ELSE}
+  FMX.Graphics,
 {$ENDIF}
-  Settings0, AboutUnit, Input, Output, ScaleStandardUnit, Modify,
-  InfoForm, Devices;
+  Input, Output, Modify, Devices;
+
 
 { --================ TTpXManager ==================-- }
 
@@ -508,7 +517,7 @@ procedure TOpenAnyPictureDialog.DoSelectionChange;
 var
   Ext: string;
   ValidPicture: Boolean;
-  BMP: Graphics.TBitmap;
+  BMP: TBitmap;
   function ValidFile(const FileName: string): Boolean;
   begin
 {$IFDEF VER140}

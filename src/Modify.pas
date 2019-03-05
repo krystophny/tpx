@@ -6,7 +6,12 @@ unit Modify;
 interface
 
 uses
-  Geometry, Graphics, Drawings, GObjBase, GObjects;
+{$IFDEF FPC}
+Graphics,
+{$ELSE}
+FMX.Graphics, System.UITypes,
+{$ENDIF}
+  Geometry, Drawings, GObjBase, GObjects;
 
 type
   TMvBackwardForward = (mv_Forward, mv_Backward,
@@ -691,12 +696,21 @@ var
       if Obj is TPrimitive2D then
         with Obj as TPrimitive2D do
         begin
+        {$IFDEF FPC}
           if LineColor <> clDefault then
             LineColor := GrayScale(LineColor);
           if HatchColor <> clDefault then
             HatchColor := GrayScale(HatchColor);
           if FillColor <> clDefault then
             FillColor := GrayScale(FillColor);
+        {$ELSE}
+          if LineColor <> TColorRec.SysDefault then
+            LineColor := GrayScale(LineColor);
+          if HatchColor <> TColorRec.SysDefault then
+            HatchColor := GrayScale(HatchColor);
+          if FillColor <> TColorRec.SysDefault then
+            FillColor := GrayScale(FillColor);
+        {$ENDIF}
         end
       else if Obj is TGroup2D then
         Convert((Obj as TGroup2D).Objects);
