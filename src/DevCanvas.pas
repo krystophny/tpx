@@ -10,6 +10,10 @@ uses Types, Classes,
 {$ENDIF}
   Graphics, Geometry, Devices, ColorEtc;
 
+{$IFDEF FPC}
+{$I EMF_Defs.inc}
+{$ENDIF}
+
 type
 
   TArrayOfPoint = array of TPoint;

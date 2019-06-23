@@ -15,11 +15,11 @@ var
 
 implementation
 
-uses Output, Input, Drawings, Preview
+uses Output, Input, Drawings, Preview,
 {$IFNDEF FPC}
-  , EMF_Unit, Modes, Bitmaps, SysBasic
+  EMF_Unit,
 {$ENDIF}
-  ;
+  Modes, Bitmaps, SysBasic;
 
 const
   IniFileName0 = 'TpX.ini';

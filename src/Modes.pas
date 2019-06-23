@@ -586,11 +586,7 @@ begin
   Ext := LowerCase(ExtractFileExt(FileName));
   Delete(Ext, 1, 1);
   if ((Ext = 'emf') or (Ext = 'wmf')) then
-    {$IFNDEF FPC}
     PreviewClick(Sender)
-    {$ELSE}
-    inherited PreviewClick(Sender)
-    {$ENDIF}
   else if ((Ext = 'eps') or (Ext = 'ps')) then
     OpenOrExec(PSViewerPath, FileName)
   else

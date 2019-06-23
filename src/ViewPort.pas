@@ -7,7 +7,7 @@ uses Types, SysUtils, Classes, Messages, Graphics, Controls,
 {$IFNDEF FPC}
   WinBasic,
 {$ELSE}
-  LCLIntf, LMessages, LCLType, LazBasic
+  LCLIntf, LMessages, LCLType, LazBasic,
 {$ENDIF}
   GObjBase, Drawings, Devices;
 

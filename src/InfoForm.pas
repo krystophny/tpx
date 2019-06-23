@@ -3,12 +3,11 @@ unit InfoForm;
 interface
 
 uses
+  SysUtils, Classes, Graphics, Forms, Controls, StdCtrls, Buttons, ExtCtrls
   {$IFDEF FPC}
-  LCLIntf, LCLType, LMessages,
-  {$ELSE}
-  SysUtils, Classes, Graphics, Forms, Controls,
-  StdCtrls, Buttons, ExtCtrls;
+  , LCLIntf, LCLType, LMessages
   {$ENDIF}
+  ;
 type
   TInfoBox = class(TForm)
     OKButton: TButton;

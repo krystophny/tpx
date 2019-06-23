@@ -6,10 +6,10 @@ uses
   {$IFDEF FPC}
   LCLIntf, LCLType, LMessages, PrintersDlgs,
   {$ELSE}
-  Messages, SysUtils, Variants, Classes, Graphics,
-    Controls, Forms, Windows,
+  Windows,
   {$ENDIF}
-  Dialogs, StdCtrls, ExtCtrls, Printers, Spin;
+  Messages, SysUtils, Variants, Classes, Graphics,
+  Controls, Forms, Dialogs, StdCtrls, ExtCtrls, Printers, Spin;
 
 type
   TPrintEpsOptForm = class(TForm)

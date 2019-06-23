@@ -8,11 +8,11 @@ uses
   StdCtrls, ExtCtrls, ImgList, ActnList, ToolWin, ExtDlgs,
   Drawings, ViewPort, GObjBase, GObjects, Manage, Options0,
 {$IFNDEF FPC}
-  Windows, HH, hh_funcs
+  Windows, HH, hh_funcs, System.ImageList, System.Actions,
 {$ELSE}
-  LCLIntf, LCLType, LResources
+  LCLIntf, LCLType, LResources,
 {$ENDIF}
-  , Devices, Modes, System.ImageList, System.Actions;
+  Devices, Modes;
 
 type
 
