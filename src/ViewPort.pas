@@ -1237,10 +1237,14 @@ var
   var
     I: Integer;
   begin
-    IX1 := Ceil(ARect.Left / D);
-    IX2 := Floor(ARect.Right / D);
-    IY1 := Ceil(ARect.Bottom / D);
-    IY2 := Floor(ARect.Top / D);
+    try
+      IX1 := Ceil(ARect.Left / D);
+      IX2 := Floor(ARect.Right / D);
+      IY1 := Ceil(ARect.Bottom / D);
+      IY2 := Floor(ARect.Top / D);
+    except
+      Exit;
+    end;
     for I := IY1 to IY2 do
     begin
       P1 := ViewportToScreen(Point2D(ARect.Left, I * D));
