@@ -325,9 +325,15 @@ begin
   if IsClosed then CloseFigure(Cnv.Handle);
   EndPath(Cnv.Handle);
 {$ELSE}
-  if Length(Pnts) = 4 then
+    if Length(Pnts) = 4 then
 // Is there some bug in Lazarus code of PolyBezier
 //   for 1 segment and Continuous path? (Under Windows only?)
+    Cnv.PolyBezier(Pnts, Length(Pnts), IsClosed, False)
+  else if IsClosed then
+    Cnv.PolyBezier(Pnts, Length(Pnts) - 1, True, True)
+  else
+    Cnv.PolyBezier(Pnts, Length(Pnts), False, True)
+      ;
 {$ENDIF}
 end;
 
