@@ -330,7 +330,7 @@ begin
 //   for 1 segment and Continuous path? (Under Windows only?)
     Cnv.PolyBezier(Pnts, Length(Pnts), IsClosed, False)
   else if IsClosed then
-    Cnv.PolyBezier(Pnts, Length(Pnts) - 1, True, True)
+    Cnv.PolyBezier(Pnts, Length(Pnts), True, True)
   else
     Cnv.PolyBezier(Pnts, Length(Pnts), False, True)
       ;
