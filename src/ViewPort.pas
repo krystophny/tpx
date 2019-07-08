@@ -1171,6 +1171,7 @@ begin
     end;
   finally
     DoCopyCanvas(True);
+    InvalidateRect(Self.Handle, @ARect, True);
     if Assigned(fOnEndRedraw) then
       fOnEndRedraw(Self);
   end;
@@ -1298,6 +1299,7 @@ begin
   if (csReadingState in ControlState) then
     Exit;
   RepaintRect(fVisualRect);
+
 end;
 
 procedure TViewport.Refresh;
