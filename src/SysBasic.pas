@@ -236,7 +236,7 @@ begin
   OldDir := GetCurrentDir;
   SetCurrentDir(Directory);
 {$IFDEF LINUX}
-//  Result := Shell(aCmdLine) = 0; TODO: doesn't work
+  Result := ExecuteProcess('/usr/bin/bash', [ '-c', 'cd "' + Directory + '"; ' + aCmdLine]) = 0;
 {$ELSE}
   Result := ExecuteProcess(aCmdLine, '') = 0;
 {$ENDIF}
