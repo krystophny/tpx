@@ -638,6 +638,8 @@ type
     procedure SaveToStream(const Stream: TStream); override;
     procedure FillPieces; override;
     procedure Transform(const T: TTransf2D); override;
+    function OnMe(P: TPoint2D; Aperture: TRealType;
+      var Distance: TRealType): Integer; override;
     {: This property contains the heigth of the text in world
        units.
        This is different from the Heigth of font used to render
@@ -4032,6 +4034,22 @@ begin
   if RotateText then fRot := VectorAngle(V);
   fHeight := VectorLength2D(V);
   UpdateExtension(Self);
+end;
+
+function TText2D.OnMe(P: TPoint2D; Aperture: TRealType;
+  var Distance: TRealType): Integer;
+var
+  TmpBox: TRect2D;
+begin
+  Result := inherited OnMe(P, Aperture, Distance);
+  if Result <> PICK_NOOBJECT then
+    Exit;
+  TmpBox := EnlargeBoxDelta2D(BoundingBox, Aperture);
+  if IsPointInCartesianBox2D(P, TmpBox) then
+  begin
+    Distance := Aperture;
+    Result := PICK_INOBJECT;
+  end;
 end;
 
 // =====================================================================
