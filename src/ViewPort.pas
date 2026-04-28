@@ -1171,7 +1171,7 @@ begin
     end;
   finally
     DoCopyCanvas(True);
-    InvalidateRect(Self.Handle, @ARect, True);
+    Invalidate;
     if Assigned(fOnEndRedraw) then
       fOnEndRedraw(Self);
   end;
