@@ -2221,12 +2221,21 @@ end;
 
 procedure TInsertSizedGrObjMode.OnMouseUp(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  CurrPoint: TPoint2D;
+  Prim: TPrimitive2D;
 begin
   if Button <> mbLeft then Exit;
-  if (Obj as TPrimitive2D).FirstDrawPoint = 1 then
-    PointSelected(
-      ViewPort.GetSnappedPoint(
-      ViewPort.ScreenToViewport(Point2D(X, Y))));
+  if Obj = nil then Exit;
+  Prim := Obj as TPrimitive2D;
+  if Prim.FirstDrawPoint = 1 then
+  begin
+    CurrPoint := ViewPort.GetSnappedPoint(
+      ViewPort.ScreenToViewport(Point2D(X, Y)));
+    if IsSamePoint2D(CurrPoint, Prim.Points[Prim.FirstDrawPoint - 1])
+      then Exit;
+    PointSelected(CurrPoint);
+  end;
 end;
 
 {* --------- TFreehandMode --------- *}
