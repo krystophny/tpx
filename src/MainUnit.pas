@@ -1105,8 +1105,8 @@ end;
 
 procedure TMainForm.LocalViewEndRedraw(Sender: TObject);
 begin
-  Ruler1.Paint;
-  Ruler2.Paint;
+  Ruler1.Invalidate;
+  Ruler2.Invalidate;
 end;
 
 procedure TMainForm.ScrollBarScroll(Sender: TObject;
