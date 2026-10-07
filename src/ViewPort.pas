@@ -1198,8 +1198,68 @@ begin
 end;
 
 function TViewport2D.GetSnappedPoint(P: TPoint2D): TPoint2D;
+var
+  BestPoint: TPoint2D;
+  BestDistance, Distance: TRealType;
+  Found: Boolean;
+  procedure Consider(const Candidate: TPoint2D);
+  begin
+    Distance := PointDistance2D(P, Candidate);
+    if Distance < BestDistance then begin
+      BestDistance := Distance;
+      BestPoint := Candidate;
+      Found := True;
+    end;
+  end;
+  procedure Search(const List: TGraphicObjList; Depth: Integer);
+  var
+    Obj: TGraphicObject;
+    Prim: TPrimitive2D;
+    Corners: TPointsSet2D;
+    I: Integer;
+  begin
+    if Depth > 32 then Exit;
+    List.Lock;
+    try
+      Obj := List.FirstObj;
+      while Obj <> nil do begin
+        if Obj.Visible and Obj.Enabled and
+          fDrawing2D.Layers[Obj.Layer].Visible and
+          fDrawing2D.Layers[Obj.Layer].Active then begin
+          if Obj is TPrimitive2D then begin
+            Prim := Obj as TPrimitive2D;
+            if Prim is TBox2D0 then begin
+              Corners := TPointsSet2D.Create(4);
+              try
+                (Prim as TBox2D0).PolyPoints(Corners, IdentityTransf2D);
+                for I := 0 to Corners.Count - 1 do Consider(Corners[I]);
+              finally
+                Corners.Free;
+              end;
+            end
+            else for I := 0 to Prim.Points.Count - 1 do Consider(Prim.Points[I]);
+          end
+          else if Obj is TContainer2D then Search((Obj as TContainer2D).Objects, Depth + 1)
+          else if (Obj is TBlock2D) and Assigned((Obj as TBlock2D).SourceBlock) then
+            Search((Obj as TBlock2D).SourceBlock.Objects, Depth + 1);
+        end;
+        Obj := List.NextObj;
+      end;
+    finally
+      List.Unlock;
+    end;
+  end;
 begin
   Result := P;
+  if UseShapeSnap and Assigned(fDrawing2D) then begin
+    Found := False;
+    BestDistance := 6 * PixelSize;
+    Search(fDrawing2D.ObjectList, 0);
+    if Found then begin
+      Result := BestPoint;
+      Exit;
+    end;
+  end;
   if not UseSnap then Exit;
   if fSnapStep <> 0 then
   begin

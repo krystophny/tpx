@@ -278,6 +278,8 @@ begin
     @(AreaSelectInside), 'Area select inside only');
   SettingsList.AddBoolean('UseSnap',
     @(UseSnap), 'Snap to grid');
+  SettingsList.AddBoolean('UseShapeSnap',
+    @(UseShapeSnap), 'Snap to shape endpoints and corners');
   SettingsList.AddBoolean('UseAngularSnap',
     @(UseAngularSnap), 'Angular snap (45 degrees)');
   SettingsList.AddInteger('Mainform.Left',

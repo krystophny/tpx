@@ -329,7 +329,7 @@ procedure StoreToFile_EMF(const Drawing: TDrawing2D;
   const FileName: string);
 
 var
-{$IFNDEF LINUX}MetaPostPath: string = 'mpost.exe';
+{$IFDEF MSWINDOWS}MetaPostPath: string = 'mpost.exe';
 {$ELSE}MetaPostPath: string = 'mpost'; {$ENDIF}
   Font_pfb_Path: string = '';
   GhostscriptCustomKeys: string = '-r300 -sDEVICE=png256';
@@ -721,6 +721,9 @@ function Get_TeXText(
 begin
   if TeXText <> '' then
     Result := TeXText
+  else if (Length(WideText) > 1) and
+    (WideText[1] = '$') and (WideText[Length(WideText)] = '$') then
+    Result := WideText
   else
     Result := TeX_Replace_Special(WideText);
   if LineColor <> clDefault then
@@ -1311,6 +1314,7 @@ constructor T_TikZ_Export.Create(Drawing: TDrawing2D);
 begin
   inherited Create(Drawing);
   fDevice := T_TikZ_Device.Create;
+  (fDevice as T_TikZ_Device).DefaultFontHeight := Drawing.DefaultFontHeight;
   (fDevice as T_TikZ_Device).FontSizeInTeX :=
     Drawing.FontSizeInTeX;
 end;
@@ -1504,7 +1508,7 @@ begin
         '%s -dSAFER -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite' +
         ' -dAutoRotatePages=/None -sOutputFile="%s" "%s"',
         [PrepareFilePath(GhostscriptPath),
-        PdfFileName, EpsFileName]), '', '',
+        ExpandFileName(PdfFileName), ExpandFileName(EpsFileName)]), '', '',
           GetTempDir, True, True);
 
       if not FileExists(PdfFileName) then

@@ -234,13 +234,16 @@ begin
       'Error', MB_OK);}
 {$ELSE}
   OldDir := GetCurrentDir;
-  SetCurrentDir(Directory);
-{$IFDEF LINUX}
-  Result := ExecuteProcess('/usr/bin/bash', [ '-c', 'cd "' + Directory + '"; ' + aCmdLine]) = 0;
+  try
+    if Directory <> '' then SetCurrentDir(Directory);
+{$IFDEF UNIX}
+    Result := ExecuteProcess('/bin/sh', ['-c', aCmdLine]) = 0;
 {$ELSE}
-  Result := ExecuteProcess(aCmdLine, '') = 0;
+    Result := ExecuteProcess(aCmdLine, '') = 0;
 {$ENDIF}
-  SetCurrentDir(OldDir);
+  finally
+    SetCurrentDir(OldDir);
+  end;
 {$ENDIF}
 end;
 

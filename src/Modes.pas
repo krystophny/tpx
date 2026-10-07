@@ -456,6 +456,7 @@ const
   Msg_Help = Msg_Panning + 1;
   Msg_PictureInfo = Msg_Help + 1;
   Msg_About = Msg_PictureInfo + 1;
+  Msg_SnapToShapes = Msg_About + 1;
 
 const Drag_Aperture = 4;
 
@@ -994,6 +995,11 @@ begin
       begin
         UseSnap := not UseSnap;
         MainForm.SnapToGrid.Checked := UseSnap;
+      end;
+    Msg_SnapToShapes:
+      begin
+        UseShapeSnap := not UseShapeSnap;
+        MainForm.SnapToShapes.Checked := UseShapeSnap;
       end;
     Msg_AngularSnap:
       begin
@@ -2195,6 +2201,7 @@ begin
   PointSelected(
     ViewPort.GetSnappedPoint(
     ViewPort.ScreenToViewport(Point2D(X, Y))));
+  if Obj = nil then BaseMode.OnMouseDown(Sender, Button, Shift, X, Y);
 end;
 
 procedure TInsertSizedGrObjMode.OnMouseMove(Sender: TObject;
@@ -2221,12 +2228,22 @@ end;
 
 procedure TInsertSizedGrObjMode.OnMouseUp(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  CurrPoint: TPoint2D;
+  Prim: TPrimitive2D;
 begin
   if Button <> mbLeft then Exit;
-  if (Obj as TPrimitive2D).FirstDrawPoint = 1 then
-    PointSelected(
-      ViewPort.GetSnappedPoint(
-      ViewPort.ScreenToViewport(Point2D(X, Y))));
+  if Obj = nil then Exit;
+  Prim := Obj as TPrimitive2D;
+  if Prim.FirstDrawPoint = 1 then
+  begin
+    CurrPoint := ViewPort.GetSnappedPoint(
+      ViewPort.ScreenToViewport(Point2D(X, Y)));
+    if PointDistance2D(CurrPoint, Prim.Points[Prim.FirstDrawPoint - 1])
+      <= 3 * ViewPort.PixelSize
+      then Exit;
+    PointSelected(CurrPoint);
+  end;
 end;
 
 {* --------- TFreehandMode --------- *}

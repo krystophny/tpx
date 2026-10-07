@@ -396,7 +396,7 @@ end;
 procedure TOptionsList.AddFilePath(Key0: string;
   PData0: Pointer; Filter0: string; Hint0: string);
 begin
-{$IFDEF LINUX}
+{$IFDEF UNIX}
   Filter0 := AnsiReplaceStr(Filter0, '*.exe|*.exe', '*.*|*.*');
   Hint0 := AnsiReplaceStr(Hint0, '.exe', '');
 {$ENDIF}
