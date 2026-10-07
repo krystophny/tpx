@@ -269,7 +269,7 @@
     <Version Value="11"/>
     <SearchPaths>
       <IncludeFiles Value="src/lib/PowerPdf;src/lib/XML;$(ProjOutDir)"/>
-      <OtherUnitFiles Value="src/lib/PowerPdf;src/lib/XML"/>
+      <OtherUnitFiles Value="src;src/lib/PowerPdf;src/lib/XML"/>
       <UnitOutputDirectory Value="obj/$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Conditionals Value="if TargetOS = 'darwin' then

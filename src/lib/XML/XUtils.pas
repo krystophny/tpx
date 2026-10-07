@@ -108,13 +108,51 @@ begin
 end;
 
 function DecodeHtmlString(const s: String): String;
+var
+  I, J, Code: Integer;
+  Entity, Decoded: string;
+  Characters: WideString;
 begin
-	Result := s;
-	Result := StringReplace(Result, '&apos;', '''', [rfReplaceAll]);
-	Result := StringReplace(Result, '&quot;', '"', [rfReplaceAll]);
-	Result := StringReplace(Result, '&gt;', '>', [rfReplaceAll]);
-	Result := StringReplace(Result, '&lt;', '<', [rfReplaceAll]);
-	Result := StringReplace(Result, '&amp;', '&', [rfReplaceAll]);
+  Result := '';
+  I := 1;
+  while I <= Length(s) do begin
+    if s[I] = '&' then begin
+      J := I + 1;
+      while (J <= Length(s)) and (s[J] <> ';') do Inc(J);
+      if J <= Length(s) then begin
+        Entity := Copy(s, I + 1, J - I - 1);
+        Decoded := '';
+        if Entity = 'amp' then Decoded := '&'
+        else if Entity = 'lt' then Decoded := '<'
+        else if Entity = 'gt' then Decoded := '>'
+        else if Entity = 'quot' then Decoded := '"'
+        else if Entity = 'apos' then Decoded := #39
+        else if (Length(Entity) > 1) and (Entity[1] = '#') then begin
+          Delete(Entity, 1, 1);
+          if (Length(Entity) > 1) and (Entity[1] in ['x', 'X']) then
+            Entity := '$' + Copy(Entity, 2, Length(Entity));
+          if TryStrToInt(Entity, Code) and
+            ((Code in [9, 10, 13]) or ((Code >= 32) and
+            (Code <= $10FFFF) and not ((Code >= $D800) and (Code <= $DFFF)))) then begin
+            if Code <= $FFFF then Characters := WideChar(Code)
+            else begin
+              Code := Code - $10000;
+              Characters := WideChar($D800 + (Code shr 10));
+              Characters := Characters + WideChar($DC00 + (Code and $3FF));
+            end;
+            Decoded := UTF8Encode(Characters);
+          end;
+        end;
+        if Decoded <> '' then begin
+          Result := Result + Decoded;
+          I := J + 1;
+          Continue;
+        end;
+      end;
+    end;
+    Result := Result + s[I];
+    Inc(I);
+  end;
 end;
 
 function RO_Replace(var aDst{ : TRefObject}; aSrc: TRefObject): Boolean;

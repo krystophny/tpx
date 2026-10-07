@@ -923,7 +923,10 @@ end;
 
 procedure TMainForm.UserEventExecute(Sender: TObject);
 begin
-  EventManager.SendMessage((Sender as TAction).Tag, Sender);
+  if (Sender as TAction).Tag = Msg_Exit then
+    Close
+  else
+    EventManager.SendMessage((Sender as TAction).Tag, Sender);
 end;
 
 procedure TMainForm.BasicModeExecute(Sender: TObject);
@@ -1302,11 +1305,8 @@ begin
 end;
 
 procedure TMainForm.OnExit(Sender: TObject);
-var
-  CanClose: Boolean;
 begin
-  FormCloseQuery(Self, CanClose);
-  if CanClose then Close;
+  Close;
 end;
 
 procedure TMainForm.LocalViewDblClick(Sender: TObject);
