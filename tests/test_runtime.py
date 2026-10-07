@@ -7,7 +7,8 @@ import unittest
 
 BINARY = Path(os.environ["RUNTIME_BINARY"]).resolve()
 SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-yes",
-             "exit-close", "exit-fallback", "text-selection", "default-view", "toolbar", "draw-click", "draw-drag", "draw-rectangle", "draw-jitter", "shape-snap", "external-tools", "preview-state")
+             "exit-close", "exit-fallback", "text-selection", "default-view", "toolbar", "draw-click", "draw-drag", "draw-rectangle", "draw-jitter", "draw-cancel", "shape-snap", "external-tools", "preview-state",
+             "viewport-events", "viewport-crosshair", "viewport-preview")
 
 
 class RuntimeTests(unittest.TestCase):
@@ -17,7 +18,7 @@ class RuntimeTests(unittest.TestCase):
                 result = subprocess.run([str(BINARY), scenario],
                                         capture_output=True, text=True, timeout=20)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertIn("PASS " + scenario, result.stdout)
+                self.assertIn("PASS " + scenario, result.stdout, result.stderr)
 
 
 if __name__ == "__main__":

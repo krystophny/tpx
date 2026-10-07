@@ -172,7 +172,11 @@ type
        canvas and an <See Property=TViewport@OnPaint> event is fired.
     }
     procedure Paint; override; { Repaint all the objects. }
+{$IFDEF FPC}
+    procedure Resize; override;
+{$ELSE}
     procedure WMSize(var Message: TWMSize); message WM_SIZE;
+{$ENDIF}
     {: This method is called by the viewport whenever a changing in the
        mapping transform from window plane (view plane) and canvas
        rectangle is required.
@@ -696,6 +700,11 @@ type
 
      See <See Class=TViewport> for details.
   }
+  TRubberObject = record
+    Obj: TGraphicObject;
+    Transf: TTransf2D;
+  end;
+
   TViewport2D = class(TViewport)
   private
       { consider only the objects with this type during the picking. }
@@ -707,10 +716,16 @@ type
     fCursorColor: TColor;
     fLastCursorPos: TPoint2D;
     fLastMousePos: TPoint2D;
+    fRubberObjects: array of TRubberObject;
+    procedure PaintOverlays(const Target: TCanvas);
 
     procedure SetDrawing2D(ADrawing2D: TDrawing2D);
   protected
     procedure SetDrawing(ADrawing: TDrawing); override;
+    procedure Paint; override;
+{$IFDEF FPC}
+    procedure MouseLeave; override;
+{$ENDIF}
 //TSY:
     procedure DrawObjectControlPoints(
       const Obj: TGraphicObject; const Dvc: TDevice;
@@ -733,6 +748,8 @@ type
     procedure DrawObject(const Obj: TGraphicObject;
       const Dvc: TCanvasDevice;
       const ClipRect2D: TRect2D); override;
+    procedure RenderToCanvas(const Target: TCanvas);
+    procedure ClearRubber;
     procedure DrawObject2DWithRubber(
       const Obj: TGraphicObject; Transf: TTransf2D);
     procedure ZoomToExtension; override;
@@ -823,16 +840,9 @@ end;
 procedure TViewport.CopyBitmapOnCanvas(const DestCnv:
   TCanvas; const BMP: TBitmap; IRect: TRect);
 begin
-{$IFNDEF WINDOWS}
   DestCnv.Pen.Mode := pmCopy;
-  DestCnv.CopyMode := 0; //??
-{$ELSE}
-{$ENDIF}
+  DestCnv.CopyMode := cmSrcCopy;
   DestCnv.CopyRect(IRect, BMP.Canvas, IRect);
-{$IFNDEF WINDOWS}
-  DestCnv.CopyRect(IRect, BMP.Canvas, IRect);
-{$ELSE}
-{$ENDIF}
 end;
 
 procedure TViewport.Control_Point(const P: TPoint2D;
@@ -894,11 +904,19 @@ begin
   end;
 end;
 
+{$IFDEF FPC}
+procedure TViewport.Resize;
+begin
+  inherited Resize;
+  if Assigned(fOffScreenBitmap) then DoResize;
+end;
+{$ELSE}
 procedure TViewport.WMSize(var Message: TWMSize);
 begin
   inherited;
   DoResize;
 end;
+{$ENDIF}
 
 procedure TViewport.SetBackColor(const Cl: TColor);
 begin
@@ -1084,12 +1102,8 @@ begin
 end;
 
 procedure TViewport.RefreshRect(const ARect: TRect);
-var
-  TmpRect: TRect;
 begin
-  TmpRect := Rect(ARect.Left - 1, ARect.Top - 1, ARect.Right +
-    1, ARect.Bottom + 1);
-  CopyBackBufferRectOnCanvas(TmpRect, True);
+  Invalidate;
 end;
 
 procedure TViewport.DoResize;
@@ -1141,7 +1155,7 @@ begin
             Inc(I);
             if I = fCopingFrequency then
             begin
-              DoCopyCanvas(False);
+              Invalidate;
               I := 0;
             end;
             Obj := fDrawing.ObjectList.NextObj;
@@ -1170,7 +1184,6 @@ begin
     except
     end;
   finally
-    DoCopyCanvas(True);
     Invalidate;
     if Assigned(fOnEndRedraw) then
       fOnEndRedraw(Self);
@@ -1369,16 +1382,7 @@ end;
 
 procedure TViewport.Invalidate;
 begin
-  if (csReadingState in ControlState) or
-    (csLoading in ComponentState) then
-  begin
-    inherited;
-    Exit;
-  end;
-  if (csDesigning in ComponentState) then
-    inherited;
-  if HandleAllocated then
-    Paint;
+  inherited;
 end;
 
 procedure TViewport.Notification(AComponent: TComponent;
@@ -1710,6 +1714,7 @@ procedure TViewport2D.SetDrawing(ADrawing: TDrawing);
 begin
   if (ADrawing <> fDrawing2D) then
   begin
+    ClearRubber;
     inherited SetDrawing(ADrawing);
     fDrawing2D := ADrawing as TDrawing2D;
   end;
@@ -1736,9 +1741,74 @@ end;
 
 procedure TViewport2D.Repaint;
 begin
-  DrawCursorCrossHair(Point2D(0, 0), False);
+  if fLastCursorPos.X <> MaxInt then
+    fLastCursorPos := GetSnappedPoint(fLastMousePos);
   inherited Repaint;
-  DrawCursorCrossHair(fLastMousePos, True);
+end;
+
+procedure TViewport2D.PaintOverlays(const Target: TCanvas);
+var
+  I: Integer;
+  PreviousCanvas: TCanvas;
+  SavedPen: TPen;
+  P: TPoint;
+begin
+  PreviousCanvas := OnScreenDevice.Cnv;
+  try
+    OnScreenDevice.Cnv := Target;
+    if Assigned(fDrawing2D) then begin
+      SetupCanvasDevice(fDrawing2D, OnScreenDevice, ViewportToScreenTransform);
+      for I := 0 to Length(fRubberObjects) - 1 do
+        (fRubberObjects[I].Obj as TObject2D).DeviceDraw(
+          fRubberObjects[I].Transf, OnScreenDevice, RectToRect2D(ClientRect));
+    end;
+  finally
+    OnScreenDevice.Cnv := PreviousCanvas;
+  end;
+  if ShowCrossHair and (fLastCursorPos.X <> MaxInt) then begin
+    SavedPen := TPen.Create;
+    try
+      SavedPen.Assign(Target.Pen);
+      Target.Pen.Mode := pmCopy;
+      Target.Pen.Color := fCursorColor;
+      Target.Pen.Style := psSolid;
+      Target.Pen.Width := 1;
+      P := Point2DToPoint(ViewportToScreen(fLastCursorPos));
+      Target.MoveTo(P.X, 0);
+      Target.LineTo(P.X, ClientHeight);
+      Target.MoveTo(0, P.Y);
+      Target.LineTo(ClientWidth, P.Y);
+    finally
+      Target.Pen.Assign(SavedPen);
+      SavedPen.Free;
+    end;
+  end;
+end;
+
+procedure TViewport2D.RenderToCanvas(const Target: TCanvas);
+begin
+  CopyBitmapOnCanvas(Target, OffScreenBitmap, ClientRect);
+  PaintOverlays(Target);
+end;
+
+procedure TViewport2D.Paint;
+begin
+  inherited Paint;
+  PaintOverlays(Canvas);
+end;
+
+{$IFDEF FPC}
+procedure TViewport2D.MouseLeave;
+begin
+  DrawCursorCrossHair(fLastMousePos, False);
+  inherited MouseLeave;
+end;
+{$ENDIF}
+
+procedure TViewport2D.ClearRubber;
+begin
+  SetLength(fRubberObjects, 0);
+  Invalidate;
 end;
 
 procedure TViewport2D.DrawObject(const Obj: TGraphicObject;
@@ -1770,13 +1840,22 @@ end;
 
 procedure TViewport2D.DrawObject2DWithRubber(
   const Obj: TGraphicObject; Transf: TTransf2D);
+var
+  I, Count: Integer;
 begin
-  if not Assigned(fDrawing2D) then Exit;
-  if not Assigned(Obj) then Exit;
-//  if not (Obj as TObject2D).IsVisible(VisualRect) then
-//    Exit;
-  (Obj as TObject2D).DeviceDraw(Transf, fRubberDevice,
-    RectToRect2D(ClientRect));
+  if not Assigned(fDrawing2D) or not Assigned(Obj) then Exit;
+  Count := Length(fRubberObjects);
+  for I := 0 to Count - 1 do
+    if fRubberObjects[I].Obj = Obj then begin
+      fRubberObjects[I] := fRubberObjects[Count - 1];
+      SetLength(fRubberObjects, Count - 1);
+      Invalidate;
+      Exit;
+    end;
+  SetLength(fRubberObjects, Count + 1);
+  fRubberObjects[Count].Obj := Obj;
+  fRubberObjects[Count].Transf := Transf;
+  Invalidate;
 end;
 
 procedure TViewport2D.ZoomToExtension;
@@ -1861,35 +1940,12 @@ begin
   Result := GetVisualTransform2D(ViewWin, ScreenWin, 1);
 end;
 
-procedure TViewport2D.DrawCursorCrossHair(P: TPoint2D; Visible:
-  Boolean);
-  procedure _DrawCursorCrossHair2D(P: TPoint2D);
-  var
-    ScrPt: TPoint;
-  begin
-    ScrPt := Point2DToPoint(ViewportToScreen(P));
-    Canvas.MoveTo(ScrPt.X, ClientRect.Top);
-    Canvas.LineTo(ScrPt.X, ClientRect.Bottom);
-    Canvas.MoveTo(ClientRect.Left, ScrPt.Y);
-    Canvas.LineTo(ClientRect.Right, ScrPt.Y);
-  end;
+procedure TViewport2D.DrawCursorCrossHair(P: TPoint2D; Visible: Boolean);
 begin
-  if not fShowCrossHair then Exit;
-  if (HandleAllocated = False) then Exit;
-//    fLastCursorPos := Point2D(MaxInt, MaxInt);
-  Canvas.Pen.Mode := pmXOr;
-  Canvas.Pen.Color := fCursorColor xor BackGroundColor;
-  Canvas.Pen.Style := psSolid;
-  Canvas.Pen.Width := 1;
-  if fLastCursorPos.X <> MaxInt then
-    _DrawCursorCrossHair2D(fLastCursorPos);
-  if not Visible then
-  begin
-    fLastCursorPos := Point2D(MaxInt, MaxInt);
-    Exit;
-  end;
-  fLastCursorPos := GetSnappedPoint(P);
-  _DrawCursorCrossHair2D(fLastCursorPos);
+  fLastMousePos := P;
+  if Visible then fLastCursorPos := GetSnappedPoint(P)
+  else fLastCursorPos := Point2D(MaxInt, MaxInt);
+  Invalidate;
 end;
 
 initialization

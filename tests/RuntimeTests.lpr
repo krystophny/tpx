@@ -4,7 +4,7 @@ uses
   Interfaces, Forms, SysUtils, Classes, Controls, Dialogs, InterfaceBase, LCLType,
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
-  Settings0, MainUnit, Propert, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, GObjBase, SysBasic, Preview;
+  Settings0, MainUnit, Propert, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, GObjBase, SysBasic, Preview, ViewPort;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -52,6 +52,8 @@ begin
   Result := AnswerPrompt(Caption, Message, DialogType, Buttons, ButtonCount,
     DefaultIndex, EscapeResult, True, 0, 0);
 end;
+
+{$I ViewportScenarios.inc}
 
 procedure TestPreviewState;
 var
@@ -130,6 +132,8 @@ var
   P, Start, Finish: TPoint2D;
 begin
   Drawing := MainForm.TheDrawing;
+  MainForm.LocalView.GridStep := 10;
+  MainForm.LocalView.ShowGrid := True;
   MainForm.LocalView.VisualRect := Rect2D(0, 0,
     MainForm.LocalView.ClientWidth, MainForm.LocalView.ClientHeight);
   Drawing.AddObject(-1, TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(10, 10)));
@@ -191,10 +195,15 @@ end;
 
 procedure TestDrawing(const Scenario: string);
 var
+  Frame: TBitmap;
   Prim: TPrimitive2D;
   Start, Finish: TPoint2D;
 begin
   UseSnap := False;
+  if Scenario = 'draw-cancel' then begin
+    MainForm.Show;
+    PumpEvents;
+  end;
   MainForm.LocalView.VisualRect := Rect2D(0, 0,
     MainForm.LocalView.ClientWidth, MainForm.LocalView.ClientHeight);
   Start := MainForm.LocalView.ScreenToViewport(Point2D(40, 50));
@@ -216,6 +225,26 @@ begin
     else MainForm.EventManager.MouseUp(nil, mbLeft, [], 40, 50);
     Check(MainForm.TheDrawing.ObjectsCount = 0, 'First click committed an object');
     MainForm.EventManager.MouseMove(nil, [], 160, 140);
+    if Scenario = 'draw-cancel' then begin
+      MainForm.LocalView.ShowGrid := False;
+      MainForm.LocalView.ShowCrossHair := False;
+      Frame := TBitmap.Create;
+      try
+        Frame.SetSize(MainForm.LocalView.ClientWidth, MainForm.LocalView.ClientHeight);
+        MainForm.LocalView.RenderToCanvas(Frame.Canvas);
+        Check(ColorToRGB(Frame.Canvas.Pixels[100, 95]) <> clWhite,
+          'Insertion preview is absent before cancellation');
+        MainForm.EventManager.SendMessage(Msg_Escape, nil);
+        MainForm.LocalView.RenderToCanvas(Frame.Canvas);
+        Check(ColorToRGB(Frame.Canvas.Pixels[100, 95]) = clWhite,
+          'Cancellation retained the insertion preview');
+        Check(MainForm.TheDrawing.ObjectsCount = 0, 'Cancel committed a shape');
+        Check(MainForm.EventManager.Mode = BaseMode, 'Cancel retained insertion mode');
+      finally
+        Frame.Free;
+      end;
+      Exit;
+    end;
     MainForm.EventManager.MouseDown(nil, mbLeft, [], 160, 140);
     MainForm.EventManager.MouseUp(nil, mbLeft, [], 160, 140);
   end;
@@ -363,7 +392,8 @@ begin
     Observer := TObserver.Create;
     MainForm.OnClose := Observer.Closing;
     PromptDialogFunction := AnswerPrompt;
-    if ParamStr(1) = 'preview-state' then TestPreviewState
+    if Pos('viewport-', ParamStr(1)) = 1 then TestViewport(ParamStr(1))
+    else if ParamStr(1) = 'preview-state' then TestPreviewState
     else if ParamStr(1) = 'external-tools' then TestExternalTools
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
     else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))

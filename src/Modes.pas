@@ -1996,6 +1996,7 @@ end;
 
 procedure TInterruptableMode.OnPop;
 begin
+  ViewPort.ClearRubber;
   MainForm.PressModeButton(PressedBtn, False);
 end;
 
@@ -2010,7 +2011,10 @@ end;
 procedure TInsertGrObjMode.OnPush;
 begin
   inherited OnPush;
-  if Assigned(Obj) then Obj.ParentDrawing := Drawing;
+  if Assigned(Obj) then begin
+    Obj.ParentDrawing := Drawing;
+    ViewPort.DrawObject2DWithRubber(Obj, IdentityTransf2D);
+  end;
 end;
 
 procedure TInsertGrObjMode.OnPop;
@@ -2350,7 +2354,7 @@ begin
   Rect.Points[1] := P;
   Rect.Points[2] := Point2D(P.X, P.Y - 1);
   fIsSelecting := True;
-  //ViewPort.DrawObject2DWithRubber(Rect, False);
+  ViewPort.DrawObject2DWithRubber(Rect, IdentityTransf2D);
 end;
 
 procedure TSelectBoxMode.OnMouseMove(Sender: TObject;

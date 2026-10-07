@@ -10,7 +10,7 @@ vector graphics. Up to version 1.5 it has been developed by Alexander Tsyplakov.
 ## Current status
 
 * Linux: usable for testing with the GTK2 backend
-* macos: unusable due to a bug with canvas drawing on both carbon and cocoa backend
+* macOS: tested on Apple Silicon with the Cocoa backend
 * Windows: usable for testing with the win32 backend
 
 [![Build Status](https://travis-ci.org/krystophny/tpx.svg?branch=master)](https://travis-ci.org/krystophny/tpx)
@@ -133,6 +133,51 @@ remain in the editable drawing. Interactive document previews keep their
 existing page layout.
 
 **PDF from LaTeX EPS** also produces a cropped PDF and supports math text.
+
+## Build and run on macOS
+
+The Cocoa build was tested on Apple Silicon with Lazarus 4.8 and Free Pascal
+3.2.3 from the upstream `fixes_3_2` branch. The older Homebrew FPC 3.2.2
+compiler can fail with current Xcode linkers on Objective-C method atoms.
+Install Xcode command-line tools and the bootstrap compiler:
+
+```sh
+xcode-select --install
+brew install fpc git make python texlive ghostscript pstoedit
+```
+
+Build the maintained compiler in a private prefix:
+
+```sh
+git clone --depth 1 --branch fixes_3_2 https://gitlab.com/freepascal.org/fpc/source.git ~/code/fpc-source
+cd ~/code/fpc-source
+tpx_sdk=$(xcrun --sdk macosx --show-sdk-path)
+make -j8 all FPC=/opt/homebrew/bin/fpc OPT="-XR$tpx_sdk" FPMAKE_BUILD_OPT="-XR$tpx_sdk"
+make install INSTALL_PREFIX="$HOME/.local/tpx-fpc"
+"$HOME/.local/tpx-fpc/bin/fpcmkcfg" \
+  -d basepath="$HOME/.local/tpx-fpc/lib/fpc/3.2.3" \
+  -d sharepath="$HOME/.local/tpx-fpc/share/fpc/3.2.3" \
+  -o "$HOME/.local/tpx-fpc/etc/fpc.cfg"
+ln -s ../lib/fpc/3.2.3/ppca64 "$HOME/.local/tpx-fpc/bin/ppca64"
+export PATH="$HOME/.local/tpx-fpc/bin:/opt/homebrew/bin:$PATH"
+export PPC_CONFIG_PATH="$HOME/.local/tpx-fpc/etc"
+```
+
+Then build Lazarus and TpX using that compiler:
+
+```sh
+git clone --depth 1 --branch lazarus_4_8 https://gitlab.com/freepascal.org/lazarus/lazarus.git ~/code/lazarus
+cd ~/code/lazarus
+make lazbuild LCL_PLATFORM=cocoa CPU_TARGET=aarch64 FPC="$HOME/.local/tpx-fpc/bin/fpc"
+cd ~/code/tpx
+make test WIDGETSET=cocoa LAZBUILD="$HOME/code/lazarus/lazbuild" \
+  LAZARUS_DIR="$HOME/code/lazarus" LAZARUS_CONFIG="$PWD/.lazarus" \
+  LAZBUILD_FLAGS="--compiler=$HOME/.local/tpx-fpc/lib/fpc/3.2.3/ppca64"
+./obj/aarch64-darwin/TpX
+```
+
+The native GUI tests require a logged-in graphical session. Tool paths in
+TpX's settings use Unix executable names on macOS, such as `pdflatex` and `gs`.
 
 ## Links
 * http://tpx.sourceforge.net/
