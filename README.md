@@ -65,6 +65,10 @@ If it reports that the Lazarus directory is invalid, add
 or debug the editor. Additional build flags can be passed through
 `LAZBUILD_FLAGS`, for example `make LAZBUILD_FLAGS=--build-all`.
 
+With Python 3 installed, run `make test` to check saved-drawing round trips
+and SVG geometry. On a machine without a display, install Xvfb and use
+`xvfb-run -a make test`. These checks also run in GitHub Actions on Linux.
+
 ### TeX and import/export tools
 
 The editor can build and run without TeX. Previewing drawings and exporting

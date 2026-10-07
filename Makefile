@@ -6,7 +6,7 @@ LAZBUILD_FLAGS ?=
 FPC ?= fpc
 TPX_BINARY = obj/$(shell $(FPC) -iTP)-$(shell $(FPC) -iTO)/TpX
 
-.PHONY: all build run
+.PHONY: all build run test
 
 all: build
 
@@ -15,3 +15,6 @@ build:
 
 run: build
 	"$(TPX_BINARY)"
+
+test: build
+	TPX_BINARY="$(CURDIR)/$(TPX_BINARY)" python3 tests/test_exports.py
