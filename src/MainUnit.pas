@@ -540,6 +540,7 @@ type
     FormPos_Left, FormPos_Top, FormPos_Width, FormPos_Height:
     Integer;
     FormPos_Maximized: Boolean;
+    procedure FitPropertiesToolbars;
     procedure OnExit(Sender: TObject);
     procedure LocalViewDblClick(Sender: TObject);
     procedure LocalViewMouseWheel(Sender: TObject; Shift:
@@ -672,7 +673,9 @@ begin
   ShowScrollBars.Checked := True;
   ShowPropertiesToolbar1.Checked := True;
   ShowPropertiesToolbar2.Checked := True;
-  LocalView.VisualRect := Rect2D(0, 0, 100, 100);
+  LocalView.VisualRect := Rect2D(0, 0,
+    LocalView.ClientWidth * 25.4 / Screen.PixelsPerInch,
+    LocalView.ClientHeight * 25.4 / Screen.PixelsPerInch);
   SmoothBezierNodes := SmoothBezierNodesAction.Checked;
   ScaleLineWidthAction.Checked := ScaleLineWidth;
   NewDoc.Tag := Msg_New;
@@ -1039,6 +1042,44 @@ begin
   PropertiesToolbar2.Visible := ShowPropertiesToolbar2.Checked;
 end;
 
+procedure TMainForm.FitPropertiesToolbars;
+var
+  Bitmap: TBitmap;
+  I, J, RequiredWidth: Integer;
+  Combo: TComboBox;
+  Edit: TEdit;
+begin
+  Bitmap := TBitmap.Create;
+  try
+    for I := 0 to ComponentCount - 1 do begin
+      if Components[I] is TComboBox then begin
+        Combo := Components[I] as TComboBox;
+        if not ((Combo.Parent = PropertiesToolbar1) or
+          (Combo.Parent = PropertiesToolbar2)) then Continue;
+        Bitmap.Canvas.Font.Assign(Combo.Font);
+        RequiredWidth := Bitmap.Canvas.TextWidth(Combo.Text);
+        for J := 0 to Combo.Items.Count - 1 do
+          if Bitmap.Canvas.TextWidth(Combo.Items[J]) > RequiredWidth then
+            RequiredWidth := Bitmap.Canvas.TextWidth(Combo.Items[J]);
+        Inc(RequiredWidth, GetSystemMetrics(SM_CXVSCROLL) + 12);
+        if (Combo = ComboBox3) or (Combo = ComboBox4) or
+          (Combo = ComboBox5) then Inc(RequiredWidth, Combo.Height);
+        if Combo.Width < RequiredWidth then Combo.Width := RequiredWidth;
+      end
+      else if Components[I] is TEdit then begin
+        Edit := Components[I] as TEdit;
+        if not ((Edit.Parent = PropertiesToolbar1) or
+          (Edit.Parent = PropertiesToolbar2)) then Continue;
+        Bitmap.Canvas.Font.Assign(Edit.Font);
+        RequiredWidth := Bitmap.Canvas.TextWidth('-999.99') + 12;
+        if Edit.Width < RequiredWidth then Edit.Width := RequiredWidth;
+      end;
+    end;
+  finally
+    Bitmap.Free;
+  end;
+end;
+
 procedure TMainForm.FormShow(Sender: TObject);
 begin
   ShowGrid.Checked := LocalView.ShowGrid;
@@ -1053,6 +1094,7 @@ begin
   HScrollBar.Visible := ShowScrollBars.Checked;
   VScrollBar.Visible := ShowScrollBars.Checked;
   Showscrollbars1.Checked := ShowScrollBars.Checked;
+  FitPropertiesToolbars;
   Panel31.Realign;
   //Scalephysicalunits1.Checked := ScalePhysical.Checked;
 end;
