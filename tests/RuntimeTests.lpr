@@ -53,6 +53,45 @@ begin
     DefaultIndex, EscapeResult, True, 0, 0);
 end;
 
+procedure TestDrawing(const Scenario: string);
+var
+  Prim: TPrimitive2D;
+  Start, Finish: TPoint2D;
+begin
+  UseSnap := False;
+  MainForm.LocalView.VisualRect := Rect2D(0, 0,
+    MainForm.LocalView.ClientWidth, MainForm.LocalView.ClientHeight);
+  Start := MainForm.LocalView.ScreenToViewport(Point2D(40, 50));
+  Finish := MainForm.LocalView.ScreenToViewport(Point2D(160, 140));
+  if Scenario = 'draw-rectangle' then
+    MainForm.EventManager.SendMessage(Msg_InsertRectangle, nil)
+  else MainForm.EventManager.SendMessage(Msg_InsertLine, nil);
+  MainForm.EventManager.MouseDown(nil, mbRight, [], 20, 30);
+  MainForm.EventManager.MouseUp(nil, mbRight, [], 20, 30);
+  Check(MainForm.TheDrawing.ObjectsCount = 0, 'Right-click created an object');
+  MainForm.EventManager.MouseDown(nil, mbLeft, [], 40, 50);
+  if Scenario = 'draw-drag' then begin
+    MainForm.EventManager.MouseMove(nil, [ssLeft], 160, 140);
+    MainForm.EventManager.MouseUp(nil, mbLeft, [], 160, 140);
+  end
+  else begin
+    if Scenario = 'draw-jitter' then
+      MainForm.EventManager.MouseUp(nil, mbLeft, [], 41, 51)
+    else MainForm.EventManager.MouseUp(nil, mbLeft, [], 40, 50);
+    Check(MainForm.TheDrawing.ObjectsCount = 0, 'First click committed an object');
+    MainForm.EventManager.MouseMove(nil, [], 160, 140);
+    MainForm.EventManager.MouseDown(nil, mbLeft, [], 160, 140);
+    MainForm.EventManager.MouseUp(nil, mbLeft, [], 160, 140);
+  end;
+  Check(MainForm.TheDrawing.ObjectsCount = 1, 'Drawing did not create one object');
+  Prim := MainForm.TheDrawing.ObjectList.FirstObj as TPrimitive2D;
+  Check(IsSamePoint2D(Prim.Points[0], Start), 'Drawing changed first point');
+  Check(IsSamePoint2D(Prim.Points[1], Finish), 'Drawing changed second point');
+  if Scenario = 'draw-rectangle' then
+    Check(Prim is TRectangle2D, 'Rectangle tool created the wrong shape');
+  Check(MainForm.EventManager.Mode = BaseMode, 'Finished drawing retained insertion mode');
+end;
+
 procedure TestDefaultView;
 begin
   Check(Abs(MainForm.LocalView.PixelSize - 25.4 / Screen.PixelsPerInch) < 0.001,
@@ -188,7 +227,8 @@ begin
     Observer := TObserver.Create;
     MainForm.OnClose := Observer.Closing;
     PromptDialogFunction := AnswerPrompt;
-    if ParamStr(1) = 'default-view' then TestDefaultView
+    if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))
+    else if ParamStr(1) = 'default-view' then TestDefaultView
     else if ParamStr(1) = 'toolbar' then TestToolbar
     else if ParamStr(1) = 'text-selection' then TestTextSelection
     else TestExit(ParamStr(1));
