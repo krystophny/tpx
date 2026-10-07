@@ -896,8 +896,7 @@ begin
   begin
     fDrawing2D.Caption := Trim(Child.Text);
     fDrawing2D.FigLabel
-      := XmlUnReplaceChars(Trim(
-      (Child as TXMLDElement).AttributeValueSt['label']));
+      := Trim((Child as TXMLDElement).AttributeValueSt['label']);
   end
   else
   begin

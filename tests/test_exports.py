@@ -27,7 +27,7 @@ class ExportTests(unittest.TestCase):
         ET.SubElement(drawing, "rect", x="0", y="0", w="20", h="10")
         if text is not None:
             ET.SubElement(drawing, "text", x="0", y="15", h="5", t=text)
-        ET.SubElement(drawing, "caption").text = "literal &lt; &amp;"
+        ET.SubElement(drawing, "caption", label="literal &lt;").text = "literal &lt; &amp;"
         ET.SubElement(drawing, "comment").text = "literal &#9;"
         source = self.root / "input.TpX"
         xml = ET.tostring(drawing, encoding="unicode")
@@ -57,6 +57,14 @@ class ExportTests(unittest.TestCase):
         line = drawing.find(SVG + "polyline")
         self.assertEqual(line.get("points"), "0.00,0.00 20.00,-10.00")
 
+    def test_numeric_character_references(self):
+        source = self.drawing("Z")
+        source.write_text(source.read_text().replace('t="Z"',
+                          't="&#09;&#x3B2;&#128578;"'))
+        self.run_tpx("-f", source, "-o", "numeric.TpX")
+        saved = self.read_tpx(self.root / "numeric.TpX")
+        self.assertEqual(saved.find("text").get("t"), "\tβ🙂")
+
     def test_saved_drawings_preserve_geometry_and_text(self):
         for text in ["", "z", "ordinary trailing text", "123.45",
                      'a&<>"\'\tZ', "alpha β and é", "<>&", "literal &amp; &lt; &#9;"]:
@@ -65,6 +73,7 @@ class ExportTests(unittest.TestCase):
                 saved = self.read_tpx(self.root / "saved.TpX")
                 self.assertEqual(saved.get("v"), "5")
                 self.assertEqual(saved.find("caption").text.strip(), "literal &lt; &amp;")
+                self.assertEqual(saved.find("caption").get("label"), "literal &lt;")
                 self.assertEqual(saved.find("comment").text.strip(), "literal &#9;")
                 self.assertEqual(saved.find("rect").get("w"), "20")
                 self.assertEqual(saved.find("line").get("x2"), "20")
