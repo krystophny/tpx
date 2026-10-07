@@ -1,6 +1,6 @@
 LAZBUILD ?= lazbuild
 WIDGETSET ?= gtk2
-LAZARUS_DIR ?= $(firstword $(wildcard /usr/lib/lazarus /usr/share/lazarus))
+LAZARUS_DIR ?= $(patsubst %/lcl,%,$(firstword $(wildcard /usr/lib/lazarus/lcl /usr/lib/lazarus/*/lcl /usr/share/lazarus/lcl /usr/share/lazarus/*/lcl)))
 LAZARUS_CONFIG ?= $(CURDIR)/.lazarus
 LAZBUILD_FLAGS ?=
 FPC ?= fpc

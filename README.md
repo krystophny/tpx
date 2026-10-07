@@ -51,7 +51,8 @@ make run
 An X11 display or XWayland is required to run the GTK2 editor.
 The build stores its Lazarus configuration in the ignored `.lazarus/` directory.
 
-The Makefile detects Lazarus in `/usr/lib/lazarus` or `/usr/share/lazarus`.
+The Makefile detects Lazarus in `/usr/lib/lazarus` or `/usr/share/lazarus`,
+including versioned subdirectories used by Debian and Ubuntu.
 For another installation location, pass the directory containing `lcl/`:
 
 ```sh
@@ -96,4 +97,3 @@ choose the viewers used to open previews.
 * http://tpx.sourceforge.net/
 * https://sourceforge.net/projects/tpx/
 * https://ctan.org/pkg/tpx?lang=de
-
