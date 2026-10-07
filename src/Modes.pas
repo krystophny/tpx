@@ -2232,7 +2232,8 @@ begin
   begin
     CurrPoint := ViewPort.GetSnappedPoint(
       ViewPort.ScreenToViewport(Point2D(X, Y)));
-    if IsSamePoint2D(CurrPoint, Prim.Points[Prim.FirstDrawPoint - 1])
+    if PointDistance2D(CurrPoint, Prim.Points[Prim.FirstDrawPoint - 1])
+      <= 3 * ViewPort.PixelSize
       then Exit;
     PointSelected(CurrPoint);
   end;
