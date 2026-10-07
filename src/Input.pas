@@ -894,10 +894,9 @@ begin
   Child := fXML.DocumentElement.SelectSingleNode('caption');
   if Child <> nil then
   begin
-    fDrawing2D.Caption := XmlUnReplaceChars(Trim(Child.Text));
+    fDrawing2D.Caption := Trim(Child.Text);
     fDrawing2D.FigLabel
-      := XmlUnReplaceChars(Trim(
-      (Child as TXMLDElement).AttributeValueSt['label']));
+      := Trim((Child as TXMLDElement).AttributeValueSt['label']);
   end
   else
   begin
@@ -906,7 +905,7 @@ begin
   end;
   Child := fXML.DocumentElement.SelectSingleNode('comment');
   if Child <> nil
-    then fDrawing2D.Comment := XmlUnReplaceChars(Trim(Child.Text))
+    then fDrawing2D.Comment := Trim(Child.Text)
   else fDrawing2D.Comment := '';
 end;
 
