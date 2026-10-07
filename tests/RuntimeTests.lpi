@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="11"/>
+    <General>
+      <Flags><MainUnitHasCreateFormStatements Value="False"/></Flags>
+      <MainUnit Value="0"/>
+      <ResourceType Value="res"/>
+    </General>
+    <BuildModes Count="1"><Item1 Name="Default" Default="True"/></BuildModes>
+    <RequiredPackages Count="2">
+      <Item1><PackageName Value="Printer4Lazarus"/></Item1>
+      <Item2><PackageName Value="LCL"/></Item2>
+    </RequiredPackages>
+    <Units Count="1"><Unit0><Filename Value="RuntimeTests.lpr"/><IsPartOfProject Value="True"/></Unit0></Units>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <Target><Filename Value="../obj/$(TargetCPU)-$(TargetOS)/RuntimeTests"/></Target>
+    <SearchPaths>
+      <IncludeFiles Value="../obj/$(TargetCPU)-$(TargetOS);../src;../src/lib/PowerPdf;../src/lib/XML"/>
+      <OtherUnitFiles Value="../src;../src/lib/PowerPdf;../src/lib/XML"/>
+      <UnitOutputDirectory Value="../obj/$(TargetCPU)-$(TargetOS)/runtime-tests"/>
+    </SearchPaths>
+    <Parsing><SyntaxOptions><SyntaxMode Value="Delphi"/></SyntaxOptions></Parsing>
+    <Other><CustomOptions Value="-dBorland -dVer150 -dDelphi7 -dCompiler6_Up -dPUREPASCAL"/></Other>
+  </CompilerOptions>
+</CONFIG>
