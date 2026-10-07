@@ -4,7 +4,7 @@ uses
   Interfaces, Forms, SysUtils, Classes, Controls, Dialogs, InterfaceBase, LCLType,
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
-  Settings0, MainUnit, Propert, Drawings, GObjects, Geometry, Manage, Modes, Input;
+  Settings0, MainUnit, Propert, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -51,6 +51,75 @@ function TTestWidgetSet.PromptUser(const Caption, Message: string;
 begin
   Result := AnswerPrompt(Caption, Message, DialogType, Buttons, ButtonCount,
     DefaultIndex, EscapeResult, True, 0, 0);
+end;
+
+procedure TestDefaultView;
+begin
+  Check(Abs(MainForm.LocalView.PixelSize - 25.4 / Screen.PixelsPerInch) < 0.001,
+    'Default view is not at physical screen scale');
+  Check(Abs(MainForm.TheDrawing.LineWidthBase - 0.3) < 0.001,
+    'Default view changed exported line width');
+end;
+
+procedure TestToolbar;
+var
+  Bitmap: TBitmap;
+  I, J: Integer;
+  Combo: TComboBox;
+begin
+  MainForm.Font.Size := 16;
+  MainForm.FormShow(MainForm);
+  Bitmap := TBitmap.Create;
+  try
+    for I := 0 to MainForm.ComponentCount - 1 do
+      if MainForm.Components[I] is TComboBox then begin
+        Combo := MainForm.Components[I] as TComboBox;
+        if not ((Combo.Parent = MainForm.PropertiesToolbar1) or
+          (Combo.Parent = MainForm.PropertiesToolbar2)) then Continue;
+        Bitmap.Canvas.Font.Assign(Combo.Font);
+        for J := 0 to Combo.Items.Count - 1 do
+          Check(Combo.Width >= Bitmap.Canvas.TextWidth(Combo.Items[J]) + 12,
+            Combo.Name + ' clips ' + Combo.Items[J]);
+      end;
+    Bitmap.Canvas.Font.Assign(MainForm.Edit4.Font);
+    Check(MainForm.Edit4.Width >= Bitmap.Canvas.TextWidth('-999.99') + 8,
+      'Font-height entry clips numeric values');
+  finally
+    Bitmap.Free;
+  end;
+end;
+
+procedure TestTextSelection;
+var
+  TextObj: TText2D;
+  Box: TRect2D;
+  Center: TPoint2D;
+  Distance: TRealType;
+  Alignment: THAlignment;
+begin
+  TextObj := TText2D.CreateSpec(-1, Point2D(10, 20), 5, 'Selectable text');
+  try
+    for Alignment := Low(THAlignment) to High(THAlignment) do begin
+      TextObj.HAlignment := Alignment;
+      TextObj.UpdateExtension(TextObj);
+      Box := TextObj.BoundingBox;
+      Center := BoxCenter(Box);
+      Check(TextObj.OnMe(Center, 0.05, Distance) = PICK_INOBJECT,
+        'Text center is not selectable');
+      Check(TextObj.OnMe(Point2D(Box.Right + 0.02, Center.Y), 0.05, Distance)
+        = PICK_INOBJECT, 'Text edge lacks selection tolerance');
+      Check(TextObj.OnMe(Point2D(Box.Right + 1, Center.Y), 0.05, Distance)
+        = PICK_NOOBJECT, 'Text selection extends too far');
+      Check(TextObj.OnMe(TextObj.Points[0], 0.05, Distance) = 0,
+        'Text insertion anchor lost priority');
+    end;
+    TextObj.Rot := Pi / 4;
+    TextObj.UpdateExtension(TextObj);
+    Check(TextObj.OnMe(BoxCenter(TextObj.BoundingBox), 0.05, Distance)
+      = PICK_INOBJECT, 'Rotated text center is not selectable');
+  finally
+    TextObj.Free;
+  end;
 end;
 
 procedure TestExit(const Scenario: string);
@@ -119,7 +188,10 @@ begin
     Observer := TObserver.Create;
     MainForm.OnClose := Observer.Closing;
     PromptDialogFunction := AnswerPrompt;
-    TestExit(ParamStr(1));
+    if ParamStr(1) = 'default-view' then TestDefaultView
+    else if ParamStr(1) = 'toolbar' then TestToolbar
+    else if ParamStr(1) = 'text-selection' then TestTextSelection
+    else TestExit(ParamStr(1));
     WriteLn('PASS ', ParamStr(1));
   except
     on E: Exception do begin

@@ -7,7 +7,7 @@ import unittest
 
 BINARY = Path(os.environ["RUNTIME_BINARY"]).resolve()
 SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-yes",
-             "exit-close", "exit-fallback")
+             "exit-close", "exit-fallback", "text-selection", "default-view", "toolbar")
 
 
 class RuntimeTests(unittest.TestCase):
