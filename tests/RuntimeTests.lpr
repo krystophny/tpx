@@ -4,7 +4,7 @@ uses
   Interfaces, Forms, SysUtils, Classes, Controls, Dialogs, InterfaceBase, LCLType,
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
-  Settings0, MainUnit, Propert, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls;
+  Settings0, MainUnit, Propert, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, GObjBase;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -51,6 +51,74 @@ function TTestWidgetSet.PromptUser(const Caption, Message: string;
 begin
   Result := AnswerPrompt(Caption, Message, DialogType, Buttons, ButtonCount,
     DefaultIndex, EscapeResult, True, 0, 0);
+end;
+
+procedure TestShapeSnap;
+var
+  Drawing: TDrawing2D;
+  Group: TGroup2D;
+  RectObj: TRectangle2D;
+  Hidden, Drawn: TLine2D;
+  P, Start, Finish: TPoint2D;
+begin
+  Drawing := MainForm.TheDrawing;
+  MainForm.LocalView.VisualRect := Rect2D(0, 0,
+    MainForm.LocalView.ClientWidth, MainForm.LocalView.ClientHeight);
+  Drawing.AddObject(-1, TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(10, 10)));
+  Drawing.AddObject(-1, TLine2D.CreateSpec(-1, Point2D(0, 1), Point2D(10.5, 10)));
+  UseSnap := False;
+  UseShapeSnap := False;
+  P := MainForm.LocalView.GetSnappedPoint(Point2D(10.4, 10.2));
+  Check(IsSamePoint2D(P, Point2D(10.4, 10.2)), 'Disabled shape snap moved a point');
+  MainForm.UserEventExecute(MainForm.SnapToShapes);
+  Check(UseShapeSnap and MainForm.SnapToShapes.Checked, 'Shape snap action failed');
+  UseSnap := True;
+  P := MainForm.LocalView.GetSnappedPoint(Point2D(10.4, 10.2));
+  Check(IsSamePoint2D(P, Point2D(10.5, 10)), 'Nearest endpoint did not beat the grid');
+  P := MainForm.LocalView.GetSnappedPoint(Point2D(103, 99));
+  Check(IsSamePoint2D(P, Point2D(100, 100)), 'Grid fallback changed');
+  UseSnap := False;
+  Group := TGroup2D.CreateSpec(-1, [TLine2D.CreateSpec(-1,
+    Point2D(30, 30), Point2D(32, 30))]);
+  Drawing.AddObject(-1, Group);
+  P := MainForm.LocalView.GetSnappedPoint(Point2D(32.2, 30));
+  Check(IsSamePoint2D(P, Point2D(32, 30)), 'Grouped endpoint did not snap');
+  RectObj := TRectangle2D.Create(-1);
+  RectObj.Points[0] := Point2D(50, 50);
+  RectObj.Points[1] := Point2D(70, 60);
+  RectObj.Points[2] := Point2D(50, 60);
+  Drawing.AddObject(-1, RectObj);
+  P := MainForm.LocalView.GetSnappedPoint(Point2D(70.2, 50.2));
+  Check(IsSamePoint2D(P, Point2D(70, 50)), 'Implicit rectangle corner did not snap');
+  Hidden := TLine2D.CreateSpec(-1, Point2D(90, 90), Point2D(95, 95));
+  Hidden.Visible := False;
+  Drawing.AddObject(-1, Hidden);
+  P := MainForm.LocalView.GetSnappedPoint(Point2D(95.2, 95));
+  Check(IsSamePoint2D(P, Point2D(95.2, 95)), 'Hidden endpoint attracted a point');
+  Hidden.Visible := True;
+  Hidden.Layer := 1;
+  Drawing.Layers[1].Visible := False;
+  P := MainForm.LocalView.GetSnappedPoint(Point2D(95.2, 95));
+  Check(IsSamePoint2D(P, Point2D(95.2, 95)), 'Hidden layer attracted a point');
+  MainForm.LocalView.ZoomViewCenter(0.1);
+  P := MainForm.LocalView.GetSnappedPoint(Point2D(10.5, 10.8));
+  Check(IsSamePoint2D(P, Point2D(10.5, 10.8)), 'Snap tolerance grew beyond six pixels');
+  P := MainForm.LocalView.GetSnappedPoint(Point2D(10.5, 10.4));
+  Check(IsSamePoint2D(P, Point2D(10.5, 10)), 'Snap tolerance shrank below six pixels');
+  MainForm.LocalView.VisualRect := Rect2D(0, 0,
+    MainForm.LocalView.ClientWidth, MainForm.LocalView.ClientHeight);
+  Start := MainForm.LocalView.ViewportToScreen(Point2D(30, 30));
+  Finish := MainForm.LocalView.ViewportToScreen(Point2D(70, 50));
+  MainForm.EventManager.SendMessage(Msg_InsertLine, nil);
+  MainForm.EventManager.MouseDown(nil, mbLeft, [], Round(Start.X), Round(Start.Y)+1);
+  MainForm.EventManager.MouseUp(nil, mbLeft, [], Round(Start.X), Round(Start.Y)+1);
+  MainForm.EventManager.MouseDown(nil, mbLeft, [], Round(Finish.X), Round(Finish.Y)+1);
+  MainForm.EventManager.MouseUp(nil, mbLeft, [], Round(Finish.X), Round(Finish.Y)+1);
+  Drawn := MainForm.TheDrawing.ObjectList.LastObj as TLine2D;
+  Check(MainForm.TheDrawing.SelectionFirst = Drawn, 'Release selected an older object');
+  Check(IsSamePoint2D(Drawn.Points[0], Point2D(30, 30)), Format('Drawn start did not snap: %.4f, %.4f; enabled=%s',
+    [Drawn.Points[0].X, Drawn.Points[0].Y, BoolToStr(UseShapeSnap, True)]));
+  Check(IsSamePoint2D(Drawn.Points[1], Point2D(70, 50)), 'Drawn finish did not snap');
 end;
 
 procedure TestDrawing(const Scenario: string);
@@ -227,7 +295,8 @@ begin
     Observer := TObserver.Create;
     MainForm.OnClose := Observer.Closing;
     PromptDialogFunction := AnswerPrompt;
-    if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))
+    if ParamStr(1) = 'shape-snap' then TestShapeSnap
+    else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))
     else if ParamStr(1) = 'default-view' then TestDefaultView
     else if ParamStr(1) = 'toolbar' then TestToolbar
     else if ParamStr(1) = 'text-selection' then TestTextSelection

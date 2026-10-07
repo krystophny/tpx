@@ -20,5 +20,6 @@ run: build
 
 test: build
 	TPX_BINARY="$(CURDIR)/$(TPX_BINARY)" python3 tests/test_exports.py
+	TPX_BINARY="$(CURDIR)/$(TPX_BINARY)" python3 tests/test_tex.py
 	$(LAZBUILD) $(BUILD_OPTIONS) tests/RuntimeTests.lpi
 	RUNTIME_BINARY="$(CURDIR)/$(RUNTIME_BINARY)" python3 tests/test_runtime.py

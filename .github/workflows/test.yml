@@ -12,6 +12,6 @@ jobs:
       - name: Install compiler and GTK2 development tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y fpc lazarus lcl-gtk2 libgtk2.0-dev xvfb
+          sudo apt-get install -y fpc lazarus lcl-gtk2 libgtk2.0-dev xvfb texlive-latex-extra texlive-pictures ghostscript
       - name: Build and run behavioral tests
         run: xvfb-run -a make test

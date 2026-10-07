@@ -56,6 +56,7 @@ type
       const KeepAspectRatio: Boolean; BitmapEntry: TObject);
   public
     FontSizeInTeX: Boolean;
+    DefaultFontHeight: TRealType;
     DvipsFixBB: Boolean;
     constructor Create;
     procedure Poly(PP: TPointsSet2D;
@@ -79,6 +80,7 @@ constructor T_TikZ_Device.Create;
 begin
   inherited Create;
   DvipsFixBB := False;
+  DefaultFontHeight := 5;
   OnBezier := Bezier;
   OnCircle := Circle;
   OnRotEllipse := RotEllipse;
@@ -102,6 +104,12 @@ begin
   if fFactorMM = 0 then fFactorMM := 1;
 //  if DvipsFixBB then
 //    WriteLnStream(DvipsFixBB_RuleStr(ExtRect, fFactorMM));
+  WriteLnStream('\begingroup');
+  WriteLnStream(Format('\providecommand{\tpxLineWidth}{%.6gmm}', [fLineWidthBase]));
+  WriteLnStream(Format('\providecommand{\tpxTextSize}{%.6gpt}',
+    [DefaultFontHeight / fFactorMM * 2.84527559]));
+  WriteLnStream(Format('\providecommand{\tpxDashSize}{%.6gmm}', [fDashSize]));
+  WriteLnStream(Format('\providecommand{\tpxDotSize}{%.6gmm}', [fDottedSize]));
   if DvipsFixBB then
     WriteLnStream('\beginpgfgraphicnamed{\jobname}%');
   WriteStream(Format(
@@ -124,6 +132,7 @@ begin
   WriteLnStream('\end{tikzpicture}%');
   if DvipsFixBB then
     WriteLnStream('\endpgfgraphicnamed');
+  WriteLnStream('\endgroup');
 end;
 
 {function TikZGetColor(Color: TColor): string;
@@ -186,21 +195,19 @@ begin
   NAttr := 0;
   if LineStyle <> liNone then
   begin
-    AddAttr(Format('line width=%.2fmm',
-      [fLineWidthBase * LineWidth]));
+    AddAttr(Format('line width=%.6g*\tpxLineWidth', [LineWidth]));
     AddAttr('draw=L');
   end;
   if FillColor <> clDefault then AddAttr('fill=F');
   case LineStyle of
     liDotted:
       begin
-        AddAttr(Format('dash pattern=on %.2fmm off %.2fmm',
-          [fLineWidthBase * LineWidth, fDottedSize]));
+        AddAttr(Format('dash pattern=on %.6g*\tpxLineWidth off \tpxDotSize',
+          [LineWidth]));
       end;
     liDashed:
       begin
-        AddAttr(Format('dash pattern=on %.2fmm off %.2fmm',
-          [fDashSize * 2, fDashSize]));
+        AddAttr('dash pattern=on 2*\tpxDashSize off \tpxDashSize');
       end;
   end;
   WriteStream('] ');
@@ -401,7 +408,8 @@ procedure T_TikZ_Device.RotText(P: TPoint2D; H, ARot: TRealType;
   const FaceName: AnsiString;
   const Charset: TFontCharSet; const Style: TFontStyles);
 var
-  AnchorSt, St: string;
+  AnchorSt, St, SizeSt: string;
+  Ratio: TRealType;
 begin
   if LineColor <> clDefault then DefineColor(LineColor, 'T');
   WriteStream('\draw');
@@ -422,9 +430,16 @@ begin
   St := Get_TeXText(LineColor, Style, WideText, TeXText);
 //  St := St + '\strut';
   if fFactorMM = 0 then fFactorMM := 1;
-  WriteStream('{' +
-    GetTeXTextFontSize(H, 1 / fFactorMM, FontSizeInTeX)
-    + St + '}');
+  SizeSt := '';
+  if FontSizeInTeX and (DefaultFontHeight > 0) then begin
+    Ratio := H / DefaultFontHeight;
+    SizeSt := Format('\pgfmathsetlengthmacro{\tpxObjectFontSize}{%.6g*\tpxTextSize}' +
+      '\pgfmathsetlengthmacro{\tpxObjectBaseline}{%.6g*\tpxTextSize}' +
+      '\fontsize{\tpxObjectFontSize}{\tpxObjectBaseline}\selectfont ',
+      [Ratio, Ratio * 1.2]);
+  end
+  else SizeSt := GetTeXTextFontSize(H, 1 / fFactorMM, FontSizeInTeX);
+  WriteStream('{' + SizeSt + St + '}');
   WriteLnStream(';');
 end;
 
