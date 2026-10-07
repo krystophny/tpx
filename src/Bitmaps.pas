@@ -44,7 +44,7 @@ type
 function BitmapToEps(const BitmapFileName: string;
   const OutFileName: string): Boolean;
 var
-{$IFNDEF LINUX}Bitmap2EpsPath: string = 'sam2p.exe';
+{$IFDEF MSWINDOWS}Bitmap2EpsPath: string = 'sam2p.exe';
 {$ELSE}Bitmap2EpsPath: string = 'sam2p'; {$ENDIF}
 
 {$I tpx.inc}

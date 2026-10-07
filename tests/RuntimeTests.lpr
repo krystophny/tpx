@@ -4,7 +4,7 @@ uses
   Interfaces, Forms, SysUtils, Classes, Controls, Dialogs, InterfaceBase, LCLType,
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
-  Settings0, MainUnit, Propert, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, GObjBase;
+  Settings0, MainUnit, Propert, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, GObjBase, SysBasic, Preview;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -51,6 +51,74 @@ function TTestWidgetSet.PromptUser(const Caption, Message: string;
 begin
   Result := AnswerPrompt(Caption, Message, DialogType, Buttons, ButtonCount,
     DefaultIndex, EscapeResult, True, 0, 0);
+end;
+
+procedure TestPreviewState;
+var
+  FileName, OriginalName: string;
+  Drawing: TDrawing2D;
+  procedure CheckState;
+  begin
+    Check(Drawing.FileName = OriginalName, 'Preview changed the drawing filename');
+    Check(Drawing.IncludePath = 'include path', 'Preview changed the include path');
+    Check(Drawing.TeXFormat = tex_tikz, 'Preview changed the TeX format');
+    Check(Drawing.PdfTeXFormat = pdftex_tikz, 'Preview changed the PDFTeX format');
+    Check(Drawing.TeXFigure = fig_figure, 'Preview changed the figure wrapper');
+    Check(Drawing.TeXCenterFigure, 'Preview changed centering');
+    Check(Drawing.Caption = 'Caption', 'Preview changed the caption');
+    Check(Drawing.FigLabel = 'fig:test', 'Preview changed the label');
+  end;
+begin
+  Drawing := MainForm.TheDrawing;
+  OriginalName := Drawing.FileName;
+  Drawing.IncludePath := 'include path';
+  Drawing.TeXFormat := tex_tikz;
+  Drawing.PdfTeXFormat := pdftex_tikz;
+  Drawing.TeXFigure := fig_figure;
+  Drawing.TeXCenterFigure := True;
+  Drawing.Caption := 'Caption';
+  Drawing.FigLabel := 'fig:test';
+  Drawing.AddObject(-1, TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(20, 10)));
+  FileName := GetTempFileName(SysUtils.GetTempDir(False), 'tpx-preview-');
+  DeleteFile(FileName);
+  FileName := FileName + '.tex';
+  try
+    StoreToFile_PreviewSource(Drawing, FileName, ltxview_Pdf);
+    Check(FileExists(FileName), 'Preview source was not written');
+    CheckState;
+    StoreToFile_PreviewSource(Drawing, FileName + '/missing.tex', ltxview_Pdf);
+    CheckState;
+  finally
+    DeleteFile(FileName);
+    DeleteFile(ChangeFileExt(FileName, '') + '(TpX).tpx');
+  end;
+end;
+
+procedure TestExternalTools;
+var
+  OriginalDir, Directory: string;
+  Contents: TStringList;
+begin
+  OriginalDir := GetCurrentDir;
+  Directory := GetTempFileName(SysUtils.GetTempDir(False), 'tpx-tools-');
+  DeleteFile(Directory);
+  Directory := Directory + ' with spaces';
+  Check(CreateDir(Directory), 'Could not create tool test directory');
+  Contents := TStringList.Create;
+  try
+    Check(FileExec('printf "%s" "two words" > result.txt', '', '', Directory,
+      True, True), 'External command failed');
+    Check(GetCurrentDir = OriginalDir, 'External command changed working directory');
+    Contents.LoadFromFile(Directory + PathDelim + 'result.txt');
+    Check(Trim(Contents.Text) = 'two words', 'External command lost quoted arguments');
+    Check(not FileExec('exit 7', '', '', Directory, True, True),
+      'External tool failure was reported as success');
+    Check(GetCurrentDir = OriginalDir, 'Failed tool changed working directory');
+  finally
+    Contents.Free;
+    DeleteFile(Directory + PathDelim + 'result.txt');
+    RemoveDir(Directory);
+  end;
 end;
 
 procedure TestShapeSnap;
@@ -247,7 +315,7 @@ begin
   if Scenario = 'exit-cancel' then ReplyButton := idButtonCancel;
   SaveName := '';
   if Scenario = 'exit-yes' then begin
-    SaveName := GetTempFileName(GetTempDir(False), 'tpx-save-');
+    SaveName := GetTempFileName(SysUtils.GetTempDir(False), 'tpx-save-');
     DeleteFile(SaveName);
     SaveName := SaveName + '.tpx';
     MainForm.TheDrawing.FileName := SaveName;
@@ -295,7 +363,9 @@ begin
     Observer := TObserver.Create;
     MainForm.OnClose := Observer.Closing;
     PromptDialogFunction := AnswerPrompt;
-    if ParamStr(1) = 'shape-snap' then TestShapeSnap
+    if ParamStr(1) = 'preview-state' then TestPreviewState
+    else if ParamStr(1) = 'external-tools' then TestExternalTools
+    else if ParamStr(1) = 'shape-snap' then TestShapeSnap
     else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))
     else if ParamStr(1) = 'default-view' then TestDefaultView
     else if ParamStr(1) = 'toolbar' then TestToolbar

@@ -153,7 +153,7 @@ procedure Import_Eps(const Drawing: TDrawing2D;
   const InputFileName: string);
 
 var
-{$IFNDEF LINUX}PsToEditPath: string = 'pstoedit.exe';
+{$IFDEF MSWINDOWS}PsToEditPath: string = 'pstoedit.exe';
 {$ELSE}PsToEditPath: string = 'pstoedit'; {$ENDIF}
   PsToEditFormat: string = 'plot-svg';
 

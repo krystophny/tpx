@@ -104,14 +104,14 @@ begin
   if fFactorMM = 0 then fFactorMM := 1;
 //  if DvipsFixBB then
 //    WriteLnStream(DvipsFixBB_RuleStr(ExtRect, fFactorMM));
-  WriteLnStream('\begingroup');
-  WriteLnStream(Format('\providecommand{\tpxLineWidth}{%.6gmm}', [fLineWidthBase]));
-  WriteLnStream(Format('\providecommand{\tpxTextSize}{%.6gpt}',
+  WriteLnStream('\begingroup%');
+  WriteLnStream(Format('\providecommand{\tpxLineWidth}{%.6gmm}%%', [fLineWidthBase]));
+  WriteLnStream(Format('\providecommand{\tpxTextSize}{%.6gpt}%%',
     [DefaultFontHeight / fFactorMM * 2.84527559]));
-  WriteLnStream(Format('\providecommand{\tpxDashSize}{%.6gmm}', [fDashSize]));
-  WriteLnStream(Format('\providecommand{\tpxDotSize}{%.6gmm}', [fDottedSize]));
+  WriteLnStream(Format('\providecommand{\tpxDashSize}{%.6gmm}%%', [fDashSize]));
+  WriteLnStream(Format('\providecommand{\tpxDotSize}{%.6gmm}%%', [fDottedSize]));
   if DvipsFixBB then
-    WriteLnStream('\beginpgfgraphicnamed{\jobname}%');
+    WriteLnStream('\beginpgfgraphicnamed{\pgfactualjobname}%');
   WriteStream(Format(
     '\begin{tikzpicture}[x=%.2fmm, y=%.2fmm, inner xsep=0pt, inner ysep=0pt, outer xsep=0pt, outer ysep=0pt', //ysep=-1.2pt
     [1 / fFactorMM, 1 / fFactorMM]));
@@ -132,7 +132,7 @@ begin
   WriteLnStream('\end{tikzpicture}%');
   if DvipsFixBB then
     WriteLnStream('\endpgfgraphicnamed');
-  WriteLnStream('\endgroup');
+  WriteLnStream('\endgroup%');
 end;
 
 {function TikZGetColor(Color: TColor): string;
