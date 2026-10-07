@@ -59,7 +59,9 @@ class TeXTests(unittest.TestCase):
                  4.552, (10.0, 20.0))]:
             with self.subTest(override=bool(override)):
                 (self.root / "document.tex").write_text(
-                    hooks + override + r"\begin{document}\input{drawing.TpX}\end{document}")
+                    hooks + override + r"\begin{document}\input{drawing.TpX}" +
+                    (r"\ifdefined\tpxLineWidth\errmessage{Defaults leaked}\fi"
+                     if not override else "") + r"\end{document}")
                 self.run_command(["pdflatex", "-halt-on-error", "-interaction=nonstopmode",
                                   "document.tex"])
                 log = (self.root / "document.log").read_text()
