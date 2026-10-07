@@ -180,22 +180,21 @@ end;
 function ReplaceChars(const St: string; const Chars: string;
   const ReplArr: array of string): string;
 var
-  I, Prev, Pos, LenChars: Integer;
+  I, Prev, Pos: Integer;
 begin
   Result := '';
-  LenChars := Length(Chars);
   Prev := 1;
   for Pos := 1 to Length(St) do
   begin
-    for I := 1 to LenChars do if St[Pos] = Chars[I] then Break;
-    if I <= LenChars then
+    I := System.Pos(St[Pos], Chars);
+    if I > 0 then
     begin
       Result := Result
         + Copy(St, Prev, Pos - Prev) + ReplArr[I - 1];
       Prev := Pos + 1;
     end;
   end;
-  Result := Result + Copy(St, Prev, Pos - Prev);
+  Result := Result + Copy(St, Prev, Length(St) - Prev + 1);
 end;
 
 function XmlReplaceChars(const St: string): string;
