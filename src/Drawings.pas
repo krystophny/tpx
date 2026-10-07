@@ -94,6 +94,7 @@ var
   RotateSymbols: Boolean = True;
   ScaleLineWidth: Boolean = False;
   UseSnap: Boolean = False;
+  UseShapeSnap: Boolean = False;
   UseAngularSnap: Boolean = False;
 
 type

@@ -158,6 +158,8 @@ type
     Useareatoselectobjects2: TMenuItem;
     ShowGrid: TAction;
     SnapToGrid: TAction;
+    SnapToShapes: TAction;
+    SnapToShapesMenu: TMenuItem;
     AngularSnap: TAction;
     N11: TMenuItem;
     AreaSelect: TAction;
@@ -698,6 +700,7 @@ begin
   SelNext.Tag := Msg_SelNext;
   SelPrev.Tag := Msg_SelPrev;
   SnapToGrid.Tag := Msg_SnapToGrid;
+  SnapToShapes.Tag := Msg_SnapToShapes;
   AngularSnap.Tag := Msg_AngularSnap;
   SmoothBezierNodesAction.Tag := Msg_SmoothBezierNodes;
   AreaSelectInsideAction.Tag := Msg_AreaSelectInside;
@@ -1088,6 +1091,7 @@ begin
   ShowRulers.Checked := LocalView.ShowRulers;
   AreaSelectInsideAction.Checked := AreaSelectInside;
   SnapToGrid.Checked := UseSnap;
+  SnapToShapes.Checked := UseShapeSnap;
   AngularSnap.Checked := UseAngularSnap;
   Panel2.Visible := ShowRulers.Checked;
   Panel3.Visible := ShowRulers.Checked;

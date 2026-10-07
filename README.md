@@ -97,6 +97,32 @@ by `netpbm` and `libjpeg-turbo-progs` on Debian/Ubuntu, or `netpbm` and
 `libjpeg-turbo` on Arch/CachyOS. In TpX's settings, check the tool paths and
 choose the viewers used to open previews.
 
+### Drawing and TikZ defaults
+
+Sized shapes support both dragging and click-to-click placement. In the Edit
+menu, **Snap to shapes** attracts points to visible endpoints and corners
+within six screen pixels. Shape snapping takes priority over grid snapping;
+points farther away still use the grid when it is enabled.
+
+Text can be selected across its visible area. Text properties offer left,
+center, and right alignment. Enter a complete math expression such as
+`$(a+b)$` in the text field, or use the TeX text field for other LaTeX code.
+The canvas shows the editable text; LaTeX previews and exports typeset it.
+
+TikZ output supplies drawing defaults for `\tpxLineWidth`, `\tpxTextSize`,
+`\tpxDashSize`, and `\tpxDotSize`. Define these before including the drawing
+to override them, for example:
+
+```tex
+\newcommand{\tpxLineWidth}{0.4mm}
+\newcommand{\tpxTextSize}{10pt}
+\input{drawing.TpX}
+```
+
+Object-specific widths and text heights remain proportional to these defaults.
+Unset defaults belong to the drawing's local group and do not affect later
+figures. Disable `FontSizeInTeX` to inherit the document's font size instead.
+
 ## Links
 * http://tpx.sourceforge.net/
 * https://sourceforge.net/projects/tpx/

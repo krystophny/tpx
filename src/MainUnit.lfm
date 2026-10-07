@@ -1178,6 +1178,9 @@ object MainForm: TMainForm
       object Usesnap2: TMenuItem
         Action = SnapToGrid
       end
+      object SnapToShapesMenu: TMenuItem
+        Action = SnapToShapes
+      end
       object AngularSnap1: TMenuItem
         Action = AngularSnap
       end
@@ -2042,6 +2045,12 @@ object MainForm: TMainForm
       Hint = 'Snap to grid'
       OnExecute = UserEventExecute
       ShortCut = 114
+    end
+    object SnapToShapes: TAction
+      Category = 'Edit'
+      Caption = 'Snap to shapes'
+      Hint = 'Snap to endpoints and corners within six screen pixels'
+      OnExecute = UserEventExecute
     end
     object AngularSnap: TAction
       Category = 'Edit'
