@@ -329,7 +329,7 @@ procedure StoreToFile_EMF(const Drawing: TDrawing2D;
   const FileName: string);
 
 var
-{$IFNDEF LINUX}MetaPostPath: string = 'mpost.exe';
+{$IFDEF MSWINDOWS}MetaPostPath: string = 'mpost.exe';
 {$ELSE}MetaPostPath: string = 'mpost'; {$ENDIF}
   Font_pfb_Path: string = '';
   GhostscriptCustomKeys: string = '-r300 -sDEVICE=png256';
@@ -1508,7 +1508,7 @@ begin
         '%s -dSAFER -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite' +
         ' -dAutoRotatePages=/None -sOutputFile="%s" "%s"',
         [PrepareFilePath(GhostscriptPath),
-        PdfFileName, EpsFileName]), '', '',
+        ExpandFileName(PdfFileName), ExpandFileName(EpsFileName)]), '', '',
           GetTempDir, True, True);
 
       if not FileExists(PdfFileName) then

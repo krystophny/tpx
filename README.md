@@ -123,6 +123,17 @@ Object-specific widths and text heights remain proportional to these defaults.
 Unset defaults belong to the drawing's local group and do not affect later
 figures. Disable `FontSizeInTeX` to inherit the document's font size instead.
 
+### Cropped LaTeX export
+
+Export **PdfLaTeX source** and run `pdflatex` on the generated `.tex` file to
+produce a PDF cropped to the drawing, including its configured border. This
+uses the `preview` package supplied by the TeX prerequisites above. Exported
+assets omit figure placement, centering, captions, and labels; those settings
+remain in the editable drawing. Interactive document previews keep their
+existing page layout.
+
+**PDF from LaTeX EPS** also produces a cropped PDF and supports math text.
+
 ## Links
 * http://tpx.sourceforge.net/
 * https://sourceforge.net/projects/tpx/

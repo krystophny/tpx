@@ -25,7 +25,7 @@ procedure StoreToFile_PreviewSource(
   const PreviewKind: TLaTeXPreviewKind);
 
 var
-{$IFNDEF LINUX}
+{$IFDEF MSWINDOWS}
   LatexPath: string = 'latex.exe';
   PdfLatexPath: string = 'pdflatex.exe';
   DviPsPath: string = 'dvips.exe';
@@ -42,7 +42,7 @@ var
   SvgViewerPath: string = '';
   PngViewerPath: string = '';
   BmpViewerPath: string = '';
-{$IFNDEF LINUX}
+{$IFDEF MSWINDOWS}
   GhostscriptPath: string = 'gswin32c.exe';
 {$ELSE}
   GhostscriptPath: string = 'gs'; //??
@@ -67,7 +67,7 @@ end;
 procedure WriteTempTeXFile(const FileName, TpXName: string;
   const Drawing: TDrawing2D;
   const PreviewKind: TLaTeXPreviewKind;
-  const PgfDvipsFixBB: Boolean);
+  const PgfDvipsFixBB, Crop: Boolean);
 var
   IncludeFile: string;
   List: TStringList;
@@ -123,16 +123,28 @@ begin
       fig_floating: List.Add('\usepackage{floatflt}');
       fig_wrap: List.Add('\usepackage{wrapfig}');
     end;
+    if Crop then begin
+      List.Add('\usepackage[active,tightpage]{preview}');
+      List.Add('\setlength{\PreviewBorder}{0pt}');
+    end;
     if PgfDvipsFixBB then List.Add('\pgfrealjobname{dummy}');
     List.Add('\begin{document}');
     //List.Add('\hrule height 1ex');
     List.Add('\thispagestyle{empty}');
-    List.Add('\ ');
+    if Crop then begin
+      List.Add('\begin{preview}');
+      List.Add('\hbox{%');
+    end
+    else List.Add('\ ');
       //Without this preview does not work for pgf inside figure
     List.Add('');
     List.Add('\input{' + TpXName + '}%');
     List.Add('');
-    List.Add('\ ');
+    if Crop then begin
+      List.Add('}%');
+      List.Add('\end{preview}');
+    end
+    else List.Add('\ ');
     List.Add('\end{document}');
     List.SaveToFile(FileName);
   finally
@@ -143,11 +155,14 @@ end;
 function WritePreviewSource(const Drawing: TDrawing2D;
   const PreviewKind: TLaTeXPreviewKind;
   const DvipsFixBB: Boolean;
-  const TeXFileName, TpXFileName: string): Boolean;
+  const TeXFileName, TpXFileName: string;
+  const Crop: Boolean = False): Boolean;
 var
-  IncludePath0, FileName0: string;
+  IncludePath0, FileName0, Caption0, Label0: string;
   TeXFormat0: TeXFormatKind;
   PdfTeXFormat0: PdfTeXFormatKind;
+  TeXFigure0: TeXFigureEnvKind;
+  Center0: Boolean;
 begin
   Result := False;
   TryDeleteFile(TpXFileName);
@@ -159,26 +174,39 @@ begin
   Drawing.IncludePath := '';
   TeXFormat0 := Drawing.TeXFormat;
   PdfTeXFormat0 := Drawing.PdfTeXFormat;
+  TeXFigure0 := Drawing.TeXFigure;
+  Center0 := Drawing.TeXCenterFigure;
+  Caption0 := Drawing.Caption;
+  Label0 := Drawing.FigLabel;
+  if Crop or DvipsFixBB then begin
+    Drawing.TeXFigure := fig_none;
+    Drawing.TeXCenterFigure := False;
+    Drawing.Caption := '';
+    Drawing.FigLabel := '';
+  end;
   case PreviewKind of
     ltxview_Dvi, ltxview_PS: Drawing.PdfTeXFormat := pdftex_none;
     ltxview_Pdf: Drawing.TeXFormat := tex_none;
   end;
   try
-    Drawing.FileName := TpXFileName;
-    Result := StoreToFile_TpX(Drawing, TpXFileName, DvipsFixBB);
-  except
+    try
+      Drawing.FileName := TpXFileName;
+      Result := StoreToFile_TpX(Drawing, TpXFileName, DvipsFixBB);
+    except
+      Result := False;
+    end;
+  finally
     Drawing.IncludePath := IncludePath0;
     Drawing.TeXFormat := TeXFormat0;
     Drawing.PdfTeXFormat := PdfTeXFormat0;
     Drawing.FileName := FileName0;
-    Exit;
+    Drawing.TeXFigure := TeXFigure0;
+    Drawing.TeXCenterFigure := Center0;
+    Drawing.Caption := Caption0;
+    Drawing.FigLabel := Label0;
   end;
   if not Result then Exit;
   Result := False;
-  Drawing.IncludePath := IncludePath0;
-  Drawing.TeXFormat := TeXFormat0;
-  Drawing.PdfTeXFormat := PdfTeXFormat0;
-  Drawing.FileName := FileName0;
   if not FileExists(TpXFileName) then
   begin
     MessageBoxError('Preview/temporary TpX file not created');
@@ -186,7 +214,7 @@ begin
   end;
   WriteTempTeXFile(TeXFileName, ExtractFileName(TpXFileName),
     Drawing, PreviewKind,
-    (Drawing.TeXFormat in [tex_pgf, tex_tikz]) and DvipsFixBB);
+    (Drawing.TeXFormat in [tex_pgf, tex_tikz]) and DvipsFixBB, Crop);
   if not FileExists(TeXFileName) then
   begin
     MessageBoxError('Preview/temporary TeX file not created');
@@ -431,7 +459,7 @@ begin
   TpXFileName := ExtractFilePath(FileName)
     + ChangeFileExt(ExtractFileName(FileName), '') + '(TpX).tpx';
   WritePreviewSource(
-    Drawing, PreviewKind, False, FileName, TpXFileName);
+    Drawing, PreviewKind, False, FileName, TpXFileName, True);
 end;
 
 procedure WritePreambleForHelp;

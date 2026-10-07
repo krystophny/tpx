@@ -244,7 +244,7 @@ begin
 //  if DvipsFixBB then
 //    WriteLnStream(DvipsFixBB_RuleStr(ExtRect, fFactorMM));
   if DvipsFixBB then
-    WriteLnStream('\beginpgfgraphicnamed{\jobname}%');
+    WriteLnStream('\beginpgfgraphicnamed{\pgfactualjobname}%');
   WriteLnStream(Format('\begin{pgfpicture}{%.2fmm}{%.2fmm}{%.2fmm}{%.2fmm}',
     [ExtRect.Left / fFactorMM, ExtRect.Bottom / fFactorMM,
     ExtRect.Right / fFactorMM, ExtRect.Top / fFactorMM]));
