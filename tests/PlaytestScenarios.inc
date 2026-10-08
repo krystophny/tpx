@@ -314,12 +314,19 @@ begin
 end;
 
 procedure TestLabeledPreview;
+const
+  LabelValues: array[0..1] of string = ('', 'fig:test');
+  CaptionValues: array[0..1] of string = ('', 'Caption');
 var
   Drawing: TDrawing2D;
   LabelValue, CaptionValue, Pdf, OriginalName: string;
   Figure: TeXFigureEnvKind;
   Log: TStringList;
 begin
+  Check((LabelValues[0] = '') and (LabelValues[1] = 'fig:test'),
+    'Labeled preview fixtures must preserve the full label');
+  Check((CaptionValues[0] = '') and (CaptionValues[1] = 'Caption'),
+    'Labeled preview fixtures must preserve the full caption');
   Drawing := MainForm.TheDrawing;
   OriginalName := Drawing.FileName;
   Drawing.TeXFormat := tex_tikz; Drawing.PdfTeXFormat := pdftex_tikz;
@@ -327,8 +334,8 @@ begin
   Log := TStringList.Create;
   try
     for Figure in [fig_none, fig_figure] do
-      for LabelValue in ['', 'fig:test'] do
-        for CaptionValue in ['', 'Caption'] do begin
+      for LabelValue in LabelValues do
+        for CaptionValue in CaptionValues do begin
           Drawing.TeXFigure := Figure; Drawing.FigLabel := LabelValue;
           Drawing.Caption := CaptionValue;
           Check(Run_LaTeX_Temp(Drawing, ltxview_Pdf, Pdf, True, False),
