@@ -63,6 +63,62 @@ class TeXTests(unittest.TestCase):
         self.assertTrue(65 <= width <= 73, (width, height))
         self.assertTrue(36 <= height <= 45, (width, height))
 
+    @unittest.skipUnless(shutil.which("gs") and shutil.which("sam2p"),
+                         "Ghostscript and real sam2p are required")
+    def test_modern_sam2p_bitmap_survives_tikz_and_pdf_export(self):
+        # Independently define a 64x64 red, uncompressed 24-bit BMP.
+        pixels = b"\x00\x00\xff" * (64 * 64)
+        bmp = (b"BM" + struct.pack("<IHHI", 54 + len(pixels), 0, 0, 54)
+               + struct.pack("<IiiHHIIiiII", 40, 64, 64, 1, 24, 0,
+                             len(pixels), 2835, 2835, 0, 0) + pixels)
+        (self.root / "red.bmp").write_bytes(bmp)
+        drawing = ET.Element("TpX", v="5", TeXFormat="tikz", PdfTeXFormat="tikz",
+                             TeXFigure="none", PicScale="1", Border="2")
+        ET.SubElement(drawing, "bitmap", x="0", y="0", w="16", h="16", link="red.bmp")
+        source = self.root / "input.TpX"
+        source.write_text("%" + ET.tostring(drawing, encoding="unicode") + "\n")
+        # The copied application reads this test-only configuration beside itself.
+        binary = self.root / BINARY.name
+        shutil.copy2(BINARY, binary)
+        for filename in ("preview.tex.inc", "metapost.tex.inc"):
+            shutil.copy2(Path(__file__).resolve().parents[1] / "ci" / filename,
+                         self.root / filename)
+        (self.root / "TpX.ini").write_text("LineWidth_Default=1\nBitmap2EpsPath="
+                                           + shutil.which("sam2p") + "\n")
+        self.run_command([binary, "-f", source, "-o", self.root / "bitmap.TpX"])
+        self.assertNotIn(b"%%BeginData:", (self.root / "red.eps").read_bytes())
+        self.run_command([binary, "-f", self.root / "bitmap.TpX", "-x", "pdflatexsrc",
+                          "-o", self.root / "bitmap-pdf"])
+        self.run_command(["pdflatex", "-halt-on-error", "-interaction=nonstopmode", "bitmap-pdf.tex"])
+        image = self.root / "bitmap.ppm"
+        self.run_command(["gs", "-q", "-dSAFER", "-dBATCH", "-dNOPAUSE",
+                          "-sDEVICE=ppmraw", "-r72", "-sOutputFile=" + str(image),
+                          "bitmap-pdf.pdf"])
+        data = image.read_bytes()
+        # PPM has an ASCII header; comments can appear between header tokens.
+        tokens, offset = [], 0
+        while len(tokens) < 4:
+            while data[offset:offset + 1].isspace():
+                offset += 1
+            if data[offset:offset + 1] == b"#":
+                offset = data.index(b"\n", offset) + 1
+                continue
+            start = offset
+            while not data[offset:offset + 1].isspace():
+                offset += 1
+            tokens.append(data[start:offset])
+        self.assertEqual(tokens[0], b"P6")
+        self.assertEqual(tokens[3], b"255")
+        rgb = data[offset + 1:]
+        red_count = sum(rgb[i] > 240 and rgb[i + 1] < 10 and rgb[i + 2] < 10
+                        for i in range(0, len(rgb), 3))
+        print(f"Bitmap PDF oracle: {red_count} red pixels", flush=True)
+        # A 16mm square at 72dpi covers roughly 45x45 pixels. A missing bitmap
+        # leaves a white page and zero red pixels, independent of TeX syntax.
+        self.assertGreater(red_count, 1500, "The rendered PDF lost the red bitmap")
+        self.assertIn(r"\includegraphics", (self.root / "bitmap.TpX").read_text())
+        self.assertIn(r"\includegraphics", (self.root / "bitmap-pdf(TpX).tpx").read_text())
+
     @unittest.skipUnless(shutil.which("gs"), "Ghostscript is not installed")
     def test_exported_pdflatex_source_has_a_cropped_page(self):
         for figure in ("none", "figure"):

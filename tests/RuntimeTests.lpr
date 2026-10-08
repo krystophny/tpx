@@ -5,7 +5,7 @@ uses
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, GObjBase, SysBasic, Preview, ViewPort, Modify, Output;
+  Settings0, MainUnit, Propert, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -42,6 +42,11 @@ function AnswerPrompt(const Caption, Message: string; DialogType: LongInt;
   Buttons: PLongInt; ButtonCount, DefaultIndex, EscapeResult: LongInt;
   UseDefaultPos: Boolean; X, Y: LongInt): LongInt;
 begin
+  if (ParamStr(1) = 'bitmap-eps') and
+    (Pos('Conversion of bitmap to EPS failed:', Message) > 0) then begin
+    Inc(PromptCount);
+    Exit(idButtonOK);
+  end;
   if (ParamStr(1) = 'property-dimensions') and
     ((Pos('Line width must', Message) > 0) or (Pos('Text height must', Message) > 0)) then
     Exit(idButtonOK);
@@ -60,6 +65,33 @@ end;
 
 {$I ViewportScenarios.inc}
 {$I PlaytestScenarios.inc}
+
+procedure RunBitmapFixtureConverter;
+var
+  Source, Destination: TFileStream;
+begin
+  if GetEnvironmentVariable('TPX_EPS_FIXTURE_MODE') = 'nonzero' then Halt(7);
+  if GetEnvironmentVariable('TPX_EPS_FIXTURE_MODE') = 'no-output' then Halt(0);
+  Check(ParamCount = 2, 'Fixture converter expected input and output paths');
+  Source := TFileStream.Create(GetEnvironmentVariable('TPX_EPS_FIXTURE'), fmOpenRead);
+  try
+    Destination := TFileStream.Create(ParamStr(2), fmCreate);
+    try Destination.CopyFrom(Source, 0) finally Destination.Free end;
+  finally Source.Free end;
+end;
+
+procedure TestBitmapEps;
+var
+  Converted, Expected: Boolean;
+begin
+  PromptCount := 0;
+  Bitmap2EpsPath := GetEnvironmentVariable('TPX_EPS_CONVERTER');
+  Expected := GetEnvironmentVariable('TPX_EPS_EXPECT_SUCCESS') = '1';
+  Converted := BitmapToEps(GetEnvironmentVariable('TPX_EPS_INPUT'),
+    GetEnvironmentVariable('TPX_EPS_OUTPUT'));
+  Check(Converted = Expected, 'BitmapToEps returned ' + BoolToStr(Converted, True));
+  Check(PromptCount = Ord(not Expected), 'Unexpected bitmap conversion error count');
+end;
 
 procedure TestPreviewState;
 var
@@ -442,6 +474,11 @@ end;
 
 begin
   try
+    // Test-only converter copies independently defined EPS fixtures, without UI.
+    if SameText(ChangeFileExt(ExtractFileName(ParamStr(0)), ''), 'sam2p-fixture') then begin
+      RunBitmapFixtureConverter;
+      Halt(0);
+    end;
     WidgetSet := TTestWidgetSet.Create;
     Application.Initialize;
     RequireDerivedFormResource := True;
@@ -468,6 +505,7 @@ begin
     else if ParamStr(1) = 'font-choice' then TestFontChoice
     else if ParamStr(1) = 'conversion-save' then TestConversionSave
     else if ParamStr(1) = 'unsupported-exports' then TestUnsupportedExports
+    else if ParamStr(1) = 'bitmap-eps' then TestBitmapEps
     else if ParamStr(1) = 'labeled-preview' then TestLabeledPreview
     else TestExit(ParamStr(1));
     if GetEnvironmentVariable('TPX_STARTUP_EXPECTED') <> '' then
