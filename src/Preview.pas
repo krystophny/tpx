@@ -256,7 +256,8 @@ begin
   TryDeleteFile(TempTeXLog);
   try
     Result := FileExec(Format('%s -interaction=batchmode "%s"',
-      [PrepareFilePath(LatexCompPath), TempTeX]), '', '',
+      // The working directory is TEMP; avoid TeX-active characters in its path.
+      [PrepareFilePath(LatexCompPath), ExtractFileName(TempTeX)]), '', '',
       {IncludeTrailingPathDelimiter(ExtractFilePath(FileName))} TempDir,
       Hide, True);
     if not Result or not FileExists(TempDvi) then
