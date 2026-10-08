@@ -33,6 +33,29 @@ class RuntimeTests(unittest.TestCase):
             with self.subTest(scenario=scenario):
                 self.run_scenario(scenario)
 
+    def test_startup_document_identity(self):
+        # Keep scenario selection out of argv so production startup sees real input.
+        with tempfile.TemporaryDirectory(prefix="tpx startup-") as directory:
+            root = Path(directory).resolve()
+            source = root / "drawing with spaces.tpx"
+            source.write_text('%<TpX v="5">\n'
+                              '%<line x1="0" y1="0" x2="20" y2="10"/>\n'
+                              '%</TpX>\n')
+            cases = [([], ": Unnamed drawing :", 0),
+                     (["-f", ""], ": Unnamed drawing :", 0),
+                     (["new drawing.tpx"], str(root / "new drawing.tpx"), 0),
+                     (["-f", source.name], str(source), 1)]
+            for arguments, expected, count in cases:
+                with self.subTest(arguments=arguments):
+                    env = os.environ.copy()
+                    env.update(TPX_STARTUP_EXPECTED=expected,
+                               TPX_STARTUP_OBJECTS=str(count))
+                    result = subprocess.run([str(BINARY), *arguments], cwd=root,
+                                            env=env, capture_output=True,
+                                            text=True, timeout=40)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("PASS startup-file", result.stdout, result.stderr)
+
     @unittest.skipUnless(shutil.which("pdflatex"), "pdflatex is not installed")
     def test_standalone_labeled_previews(self):
         self.run_scenario("labeled-preview")

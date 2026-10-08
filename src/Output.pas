@@ -2208,7 +2208,7 @@ begin
     FileName := OptList.Values['f'];
     if FileName = '' then
       FileName := OptList.Values['$FileName'];
-    FileName := ExpandFileName(FileName);
+    if FileName <> '' then FileName := ExpandFileName(FileName);
     if OptList.IndexOfName('i') >= 0 then
       TeXFileName := OptList.Values['i'];
     if OptList.IndexOfName('l') >= 0 then

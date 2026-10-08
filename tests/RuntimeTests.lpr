@@ -349,6 +349,29 @@ begin
   end;
 end;
 
+procedure TestStartupFileName;
+var
+  Expected: string;
+  ExpectedCount: Integer;
+  Line: TLine2D;
+begin
+  Expected := GetEnvironmentVariable('TPX_STARTUP_EXPECTED');
+  ExpectedCount := StrToInt(GetEnvironmentVariable('TPX_STARTUP_OBJECTS'));
+  Check(MainForm.TheDrawing.FileName = Expected,
+    'Startup document filename differs: ' + MainForm.TheDrawing.FileName);
+  if ExpectedCount = 0 then
+    Check(MainForm.Caption = Expected, 'New startup document title differs')
+  else Check(MainForm.Caption = ExtractFileName(Expected), 'Loaded startup title differs');
+  Check(MainForm.TheDrawing.ObjectsCount = ExpectedCount,
+    'Startup loaded an unexpected object count');
+  Check(not MainForm.TheDrawing.History.IsChanged, 'Startup document is dirty');
+  if ExpectedCount = 1 then begin
+    Line := MainForm.TheDrawing.GetObject(0) as TLine2D;
+    Check((Line.Points[1].X = 20) and (Line.Points[1].Y = 10),
+      'Startup changed loaded line geometry');
+  end;
+end;
+
 procedure TestExit(const Scenario: string);
 var
   ModeBefore: TMode;
@@ -415,7 +438,8 @@ begin
     Observer := TObserver.Create;
     MainForm.OnClose := Observer.Closing;
     PromptDialogFunction := AnswerPrompt;
-    if Pos('viewport-', ParamStr(1)) = 1 then TestViewport(ParamStr(1))
+    if GetEnvironmentVariable('TPX_STARTUP_EXPECTED') <> '' then TestStartupFileName
+    else if Pos('viewport-', ParamStr(1)) = 1 then TestViewport(ParamStr(1))
     else if ParamStr(1) = 'preview-state' then TestPreviewState
     else if ParamStr(1) = 'external-tools' then TestExternalTools
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
@@ -433,7 +457,9 @@ begin
     else if ParamStr(1) = 'unsupported-exports' then TestUnsupportedExports
     else if ParamStr(1) = 'labeled-preview' then TestLabeledPreview
     else TestExit(ParamStr(1));
-    WriteLn('PASS ', ParamStr(1));
+    if GetEnvironmentVariable('TPX_STARTUP_EXPECTED') <> '' then
+      WriteLn('PASS startup-file')
+    else WriteLn('PASS ', ParamStr(1));
   except
     on E: Exception do begin
       WriteLn(StdErr, E.ClassName, ': ', E.Message);
