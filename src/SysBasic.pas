@@ -256,10 +256,12 @@ var
   PDirectory: PChar;
   exitCode: DWORD;
   ExitCodeProcess: Longword;
-{$ELSEIF NOT DEFINED(WASI)}
+{$ELSE}
+  {$IFNDEF WASI}
 var
   Child: TProcess;
   Command: string;
+  {$ENDIF}
 {$ENDIF}
 begin
 //  MessageBoxInfo(aCmdLine);
@@ -339,10 +341,11 @@ begin
 {  if Result then
     Application.MessageBox('App successful',
       'Error', MB_OK);}
-{$ELSEIF DEFINED(WASI)}
+{$ELSE}
+  {$IFDEF WASI}
   { Browsers cannot start external programs. }
   Result := False;
-{$ELSE}
+  {$ELSE}
   Result := False;
   Child := TProcess.Create(nil);
   try
@@ -372,6 +375,7 @@ begin
   finally
     Child.Free;
   end;
+  {$ENDIF}
 {$ENDIF}
 end;
 
