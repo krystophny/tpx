@@ -18,8 +18,8 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-yes",
 
 
 class RuntimeTests(unittest.TestCase):
-    def run_scenario(self, scenario, extra_env=None):
-        with tempfile.TemporaryDirectory(prefix="tpx-runtime-") as directory:
+    def run_scenario(self, scenario, extra_env=None, directory_prefix="tpx-runtime-"):
+        with tempfile.TemporaryDirectory(prefix=directory_prefix) as directory:
             env = os.environ.copy()
             env["TMPDIR"] = directory
             env.update(extra_env or {})
@@ -36,6 +36,12 @@ class RuntimeTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("pdflatex"), "pdflatex is not installed")
     def test_standalone_labeled_previews(self):
         self.run_scenario("labeled-preview")
+
+    @unittest.skipUnless(sys.platform.startswith("linux") and shutil.which("pdflatex"),
+                         "Linux temp-directory override and pdflatex are required")
+    def test_preview_in_special_temp_directory(self):
+        # Exercise the real preview compiler with a TeX-active parent path.
+        self.run_scenario("labeled-preview", directory_prefix="tpx ~preview-")
 
     @unittest.skipUnless(sys.platform.startswith("linux"), "Linux desktop opener")
     def test_default_document_opener(self):
