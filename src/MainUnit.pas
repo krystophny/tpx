@@ -1453,7 +1453,7 @@ end;
 
 procedure TMainForm.OnExit(Sender: TObject);
 begin
-  Close;
+  if not (csDestroying in ComponentState) then Close;
 end;
 
 procedure TMainForm.LocalViewDblClick(Sender: TObject);

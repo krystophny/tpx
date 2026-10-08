@@ -22,6 +22,7 @@ type
   TObserver = class
     CloseRequests: Integer;
     procedure Closing(Sender: TObject; var Action: TCloseAction);
+    procedure ClosingDefault(Sender: TObject; var Action: TCloseAction);
   end;
 
 var
@@ -39,6 +40,11 @@ procedure TObserver.Closing(Sender: TObject; var Action: TCloseAction);
 begin
   Inc(CloseRequests);
   Action := caNone;
+end;
+
+procedure TObserver.ClosingDefault(Sender: TObject; var Action: TCloseAction);
+begin
+  Inc(CloseRequests);
 end;
 
 function AnswerPrompt(const Caption, Message: string; DialogType: LongInt;
@@ -735,17 +741,25 @@ var
   Saved: TDrawing2D;
   Loader: T_TpX_Loader;
   SaveName: string;
+  SaveFailed: Boolean;
 begin
   PromptCount := 0;
   ReplyButton := idButtonNo;
+  SaveFailed := False;
   if Scenario <> 'exit-clean' then begin
     Line := TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(20, 10));
     MainForm.TheDrawing.AddObject(-1, Line);
     MainForm.TheDrawing.History.SetPropertiesChanged;
   end;
-  if Scenario = 'exit-cancel' then ReplyButton := idButtonCancel;
+  if Pos('exit-cancel', Scenario) = 1 then ReplyButton := idButtonCancel;
+  if Scenario = 'exit-save-failure' then begin
+    MainForm.TheDrawing.FileName := IncludeTrailingPathDelimiter(
+      SysUtils.GetTempDir(False)) + 'tpx-missing-save-parent-' + IntToStr(GetProcessID) +
+      PathDelim + 'drawing.tpx';
+    ReplyButton := idButtonYes;
+  end;
   SaveName := '';
-  if Scenario = 'exit-yes' then begin
+  if (Scenario = 'exit-yes') or (Scenario = 'exit-destroy-yes') then begin
     SaveName := GetTempFileName(SysUtils.GetTempDir(False), 'tpx-save-');
     DeleteFile(SaveName);
     SaveName := SaveName + '.tpx';
@@ -754,19 +768,62 @@ begin
   end;
   ModeBefore := MainForm.EventManager.Mode;
   if Scenario = 'exit-fallback' then MainForm.OnExit(MainForm)
+  else if Pos('exit-destroy', Scenario) = 1 then begin
+    MainForm.OnClose := nil;
+    MainForm.Close;
+    Check(Application.Terminated, 'Accepted close did not terminate the application');
+    MainForm.Free;
+    MainForm := nil;
+  end
+  else if Scenario = 'exit-save-failure' then begin
+    try
+      MainForm.Close;
+    except
+      on E: Exception do SaveFailed := True;
+    end;
+  end
   else if Scenario = 'exit-close' then MainForm.Close
   else MainForm.UserEventExecute(MainForm.ExitProgram);
   if Scenario = 'exit-clean' then Check(PromptCount = 0, 'Clean drawing prompted')
   else Check(PromptCount = 1, 'Expected one save prompt, got ' + IntToStr(PromptCount));
-  if Scenario = 'exit-cancel' then begin
+  if Pos('exit-cancel', Scenario) = 1 then begin
     Check(Observer.CloseRequests = 0, 'Cancel requested closing');
     Check(MainForm.EventManager.Mode = ModeBefore, 'Cancel discarded the active mode');
     Check(MainForm.TheDrawing.ObjectsCount = 1, 'Cancel discarded the drawing');
+    if Scenario = 'exit-cancel-retry' then begin
+      ReplyButton := idButtonNo;
+      MainForm.OnClose := Observer.ClosingDefault;
+      MainForm.Close;
+      Check(Application.Terminated, 'Accepted retry did not terminate the application');
+      MainForm.Free;
+      MainForm := nil;
+      Check(PromptCount = 2, 'Retry after Cancel did not prompt once');
+      Check(Observer.CloseRequests = 1, 'Retry after Cancel did not close');
+    end;
   end
-  else Check(Observer.CloseRequests = 1, 'Exit failed to request closing');
-  if Scenario = 'exit-yes' then begin
+  else if Scenario = 'exit-save-failure' then begin
+    Check(SaveFailed, 'Failed save did not block closing');
+    Check(Observer.CloseRequests = 0, 'Failed save requested closing');
+    Check(MainForm.TheDrawing.History.IsChanged,
+      'Failed save cleared the modified state');
+    Check(MainForm.TheDrawing.ObjectsCount = 1,
+      'Failed save discarded the drawing');
+    ReplyButton := idButtonNo;
+    MainForm.OnClose := Observer.ClosingDefault;
+    MainForm.Close;
+    Check(Application.Terminated, 'Accepted retry did not terminate the application');
+    MainForm.Free;
+    MainForm := nil;
+    Check(PromptCount = 2, 'Retry after failed save did not prompt once');
+    Check(Observer.CloseRequests = 1, 'Retry after failed save did not close');
+  end
+  else if Pos('exit-destroy', Scenario) <> 1 then
+    Check(Observer.CloseRequests = 1, 'Exit failed to request closing');
+  if (Scenario = 'exit-yes') or (Scenario = 'exit-destroy-yes') then begin
     Check(FileExists(SaveName), 'Save did not write the drawing');
-    Check(not MainForm.TheDrawing.History.IsChanged, 'Saved drawing remains modified');
+    if Scenario = 'exit-yes' then
+      Check(not MainForm.TheDrawing.History.IsChanged,
+        'Saved drawing remains modified');
     Saved := TDrawing2D.Create(nil);
     Loader := T_TpX_Loader.Create(Saved);
     try
