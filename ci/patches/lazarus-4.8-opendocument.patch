@@ -1,0 +1,46 @@
+diff --git a/lcl/include/sysenvapis_unix.inc b/lcl/include/sysenvapis_unix.inc
+index 19fc8667..49cd7d2c 100644
+--- a/lcl/include/sysenvapis_unix.inc
++++ b/lcl/include/sysenvapis_unix.inc
+@@ -26,6 +26,7 @@ end;
+ function OpenDocument(APath: String): Boolean;
+ var
+   lApp: string;
++  DocumentProcess: TProcessUTF8;
+ begin
+   // Android uses this
+   if Assigned(OpenDocumentWidgetsetImplementation) then
+@@ -43,7 +44,14 @@ begin
+   if lApp='' then
+     Exit(False);
+ 
+-  if (APath<>'') and (APath[1]<>'"') then
+-    APath:=QuotedStr(APath);
+-  RunCmdFromPath(lApp,APath);
++  DocumentProcess := TProcessUTF8.Create(nil);
++  try
++    DocumentProcess.InheritHandles := False;
++    DocumentProcess.Options := [poWaitOnExit]; // Prevent a zombie process.
++    DocumentProcess.Executable := lApp;
++    DocumentProcess.Parameters.Add(APath);
++    DocumentProcess.Execute;
++  finally
++    DocumentProcess.Free;
++  end;
+ end;
+diff --git a/lcl/lclintf.pas b/lcl/lclintf.pas
+index 3cdee3d1..438e7f96 100644
+--- a/lcl/lclintf.pas
++++ b/lcl/lclintf.pas
+@@ -95,6 +95,11 @@ var
+ 
+ implementation
+ 
++{$IFDEF UNIX}
++uses
++  Process;
++{$ENDIF}
++
+ type
+   { TTimerID }
+ 
