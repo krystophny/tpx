@@ -34,6 +34,7 @@ jobs:
             runner: macos-15
             widgetset: cocoa
     env:
+      PYTHONUTF8: '1'
       CANDIDATE_VERSION: ${{ inputs.version || '1.6.0' }}
       CANDIDATE_PLATFORM: ${{ matrix.platform }}
       WIDGETSET: ${{ matrix.widgetset }}
