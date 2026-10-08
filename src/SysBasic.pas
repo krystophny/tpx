@@ -134,8 +134,6 @@ function CheckFilePath(var FilePath: string;
 var
   I: Integer;
   TmpFilePath: string;
-const
-  PathSepa = ';'; //?? Lazarus
   // Checks whether the path exists.
   // Adds a space to the path to indicate problem.
   // If the path already starts with a space, error message does not show up.
@@ -165,8 +163,8 @@ begin
   if ExtractFilePath(TmpFilePath) = '' then
   // If the path is not full, try to find the file
     TmpFilePath := FileSearch(
-      TmpFilePath, '.' + PathSepa +
-      ExtractFilePath(ParamStr(0)) + PathSepa +
+      TmpFilePath, '.' + PathSeparator +
+      ExtractFilePath(ParamStr(0)) + PathSeparator +
       GetEnvironmentVariable('PATH'));
   if not FileExists(TmpFilePath) then
   begin

@@ -6,6 +6,7 @@ import subprocess
 import shutil
 import sys
 import tempfile
+import uuid
 import unittest
 
 BINARY = Path(os.environ["RUNTIME_BINARY"]).resolve()
@@ -77,6 +78,29 @@ class RuntimeTests(unittest.TestCase):
                 "PATH": directory + os.pathsep + os.environ["PATH"],
                 "TPX_OPENER_LOG": str(root / "opened"),
             })
+
+    def test_check_file_path_uses_platform_path_separator(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-path-tool-") as directory:
+            tool_name = "tpx-path-probe-" + uuid.uuid4().hex
+            tool = Path(directory) / tool_name
+            tool.write_bytes(b"")
+            self.run_scenario("check-file-path", {
+                "PATH": directory,
+                "TPX_FILEPATH_TOOL": tool_name,
+            })
+
+    def test_check_file_path_searches_beside_runtime_executable(self):
+        tool_name = "tpx-path-probe-" + uuid.uuid4().hex
+        tool = BINARY.parent / tool_name
+        with tempfile.TemporaryDirectory(prefix="tpx-empty-path-") as directory:
+            try:
+                tool.write_bytes(b"")
+                self.run_scenario("check-file-path", {
+                    "PATH": directory,
+                    "TPX_FILEPATH_TOOL": tool_name,
+                })
+            finally:
+                tool.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

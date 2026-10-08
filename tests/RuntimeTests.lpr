@@ -137,6 +137,18 @@ begin
   end;
 end;
 
+procedure TestCheckFilePath;
+var
+  FilePath: string;
+begin
+  FilePath := GetEnvironmentVariable('TPX_FILEPATH_TOOL');
+  Check(FilePath <> '', 'Test tool name was not supplied');
+  Check(CheckFilePath(FilePath, 'Test tool'),
+    'Executable in the first PATH component was not found');
+  Check(FilePath = GetEnvironmentVariable('TPX_FILEPATH_TOOL'),
+    'CheckFilePath changed the configured executable name');
+end;
+
 procedure TestShapeSnap;
 var
   Drawing: TDrawing2D;
@@ -442,6 +454,7 @@ begin
     else if Pos('viewport-', ParamStr(1)) = 1 then TestViewport(ParamStr(1))
     else if ParamStr(1) = 'preview-state' then TestPreviewState
     else if ParamStr(1) = 'external-tools' then TestExternalTools
+    else if ParamStr(1) = 'check-file-path' then TestCheckFilePath
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
     else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))
     else if ParamStr(1) = 'default-view' then TestDefaultView
