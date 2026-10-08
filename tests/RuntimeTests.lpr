@@ -1,11 +1,11 @@
 program RuntimeTests;
 {$mode Delphi}
 uses
-  Interfaces, Forms, SysUtils, Classes, Types, Math, Controls, Dialogs, InterfaceBase, LCLType,
+  Interfaces, Forms, SysUtils, Classes, Types, Math, Controls, Dialogs, InterfaceBase, LCLType, LMessages,
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc;
+  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -15,6 +15,7 @@ type
   {$IFDEF LCLcocoa}TNativeWidgetSet = TCocoaWidgetSet;{$ENDIF}
   {$IFDEF LCLwin32}TNativeWidgetSet = TWin32WidgetSet;{$ENDIF}
   TTestWidgetSet = class(TNativeWidgetSet)
+    function GetKeyState(nVirtKey: Integer): SmallInt; override;
     function PromptUser(const Caption, Message: string; DialogType: LongInt;
       Buttons: PLongInt; ButtonCount, DefaultIndex, EscapeResult: LongInt): LongInt; override;
   end;
@@ -26,6 +27,8 @@ type
 var
   Observer: TObserver;
   PromptCount, ReplyButton: Integer;
+  ShortcutModifierSimulation: Boolean = False;
+  ShortcutModifiers: TShiftState = [];
 
 procedure Check(Condition: Boolean; const Message: string);
 begin
@@ -53,6 +56,16 @@ begin
   Check(Pos('Save current drawing?', Message) > 0, 'Unexpected dialog: ' + Message);
   Inc(PromptCount);
   Result := ReplyButton;
+end;
+
+function TTestWidgetSet.GetKeyState(nVirtKey: Integer): SmallInt;
+begin
+  if ShortcutModifierSimulation then begin
+    Result := 0;
+    if (nVirtKey = VK_CONTROL) and (ssCtrl in ShortcutModifiers) then Result := -1;
+    if (nVirtKey = VK_LWIN) and (ssMeta in ShortcutModifiers) then Result := -1;
+    if (nVirtKey = VK_SHIFT) and (ssShift in ShortcutModifiers) then Result := -1;
+  end else Result := inherited GetKeyState(nVirtKey);
 end;
 
 function TTestWidgetSet.PromptUser(const Caption, Message: string;
@@ -185,6 +198,96 @@ procedure TestClipboardFormatWidth;
 begin
   Check(SizeOf(TpXClipboardFormat) = SizeOf(Pointer),
     'TpX clipboard format ID cannot hold a native format handle');
+end;
+
+procedure CheckPlatformActionShortcut(Action: TAction; Key: Word;
+  Shift: TShiftState; const ActionName: string);
+var
+  Expected: TShortCut;
+  DecodedKey: Word;
+  DecodedShift: TShiftState;
+begin
+{$IFDEF DARWIN}
+  Include(Shift, ssMeta);
+{$ELSE}
+  Include(Shift, ssCtrl);
+{$ENDIF}
+  Expected := Menus.ShortCut(Key, Shift);
+  Check(Action.ShortCut = Expected, ActionName + ' shortcut uses the wrong modifier');
+  ShortCutToKey(Action.ShortCut, DecodedKey, DecodedShift);
+  Check((DecodedKey = Key) and (DecodedShift = Shift),
+    ActionName + ' shortcut does not dispatch its displayed key and modifier');
+end;
+
+function DispatchActionShortcut(Key: Word; Modifiers: TShiftState): Boolean;
+var
+  Message: TLMKey;
+begin
+  ShortcutModifiers := Modifiers;
+  ShortcutModifierSimulation := True;
+  FillChar(Message, SizeOf(Message), 0);
+  Message.CharCode := Key;
+  try
+    Result := MainForm.ActionList1.IsShortCut(Message);
+  finally
+    ShortcutModifierSimulation := False;
+    ShortcutModifiers := [];
+  end;
+end;
+
+procedure TestPlatformShortcuts;
+var
+  ExpectedCtrlW: TShortCut;
+  Line: TLine2D;
+  WrongModifier: TShiftState;
+  RightModifier: TShiftState;
+  TableWindow: TTableForm;
+begin
+  CheckPlatformActionShortcut(MainForm.Undo, Ord('Z'), [], 'Undo');
+  CheckPlatformActionShortcut(MainForm.Redo, Ord('Z'), [ssShift], 'Redo');
+  CheckPlatformActionShortcut(MainForm.ClipboardCopy, Ord('C'), [], 'Copy');
+  CheckPlatformActionShortcut(MainForm.ClipboardCut, Ord('X'), [], 'Cut');
+  CheckPlatformActionShortcut(MainForm.ClipboardPaste, Ord('V'), [], 'Paste');
+  CheckPlatformActionShortcut(MainForm.SelectAll, Ord('A'), [], 'Select All');
+  CheckPlatformActionShortcut(MainForm.NewDoc, Ord('N'), [], 'New');
+  CheckPlatformActionShortcut(MainForm.OpenDoc, Ord('O'), [], 'Open');
+  CheckPlatformActionShortcut(MainForm.SaveDoc, Ord('S'), [], 'Save');
+  CheckPlatformActionShortcut(MainForm.SaveAs, Ord('S'), [ssShift], 'Save As');
+  CheckPlatformActionShortcut(MainForm.Print, Ord('P'), [], 'Print');
+  Check(MainForm.Undo1.ShortCut = MainForm.Undo.ShortCut,
+    'Undo menu item does not show the action shortcut');
+  ExpectedCtrlW := Menus.ShortCut(Ord('W'), [ssCtrl]);
+  Check(MainForm.NewWindow.ShortCut = ExpectedCtrlW,
+    'New Window must keep Ctrl+W because Command+W means Close Window on macOS');
+  Check(MainForm.MoveUpPixel.ShortCut = Menus.ShortCut(VK_UP, [ssCtrl]),
+    'Specialized Ctrl+Up movement shortcut was changed');
+
+  Line := TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(10, 10));
+  MainForm.TheDrawing.AddObject(-1, Line);
+{$IFDEF DARWIN}
+  WrongModifier := [ssCtrl];
+  RightModifier := [ssMeta];
+{$ELSE}
+  WrongModifier := [ssMeta];
+  RightModifier := [ssCtrl];
+{$ENDIF}
+  Check(not DispatchActionShortcut(Ord('A'), WrongModifier),
+    'Select All dispatched with the wrong platform modifier');
+  Check(MainForm.TheDrawing.SelectedObjects.Count = 0,
+    'Wrong modifier changed drawing selection');
+  Check(DispatchActionShortcut(Ord('A'), RightModifier),
+    'Select All did not dispatch with the platform modifier');
+  Check(MainForm.TheDrawing.SelectedObjects.Count = 1,
+    'Select All shortcut did not select the drawing object');
+
+  TableWindow := TTableForm.Create(nil);
+  try
+    CheckPlatformActionShortcut(TableWindow.Copy, Ord('C'), [], 'Table Copy');
+    CheckPlatformActionShortcut(TableWindow.Paste, Ord('V'), [], 'Table Paste');
+    CheckPlatformActionShortcut(TableWindow.SelectAll, Ord('A'), [], 'Table Select All');
+  finally
+    TableWindow.Free;
+  end;
 end;
 
 procedure TestColorBoxCustomState;
@@ -568,6 +671,7 @@ begin
     else if ParamStr(1) = 'check-file-path' then TestCheckFilePath
     else if ParamStr(1) = 'clipboard-format-width' then TestClipboardFormatWidth
     else if ParamStr(1) = 'clipboard-roundtrip' then TestClipboardRoundTrip
+    else if ParamStr(1) = 'platform-shortcuts' then TestPlatformShortcuts
     else if ParamStr(1) = 'color-box-custom-state' then TestColorBoxCustomState
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
     else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))
