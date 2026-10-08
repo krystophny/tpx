@@ -1,7 +1,7 @@
 program RuntimeTests;
 {$mode Delphi}
 uses
-  Interfaces, Forms, SysUtils, Classes, Types, Math, Controls, Dialogs, InterfaceBase, LCLType, LMessages,
+  Interfaces, Forms, SysUtils, Classes, Types, Math, Controls, Dialogs, Clipbrd, InterfaceBase, LCLType, LMessages, Process,
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
@@ -198,6 +198,81 @@ procedure TestClipboardFormatWidth;
 begin
   Check(SizeOf(TpXClipboardFormat) = SizeOf(Pointer),
     'TpX clipboard format ID cannot hold a native format handle');
+end;
+
+procedure SendNativeKey(const Key: string);
+var
+  KeySender: TProcess;
+  I: Integer;
+begin
+  KeySender := TProcess.Create(nil);
+  try
+    KeySender.Executable := FileSearch('xdotool', GetEnvironmentVariable('PATH'));
+    Check(KeySender.Executable <> '', 'xdotool is required for the GTK shortcut test');
+    KeySender.Parameters.Add('key');
+    KeySender.Parameters.Add('--clearmodifiers');
+    KeySender.Parameters.Add(Key);
+    KeySender.Options := [poWaitOnExit];
+    KeySender.Execute;
+    Check(KeySender.ExitStatus = 0, 'xdotool failed to send ' + Key);
+  finally
+    KeySender.Free;
+  end;
+  for I := 1 to 5 do begin
+    Application.ProcessMessages;
+    Sleep(10);
+  end;
+end;
+
+procedure TestEditableShortcutRouting;
+var
+  Line: TLine2D;
+begin
+  Line := TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(20, 10));
+  MainForm.TheDrawing.AddObject(-1, Line);
+  MainForm.Show;
+  Application.ProcessMessages;
+
+  MainForm.ComboBox6.Text := '0.2';
+  MainForm.ComboBox6.SelStart := 0;
+  MainForm.ComboBox6.SelLength := 0;
+  MainForm.ComboBox6.SetFocus;
+  Application.ProcessMessages;
+
+  SendNativeKey('ctrl+a');
+  Check(MainForm.ComboBox6.SelText = '0.2',
+    'Ctrl+A did not select text in the focused editable combo');
+  Check(MainForm.TheDrawing.SelectedObjects.Count = 0,
+    'Ctrl+A in the editable combo selected drawing objects');
+
+  SendNativeKey('ctrl+c');
+  Check(Clipboard.AsText = '0.2', 'Ctrl+C did not copy selected combo text');
+  Check(MainForm.TheDrawing.SelectedObjects.Count = 0,
+    'Ctrl+C in the editable combo dispatched the drawing Copy action');
+
+  SendNativeKey('ctrl+x');
+  Check(MainForm.ComboBox6.Text = '', 'Ctrl+X did not cut selected combo text');
+  Check(MainForm.TheDrawing.SelectedObjects.Count = 0,
+    'Ctrl+X in the editable combo dispatched the drawing Cut action');
+  SendNativeKey('ctrl+v');
+  Check(MainForm.ComboBox6.Text = '0.2', 'Ctrl+V did not paste text into the combo');
+  SendNativeKey('ctrl+z');
+  Check(MainForm.TheDrawing.ObjectsCount = 1,
+    'Ctrl+Z in the editable combo changed the drawing');
+  SendNativeKey('ctrl+shift+z');
+  Check(MainForm.TheDrawing.ObjectsCount = 1,
+    'Ctrl+Shift+Z in the editable combo changed the drawing');
+  Check(MainForm.TheDrawing.SelectedObjects.Count = 0,
+    'Edit shortcuts in the editable combo selected drawing objects');
+
+  MainForm.LocalView.SetFocus;
+  Application.ProcessMessages;
+  SendNativeKey('ctrl+a');
+  Check(MainForm.TheDrawing.SelectedObjects.Count = 1,
+    'Ctrl+A with canvas focus did not select the drawing object');
+  SendNativeKey('ctrl+c');
+  Check(Clipboard.HasFormat(TpXClipboardFormat),
+    'Ctrl+C with canvas focus did not copy the drawing object');
 end;
 
 procedure CheckPlatformActionShortcut(Action: TAction; Key: Word;
@@ -671,6 +746,7 @@ begin
     else if ParamStr(1) = 'check-file-path' then TestCheckFilePath
     else if ParamStr(1) = 'clipboard-format-width' then TestClipboardFormatWidth
     else if ParamStr(1) = 'clipboard-roundtrip' then TestClipboardRoundTrip
+    else if ParamStr(1) = 'editable-shortcut-routing' then TestEditableShortcutRouting
     else if ParamStr(1) = 'platform-shortcuts' then TestPlatformShortcuts
     else if ParamStr(1) = 'color-box-custom-state' then TestColorBoxCustomState
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap

@@ -10,7 +10,7 @@ uses
 {$IFNDEF FPC}
   Windows, HH, hh_funcs, System.ImageList, System.Actions,
 {$ELSE}
-  LCLIntf, LCLType, LResources,
+  LCLIntf, LCLType, LMessages, LResources,
 {$ENDIF}
   Devices, Modes, PlatformShortcuts;
 
@@ -569,6 +569,9 @@ type
       const HasObject, HasSelection, IsOnObject,
       IsOnPoint, CanDeletePoints: Boolean);
     procedure SetCurrentProperties;
+{$IFDEF FPC}
+    function IsShortcut(var Message: TLMKey): Boolean; override;
+{$ENDIF}
   end;
 
 var
@@ -943,6 +946,32 @@ procedure TMainForm.LocalViewKeyUp(Sender: TObject; var Key: Word;
 begin
   EventManager.KeyUp(Sender, Key, Shift);
 end;
+
+{$IFDEF FPC}
+function TMainForm.IsShortcut(var Message: TLMKey): Boolean;
+var
+  Shortcut: TShortCut;
+  EditableFocus: Boolean;
+begin
+  EditableFocus := ActiveControl is TCustomEdit;
+  if not EditableFocus and (ActiveControl is TCustomComboBox) then
+    EditableFocus := TCustomComboBox(ActiveControl).Style.HasEditBox;
+  if EditableFocus then
+  begin
+    Shortcut := Menus.ShortCut(Message.CharCode,
+      KeyDataToShiftState(Message.KeyData));
+    if (Shortcut <> 0) and
+      ((Shortcut = Undo.ShortCut) or
+       (Shortcut = Redo.ShortCut) or
+       (Shortcut = ClipboardCopy.ShortCut) or
+       (Shortcut = ClipboardCut.ShortCut) or
+       (Shortcut = ClipboardPaste.ShortCut) or
+       (Shortcut = SelectAll.ShortCut)) then
+      Exit(False);
+  end;
+  Result := inherited IsShortcut(Message);
+end;
+{$ENDIF}
 
 procedure TMainForm.UpdatePlatformShortcuts;
 begin

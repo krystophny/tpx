@@ -46,7 +46,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y fpc libgtk2.0-dev xvfb texlive-latex-extra texlive-pictures ghostscript
+          sudo apt-get install -y fpc libgtk2.0-dev xvfb xdotool texlive-latex-extra texlive-pictures ghostscript
       - name: Install macOS bootstrap compiler
         if: runner.os == 'macOS'
         run: brew install fpc

@@ -76,6 +76,11 @@ class RuntimeTests(unittest.TestCase):
             with self.subTest(scenario=scenario):
                 self.run_scenario(scenario)
 
+    @unittest.skipUnless(sys.platform.startswith("linux"),
+                         "native editable shortcut routing uses GTK2/X11")
+    def test_gtk_editable_shortcut_routing(self):
+        self.run_scenario("editable-shortcut-routing")
+
     def test_startup_document_identity(self):
         # Keep scenario selection out of argv so production startup sees real input.
         with tempfile.TemporaryDirectory(prefix="tpx startup-") as directory:
