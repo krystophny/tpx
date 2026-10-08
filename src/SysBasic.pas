@@ -72,9 +72,9 @@ implementation
 
 uses
 //WinBasic,
-  MainUnit, Math{$IFDEF FPC}, Classes, Process, ExtCtrls{$ENDIF};
+  MainUnit, Math{$IFDEF FPC}, Classes, {$IFNDEF WASI}Process,{$ENDIF} ExtCtrls{$ENDIF};
 
-{$IFDEF FPC}
+{$IF DEFINED(FPC) AND NOT DEFINED(WASI)}
 type
   TBackgroundTool = class(TComponent)
   private
@@ -256,7 +256,7 @@ var
   PDirectory: PChar;
   exitCode: DWORD;
   ExitCodeProcess: Longword;
-{$ELSE}
+{$ELSEIF NOT DEFINED(WASI)}
 var
   Child: TProcess;
   Command: string;
@@ -339,6 +339,9 @@ begin
 {  if Result then
     Application.MessageBox('App successful',
       'Error', MB_OK);}
+{$ELSEIF DEFINED(WASI)}
+  { Browsers cannot start external programs. }
+  Result := False;
 {$ELSE}
   Result := False;
   Child := TProcess.Create(nil);
