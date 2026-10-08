@@ -24,6 +24,7 @@ object PropertiesForm: TPropertiesForm
     ActivePage = TextSheet
     Align = alClient
     MultiLine = True
+    ShowTabs = False
     TabHeight = 1
     TabIndex = 1
     TabOrder = 0
