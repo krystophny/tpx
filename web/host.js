@@ -65,8 +65,8 @@ const imports = {
   present: (pointer, width, height) => {
     if (canvas.width !== width) canvas.width = width;
     if (canvas.height !== height) canvas.height = height;
-    document.querySelector("#lcl-surface").style.width = `${width}px`;
-    document.querySelector("#lcl-surface").style.height = `${height}px`;
+    // The surface is sized by CSS; the canvas keeps the form's pixel size and
+    // scales down to fit, so the UI never overflows the browser window.
     // LazCanvas clfARGB32 bytes A, R, G, B become canvas bytes R, G, B, A:
     // one shift per little-endian word into a reused buffer.
     if (!image || image.width !== width || image.height !== height) image = context.createImageData(width, height);
@@ -108,6 +108,57 @@ for (const [name, kind] of [['pointerdown', 0], ['pointerup', 1], ['pointermove'
   });
 }
 canvas.addEventListener('contextmenu', event => event.preventDefault());
+
+// Keys: Windows virtual key codes for the keys LCL routes, Unicode scalar for
+// text input. Modifiers follow the pointer encoding: shift 1, ctrl 2, alt 4.
+const KEYS = {Backspace: 8, Tab: 9, Enter: 13, Shift: 16, Control: 17, Alt: 18,
+  Escape: 27, PageUp: 33, PageDown: 34, End: 35, Home: 36, Insert: 45, Delete: 46,
+  ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Meta: 91};
+const PREVENT = new Set(['Tab', 'Escape', 'Enter', 'Backspace', 'Delete', 'ArrowLeft',
+  'ArrowUp', 'ArrowRight', 'ArrowDown', 'PageUp', 'PageDown', 'F1', 'F2', 'F3', 'F4',
+  'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12']);
+function vk(key) {
+  if (key in KEYS) return KEYS[key];
+  if (key.length === 1) return key.toUpperCase().charCodeAt(0);
+  if (/^F([1-9]|1[0-2])$/.test(key)) return 111 + Number(key.slice(1));
+  return 0;
+}
+const modifiers = event => Number(event.shiftKey) | Number(event.ctrlKey) << 1 |
+  Number(event.altKey) << 2 | Number(event.buttons & 1) << 3;
+function key(kind, event) {
+  if (!ready) return;
+  if (PREVENT.has(event.key)) event.preventDefault();
+  const code = vk(event.key);
+  guarded(() => kind === 2
+    ? instance.exports.lcl_key(2, code, event.key.codePointAt(0), modifiers(event))
+    : instance.exports.lcl_key(kind, code, 0, modifiers(event)));
+}
+document.addEventListener('keydown', event => { key(0, event); if (event.key.length === 1 && !event.ctrlKey && !event.altKey) key(2, event); });
+document.addEventListener('keyup', event => key(1, event));
+canvas.addEventListener('wheel', event => {
+  if (!ready) return;
+  event.preventDefault();
+  const b = canvas.getBoundingClientRect();
+  const x = Math.round((event.clientX-b.left)*canvas.width/b.width);
+  const y = Math.round((event.clientY-b.top)*canvas.height/b.height);
+  // LCL wants Windows wheel ticks (120 per notch, positive scrolls up).
+  const delta = Math.sign(-event.deltaY) * 120;
+  guarded(() => instance.exports.lcl_wheel(x, y, delta, modifiers(event)));
+}, {passive: false});
+
+// The form follows the window instead of the desktop size it was saved with.
+function surfaceBox() {
+  const surface = document.querySelector('#lcl-surface');
+  const left = surface.getBoundingClientRect().left;
+  return [Math.max(320, Math.floor(document.documentElement.clientWidth - left*2)),
+          Math.max(240, Math.floor(window.innerHeight - surface.getBoundingClientRect().top - 16))];
+}
+function resize() {
+  if (!ready) return;
+  const [width, height] = surfaceBox();
+  guarded(() => instance.exports.lcl_resize(width, height));
+}
+window.addEventListener('resize', () => requestAnimationFrame(resize));
 async function start() {
   const wasi = new WASI(['tpx'], [], [
     new OpenFile(new File([])),
@@ -139,6 +190,7 @@ async function start() {
   window.lclDemo = instance.exports;
   status.textContent = 'Running · Pascal + LCL in WebAssembly';
   status.dataset.state = 'ready';
+  resize();
   invalidate();
 }
 start().catch(fail);
