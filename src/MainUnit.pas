@@ -966,7 +966,8 @@ begin
        (Shortcut = ClipboardCopy.ShortCut) or
        (Shortcut = ClipboardCut.ShortCut) or
        (Shortcut = ClipboardPaste.ShortCut) or
-       (Shortcut = SelectAll.ShortCut)) then
+       (Shortcut = SelectAll.ShortCut) or
+       (Shortcut = DeleteSelected.ShortCut)) then
       Exit(False);
   end;
   Result := inherited IsShortcut(Message);

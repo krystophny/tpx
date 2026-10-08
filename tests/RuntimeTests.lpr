@@ -265,6 +265,18 @@ begin
   Check(MainForm.TheDrawing.SelectedObjects.Count = 0,
     'Edit shortcuts in the editable combo selected drawing objects');
 
+  MainForm.TheDrawing.SelectionAdd(Line);
+  MainForm.ComboBox6.SelStart := 0;
+  MainForm.ComboBox6.SelLength := Length(MainForm.ComboBox6.Text);
+  MainForm.ComboBox6.SetFocus;
+  Application.ProcessMessages;
+  SendNativeKey('Delete');
+  Check((MainForm.TheDrawing.ObjectsCount = 1) and
+    (MainForm.TheDrawing.SelectedObjects.Count = 1),
+    'Delete in the editable combo deleted the selected drawing object');
+  Check(MainForm.ComboBox6.Text = '',
+    'Delete did not erase selected text in the editable combo');
+
   MainForm.LocalView.SetFocus;
   Application.ProcessMessages;
   SendNativeKey('ctrl+a');
@@ -273,6 +285,9 @@ begin
   SendNativeKey('ctrl+c');
   Check(Clipboard.HasFormat(TpXClipboardFormat),
     'Ctrl+C with canvas focus did not copy the drawing object');
+  SendNativeKey('Delete');
+  Check(MainForm.TheDrawing.ObjectsCount = 0,
+    'Delete with canvas focus did not delete the selected drawing object');
 end;
 
 procedure CheckPlatformActionShortcut(Action: TAction; Key: Word;
