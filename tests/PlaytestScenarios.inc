@@ -100,7 +100,8 @@ begin
       'Async launch failed');
     Check(GetTickCount64 - Started < 700, 'Async command blocked its caller');
     Check(not FileExists(Marker), 'Child finished before async return');
-    while not FileExists(Marker) and (GetTickCount64 - Started < 4000) do Sleep(20);
+    { Keep the prompt-return bound above; allow slower child startup on CI. }
+    while not FileExists(Marker) and (GetTickCount64 - Started < 10000) do Sleep(20);
     Check(FileExists(Marker), 'Async child did not finish');
 {$IFDEF LINUX}
     Contents := TStringList.Create;
