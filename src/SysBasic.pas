@@ -19,6 +19,9 @@ function PrepareFilePath(const FilePath: string): string;
 function FileExec(const aCmdLine, InFile, OutFile, Directory:
   string; aHide, aWait: Boolean): Boolean;
 procedure OpenOrExec(const ViewerPath, FileName: string);
+function QuoteShellArg(const Value: string): string;
+function TryDimension(const Text: string; out Value: Single;
+  const AllowZero: Boolean): Boolean;
 function TryDeleteFile(const FileName: string): Boolean;
 function RenameFile(const FileName1, FileName2: string): Boolean;
 function CopyFile(const FileName1, FileName2: string): Boolean;
@@ -67,7 +70,64 @@ implementation
 
 uses
 //WinBasic,
-  MainUnit;
+  MainUnit, Math{$IFDEF FPC}, Classes, Process, ExtCtrls{$ENDIF};
+
+{$IFDEF FPC}
+type
+  TBackgroundTool = class(TComponent)
+  private
+    Child: TProcess;
+    Timer: TTimer;
+    procedure Poll(Sender: TObject);
+  public
+    constructor Create(AChild: TProcess); reintroduce;
+    destructor Destroy; override;
+  end;
+
+constructor TBackgroundTool.Create(AChild: TProcess);
+begin
+  inherited Create(Application);
+  Timer := TTimer.Create(Self);
+  Timer.Enabled := False;
+  Timer.Interval := 100;
+  Timer.OnTimer := Poll;
+  Child := AChild;
+  Timer.Enabled := True;
+end;
+
+destructor TBackgroundTool.Destroy;
+begin
+  if Assigned(Timer) then Timer.Enabled := False;
+  Child.Free;
+  inherited Destroy;
+end;
+
+procedure TBackgroundTool.Poll(Sender: TObject);
+begin
+  if not Child.Running then Free;
+end;
+{$ENDIF}
+
+function QuoteShellArg(const Value: string): string;
+var
+  Q: string;
+begin
+{$IFDEF UNIX}
+  Q := Chr(39);
+  Result := Q + StringReplace(Value, Q, Q + '\' + Q + Q, [rfReplaceAll]) + Q;
+{$ELSE}
+  Result := AnsiQuotedStr(Value, '"');
+{$ENDIF}
+end;
+
+function TryDimension(const Text: string; out Value: Single;
+  const AllowZero: Boolean): Boolean;
+begin
+  Result := TryStrToFloat(Text, Value);
+  if not Result then Exit;
+  Result := not IsNan(Value) and not IsInfinite(Value) and
+    ((Value > 0) or (AllowZero and (Value = 0)));
+end;
 
 function CheckFilePath(var FilePath: string;
   const FileDescription: string): Boolean;
@@ -152,7 +212,8 @@ var
   ExitCodeProcess: Longword;
 {$ELSE}
 var
-  OldDir: string;
+  Child: TProcess;
+  Command: string;
 {$ENDIF}
 begin
 //  MessageBoxInfo(aCmdLine);
@@ -233,16 +294,34 @@ begin
     Application.MessageBox('App successful',
       'Error', MB_OK);}
 {$ELSE}
-  OldDir := GetCurrentDir;
+  Result := False;
+  Child := TProcess.Create(nil);
   try
-    if Directory <> '' then SetCurrentDir(Directory);
+    Child.CurrentDirectory := Directory;
 {$IFDEF UNIX}
-    Result := ExecuteProcess('/bin/sh', ['-c', aCmdLine]) = 0;
+    Command := aCmdLine;
+    if InFile <> '' then Command := Command + ' < ' + QuoteShellArg(InFile);
+    if OutFile <> '' then Command := Command + ' > ' + QuoteShellArg(OutFile);
+    Child.Executable := '/bin/sh';
+    Child.Parameters.Add('-c');
+    Child.Parameters.Add(Command);
 {$ELSE}
-    Result := ExecuteProcess(aCmdLine, '') = 0;
+    Child.CommandLine := aCmdLine;
+    if aHide then Child.Options := Child.Options + [poNoConsole];
 {$ENDIF}
+    if aWait then Child.Options := Child.Options + [poWaitOnExit];
+    try
+      Child.Execute;
+      Result := not aWait or (Child.ExitStatus = 0);
+      if not aWait then begin
+        TBackgroundTool.Create(Child);
+        Child := nil;
+      end;
+    except
+      Result := False;
+    end;
   finally
-    SetCurrentDir(OldDir);
+    Child.Free;
   end;
 {$ENDIF}
 end;
@@ -250,19 +329,19 @@ end;
 procedure OpenOrExec(const ViewerPath, FileName: string);
 begin
   if ViewerPath = '' then
-{$IFDEF VER140}
-    ShellExecute(Application.Handle,
-      PChar('open'), PChar(FileName),
-      nil {PChar(Parameters)}, nil {PChar(Directory)}, SW_SHOW)
+  begin
+{$IFDEF FPC}
+    if not LCLIntf.OpenDocument(FileName) then
+      MessageBoxError('Could not open the default viewer for ' + FileName);
 {$ELSE}
-    FileExec('"' + FileName + '"', '', '', '',
-      False, False)
+    ShellExecute(Application.Handle, PChar('open'), PChar(FileName),
+      nil, nil, SW_SHOW);
 {$ENDIF}
-  else
-    FileExec(Format('%s "%s"',
-      [PrepareFilePath(ViewerPath), FileName]), '', '',
-      {IncludeTrailingPathDelimiter(ExtractFilePath(FileName))}'',
-      False, False);
+  end
+  else if not FileExec(Format('%s %s',
+    [PrepareFilePath(ViewerPath), QuoteShellArg(FileName)]),
+    '', '', '', False, False) then
+    MessageBoxError('Could not launch viewer: ' + ViewerPath);
 end;
 
 function TryDeleteFile(const FileName: string): Boolean;
@@ -450,7 +529,13 @@ begin
     Windows.GetTextExtentPoint32W(ExtendedFont.Canvas.Handle,
       PWideChar(WideText), Length(WideText), S);
 {$ELSE}
-    S := ExtendedFont.Canvas.TextExtent(WideText);
+    BMP.Canvas.Font.Name := FaceName;
+    BMP.Canvas.Font.Style := Style;
+    BMP.Canvas.Font.Charset := Charset;
+    BMP.Canvas.Font.Height := -TmpH;
+    S := BMP.Canvas.TextExtent(UTF8Encode(WideText));
+    GetTextMetrics(BMP.Canvas.Handle, Text_Metric);
+    Descent := Text_Metric.tmDescent / TmpH;
 {$ENDIF}
     Width := S.CX / TmpH;
     //if S.CY <> 0 then Width := S.CX / S.CY    else Width := 1;

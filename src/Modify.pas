@@ -29,6 +29,8 @@ function ScaleStandard(const ADrawing: TDrawing2D;
   ScaleStandardMaxHeight: TRealType): TTransf2D;
 procedure ScalePhysical(const ADrawing: TDrawing2D;
   const S: TRealType; const DoNotify: Boolean);
+function CanConvertSelected(const ADrawing: TDrawing2D;
+  const DestClass: TPrimitive2DClass): Boolean;
 procedure ConvertSelected(const ADrawing: TDrawing2D;
   const DestClass: TPrimitive2DClass);
 procedure SimplifyPoly(const ADrawing: TDrawing2D;
@@ -84,7 +86,7 @@ procedure ChangeSelectedProperties(const ADrawing: TDrawing2D;
 
 implementation
 
-uses Math, ColorEtc, Devices;
+uses Math, ColorEtc, Devices, SysUtils;
 
 procedure BackwardForward(const ADrawing: TDrawing2D;
   const Mv: TMvBackwardForward);
@@ -431,12 +433,34 @@ begin
     ADrawing.History.SetPropertiesChanged;
 end;
 
+function CanConvertSelected(const ADrawing: TDrawing2D;
+  const DestClass: TPrimitive2DClass): Boolean;
+var
+  Obj: TGraphicObject;
+begin
+  Result := False;
+  if ADrawing.SelectedObjects.Count = 0 then Exit;
+  if DestClass = TBitmap2D then
+  begin
+    Obj := ADrawing.SelectedObjects.FirstObj;
+    while Obj <> nil do
+    begin
+      if not (Obj is TBitmap2D) then Exit;
+      if not Assigned(TBitmap2D(Obj).BitmapEntry) then Exit;
+      Obj := ADrawing.SelectedObjects.NextObj;
+    end;
+  end;
+  Result := True;
+end;
+
 procedure ConvertSelected(const ADrawing: TDrawing2D;
   const DestClass: TPrimitive2DClass);
 var
   Current, NewObj: TGraphicObject;
   NewObjs: TGraphicObjList;
 begin
+  if not CanConvertSelected(ADrawing, DestClass) then
+    raise Exception.Create('Cannot convert the selection to a bitmap without an image resource');
   NewObjs := TGraphicObjList.Create;
   NewObjs.FreeOnDelete := False;
   try

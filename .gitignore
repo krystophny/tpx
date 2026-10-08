@@ -8,3 +8,5 @@ misc/
 *.lps
 
 .lazarus/
+dist/
+__pycache__/

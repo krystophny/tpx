@@ -2405,7 +2405,8 @@ function TDrawing2D.RegisterBitmap(ImageLink: string):
 var
   I: Integer;
 begin
-  if ExtractFileDrive(ImageLink) = '' then
+  if (ExtractFileDrive(ImageLink) = '') and
+    (Copy(ImageLink, 1, 1) <> PathDelim) then
     ImageLink := ExtractFilePath(FileName) + ImageLink;
   I := BitmapRegistry.IndexOf(ImageLink);
   if I < 0 then

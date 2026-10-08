@@ -463,13 +463,24 @@ var
   begin
     if ComboBox.Items.Count < 2 then Exit;
     ColorDialog.Color := Integer(ComboBox.Items.Objects[1]);
-    if not ColorDialog.Execute then Exit;
+    if ColorDialog.Color = clDefault then ColorDialog.Color := clBlack;
+    if not ColorDialog.Execute then begin
+      ColorBoxSet(ComboBox, Integer(ComboBox.Items.Objects[1]));
+      Exit;
+    end;
     if ComboBox.Items.Count < 2 then Exit;
     ComboBox.Items.Objects[1] := TObject(ColorDialog.Color);
   end;
 begin
-  if ComboBox.ItemIndex <> 1 then Exit;
+  if ComboBox.Items.Count < 2 then Exit;
+  if ComboBox.ItemIndex <> 1 then begin
+    if ComboBox.ItemIndex >= 0 then
+      ComboBox.Items.Objects[1] := ComboBox.Items.Objects[ComboBox.ItemIndex];
+    Exit;
+  end;
+  ComboBox.DroppedDown := False;
   ColorDialog := TColorDialog.Create(nil);
+  try
 {$IFDEF VER140}
   if CustomColors <> '' then
     ColorDialog.CustomColors.Text := CustomColors;
@@ -478,7 +489,7 @@ begin
 {$IFDEF VER140}
   CustomColors := ColorDialog.CustomColors.Text;
 {$ENDIF}
-  ColorDialog.Free;
+  finally ColorDialog.Free end;
 end;
 
 procedure ColorBoxSet(ComboBox: TComboBox; Color: TColor);
@@ -487,6 +498,7 @@ var
 begin
   if Color = clDefault then
   begin
+    ComboBox.Items.Objects[1] := TObject(clDefault);
     ComboBox.ItemIndex := 0;
     Exit;
   end;

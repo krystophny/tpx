@@ -4371,7 +4371,7 @@ begin
   Result := R.FirstEdge;
   W := R.Right - R.Left;
   H := R.Top - R.Bottom;
-  if KeepAspectRatio then
+  if KeepAspectRatio and Assigned(Bitmap) then
   begin
     if Bitmap.Width > 0 then
     begin
@@ -4397,7 +4397,7 @@ begin
   PositiveH := P1.Y > P0.Y;
   W := Abs(P1.X - P0.X);
   H := Abs(P1.Y - P0.Y);
-  if KeepAspectRatio then
+  if KeepAspectRatio and Assigned(Bitmap) then
   begin
     if Bitmap.Width > 0 then
     begin
@@ -4459,6 +4459,7 @@ end;
 
 function TBitmap2D.GetBitmap: TBitmap;
 begin
+  Result := nil;
   if Assigned(fBitmapEntry) then
     Result := fBitmapEntry.Bitmap;
 end;
@@ -4467,7 +4468,7 @@ procedure TBitmap2D.Assign(const Obj: TGraphicObject);
 begin
   if (Obj = Self) then Exit;
   inherited;
-  if (Obj is TBitmap2D) or (Obj is TRectangle2D) then
+  if Obj is TBitmap2D then
   begin
     fKeepAspectRatio := TBitmap2D(Obj).KeepAspectRatio;
     fBitmapEntry := TBitmap2D(Obj).fBitmapEntry;

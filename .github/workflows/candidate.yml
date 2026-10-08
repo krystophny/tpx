@@ -1,0 +1,76 @@
+name: Candidate binaries (manual playtest)
+
+on:
+  pull_request:
+  push:
+    branches: [fix/playtest-regressions, prep/release-candidate]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Proposed version; this builds a candidate and never releases it
+        required: true
+        default: '1.6.0'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    name: ${{ matrix.platform }} candidate
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x86_64
+            runner: windows-2025
+            widgetset: win32
+          - platform: linux-x86_64
+            runner: ubuntu-24.04
+            widgetset: gtk2
+          - platform: macos-aarch64
+            runner: macos-15
+            widgetset: cocoa
+    env:
+      PYTHONUTF8: '1'
+      CANDIDATE_VERSION: ${{ inputs.version || '1.6.0' }}
+      CANDIDATE_PLATFORM: ${{ matrix.platform }}
+      WIDGETSET: ${{ matrix.widgetset }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fpc libgtk2.0-dev xvfb texlive-latex-extra texlive-pictures ghostscript
+      - name: Install macOS bootstrap compiler
+        if: runner.os == 'macOS'
+        run: brew install fpc
+      - name: Prepare Unix toolchain
+        if: runner.os != 'Windows'
+        run: bash ci/bootstrap-unix.sh
+      - name: Prepare Windows toolchain
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./ci/bootstrap-windows.ps1
+      - name: Build, check, and package Linux candidate
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python3 ci/build_candidate.py
+      - name: Build, check, and package macOS candidate
+        if: runner.os == 'macOS'
+        run: python3 ci/build_candidate.py
+      - name: Build, check, and package Windows candidate
+        if: runner.os == 'Windows'
+        run: python ci/build_candidate.py
+      - name: Upload checked candidate and checksums
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: tpx-${{ matrix.platform }}-candidate-${{ github.sha }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0

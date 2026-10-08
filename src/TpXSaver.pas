@@ -520,6 +520,8 @@ var
   P: TPoint2D;
   W, H: TRealType;
 begin
+  if not Assigned(Obj.BitmapEntry) then
+    raise Exception.Create('Bitmap has no image resource');
   fXML.OpenTag('bitmap');
   with Obj do
   begin

@@ -273,6 +273,7 @@ type
 type
   T_FM_Arr = array[0..255] of TRealType;
 
+function ExportFormatSupported(const Format: ExportFormatKind): Boolean;
 procedure ExportToFile(const Drawing: TDrawing2D;
   const FileName: string; const ExportFormat: ExportFormatKind);
 procedure StoreToFile_Saver(const Drawing: TDrawing2D;
@@ -525,6 +526,7 @@ begin
       if I mod 100 = 0 then
         ShowProgress(I / ObjList.Count);
     except
+      if Self is T_TpX_Saver then raise;
       if not HasError then
         MessageBoxError(Obj.ClassName);
       HasError := True;
@@ -892,10 +894,21 @@ begin
   end;
 end;
 
+function ExportFormatSupported(const Format: ExportFormatKind): Boolean;
+begin
+{$IFDEF VER140}
+  Result := True;
+{$ELSE}
+  Result := not (Format in [export_EMF, export_PNG, export_BMP]);
+{$ENDIF}
+end;
+
 procedure ExportToFile(const Drawing: TDrawing2D;
   const FileName: string; const ExportFormat:
   ExportFormatKind);
 begin
+  if not ExportFormatSupported(ExportFormat) then
+    raise Exception.Create('This export format is not supported by this build');
   case ExportFormat of
     export_SVG:
       StoreToFile_Saver(Drawing, FileName, T_SVG_Export);
@@ -967,7 +980,7 @@ function StoreToFile_TpX0(const Drawing: TDrawing2D;
   AClass_TeX, AClass_PdfTeX: TDrawingSaverClass;
   const DvipsFixBB: Boolean): Boolean;
 var
-  Stream: TFileStream;
+  Stream: TMemoryStream;
   ARect: TRect2D;
   PicWidth: TRealType;
   procedure WriteAsClass(
@@ -1002,7 +1015,7 @@ begin
       Drawing.PicScale
       + Drawing.Border * 2;
   end;
-  Stream := TFileStream.Create(FileName, fmCreate);
+  Stream := TMemoryStream.Create;
   try
     WriteAsClass(T_TpX_Saver);
     if //(Drawing.TeXFigure <> fig_none)      and
@@ -1084,6 +1097,7 @@ begin
     if //(Drawing.TeXFigure <> fig_none)      and
       (Drawing.TeXFigureEpilogue <> '') then
       WriteLnStream(Drawing.TeXFigureEpilogue);
+    Stream.SaveToFile(FileName);
   finally
     Stream.Free;
   end;
