@@ -29,6 +29,8 @@ def check_exports(binary):
         # Require the tool, so missing TeX cannot turn this gate into a skip.
         if not shutil.which("pdflatex"):
             raise RuntimeError("Linux candidates require pdflatex for the TeX gate")
+        if not shutil.which("sam2p"):
+            raise RuntimeError("Linux candidates require sam2p for the bitmap gate")
         command(sys.executable, "tests/test_tex.py", env=environment)
     else:
         print("TeX compilation is covered by the Linux candidate job; "
@@ -135,6 +137,7 @@ def build_and_package():
                              "lazarus-4.8-cocoa-font-cancel.patch")
             } if operating_system != "win64" else {},
             "fpc_source": os.environ.get("FPC_SOURCE", "3.2.2 distribution"),
+            "sam2p_source": os.environ.get("SAM2P_SOURCE"),
             "run_id": os.environ.get("GITHUB_RUN_ID", "local"),
             "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", "local"),
             "checks": ["native exports", "native GUI scenarios", "packaged exports"],

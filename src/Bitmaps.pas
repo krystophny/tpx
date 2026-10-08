@@ -63,34 +63,46 @@ var
   FIn, FOut: TextFile;
   TmpEps, St: string;
   I: Integer;
+  Changed: Boolean;
 begin
   Result := False;
   if not FileExists(EpsFileName) then Exit;
-  AssignFile(FIn, EpsFileName);
-  Reset(FIn);
   TmpEps := GetTempDir + '(bitmap2eps)eps.eps';
-  AssignFile(FOut, TmpEps);
-  Rewrite(FOut);
-  I := 0;
+  Changed := False;
   try
-    while not Eof(FIn) do
-    begin
-      ReadLn(FIn, St);
-      Inc(I);
-      if I <= 50 then
-        if Pos('%%BeginData:', St) = 1 then
+    AssignFile(FIn, EpsFileName);
+    Reset(FIn);
+    try
+      AssignFile(FOut, TmpEps);
+      Rewrite(FOut);
+      I := 0;
+      try
+        while not Eof(FIn) do
         begin
-          System.Delete(St, 12, 1);
-          Result := True;
+          ReadLn(FIn, St);
+          Inc(I);
+          if I <= 50 then
+            if Pos('%%BeginData:', St) = 1 then
+            begin
+              System.Delete(St, 12, 1);
+              Changed := True;
+            end;
+          WriteLn(FOut, St);
         end;
-      WriteLn(FOut, St);
+      finally
+        CloseFile(FOut);
+      end;
+    finally
+      CloseFile(FIn);
     end;
+    // Modern sam2p output needs no header repair and must remain byte for byte.
+    if Changed then
+      Result := SysBasic.RenameFile(TmpEps, EpsFileName)
+    else
+      Result := True;
   finally
-    CloseFile(FIn);
-    CloseFile(FOut);
+    TryDeleteFile(TmpEps);
   end;
-  if Result then
-    Result := SysBasic.RenameFile(TmpEps, EpsFileName);
 end;
 
 function BitmapToEps(const BitmapFileName: string;

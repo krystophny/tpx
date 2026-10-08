@@ -53,6 +53,9 @@ jobs:
       - name: Prepare Unix toolchain
         if: runner.os != 'Windows'
         run: bash ci/bootstrap-unix.sh
+      - name: Build the pinned bitmap converter for real export tests
+        if: runner.os == 'Linux'
+        run: bash ci/bootstrap-sam2p.sh
       - name: Prepare Windows toolchain
         if: runner.os == 'Windows'
         shell: pwsh

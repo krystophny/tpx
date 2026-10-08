@@ -19,6 +19,46 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-yes",
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_bitmap_eps_compatibility_and_conversion_failures(self):
+        # The fixture converter lives only in this test's temporary directory.
+        # It runs the copied native test executable before Application.Initialize.
+        with tempfile.TemporaryDirectory(prefix="tpx-eps-") as directory:
+            root = Path(directory).resolve()
+            suffix = ".exe" if sys.platform == "win32" else ""
+            converter = root / ("sam2p-fixture" + suffix)
+            shutil.copy2(BINARY, converter)
+            modern = (b"%!PS-Adobe-3.0 EPSF-3.0\r\n"
+                      b"%%BoundingBox: 0 0 64 64\r\n"
+                      b"1 0 0 setrgbcolor\r\n0 0 64 64 rectfill\r\nshowpage\r\n")
+            legacy = os.linesep.join(("%!PS-Adobe-3.0 EPSF-3.0",
+                       "%%BoundingBox: 0 0 64 64", "%%BeginData: 0 Binary Bytes",
+                       "1 0 0 setrgbcolor", "0 0 64 64 rectfill", "showpage", "")).encode()
+            for case, fixture, expected in (
+                    ("modern", modern, modern),
+                    ("legacy", legacy, legacy.replace(b"%%BeginData:", b"%%BeginData")),
+                    ("no-output", modern, None), ("nonzero", modern, None)):
+                with self.subTest(case=case):
+                    source = root / "fixture.eps"
+                    output = root / "converted.eps"
+                    source.write_bytes(fixture)
+                    # Conversion must discard stale output even when the tool fails.
+                    output.write_bytes(b"stale output")
+                    self.run_scenario("bitmap-eps", {
+                        "TMPDIR": str(root), "TMP": str(root), "TEMP": str(root),
+                        "TPX_EPS_CONVERTER": str(converter),
+                        "TPX_EPS_FIXTURE_MODE": case,
+                        "TPX_EPS_FIXTURE": str(source),
+                        "TPX_EPS_INPUT": str(root / "source.bmp"),
+                        "TPX_EPS_OUTPUT": str(output),
+                        "TPX_EPS_EXPECT_SUCCESS": "1" if expected is not None else "0",
+                    })
+                    if expected is None:
+                        self.assertFalse(output.exists())
+                    else:
+                        self.assertEqual(output.read_bytes(), expected)
+                    self.assertFalse((root / "(bitmap2eps)eps.eps").exists(),
+                                     "EPS compatibility check leaked its scratch file")
+
     def run_scenario(self, scenario, extra_env=None, directory_prefix="tpx-runtime-"):
         with tempfile.TemporaryDirectory(prefix=directory_prefix) as directory:
             env = os.environ.copy()
