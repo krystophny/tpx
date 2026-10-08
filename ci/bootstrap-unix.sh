@@ -37,6 +37,7 @@ git -C "$tpx_lazarus" remote add origin https://gitlab.com/freepascal.org/lazaru
 git -C "$tpx_lazarus" fetch --depth 1 origin "$tpx_lazarus_commit"
 git -C "$tpx_lazarus" checkout --detach FETCH_HEAD
 git -C "$tpx_lazarus" apply "$GITHUB_WORKSPACE/ci/patches/lazarus-4.8-opendocument.patch"
+git -C "$tpx_lazarus" apply "$GITHUB_WORKSPACE/ci/patches/lazarus-4.8-cocoa-font-cancel.patch"
 make -C "$tpx_lazarus" lazbuild LCL_PLATFORM="$WIDGETSET" FPC="$tpx_compiler"
 echo "LAZARUS_DIR=$tpx_lazarus" >> "$GITHUB_ENV"
 echo "LAZBUILD=$tpx_lazarus/lazbuild" >> "$GITHUB_ENV"
