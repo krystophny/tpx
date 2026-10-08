@@ -8,8 +8,8 @@ until Chris completes manual playtesting and explicitly authorizes a release.
 ## Build a candidate
 
 Integrate the reviewed product fixes and this workflow into the chosen branch.
-Verify the About dialog version matches the proposed candidate version; the
-historical source still said `Version 1.5` before release preparation.
+The About dialog identifies this build as `Version 1.6.0 candidate`.
+Verify its version before preparing another candidate.
 Push the `fix/playtest-regressions` review branch or open a pull request to build
 candidates automatically with proposed version `1.6.0`. After the workflow
 exists on the default branch, manually dispatch **Candidate binaries (manual

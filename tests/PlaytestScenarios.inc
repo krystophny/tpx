@@ -227,6 +227,9 @@ var
   Failed: Boolean;
 begin
   Drawing := MainForm.TheDrawing;
+  { Native bitmap roundtrip does not require external EPS conversion. }
+  Drawing.TeXFormat := tex_none;
+  Drawing.PdfTeXFormat := pdftex_none;
   Line := TLine2D.CreateSpec(-1, Point2D(3, 4), Point2D(20, 10));
   Drawing.AddObject(-1, Line); Drawing.SelectionAdd(Line);
   Failed := False;
