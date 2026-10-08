@@ -2051,7 +2051,7 @@ var
 begin
   if (Obj = Self) then Exit;
   inherited Assign(Obj);
-  if Obj is TBox2D0
+  if (Obj is TBox2D0)
     and ((Obj as TPrimitive2D).fPoints.Count > 2) then
     fPoints.Copy((Obj as TPrimitive2D).fPoints, 0, 2)
   else if Obj is TPrimitive2D then
