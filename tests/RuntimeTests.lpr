@@ -5,7 +5,7 @@ uses
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp;
+  Settings0, MainUnit, Propert, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -185,6 +185,46 @@ procedure TestClipboardFormatWidth;
 begin
   Check(SizeOf(TpXClipboardFormat) = SizeOf(Pointer),
     'TpX clipboard format ID cannot hold a native format handle');
+end;
+
+procedure TestColorBoxCustomState;
+var
+  ComboBox: TComboBox;
+  InitialCount: Integer;
+  CustomColor: TColor;
+begin
+  ComboBox := PropertiesForm.ComboBox3;
+  InitialCount := ComboBox.Items.Count;
+  CustomColor := TColor($00123456);
+  ColorBoxSet(ComboBox, CustomColor);
+  Check(ComboBox.Items.Count = InitialCount,
+    'Choosing a custom color grew the item list');
+  Check(ComboBox.Items[ComboBox.ItemIndex] = 'Current color',
+    'Custom color selection did not leave the Custom command available');
+  Check(ColorBoxGet(ComboBox) = CustomColor,
+    'Custom color selection changed its value');
+  ColorBoxSet(ComboBox, CustomColor);
+  Check(ComboBox.Items.Count = InitialCount,
+    'Repeating a custom color grew the item list');
+  Check(ComboBox.Items[ComboBox.ItemIndex] = 'Current color',
+    'Repeated custom color selection collided with its command');
+  Check(ColorBoxGet(ComboBox) = CustomColor,
+    'Repeated custom color selection changed its value');
+  ColorBoxSet(ComboBox, clRed);
+  Check((ColorBoxGet(ComboBox) = clRed) and
+    (ComboBox.Items[ComboBox.ItemIndex] = 'red'),
+    'Selecting a named color changed its value');
+  ColorBoxSet(ComboBox, clWhite);
+  Check((ColorBoxGet(ComboBox) = clWhite) and
+    (ComboBox.Items[ComboBox.ItemIndex] = 'white'),
+    'Selecting the last named color lost its preset');
+  ColorBoxSet(ComboBox, clBlack);
+  Check((ColorBoxGet(ComboBox) = clBlack) and
+    (ComboBox.Items[ComboBox.ItemIndex] = 'black'),
+    'Selecting black lost its preset');
+  ColorBoxSet(ComboBox, clDefault);
+  Check(ColorBoxGet(ComboBox) = clDefault,
+    'Selecting Default changed its value');
 end;
 
 procedure TestClipboardRoundTrip;
@@ -528,6 +568,7 @@ begin
     else if ParamStr(1) = 'check-file-path' then TestCheckFilePath
     else if ParamStr(1) = 'clipboard-format-width' then TestClipboardFormatWidth
     else if ParamStr(1) = 'clipboard-roundtrip' then TestClipboardRoundTrip
+    else if ParamStr(1) = 'color-box-custom-state' then TestColorBoxCustomState
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
     else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))
     else if ParamStr(1) = 'default-view' then TestDefaultView
