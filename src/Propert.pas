@@ -101,6 +101,7 @@ type
   public
     { Public declarations }
     PObject: TObject2D;
+    procedure ApplyFontChoice;
   end;
 
 var
@@ -108,7 +109,7 @@ var
 
 implementation
 
-uses ColorEtc, Table, Geometry, Devices, Modify;
+uses ColorEtc, Table, Geometry, Devices, Modify, Math, SysBasic;
 
 {$IFDEF VER140}
 {$R *.lfm}
@@ -186,6 +187,8 @@ begin
       LabeledEdit1.Text := Text;
       LabeledEdit3.Text := TeXText;
       LabeledEdit2.Text := Format('%.5g', [Height]);
+      FontDialog1.Font.Assign(Font);
+      FontDialog1.Font.Size := Max(1, Round(Height * 72 / 25.4));
       LabeledEdit4.Text := Format('%.6g', [RadToDeg(Rot)]);
       RadioGroup1.ItemIndex := Ord(HAlignment);
       PropPages.ActivePage := TextSheet;
@@ -262,14 +265,28 @@ procedure TPropertiesForm.FormCloseQuery(Sender: TObject;
   var CanClose: Boolean);
 var
   I: Integer;
+  WidthValue, HeightValue: TRealType;
 begin
   if not (PObject is TPrimitive2D) then Panel2.Enabled := True;
   if ModalResult <> mrOK then Exit;
+  if not TryDimension(ComboBox6.Text, WidthValue, True) then
+  begin
+    CanClose := False;
+    MessageBoxError('Line width must be a finite nonnegative number');
+    Exit;
+  end;
+  if (PObject is TText2D) and
+    not TryDimension(LabeledEdit2.Text, HeightValue, False) then
+  begin
+    CanClose := False;
+    MessageBoxError('Text height must be a finite positive number');
+    Exit;
+  end;
   if PObject is TGroup2D then
   begin
     ChangeGroupProperties(PObject as TGroup2D,
       TLineStyle(ComboBox1.ItemIndex), ColorBoxGet(ComboBox3),
-      StrToFloat(ComboBox6.Text),
+      WidthValue,
       THatching(ComboBox2.ItemIndex), ColorBoxGet(ComboBox4),
       ColorBoxGet(ComboBox5),
       TArrowKind(ComboBox8.ItemIndex),
@@ -284,17 +301,17 @@ begin
   (PObject as TPrimitive2D).LineColor := ColorBoxGet(ComboBox3);
   (PObject as TPrimitive2D).HatchColor := ColorBoxGet(ComboBox4);
   (PObject as TPrimitive2D).FillColor := ColorBoxGet(ComboBox5);
-  (PObject as TPrimitive2D).LineWidth :=
-    StrToFloat(ComboBox6.Text);
+  (PObject as TPrimitive2D).LineWidth := WidthValue;
   if PObject is TText2D then
     with PObject as TText2D do
     begin
       Text := LabeledEdit1.Text;
       TeXText := LabeledEdit3.Text;
-      Height := StrToFloat(LabeledEdit2.Text);
+      Height := HeightValue;
       Rot := DegToRad(StrToRealType(LabeledEdit4.Text, 0));
       HAlignment := THAlignment(RadioGroup1.ItemIndex);
-      if not FontCheckBox.Checked then Font.Name := ' ';
+      if FontCheckBox.Checked then Font.Assign(FontDialog1.Font)
+      else Font.Name := ' ';
     end
   else if (PObject is TLine2D) or (PObject is TArc2D)
     or (PObject is TPolyline2D) or (PObject is TSmoothPath2D)
@@ -373,11 +390,14 @@ begin
   end;
 end;
 
+procedure TPropertiesForm.ApplyFontChoice;
+begin
+  LabeledEdit2.Text := Format('%.6g', [FontDialog1.Font.Size * 25.4 / 72]);
+end;
+
 procedure TPropertiesForm.Button4Click(Sender: TObject);
 begin
-  FontDialog1.Font.Assign((PObject as TText2D).Font);
-  if FontDialog1.Execute then
-    (PObject as TText2D).Font.Assign(FontDialog1.Font);
+  if FontDialog1.Execute then ApplyFontChoice;
 end;
 
 procedure TPropertiesForm.FontCheckBoxClick(Sender: TObject);

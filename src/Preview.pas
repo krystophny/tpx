@@ -183,7 +183,10 @@ begin
     Drawing.TeXCenterFigure := False;
     Drawing.Caption := '';
     Drawing.FigLabel := '';
-  end;
+  end
+  else if (Drawing.TeXFigure = fig_none) and
+    ((Drawing.Caption <> '') or (Drawing.FigLabel <> '')) then
+    Drawing.TeXFigure := fig_figure;
   case PreviewKind of
     ltxview_Dvi, ltxview_PS: Drawing.PdfTeXFormat := pdftex_none;
     ltxview_Pdf: Drawing.TeXFormat := tex_none;
@@ -323,6 +326,8 @@ procedure Preview_Picture(const Drawing: TDrawing2D;
 var
   TmpFileName, Ext, ViewerPath: string;
 begin
+  if not ExportFormatSupported(PreviewKind) then
+    raise Exception.Create('This preview format is not supported by this build');
   TmpFileName := GetTempDir + '(img)TpX';
   Ext := CSV_Item(ExportDefaultExt, Ord(PreviewKind) + 1);
   if Ext = '' then Exit;
@@ -422,8 +427,8 @@ begin
   end;
   if not ShowCurrent then
   begin
-    if not CheckFilePath(TextViewerPath, 'TextViewerPath') then
-      Exit;
+    if (TextViewerPath <> '') and
+      not CheckFilePath(TextViewerPath, 'TextViewerPath') then Exit;
     OpenOrExec(TextViewerPath, Drawing.FileName);
     Exit;
   end;
@@ -445,8 +450,8 @@ begin
     MessageBoxError('Temporary TpX file not created');
     Exit;
   end;
-  if not CheckFilePath(TextViewerPath, 'TextViewerPath') then
-    Exit;
+  if (TextViewerPath <> '') and
+    not CheckFilePath(TextViewerPath, 'TextViewerPath') then Exit;
   OpenOrExec(TextViewerPath, TempTpX);
 end;
 

@@ -469,6 +469,7 @@ var
   end;
 begin
   if ComboBox.ItemIndex <> 1 then Exit;
+  ComboBox.DroppedDown := False;
   ColorDialog := TColorDialog.Create(nil);
 {$IFDEF VER140}
   if CustomColors <> '' then

@@ -494,6 +494,7 @@ type
       Integer;
       Rect: TRect; State: TOwnerDrawState);
     procedure ChangeProperties(Sender: TObject);
+    procedure NumericPropertyExit(Sender: TObject);
     procedure ScalePhysicalExecute(Sender: TObject);
     procedure InsertBezierPathExecute(Sender: TObject);
     procedure InsertClosedBezierPathExecute(Sender: TObject);
@@ -527,7 +528,13 @@ type
     procedure ShowPropertiesToolbar2Execute(Sender: TObject);
   private
     { Private declarations }
+{$IFDEF FPC}
+    InitialViewQueued: Boolean;
+{$ENDIF}
     ScrollPos0: Integer;             
+{$IFDEF FPC}
+    procedure InitializeEmptyView(Data: PtrInt);
+{$ENDIF}
 {$IFDEF VER140}
     procedure SetFormPosition;
     procedure GetFormPosition;
@@ -803,6 +810,8 @@ begin
   ComboBox9.Tag := Byte(chpArr2) + 1;
   Edit3.Tag := Byte(chpArrS) + 1;
   Edit4.Tag := Byte(chpFH) + 1;
+  ComboBox6.OnExit := NumericPropertyExit;
+  Edit4.OnExit := NumericPropertyExit;
   ComboBox7.Tag := Byte(chpHJ) + 1;
   ComboBox10.Tag := Byte(chpSK) + 1;
   Edit5.Tag := Byte(chpSS) + 1;
@@ -812,6 +821,12 @@ begin
   CopyPictureToClipboard.Visible := False;
   CaptureEMF.Visible := False;
   ImageTool.Visible := False;
+  PreviewPNG.Visible := False;
+  PreviewBMP.Visible := False;
+  PreviewEMF.Visible := False;
+  PreviewPNG.Enabled := False;
+  PreviewBMP.Enabled := False;
+  PreviewEMF.Enabled := False;
 {$ENDIF}
 
   EventManager.SendMessage(Msg_StartProgram, Self);   
@@ -1083,6 +1098,17 @@ begin
   end;
 end;
 
+{$IFDEF FPC}
+procedure TMainForm.InitializeEmptyView(Data: PtrInt);
+begin
+  if (TheDrawing.ObjectsCount = 0) and (LocalView.ClientWidth > 0) and
+    (LocalView.ClientHeight > 0) then
+    LocalView.VisualRect := Rect2D(0, 0,
+      LocalView.ClientWidth * 25.4 / Screen.PixelsPerInch,
+      LocalView.ClientHeight * 25.4 / Screen.PixelsPerInch);
+end;
+{$ENDIF}
+
 procedure TMainForm.FormShow(Sender: TObject);
 begin
   ShowGrid.Checked := LocalView.ShowGrid;
@@ -1100,6 +1126,12 @@ begin
   Showscrollbars1.Checked := ShowScrollBars.Checked;
   FitPropertiesToolbars;
   Panel31.Realign;
+{$IFDEF FPC}
+  if not InitialViewQueued then begin
+    InitialViewQueued := True;
+    Application.QueueAsyncCall(InitializeEmptyView, 0);
+  end;
+{$ENDIF}
   //Scalephysicalunits1.Checked := ScalePhysical.Checked;
 end;
 
@@ -1152,7 +1184,8 @@ begin
   begin
     GOClass := GraphicObjectClasses[I];
     Item := TMenuItem.Create(ConvertPopup);
-    Item.Caption := TPrimitive2DClass(GOClass).GetName; //
+    Item.Caption := TPrimitive2DClass(GOClass).GetName;
+    Item.Enabled := CanConvertSelected(TheDrawing, TPrimitive2DClass(GOClass));
     Item.Tag := Msg_ConvertTo + I - 1;
     //Item.Action := DoConvertTo;
     Item.OnClick := DoConvertToExecute;
@@ -1189,6 +1222,7 @@ end;
 procedure TMainForm.ChangeProperties(Sender: TObject);
 var
   Kind: TChangePropertiesKind;
+  Value: TRealType;
 begin
   if not (Sender is TComponent) then Exit;
   if (Sender as TComponent).Tag <= 0 then Exit;
@@ -1204,13 +1238,8 @@ begin
       end;
     chpLW:
       begin
-        TheDrawing.New_LineWidth
-          := StrToFloat((Sender as TComboBox).Text);
-        if TheDrawing.New_LineWidth <= 0 then
-        begin
-          TheDrawing.New_LineWidth := 1;
-          Exit;
-        end;
+        if not TryDimension((Sender as TComboBox).Text, Value, True) then Exit;
+        TheDrawing.New_LineWidth := Value;
       end;
     chpHa: TheDrawing.New_Hatching
       := THatching((Sender as TComboBox).ItemIndex);
@@ -1232,9 +1261,11 @@ begin
       := (Sender as TComboBox).ItemIndex;
     chpArrS: TheDrawing.New_ArrSizeFactor
       := StrToRealType((Sender as TEdit).Text, 1);
-    chpFH: TheDrawing.New_FontHeight
-      := StrToRealType((Sender as TEdit).Text,
-        TheDrawing.DefaultFontHeight);
+    chpFH:
+      begin
+        if not TryDimension((Sender as TEdit).Text, Value, False) then Exit;
+        TheDrawing.New_FontHeight := Value;
+      end;
     chpHJ: TheDrawing.New_HAlignment
       := (Sender as TComboBox).ItemIndex;
     chpSK: TheDrawing.New_StarKind
@@ -1245,6 +1276,27 @@ begin
   end;
   ChangeSelectedProperties(TheDrawing, [Kind]);
   TheDrawing.RepaintViewports;
+end;
+
+procedure TMainForm.NumericPropertyExit(Sender: TObject);
+var
+  Value: TRealType;
+  Changed: TNotifyEvent;
+begin
+  if (Sender = ComboBox6) and not TryDimension(ComboBox6.Text, Value, True) then
+  begin
+    Changed := ComboBox6.OnChange;
+    ComboBox6.OnChange := nil;
+    try ComboBox6.Text := RealTypeToStr(TheDrawing.New_LineWidth);
+    finally ComboBox6.OnChange := Changed end;
+  end
+  else if (Sender = Edit4) and not TryDimension(Edit4.Text, Value, False) then
+  begin
+    Changed := Edit4.OnChange;
+    Edit4.OnChange := nil;
+    try Edit4.Text := RealTypeToStr(TheDrawing.New_FontHeight);
+    finally Edit4.OnChange := Changed end;
+  end;
 end;
 
 procedure TMainForm.SetCurrentProperties;

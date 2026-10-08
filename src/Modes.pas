@@ -865,11 +865,20 @@ begin
 end;
 
 procedure TTpXMode.DoSaveDrawing(FileName: string);
+var
+  PreviousName: string;
 begin
   if not SameText(ExtractFileExt(FileName), '.tpx') then
     FileName := ChangeFileExt(FileName, '.tpx');
+  PreviousName := Drawing.FileName;
   Drawing.FileName := FileName;
-  StoreToFile_TpX(Drawing, FileName, False);
+  try
+    if not StoreToFile_TpX(Drawing, FileName, False) then
+      raise Exception.Create('Drawing was not saved');
+  except
+    Drawing.FileName := PreviousName;
+    raise;
+  end;
   MainForm.Caption := ExtractFileName(Drawing.FileName);
   TpX_Manager.RecentFiles.Update(Drawing.FileName);
   Drawing.History.SaveCheckSum;
@@ -879,10 +888,14 @@ end;
 const
   Save_Filter_Str = 'TpX drawing|*.tpx'
     + '|Scalable vector graphics (SVG)|*.svg'
+{$IFDEF VER140}
     + '|Enhanced metafile (EMF)|*.emf'
+{$ENDIF}
     + '|Encapsulated PostScript (EPS)|*.eps'
+{$IFDEF VER140}
     + '|Portable network graphics (PNG)|*.png'
     + '|Windows bitmap (BMP)|*.bmp'
+{$ENDIF}
     + '|Portable document format (PDF)|*.pdf'
     + '|MetaPost (.mp)|*.mp'
     + '|MetaPost EPS output (.mps)|*.mps'
@@ -919,6 +932,8 @@ var
 //  Filter: string;
   ExecuteResult: Boolean;
   Device, Ext, Ext2: string;
+  Format: ExportFormatKind;
+  Index: Integer;
   //LaTeX custom (latex-dvips-gs) |LaTeX custom (latex-dvips-gs)|*.*
 begin
   if FileName = Drawing_NewFileName then
@@ -950,14 +965,23 @@ begin
     Result := mrCancel;
     Exit;
   end;
-  if (MainForm.DrawingSaveDlg.FilterIndex > 1) and
-    (MainForm.DrawingSaveDlg.FilterIndex - 2 <=
-    Ord(High(ExportFormatKind))) then
-    ExportToFile(Drawing,
-      MainForm.DrawingSaveDlg.FileName,
-      ExportFormatKind(MainForm.DrawingSaveDlg.FilterIndex - 2))
-  else
-    DoSaveDrawing(MainForm.DrawingSaveDlg.FileName);
+  if MainForm.DrawingSaveDlg.FilterIndex > 1 then
+  begin
+    Index := 1;
+    for Format := Low(ExportFormatKind) to High(ExportFormatKind) do
+      if ExportFormatSupported(Format) then
+      begin
+        Inc(Index);
+        if Index = MainForm.DrawingSaveDlg.FilterIndex then
+        begin
+          ExportToFile(Drawing, MainForm.DrawingSaveDlg.FileName, Format);
+          if not FileExists(MainForm.DrawingSaveDlg.FileName) then
+            raise Exception.Create('Export file was not created');
+          Break;
+        end;
+      end;
+  end
+  else DoSaveDrawing(MainForm.DrawingSaveDlg.FileName);
   Result := mrOK;
 end;
 
@@ -1481,7 +1505,9 @@ begin
         if AskSaveCurrentDrawing <> mrCancel then
           NewDrawing(Drawing_NewFileName);
       end;
-    Msg_NewWindow: OpenOrExec('', Application.ExeName);
+    Msg_NewWindow:
+      if not FileExec(QuoteShellArg(Application.ExeName), '', '', '',
+        False, False) then MessageBoxError('Could not launch a new window');
     Msg_Open: DlgOpenDrawing;
     Msg_Save: TrySaveDrawing(Drawing.FileName);
     Msg_Print: {--not implemented--};
@@ -2103,7 +2129,10 @@ begin
     ViewPort.ScreenToViewport(Point2D(X, Y)));
   //SnapOriginPoint := CurrPoint;
   if Prim.FirstDrawPoint = 0 then
-    Prim.Points.Add(CurrPoint)
+  begin
+    Prim.Points[0] := CurrPoint;
+    Prim.Points.Add(CurrPoint);
+  end
   else
   begin
     if UseAngularSnap then

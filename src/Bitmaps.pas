@@ -223,10 +223,10 @@ begin
     System.Delete(Result, 1, Length(Dir))
   else
   begin
-    Dir := Dir + 'bitmaps\';
+    Dir := Dir + 'bitmaps' + PathDelim;
     if not DirectoryExists(Dir) then CreateDir(Dir);
     CopyImage(Link, Dir + ExtractFileName(Result));
-    Result := 'bitmaps\' + ExtractFileName(Result);
+    Result := 'bitmaps' + PathDelim + ExtractFileName(Result);
   end;
 end;
 
@@ -273,7 +273,8 @@ end;
 
 function TBitmapEntry.GetFullLink: string;
 begin
-  if ExtractFileDrive(fImageLink) = '' then
+  if (ExtractFileDrive(fImageLink) = '') and
+    (Copy(fImageLink, 1, 1) <> PathDelim) then
     Result := ExtractFilePath(fParentFileName) + fImageLink
   else Result := fImageLink;
 end;
@@ -295,7 +296,8 @@ procedure TBitmapEntry.RefreshParentFileName(
 var
   NewDir, NewLink: string;
 begin
-  if ExtractFileDrive(fImageLink) <> '' then
+  if (ExtractFileDrive(fImageLink) <> '') or
+    (Copy(fImageLink, 1, 1) = PathDelim) then
   begin
     fImageLink := MakeImageLocal(fImageLink, NewFileName);
     SetImageKind('');
@@ -389,7 +391,8 @@ function TBitmapEntry.GetIncludeGraphics(const W, H: TRealType;
 begin
   Result := AnsiReplaceStr(ChangeFileExt(fImageLink, ''),
     '\', '/');
-  if ExtractFileDrive(fImageLink) = '' then
+  if (ExtractFileDrive(fImageLink) = '') and
+    (Copy(fImageLink, 1, 1) <> PathDelim) then
     Result := IncludePath + Result;
   if KeepAspectRatio then
     Result := Format(
