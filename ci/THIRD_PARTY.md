@@ -13,7 +13,7 @@ Compiler and Lazarus revisions are recorded in `BUILD.json`.
 The Unix toolchain applies the versioned Lazarus patches under `ci/patches/`:
 quoted-path handling in `OpenDocument`, native Cocoa font-picker cancellation,
 and Cocoa text-shortcut responder handling. `BUILD.json` records the SHA256 of
-each applied patch. The macOS candidate job runs the native Cocoa font-dialog
+each applied patch. The macOS package job runs the native Cocoa font-dialog
 and text-shortcut regressions. Provider source bases, patch hashes, and current
 owner-commit status are documented in `ci/patches/README.md`.
 

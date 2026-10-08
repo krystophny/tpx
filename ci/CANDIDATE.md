@@ -18,8 +18,8 @@ contains the exact project source.
   and newer compatible systems.
 - macOS: open `TpX.app` in Finder, or run `open TpX.app` from Terminal, in a
   logged-in graphical session on Apple Silicon. This candidate uses Cocoa.
-  It is unsigned and unnotarized; follow your system's normal review process
-  for downloaded software.
+  It is ad hoc signed and unnotarized; see `INSTALL.md` for first-launch
+  instructions.
 
 Install TeX and the desired external converters separately; see `README.md`
 for prerequisites. Record operating system, candidate commit, display scaling,

@@ -7,13 +7,15 @@ TpX is a lightweight, easy-to-use graphical editor for creating drawings and inc
 into LaTeX files in publication-ready form. It can also be used as a stand-alone editor for 
 vector graphics. Up to version 1.5 it has been developed by Alexander Tsyplakov.
 
-## Current status
+## Download and install
 
-* Linux: usable for testing with the GTK2 backend
-* macOS: tested on Apple Silicon with the Cocoa backend
-* Windows: usable for testing with the win32 backend
+[Download TpX 1.6.0](https://github.com/krystophny/tpx/releases/tag/v1.6.0)
+for Windows x86-64, Linux x86-64 or Apple Silicon macOS. Extract the archive and
+run the editor; no compiler is needed. See [INSTALL.md](INSTALL.md) for the
+short installation steps, dependencies and Mac first-launch instructions.
+The Mac app is ad hoc signed and not notarized.
 
-[![Build Status](https://travis-ci.org/krystophny/tpx.svg?branch=master)](https://travis-ci.org/krystophny/tpx)
+[![Linux tests](https://github.com/krystophny/tpx/actions/workflows/test.yml/badge.svg)](https://github.com/krystophny/tpx/actions/workflows/test.yml)
 
 This is a screenshot of the v1.6.alpha.1 on Linux/GTK2
 ![Screenshot](/doc/screenshot_v1.6alpha1.png?raw=true "Screenshot")
@@ -168,6 +170,10 @@ Then build Lazarus and TpX using that compiler:
 ```sh
 git clone --depth 1 --branch lazarus_4_8 https://gitlab.com/freepascal.org/lazarus/lazarus.git ~/code/lazarus
 cd ~/code/lazarus
+# Apply the provider repairs used by the published binaries.
+git apply ~/code/tpx/ci/patches/lazarus-4.8-opendocument.patch
+git apply ~/code/tpx/ci/patches/lazarus-4.8-cocoa-font-cancel.patch
+git apply ~/code/tpx/ci/patches/lazarus-4.8-cocoa-text-shortcuts.patch
 make lazbuild LCL_PLATFORM=cocoa CPU_TARGET=aarch64 FPC="$HOME/.local/tpx-fpc/bin/fpc"
 cd ~/code/tpx
 make test WIDGETSET=cocoa LAZBUILD="$HOME/code/lazarus/lazbuild" \

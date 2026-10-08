@@ -1,0 +1,80 @@
+name: Publish release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Publish this reviewed version from master after all package gates pass
+        required: true
+        default: '1.6.0'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tpx-release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Check source and unused tag
+        run: |
+          python3 - <<'PY'
+          import os, re, subprocess
+          from pathlib import Path
+          version = os.environ['RELEASE_VERSION']
+          assert os.environ['GITHUB_REF'] == 'refs/heads/master', 'release only from master'
+          assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version), 'stable numeric version required'
+          assert f"About_Version = 'Version {version}'" in Path('src/tpx.inc').read_text()
+          tags = subprocess.check_output(['git', 'ls-remote', '--tags', 'origin', 'refs/tags/v' + version], text=True)
+          assert not tags.strip(), 'release tag already exists'
+          PY
+  packages:
+    needs: preflight
+    uses: ./.github/workflows/candidate.yml
+    with:
+      version: ${{ inputs.version }}
+      package_kind: release
+  publish:
+    needs: packages
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          pattern: tpx-*-release-${{ github.sha }}
+          path: release-assets
+          merge-multiple: true
+      - name: Verify archives, source, provenance and checksums
+        run: python3 ci/verify_release.py release-assets
+      - name: Create draft with tested artifacts and publish
+        run: |
+          gh release create "v$RELEASE_VERSION" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "TpX $RELEASE_VERSION" --notes-file ci/RELEASE_NOTES.md --draft
+          gh release view "v$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --json assets > release-assets/uploaded.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          folder = Path('release-assets')
+          expected = {p.name for p in folder.iterdir() if p.name != 'uploaded.json'}
+          uploaded = {a['name'] for a in json.loads((folder / 'uploaded.json').read_text())['assets']}
+          assert uploaded == expected, (uploaded, expected)
+          PY
+          gh release edit "v$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --draft=false --latest

@@ -734,6 +734,40 @@ begin
   end;
 end;
 
+{$IFDEF DARWIN}
+procedure TestMacSettings;
+var
+  ConfigFile, BundleFile, ExpectedLegacy: string;
+  ExpectedWidth: Double;
+begin
+  ConfigFile := IncludeTrailingPathDelimiter(GetAppConfigDir(False)) + 'TpX.ini';
+  BundleFile := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) + 'TpX.ini';
+  ExpectedLegacy := GetEnvironmentVariable('TPX_SETTINGS_EXPECT_LEGACY');
+  if ExpectedLegacy <> '' then
+  begin
+    ExpectedWidth := StrToFloat(ExpectedLegacy);
+    Check(Abs(LineWidthBase_Default - ExpectedWidth) < 0.000001,
+      'Legacy bundle settings were not loaded');
+  end
+  else
+    Check(not FileExists(BundleFile), 'Fresh bundle unexpectedly contains settings');
+
+  LineWidthBase_Default := 2.75;
+  SaveSettings;
+  Check(FileExists(ConfigFile), 'User settings file was not created');
+  Check(ExpandFileName(ConfigFile) <> ExpandFileName(BundleFile),
+    'User settings path points into the application bundle');
+  if ExpectedLegacy = '' then
+    Check(not FileExists(BundleFile), 'Saving wrote settings beside the application');
+
+  LineWidthBase_Default := 4.25;
+  LoadSettings;
+  Check(Abs(LineWidthBase_Default - 2.75) < 0.000001,
+    'Saved user setting did not reload');
+  WriteLn('SETTINGS_FILE=', ConfigFile);
+end;
+{$ENDIF}
+
 procedure TestExit(const Scenario: string);
 var
   ModeBefore: TMode;
@@ -884,6 +918,9 @@ begin
     else if ParamStr(1) = 'unsupported-exports' then TestUnsupportedExports
     else if ParamStr(1) = 'bitmap-eps' then TestBitmapEps
     else if ParamStr(1) = 'labeled-preview' then TestLabeledPreview
+{$IFDEF DARWIN}
+    else if ParamStr(1) = 'mac-settings' then TestMacSettings
+{$ENDIF}
     else TestExit(ParamStr(1));
     if GetEnvironmentVariable('TPX_STARTUP_EXPECTED') <> '' then
       WriteLn('PASS startup-file')

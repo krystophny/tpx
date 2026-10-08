@@ -26,17 +26,30 @@ const
 
 var
   IniFileName: string = IniFileName0;
+{$IFDEF DARWIN}
+  LegacyIniFileName: string = '';
+{$ENDIF}
 
 procedure LoadSettings;
 var
   I: Integer;
   Strings: TStringList;
   St: string;
+  FileToLoad: string;
 begin
-  if not FileExists(IniFileName) then Exit;
+  FileToLoad := IniFileName;
+  if not FileExists(FileToLoad) then
+  begin
+{$IFDEF DARWIN}
+    if not FileExists(LegacyIniFileName) then Exit;
+    FileToLoad := LegacyIniFileName;
+{$ELSE}
+    Exit;
+{$ENDIF}
+  end;
   Strings := TStringList.Create;
   try
-    Strings.LoadFromFile(IniFileName);
+    Strings.LoadFromFile(FileToLoad);
     for I := 0 to SettingsList.Count - 1 do
     begin
       St := Strings.Values[(SettingsList[I] as TOptionData).Key];
@@ -85,11 +98,19 @@ var
 begin
   Strings := TStringList.Create;
   try
-    if FillSettings(Strings)
-      then Strings.SaveToFile(IniFileName);
+    if FillSettings(Strings) then
+    begin
+{$IFDEF DARWIN}
+      ForceDirectories(ExtractFileDir(IniFileName));
+{$ENDIF}
+      Strings.SaveToFile(IniFileName);
+    end;
   finally
     Strings.Free;
   end;
+{$IFDEF DARWIN}
+  Exit;
+{$ELSE}
   if not OutHelp then Exit;
   // Save drawing options hints for help
   Strings := TStringList.Create;
@@ -100,12 +121,20 @@ begin
   finally
     Strings.Free;
   end;
+{$ENDIF}
 end;
 
 procedure Initialize;
 begin
+{$IFDEF DARWIN}
+  LegacyIniFileName := IncludeTrailingPathDelimiter(
+    ExtractFilePath(ParamStr(0))) + IniFileName0;
+  IniFileName := IncludeTrailingPathDelimiter(GetAppConfigDir(False))
+    + IniFileName0;
+{$ELSE}
   IniFileName := IncludeTrailingPathDelimiter(
     ExtractFilePath(ParamStr(0))) + IniFileName0;
+{$ENDIF}
   SettingsList := TOptionsList.Create;
 
   SettingsList.AddRealType('PicScale_Default',

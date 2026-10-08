@@ -4,6 +4,14 @@ on:
   pull_request:
   push:
     branches: [fix/playtest-regressions, prep/release-candidate]
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      package_kind:
+        default: candidate
+        type: string
   workflow_dispatch:
     inputs:
       version:
@@ -36,6 +44,7 @@ jobs:
     env:
       PYTHONUTF8: '1'
       CANDIDATE_VERSION: ${{ inputs.version || '1.6.0' }}
+      PACKAGE_KIND: ${{ inputs.package_kind || 'candidate' }}
       CANDIDATE_PLATFORM: ${{ matrix.platform }}
       WIDGETSET: ${{ matrix.widgetset }}
     steps:
@@ -72,7 +81,7 @@ jobs:
       - name: Upload checked candidate and checksums
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: tpx-${{ matrix.platform }}-candidate-${{ github.sha }}
+          name: tpx-${{ matrix.platform }}-${{ inputs.package_kind || 'candidate' }}-${{ github.sha }}
           path: dist/*
           if-no-files-found: error
           retention-days: 30

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build checked portable candidates; deliberately has no release operation."""
+"""Build and verify portable packages; publication belongs to release.yml."""
 import hashlib
 import json
 import os
@@ -61,6 +61,14 @@ def stage_runtime(package, binary, platform, version):
     shutil.copy2(binary, packaged_binary)
     for filename in ("preview.tex.inc", "metapost.tex.inc"):
         shutil.copy2(ROOT / "ci" / filename, executable_dir / filename)
+    help_dir = executable_dir / "help"
+    help_dir.mkdir()
+    shutil.copy2(ROOT / "ci" / "help.html",
+                 help_dir / "tpx_tpxabout_tpx_drawing_tool.htm")
+    if platform.startswith("macos-"):
+        # Seal the complete bundle, including the editable TeX templates.
+        command("codesign", "--force", "--sign", "-", package / "TpX.app")
+        command("codesign", "--verify", "--deep", "--strict", package / "TpX.app")
     return packaged_binary
 
 
@@ -68,6 +76,14 @@ def build_and_package():
     version = os.environ["CANDIDATE_VERSION"]
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?", version):
         raise ValueError("version must be a numeric major.minor.patch with optional suffix")
+    kind = os.environ.get("PACKAGE_KIND", "candidate")
+    if kind not in {"candidate", "release"}:
+        raise ValueError("PACKAGE_KIND must be candidate or release")
+    if kind == "release":
+        source_version = re.search(r"About_Version = 'Version ([^']+)'",
+                                   (ROOT / "src/tpx.inc").read_text()).group(1)
+        if source_version != version:
+            raise ValueError(f"About version {source_version!r} != release {version!r}")
     platform = os.environ["CANDIDATE_PLATFORM"]
     widgetset = os.environ["WIDGETSET"]
     if (platform, widgetset) not in {
@@ -101,16 +117,18 @@ def build_and_package():
             env=dict(os.environ, RUNTIME_BINARY=str(runtime)))
 
     commit = output("git", "rev-parse", "HEAD")
-    name = f"tpx-{version}-candidate-{platform}-{commit[:12]}"
+    name = (f"tpx-{version}-{platform}" if kind == "release" else
+            f"tpx-{version}-candidate-{platform}-{commit[:12]}")
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="tpx candidate ") as temporary:
         package = Path(temporary) / name
         package.mkdir()
         packaged_binary = stage_runtime(package, binary, platform, version)
-        for filename in ("README.md", "LICENSE"):
+        for filename in ("README.md", "INSTALL.md", "LICENSE"):
             shutil.copy2(ROOT / filename, package / filename)
-        for filename in ("CANDIDATE.md", "THIRD_PARTY.md"):
+        for filename in (("CANDIDATE.md", "THIRD_PARTY.md") if kind == "candidate"
+                         else ("THIRD_PARTY.md",)):
             shutil.copy2(ROOT / "ci" / filename, package / filename)
         licenses = package / "licenses"
         licenses.mkdir()
@@ -124,9 +142,12 @@ def build_and_package():
         # sources, including vendored component license notices, beside the binary.
         command("git", "archive", "--format=zip", "HEAD", "-o", package / "source.zip")
         manifest = {
-            "status": "candidate; manual playtest required before release",
+            "status": ("release" if kind == "release" else
+                       "candidate; manual playtest required before release"),
             "proposed_version": version, "commit": commit, "platform": platform,
             "executable": packaged_binary.relative_to(package).as_posix(),
+            "macos_signing": "ad hoc" if platform.startswith("macos-") else None,
+            "macos_notarized": False if platform.startswith("macos-") else None,
             "widgetset": widgetset, "fpc_version": output(fpc, "-iV"),
             "lazarus_source": os.environ.get("LAZARUS_SOURCE", "local"),
             "lazarus_patch_sha256": hashlib.sha256(
@@ -148,18 +169,42 @@ def build_and_package():
             manifest["checks"].extend(["TeX compilation", "packaged TeX compilation"])
         if platform.startswith("macos-"):
             manifest["checks"].extend(["native Cocoa font cancellation",
-                                       "native Cocoa text shortcuts"])
+                                       "native Cocoa text shortcuts",
+                                       "ad hoc signature verification",
+                                       "signature tamper detection"])
         (package / "BUILD.json").write_text(json.dumps(manifest, indent=2) + "\n")
-        fmt = "zip" if platform.startswith("windows-") else "gztar"
-        archive = Path(shutil.make_archive(str(dist / name), fmt,
-                                          root_dir=temporary, base_dir=name))
-        extracted = Path(temporary) / "extracted candidate"
-        shutil.unpack_archive(str(archive), extracted)
+        extracted = Path(temporary) / "extracted package"
+        if platform.startswith("macos-"):
+            archive = dist / (name + ".zip")
+            # ditto preserves the executable permissions and app resources.
+            command("ditto", "-c", "-k", "--keepParent", package, archive)
+            command("ditto", "-x", "-k", archive, extracted)
+            app = extracted / name / "TpX.app"
+            command("codesign", "--verify", "--deep", "--strict", app)
+            command("codesign", "--display", "--verbose=2", app)
+            # Independent negative oracle: modifying a sealed resource must fail.
+            altered = Path(temporary) / "tampered.app"
+            shutil.copytree(app, altered)
+            command("codesign", "--verify", "--deep", "--strict", altered)
+            with (altered / "Contents/MacOS/preview.tex.inc").open("a") as stream:
+                stream.write("\n% signature test\n")
+            result = subprocess.run(["codesign", "--verify", "--strict", str(altered)],
+                                    capture_output=True, text=True)
+            if result.returncode == 0:
+                raise RuntimeError("codesign accepted a modified sealed resource")
+            print("Signature tamper detection: PASS", flush=True)
+        else:
+            fmt = "zip" if platform.startswith("windows-") else "gztar"
+            archive = Path(shutil.make_archive(str(dist / name), fmt,
+                                              root_dir=temporary, base_dir=name))
+            shutil.unpack_archive(str(archive), extracted)
         # Test the actual extracted archive from a path containing spaces.
         check_exports(extracted / name / packaged_binary.relative_to(package))
+        if platform.startswith("macos-"):
+            command("codesign", "--verify", "--deep", "--strict", app)
     checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
     (dist / (archive.name + ".sha256")).write_text(f"{checksum}  {archive.name}\n")
-    print(f"Checked candidate: {archive.name}\nSHA256: {checksum}", flush=True)
+    print(f"Checked {kind} package: {archive.name}\nSHA256: {checksum}", flush=True)
 
 
 if __name__ == "__main__":

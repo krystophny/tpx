@@ -152,6 +152,50 @@ class RuntimeTests(unittest.TestCase):
             finally:
                 tool.unlink(missing_ok=True)
 
+    @unittest.skipUnless(sys.platform == "darwin", "macOS user settings location")
+    def test_macos_settings_are_saved_outside_application_bundle(self):
+        for legacy_settings in (False, True):
+            with self.subTest(legacy_settings=legacy_settings), \
+                    tempfile.TemporaryDirectory(prefix="tpx-mac-settings-") as directory:
+                root = Path(directory).resolve()
+                bundle_dir = root / "TpX.app" / "Contents" / "MacOS"
+                bundle_dir.mkdir(parents=True)
+                executable = bundle_dir / "RuntimeTests"
+                shutil.copy2(BINARY, executable)
+                bundle_ini = bundle_dir / "TpX.ini"
+                original_legacy = "LineWidth_Default=2.25\n"
+                if legacy_settings:
+                    bundle_ini.write_text(original_legacy)
+
+                home = root / "home"
+                config_home = root / "config"
+                home.mkdir()
+                config_home.mkdir()
+                env = os.environ.copy()
+                env.update(HOME=str(home), XDG_CONFIG_HOME=str(config_home),
+                           TMPDIR=str(root))
+                if legacy_settings:
+                    env["TPX_SETTINGS_EXPECT_LEGACY"] = "2.25"
+                else:
+                    env.pop("TPX_SETTINGS_EXPECT_LEGACY", None)
+                result = subprocess.run([str(executable), "mac-settings"], cwd=root,
+                                        env=env, capture_output=True, text=True,
+                                        timeout=40)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("PASS mac-settings", result.stdout, result.stderr)
+                config_line = next(line for line in result.stdout.splitlines()
+                                   if line.startswith("SETTINGS_FILE="))
+                settings_file = Path(config_line.split("=", 1)[1]).resolve()
+                self.assertTrue(settings_file.is_file())
+                self.assertNotEqual(settings_file, bundle_ini.resolve())
+                self.assertTrue(settings_file.is_relative_to(root))
+                if legacy_settings:
+                    self.assertEqual(bundle_ini.read_text(), original_legacy,
+                                     "Legacy bundle settings were modified")
+                else:
+                    self.assertFalse(bundle_ini.exists(),
+                                     "Saving created TpX.ini inside the app bundle")
+
 
 if __name__ == "__main__":
     unittest.main()
