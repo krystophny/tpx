@@ -11,7 +11,7 @@ uses
   Messages, SysUtils, Classes, Graphics, Controls, Forms,
   Dialogs, Grids, StdCtrls, Spin, GObjects, ExtCtrls, ActnList,
   Menus,
-  Clipbrd, StrUtils, ComCtrls;
+  Clipbrd, StrUtils, ComCtrls, PlatformShortcuts;
 
 {$IFDEF VER140}
 {$ELSE}
@@ -95,6 +95,9 @@ uses Drawings, Geometry, SysBasic;
 
 procedure TTableForm.FormCreate(Sender: TObject);
 begin
+  Copy.ShortCut := StandardShortcut(Ord('C'), []);
+  Paste.ShortCut := StandardShortcut(Ord('V'), []);
+  SelectAll.ShortCut := StandardShortcut(Ord('A'), []);
   Grid.Cells[1, 0] := 'x';
   Grid.Cells[2, 0] := 'y';
 end;

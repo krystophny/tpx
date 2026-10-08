@@ -12,7 +12,7 @@ uses
 {$ELSE}
   LCLIntf, LCLType, LResources,
 {$ENDIF}
-  Devices, Modes;
+  Devices, Modes, PlatformShortcuts;
 
 type
 
@@ -476,6 +476,7 @@ type
     procedure FormCloseQuery(Sender: TObject; var CanClose:
       Boolean);
     procedure FormDestroy(Sender: TObject);
+    procedure UpdatePlatformShortcuts;
     procedure CaptureEMFExecute(Sender: TObject);
     procedure Tools1Click(Sender: TObject);
     procedure ShowRulersExecute(Sender: TObject);
@@ -678,6 +679,7 @@ begin
   Screen.Cursors[crPen] := LoadCursor(HInstance, 'PEN');
 {$ENDIF}
   Caption := Drawing_NewFileName;
+  UpdatePlatformShortcuts;
   ScrollPos0 := -1;
   ShowScrollBars.Checked := True;
   ShowPropertiesToolbar1.Checked := True;
@@ -940,6 +942,21 @@ procedure TMainForm.LocalViewKeyUp(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
   EventManager.KeyUp(Sender, Key, Shift);
+end;
+
+procedure TMainForm.UpdatePlatformShortcuts;
+begin
+  Undo.ShortCut := StandardShortcut(Ord('Z'), []);
+  Redo.ShortCut := StandardShortcut(Ord('Z'), [ssShift]);
+  ClipboardCopy.ShortCut := StandardShortcut(Ord('C'), []);
+  ClipboardCut.ShortCut := StandardShortcut(Ord('X'), []);
+  ClipboardPaste.ShortCut := StandardShortcut(Ord('V'), []);
+  SelectAll.ShortCut := StandardShortcut(Ord('A'), []);
+  NewDoc.ShortCut := StandardShortcut(Ord('N'), []);
+  OpenDoc.ShortCut := StandardShortcut(Ord('O'), []);
+  SaveDoc.ShortCut := StandardShortcut(Ord('S'), []);
+  SaveAs.ShortCut := StandardShortcut(Ord('S'), [ssShift]);
+  Print.ShortCut := StandardShortcut(Ord('P'), []);
 end;
 
 procedure TMainForm.UserEventExecute(Sender: TObject);
