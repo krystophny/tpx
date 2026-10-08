@@ -5,7 +5,7 @@ uses
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps;
+  Settings0, MainUnit, Propert, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -179,6 +179,38 @@ begin
     'Executable in the first PATH component was not found');
   Check(FilePath = GetEnvironmentVariable('TPX_FILEPATH_TOOL'),
     'CheckFilePath changed the configured executable name');
+end;
+
+procedure TestClipboardFormatWidth;
+begin
+  Check(SizeOf(TpXClipboardFormat) = SizeOf(Pointer),
+    'TpX clipboard format ID cannot hold a native format handle');
+end;
+
+procedure TestClipboardRoundTrip;
+var
+  Source, Target: TDrawing2D;
+  Line: TLine2D;
+begin
+  Source := TDrawing2D.Create(nil);
+  Target := TDrawing2D.Create(nil);
+  try
+    Source.AddObject(-1, TLine2D.CreateSpec(-1,
+      Point2D(12.5, 34.25), Point2D(56.75, 78.125)));
+    Source.SelectAll;
+    Source.CopySelectionToClipboard;
+    Check(ClipboardHasTpX, 'TpX format is absent after copying selection');
+    Target.PasteFromClipboard;
+    Check(Target.ObjectsCount = 1, 'Clipboard paste lost selected line');
+    Line := Target.GetObject(0) as TLine2D;
+    Check(IsSamePoint2D(Line.Points[0], Point2D(12.5, 34.25)),
+      'Clipboard paste changed the selected line start');
+    Check(IsSamePoint2D(Line.Points[1], Point2D(56.75, 78.125)),
+      'Clipboard paste changed the selected line end');
+  finally
+    Target.Free;
+    Source.Free;
+  end;
 end;
 
 procedure TestShapeSnap;
@@ -479,7 +511,9 @@ begin
       RunBitmapFixtureConverter;
       Halt(0);
     end;
-    WidgetSet := TTestWidgetSet.Create;
+    if (ParamStr(1) <> 'clipboard-format-width') and
+      (ParamStr(1) <> 'clipboard-roundtrip') then
+      WidgetSet := TTestWidgetSet.Create;
     Application.Initialize;
     RequireDerivedFormResource := True;
     Application.CreateForm(TMainForm, MainForm);
@@ -492,6 +526,8 @@ begin
     else if ParamStr(1) = 'preview-state' then TestPreviewState
     else if ParamStr(1) = 'external-tools' then TestExternalTools
     else if ParamStr(1) = 'check-file-path' then TestCheckFilePath
+    else if ParamStr(1) = 'clipboard-format-width' then TestClipboardFormatWidth
+    else if ParamStr(1) = 'clipboard-roundtrip' then TestClipboardRoundTrip
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
     else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))
     else if ParamStr(1) = 'default-view' then TestDefaultView
@@ -514,6 +550,8 @@ begin
   except
     on E: Exception do begin
       WriteLn(StdErr, E.ClassName, ': ', E.Message);
+      if ParamStr(1) = 'clipboard-roundtrip' then
+        DumpExceptionBackTrace(StdErr);
       Halt(1);
     end;
   end;

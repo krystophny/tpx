@@ -15,7 +15,8 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-yes",
              "viewport-events", "viewport-crosshair", "viewport-preview",
              "text-metrics", "path-first-click", "async-tools",
              "property-dimensions", "font-choice", "conversion-save",
-             "unsupported-exports")
+             "unsupported-exports", "clipboard-format-width",
+             "clipboard-roundtrip")
 
 
 class RuntimeTests(unittest.TestCase):
