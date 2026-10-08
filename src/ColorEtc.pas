@@ -2,7 +2,7 @@ unit ColorEtc; //Colors and miscellanea
 
 interface
 
-uses Types, Classes, SysUtils, Graphics, StdCtrls, Dialogs,
+uses Types, Classes, SysUtils, Graphics, StdCtrls, Dialogs, ExtCtrls,
 {$IFDEF VER140}
   Windows,
 {$ELSE}
@@ -70,6 +70,41 @@ const
     clMoneyGreen, clSkyBlue, clCream, clMedGray);
 
 implementation
+
+type
+  TColorBoxResetTimer = class(TTimer)
+  private
+    FComboBox: TComboBox;
+    FSelectedColor: TColor;
+    procedure ResetSelection(Sender: TObject);
+  public
+    constructor Create(ComboBox: TComboBox; SelectedColor: TColor);
+  end;
+
+constructor TColorBoxResetTimer.Create(ComboBox: TComboBox;
+  SelectedColor: TColor);
+begin
+  inherited Create(ComboBox);
+  FComboBox := ComboBox;
+  FSelectedColor := SelectedColor;
+  Interval := 1;
+  OnTimer := ResetSelection;
+  Enabled := True;
+end;
+
+procedure TColorBoxResetTimer.ResetSelection(Sender: TObject);
+begin
+  Enabled := False;
+  try
+    if not Assigned(FComboBox) then Exit;
+    if (FComboBox.Items.Count < 3) or
+      (FComboBox.Items.Objects[1] <> TObject(FSelectedColor)) then Exit;
+    FComboBox.ItemIndex := -1;
+    ColorBoxSet(FComboBox, FSelectedColor);
+  finally
+    Free;
+  end;
+end;
 
 {Black #000000
 Silver #C0C0C0
@@ -421,6 +456,8 @@ begin
     ComboBox.Items.AddObject(ColorName,
       TObject(SwapColor(Integer(TheHTMLColor.Objects[I]))));
   end;
+  ComboBox.Items.InsertObject(ComboBox.Items.Count - 1,
+    'Current color', TObject(clBlack));
   ComboBox.ItemIndex := 0;
 end;
 
@@ -459,62 +496,69 @@ end;
 procedure ColorBoxSelect(ComboBox: TComboBox);
 var
   ColorDialog: TColorDialog;
-  procedure Body;
-  begin
-    if ComboBox.Items.Count < 2 then Exit;
-    ColorDialog.Color := Integer(ComboBox.Items.Objects[1]);
-    if ColorDialog.Color = clDefault then ColorDialog.Color := clBlack;
-    if not ColorDialog.Execute then begin
-      ColorBoxSet(ComboBox, Integer(ComboBox.Items.Objects[1]));
-      Exit;
-    end;
-    if ComboBox.Items.Count < 2 then Exit;
-    ComboBox.Items.Objects[1] := TObject(ColorDialog.Color);
-  end;
+  SelectedColor: TColor;
 begin
   if ComboBox.Items.Count < 2 then Exit;
   if ComboBox.ItemIndex <> 1 then begin
-    if ComboBox.ItemIndex >= 0 then
+    if ComboBox.ItemIndex >= 0 then begin
       ComboBox.Items.Objects[1] := ComboBox.Items.Objects[ComboBox.ItemIndex];
+      ComboBox.Items.Objects[ComboBox.Items.Count - 2] :=
+        ComboBox.Items.Objects[ComboBox.ItemIndex];
+    end;
     Exit;
   end;
   ComboBox.DroppedDown := False;
+  SelectedColor := Integer(ComboBox.Items.Objects[1]);
   ColorDialog := TColorDialog.Create(nil);
   try
 {$IFDEF VER140}
-  if CustomColors <> '' then
-    ColorDialog.CustomColors.Text := CustomColors;
+    if CustomColors <> '' then
+      ColorDialog.CustomColors.Text := CustomColors;
 {$ENDIF}
-  Body;
+    ColorDialog.Color := SelectedColor;
+    if ColorDialog.Color = clDefault then ColorDialog.Color := clBlack;
+    if ColorDialog.Execute then
+      ColorBoxSet(ComboBox, ColorDialog.Color)
+    else
+      ColorBoxSet(ComboBox, SelectedColor);
 {$IFDEF VER140}
-  CustomColors := ColorDialog.CustomColors.Text;
+    CustomColors := ColorDialog.CustomColors.Text;
 {$ENDIF}
-  finally ColorDialog.Free end;
+  finally
+    ColorDialog.Free;
+  end;
+  TColorBoxResetTimer.Create(ComboBox,
+    Integer(ComboBox.Items.Objects[1]));
 end;
 
 procedure ColorBoxSet(ComboBox: TComboBox; Color: TColor);
 var
   I: Integer;
+  CurrentColorIndex: Integer;
 begin
+  if ComboBox.Items.Count < 3 then Exit;
   if Color = clDefault then
   begin
     ComboBox.Items.Objects[1] := TObject(clDefault);
+    ComboBox.Items.Objects[ComboBox.Items.Count - 2] := TObject(clDefault);
     ComboBox.ItemIndex := 0;
     Exit;
   end;
   ComboBox.Items.Objects[1] := TObject(clBlack);
+  CurrentColorIndex := ComboBox.Items.Count - 2;
+  ComboBox.Items.Objects[CurrentColorIndex] := TObject(Color);
   if Color = clBlack then
   begin
     ComboBox.ItemIndex := 2;
+    ComboBox.Items.Objects[1] := TObject(Color);
     Exit;
   end;
-  I := ComboBox.Items.IndexOfObject(TObject(Color));
-  if I > 2 then
-    ComboBox.ItemIndex := I
-  else
-  begin
-    ComboBox.ItemIndex := 1;
-  end;
+  I := 2;
+  while (I < ComboBox.Items.Count) and
+    ((I = CurrentColorIndex) or
+     (ComboBox.Items.Objects[I] <> TObject(Color))) do Inc(I);
+  if I < ComboBox.Items.Count then ComboBox.ItemIndex := I
+  else ComboBox.ItemIndex := CurrentColorIndex;
   ComboBox.Items.Objects[1] := TObject(Color);
   ComboBox.Refresh;
 end;
