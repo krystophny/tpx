@@ -6,19 +6,26 @@ uses Drawings, Graphics, Clipbrd,
 {$IFNDEF FPC}
   Windows,
 {$ELSE}
-  LCLIntf,
+  LCLIntf, LCLType,
 {$ENDIF}
   Classes;
-
-var
-  TpXClipboardFormat: Cardinal;
 
 const
   TpXClipboardFormatString = 'TpX Clipboard Format';
 
 type
-
+{$IFDEF FPC}
+  TClipboardFormat = LCLType.TClipboardFormat;
+{$ELSE}
   TClipboardFormat = Word;
+{$ENDIF}
+
+var
+{$IFDEF FPC}
+  TpXClipboardFormat: TClipboardFormat;
+{$ELSE}
+  TpXClipboardFormat: Cardinal;
+{$ENDIF}
 
 {$IFDEF VER140}
 procedure PutMetafileToClipboard(const MetaFile: TMetaFile);

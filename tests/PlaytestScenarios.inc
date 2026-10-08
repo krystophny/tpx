@@ -152,6 +152,11 @@ begin
 end;
 
 procedure TestPropertyDimensions;
+const
+  // Explicit string arrays keep short and long invalid tokens intact.
+  InvalidHeights: array[0..4] of string = ('-1', '0', 'NaN', 'Inf', 'bad');
+  InvalidWidths: array[0..3] of string = ('-1', 'NaN', 'Inf', 'bad');
+  InvalidToolbarHeights: array[0..3] of string = ('-1', '0', 'NaN', 'bad');
 var
   TextObj: TText2D;
   CanClose: Boolean;
@@ -161,7 +166,7 @@ begin
   MainForm.TheDrawing.AddObject(-1, TextObj);
   MainForm.TheDrawing.SelectionAdd(TextObj);
   PropertiesForm.PObject := TextObj;
-  for Bad in ['-1', '0', 'NaN', 'Inf', 'bad'] do begin
+  for Bad in InvalidHeights do begin
     PropertiesForm.FormShow(nil);
     PropertiesForm.LabeledEdit1.Text := 'Changed';
     PropertiesForm.LabeledEdit2.Text := Bad;
@@ -171,7 +176,7 @@ begin
     Check(not CanClose, 'Invalid text height was accepted: ' + Bad);
     Check((TextObj.Height = 7) and (TextObj.Text = 'Original'), 'Invalid edit mutated text');
   end;
-  for Bad in ['-1', 'NaN', 'Inf', 'bad'] do begin
+  for Bad in InvalidWidths do begin
     PropertiesForm.FormShow(nil);
     PropertiesForm.ComboBox6.Text := Bad;
     PropertiesForm.ComboBox1.ItemIndex := Ord(liNone);
@@ -189,7 +194,7 @@ begin
     'Fractional height or zero hairline was rejected');
   MainForm.TheDrawing.New_FontHeight := 0.5;
   MainForm.TheDrawing.New_LineWidth := 0;
-  for Bad in ['-1', '0', 'NaN', 'bad'] do begin
+  for Bad in InvalidToolbarHeights do begin
     MainForm.Edit4.Text := Bad;
     MainForm.ChangeProperties(MainForm.Edit4);
     MainForm.NumericPropertyExit(MainForm.Edit4);
