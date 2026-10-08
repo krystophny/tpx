@@ -42,7 +42,8 @@ Windows Server 2025 uses the official Lazarus 4.8/FPC 3.2.2 installer with its
 published SHA-256. Ubuntu 24.04 builds the pinned Lazarus 4.8 source with the
 distribution FPC. macOS 15 on Apple Silicon builds pinned `fixes_3_2` FPC 3.2.3
 and Lazarus 4.8 sources to avoid the older compiler's Cocoa linker problem.
-Unix builds apply the [versioned dependency repair](patches/README.md).
+Unix builds apply the [versioned dependency repairs](patches/README.md); the
+macOS candidate also runs native Cocoa font-dialog and text-shortcut tests.
 All candidates include `BUILD.json`, project source, license notices,
 `README.md`, and the TeX preambles. Form and icon resources are embedded.
 

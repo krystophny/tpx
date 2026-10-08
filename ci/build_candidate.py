@@ -91,6 +91,7 @@ def build_and_package():
     command(*build, "tests/RuntimeTests.lpi")
     if platform.startswith("macos-"):
         command("sh", lazarus / "test/lcltests/testcocoafontdialog.sh", lazarus)
+        command("sh", lazarus / "test/lcltests/testcocoatextshortcuts.sh", lazarus)
     suffix = ".exe" if platform.startswith("windows-") else ""
     binary_dir = ROOT / "obj" / f"{cpu}-{operating_system}"
     binary = binary_dir / ("TpX" + suffix)
@@ -134,7 +135,8 @@ def build_and_package():
             "lazarus_patches_sha256": {
                 name: hashlib.sha256((ROOT / "ci/patches" / name).read_bytes()).hexdigest()
                 for name in ("lazarus-4.8-opendocument.patch",
-                             "lazarus-4.8-cocoa-font-cancel.patch")
+                             "lazarus-4.8-cocoa-font-cancel.patch",
+                             "lazarus-4.8-cocoa-text-shortcuts.patch")
             } if operating_system != "win64" else {},
             "fpc_source": os.environ.get("FPC_SOURCE", "3.2.2 distribution"),
             "sam2p_source": os.environ.get("SAM2P_SOURCE"),
@@ -145,7 +147,8 @@ def build_and_package():
         if platform.startswith("linux-"):
             manifest["checks"].extend(["TeX compilation", "packaged TeX compilation"])
         if platform.startswith("macos-"):
-            manifest["checks"].append("native Cocoa font cancellation")
+            manifest["checks"].extend(["native Cocoa font cancellation",
+                                       "native Cocoa text shortcuts"])
         (package / "BUILD.json").write_text(json.dumps(manifest, indent=2) + "\n")
         fmt = "zip" if platform.startswith("windows-") else "gztar"
         archive = Path(shutil.make_archive(str(dist / name), fmt,
