@@ -14,6 +14,7 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-yes",
              "exit-close", "exit-fallback", "text-selection", "default-view", "toolbar", "draw-click", "draw-drag", "draw-rectangle", "draw-jitter", "draw-cancel", "shape-snap", "external-tools", "preview-state",
              "viewport-events", "viewport-crosshair", "viewport-preview",
              "text-metrics", "path-first-click", "async-tools",
+             "canvas-focus-transfer",
              "property-dimensions", "font-choice", "conversion-save",
              "unsupported-exports", "clipboard-format-width",
              "clipboard-roundtrip", "color-box-custom-state",
@@ -75,6 +76,11 @@ class RuntimeTests(unittest.TestCase):
         for scenario in SCENARIOS:
             with self.subTest(scenario=scenario):
                 self.run_scenario(scenario)
+
+    @unittest.skipUnless(sys.platform.startswith("linux"),
+                         "native editable shortcut routing uses GTK2/X11")
+    def test_gtk_editable_shortcut_routing(self):
+        self.run_scenario("editable-shortcut-routing")
 
     def test_startup_document_identity(self):
         # Keep scenario selection out of argv so production startup sees real input.

@@ -1,7 +1,7 @@
 program RuntimeTests;
 {$mode Delphi}
 uses
-  Interfaces, Forms, SysUtils, Classes, Types, Math, Controls, Dialogs, InterfaceBase, LCLType, LMessages,
+  Interfaces, Forms, SysUtils, Classes, Types, Math, Controls, Dialogs, Clipbrd, InterfaceBase, LCLType, LMessages, Process,
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
@@ -198,6 +198,143 @@ procedure TestClipboardFormatWidth;
 begin
   Check(SizeOf(TpXClipboardFormat) = SizeOf(Pointer),
     'TpX clipboard format ID cannot hold a native format handle');
+end;
+
+procedure SendNativeKey(const Key: string);
+var
+  KeySender: TProcess;
+  I: Integer;
+begin
+  KeySender := TProcess.Create(nil);
+  try
+    KeySender.Executable := FileSearch('xdotool', GetEnvironmentVariable('PATH'));
+    Check(KeySender.Executable <> '', 'xdotool is required for the GTK shortcut test');
+    KeySender.Parameters.Add('key');
+    KeySender.Parameters.Add('--clearmodifiers');
+    KeySender.Parameters.Add(Key);
+    KeySender.Options := [poWaitOnExit];
+    KeySender.Execute;
+    Check(KeySender.ExitStatus = 0, 'xdotool failed to send ' + Key);
+  finally
+    KeySender.Free;
+  end;
+  for I := 1 to 5 do begin
+    Application.ProcessMessages;
+    Sleep(10);
+  end;
+end;
+
+procedure SendNativeClick(X, Y: Integer);
+var
+  ClickSender: TProcess;
+begin
+  ClickSender := TProcess.Create(nil);
+  try
+    ClickSender.Executable := FileSearch('xdotool', GetEnvironmentVariable('PATH'));
+    Check(ClickSender.Executable <> '', 'xdotool is required for the GTK shortcut test');
+    ClickSender.Parameters.Add('mousemove');
+    ClickSender.Parameters.Add('--sync');
+    ClickSender.Parameters.Add(IntToStr(X));
+    ClickSender.Parameters.Add(IntToStr(Y));
+    ClickSender.Parameters.Add('click');
+    ClickSender.Parameters.Add('1');
+    ClickSender.Options := [poWaitOnExit];
+    ClickSender.Execute;
+    Check(ClickSender.ExitStatus = 0, 'xdotool failed to click the canvas');
+  finally
+    ClickSender.Free;
+  end;
+  Application.ProcessMessages;
+  Sleep(20);
+  Application.ProcessMessages;
+end;
+
+procedure TestEditableShortcutRouting;
+var
+  Line: TLine2D;
+  CanvasPoint: TPoint;
+begin
+  Line := TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(20, 10));
+  MainForm.TheDrawing.AddObject(-1, Line);
+  MainForm.Show;
+  Application.ProcessMessages;
+
+  MainForm.ComboBox6.Text := '0.2';
+  MainForm.ComboBox6.SelStart := 0;
+  MainForm.ComboBox6.SelLength := 0;
+  MainForm.ComboBox6.SetFocus;
+  Application.ProcessMessages;
+  Check(MainForm.ActiveControl = MainForm.ComboBox6,
+    'Editable combo was not focused before native keyboard input');
+
+  SendNativeKey('ctrl+a');
+  Check(MainForm.ComboBox6.SelText = '0.2',
+    'Ctrl+A did not select text in the focused editable combo');
+  Check(MainForm.TheDrawing.SelectedObjects.Count = 0,
+    'Ctrl+A in the editable combo selected drawing objects');
+
+  SendNativeKey('ctrl+c');
+  Check(Clipboard.AsText = '0.2', 'Ctrl+C did not copy selected combo text');
+  Check(MainForm.TheDrawing.SelectedObjects.Count = 0,
+    'Ctrl+C in the editable combo dispatched the drawing Copy action');
+
+  SendNativeKey('ctrl+x');
+  Check(MainForm.ComboBox6.Text = '', 'Ctrl+X did not cut selected combo text');
+  Check(MainForm.TheDrawing.SelectedObjects.Count = 0,
+    'Ctrl+X in the editable combo dispatched the drawing Cut action');
+  SendNativeKey('ctrl+v');
+  Check(MainForm.ComboBox6.Text = '0.2', 'Ctrl+V did not paste text into the combo');
+  SendNativeKey('ctrl+z');
+  Check(MainForm.TheDrawing.ObjectsCount = 1,
+    'Ctrl+Z in the editable combo changed the drawing');
+  SendNativeKey('ctrl+shift+z');
+  Check(MainForm.TheDrawing.ObjectsCount = 1,
+    'Ctrl+Shift+Z in the editable combo changed the drawing');
+  Check(MainForm.TheDrawing.SelectedObjects.Count = 0,
+    'Edit shortcuts in the editable combo selected drawing objects');
+
+  MainForm.TheDrawing.SelectionAdd(Line);
+  MainForm.ComboBox6.SelStart := 0;
+  MainForm.ComboBox6.SelLength := Length(MainForm.ComboBox6.Text);
+  MainForm.ComboBox6.SetFocus;
+  Application.ProcessMessages;
+  SendNativeKey('Delete');
+  Check((MainForm.TheDrawing.ObjectsCount = 1) and
+    (MainForm.TheDrawing.SelectedObjects.Count = 1),
+    'Delete in the editable combo deleted the selected drawing object');
+  Check(MainForm.ComboBox6.Text = '',
+    'Delete did not erase selected text in the editable combo');
+
+  MainForm.ComboBox6.SetFocus;
+  Application.ProcessMessages;
+  CanvasPoint := MainForm.LocalView.ClientToScreen(Point(20, 20));
+  SendNativeClick(CanvasPoint.X, CanvasPoint.Y);
+  Check(MainForm.ActiveControl = MainForm.LocalView,
+    'Native canvas click did not move focus out of the editable combo');
+  SendNativeKey('ctrl+a');
+  Check(MainForm.TheDrawing.SelectedObjects.Count = 1,
+    'Ctrl+A with canvas focus did not select the drawing object');
+  SendNativeKey('ctrl+c');
+  Check(Clipboard.HasFormat(TpXClipboardFormat),
+    'Ctrl+C with canvas focus did not copy the drawing object');
+  SendNativeKey('Delete');
+  Check(MainForm.TheDrawing.ObjectsCount = 0,
+    'Delete with canvas focus did not delete the selected drawing object');
+end;
+
+procedure TestCanvasFocusTransfer;
+begin
+  MainForm.Show;
+  Application.ProcessMessages;
+  MainForm.ComboBox6.SetFocus;
+  Application.ProcessMessages;
+  Check(MainForm.ActiveControl = MainForm.ComboBox6,
+    'Editable combo was not focused before the canvas mouse message');
+
+  MainForm.LocalView.Perform(LM_LBUTTONDOWN, MK_LBUTTON, 0);
+  Application.ProcessMessages;
+  Check(MainForm.ActiveControl = MainForm.LocalView,
+    'LCL canvas mouse-down did not transfer focus from the editable combo');
 end;
 
 procedure CheckPlatformActionShortcut(Action: TAction; Key: Word;
@@ -671,6 +808,8 @@ begin
     else if ParamStr(1) = 'check-file-path' then TestCheckFilePath
     else if ParamStr(1) = 'clipboard-format-width' then TestClipboardFormatWidth
     else if ParamStr(1) = 'clipboard-roundtrip' then TestClipboardRoundTrip
+    else if ParamStr(1) = 'editable-shortcut-routing' then TestEditableShortcutRouting
+    else if ParamStr(1) = 'canvas-focus-transfer' then TestCanvasFocusTransfer
     else if ParamStr(1) = 'platform-shortcuts' then TestPlatformShortcuts
     else if ParamStr(1) = 'color-box-custom-state' then TestColorBoxCustomState
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
