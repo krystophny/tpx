@@ -36,7 +36,7 @@ class RuntimeTests(unittest.TestCase):
     def test_startup_document_identity(self):
         # Keep scenario selection out of argv so production startup sees real input.
         with tempfile.TemporaryDirectory(prefix="tpx startup-") as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             source = root / "drawing with spaces.tpx"
             source.write_text('%<TpX v="5">\n'
                               '%<line x1="0" y1="0" x2="20" y2="10"/>\n'
