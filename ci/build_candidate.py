@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import plistlib
 import re
 import shutil
 import subprocess
@@ -32,6 +33,33 @@ def check_exports(binary):
     else:
         print("TeX compilation is covered by the Linux candidate job; "
               "this job checks native exports and GUI scenarios.", flush=True)
+
+
+def stage_runtime(package, binary, platform, version):
+    """Put TpX and its editable preambles where the executable finds them."""
+    executable_dir = package
+    if platform.startswith("macos-"):
+        contents = package / "TpX.app" / "Contents"
+        executable_dir = contents / "MacOS"
+        executable_dir.mkdir(parents=True)
+        bundle_version = version.split("-", 1)[0]
+        with (contents / "Info.plist").open("wb") as stream:
+            plistlib.dump({
+                "CFBundleIdentifier": "org.tpx.TpX",
+                "CFBundleName": "TpX",
+                "CFBundleDisplayName": "TpX",
+                "CFBundleExecutable": binary.name,
+                "CFBundlePackageType": "APPL",
+                "CFBundleInfoDictionaryVersion": "6.0",
+                "CFBundleShortVersionString": bundle_version,
+                "CFBundleVersion": bundle_version,
+                "NSHighResolutionCapable": True,
+            }, stream)
+    packaged_binary = executable_dir / binary.name
+    shutil.copy2(binary, packaged_binary)
+    for filename in ("preview.tex.inc", "metapost.tex.inc"):
+        shutil.copy2(ROOT / "ci" / filename, executable_dir / filename)
+    return packaged_binary
 
 
 def build_and_package():
@@ -74,11 +102,10 @@ def build_and_package():
     with tempfile.TemporaryDirectory(prefix="tpx candidate ") as temporary:
         package = Path(temporary) / name
         package.mkdir()
-        shutil.copy2(binary, package / binary.name)
+        packaged_binary = stage_runtime(package, binary, platform, version)
         for filename in ("README.md", "LICENSE"):
             shutil.copy2(ROOT / filename, package / filename)
-        for filename in ("CANDIDATE.md", "THIRD_PARTY.md", "preview.tex.inc",
-                         "metapost.tex.inc"):
+        for filename in ("CANDIDATE.md", "THIRD_PARTY.md"):
             shutil.copy2(ROOT / "ci" / filename, package / filename)
         licenses = package / "licenses"
         licenses.mkdir()
@@ -94,6 +121,7 @@ def build_and_package():
         manifest = {
             "status": "candidate; manual playtest required before release",
             "proposed_version": version, "commit": commit, "platform": platform,
+            "executable": packaged_binary.relative_to(package).as_posix(),
             "widgetset": widgetset, "fpc_version": output(fpc, "-iV"),
             "lazarus_source": os.environ.get("LAZARUS_SOURCE", "local"),
             "lazarus_patch_sha256": hashlib.sha256(
@@ -113,7 +141,7 @@ def build_and_package():
         extracted = Path(temporary) / "extracted candidate"
         shutil.unpack_archive(str(archive), extracted)
         # Test the actual extracted archive from a path containing spaces.
-        check_exports(extracted / name / binary.name)
+        check_exports(extracted / name / packaged_binary.relative_to(package))
     checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
     (dist / (archive.name + ".sha256")).write_text(f"{checksum}  {archive.name}\n")
     print(f"Checked candidate: {archive.name}\nSHA256: {checksum}", flush=True)

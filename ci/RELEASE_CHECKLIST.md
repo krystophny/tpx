@@ -32,6 +32,8 @@ the matrix jobs run independently. Retain each archive, checksum, and run URL.
 Each job builds the editor and native GUI scenario runner, checks exported
 geometry and saved-drawing behavior, then extracts its archive into a folder
 containing spaces and repeats export checks against the shipped executable.
+On macOS, this executable is inside the extracted `TpX.app` bundle; its TeX
+preambles remain beside it in `Contents/MacOS`.
 Linux also compiles TeX exports, both before and after packaging. Windows and
 macOS leave TeX compilation to Linux; installed external tools require manual
 checks on those systems. Failed gates prevent that platform's artifact upload.
@@ -68,7 +70,9 @@ because its version table ends at 4.4 and its maintainer announced discontinuati
   three platforms. Attach failures to the exact candidate commit and rebuild
   after repairs; candidates from different commits do not share sign-off.
 - Confirm Windows native behavior in the VM and macOS Cocoa behavior in a
-  graphical session. Obtain Chris's explicit publication authorization only
+  graphical session. Open the macOS `TpX.app` through Finder and confirm that
+  it becomes the active application, with its native menu and Save As dialog.
+  Obtain Chris's explicit publication authorization only
   after the remaining failures are resolved.
 
 After authorization, a separate release operation can tag the approved commit
