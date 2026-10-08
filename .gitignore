@@ -10,3 +10,5 @@ misc/
 .lazarus/
 dist/
 __pycache__/
+web/build/
+web/dist/

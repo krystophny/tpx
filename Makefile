@@ -8,7 +8,9 @@ TPX_BINARY = obj/$(shell $(FPC) -iTP)-$(shell $(FPC) -iTO)/TpX
 RUNTIME_BINARY = obj/$(shell $(FPC) -iTP)-$(shell $(FPC) -iTO)/RuntimeTests
 BUILD_OPTIONS = --pcp="$(LAZARUS_CONFIG)" $(if $(LAZARUS_DIR),--lazarusdir="$(LAZARUS_DIR)") --ws="$(WIDGETSET)" $(LAZBUILD_FLAGS)
 
-.PHONY: all build run test
+WEB_PORT ?= 8791
+
+.PHONY: all build run test web web-check web-serve
 
 all: build
 
@@ -23,3 +25,14 @@ test: build
 	TPX_BINARY="$(CURDIR)/$(TPX_BINARY)" python3 tests/test_tex.py
 	$(LAZBUILD) $(BUILD_OPTIONS) tests/RuntimeTests.lpi
 	RUNTIME_BINARY="$(CURDIR)/$(RUNTIME_BINARY)" python3 tests/test_runtime.py
+
+# Browser (WASI) target. Toolchain pins and locations: web/pins.env, web/README.md.
+web:
+	web/build.sh
+
+web-check:
+	web/build.sh check
+
+web-serve: web
+	@echo "serving $(CURDIR)/web/dist on http://127.0.0.1:$(WEB_PORT)/"
+	python3 -m http.server "$(WEB_PORT)" --bind 127.0.0.1 --directory "$(CURDIR)/web/dist"

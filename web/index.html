@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TpX in the browser</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f5f7;color:#1c2635;font:15px system-ui,sans-serif}main{margin:16px auto;padding:0 16px;max-width:1100px}h1{font-size:22px;margin:4px 0}#status{font-size:14px;color:#345477}#status[data-state=error]{color:#a62121}
+canvas{display:block;border:1px solid #bcc7d4;background:white;touch-action:none}
+#lcl-surface{position:relative;width:720px;height:480px}#lcl-dom{position:absolute;inset:0;pointer-events:none}#lcl-dom>*{pointer-events:auto;font-family:system-ui}#lcl-dom button{border:1px solid #a5b8ce;background:#fff;border-radius:4px;color:#203e69;cursor:pointer}#lcl-dom label{display:flex;align-items:center;gap:8px}.scroller{overflow:auto}
+</style>
+</head>
+<body><main>
+<h1>TpX 1.6 on the LCL CustomDrawn/WASM backend</h1>
+<p id="status" data-state="loading" role="status">Loading TpX…</p>
+<div class="scroller"><div id="lcl-surface"><canvas id="lcl" width="720" height="480" tabindex="0" aria-label="TpX drawing application"></canvas><div id="lcl-dom"></div></div></div>
+</main><script src="./jobhost.js"></script><script>rtl.run();</script><script type="module" src="./host.bundle.js"></script></body>
+</html>
