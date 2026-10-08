@@ -1,0 +1,217 @@
+diff --git a/lcl/interfaces/cocoa/cocoawindows.pas b/lcl/interfaces/cocoa/cocoawindows.pas
+index 7187a32c..7532e0a0 100644
+--- a/lcl/interfaces/cocoa/cocoawindows.pas
++++ b/lcl/interfaces/cocoa/cocoawindows.pas
+@@ -334,7 +334,7 @@ begin
+              handled := NSApplication(NSApp).sendAction_to_from(objcselector('paste:'), atarget, asender);
+       'x': if msk = NSCommandKeyMask then
+              handled := NSApplication(NSApp).sendAction_to_from(objcselector('cut:'), atarget, asender);
+-      'z': if msk = NSCommandKeyMask then
++      'z', 'Z': if msk = NSCommandKeyMask then
+       begin
+         undoManager := atarget.undoManager;
+         if Assigned(undoManager) and undoManager.canUndo then
+@@ -342,7 +342,7 @@ begin
+           handled := true;
+           undoManager.undo;
+         end;
+-      end;
++      end
+       else if msk = (NSCommandKeyMask or NSShiftKeyMask) then
+       begin
+         undoManager := atarget.undoManager;
+diff --git a/test/lcltests/testcocoatextshortcuts.pas b/test/lcltests/testcocoatextshortcuts.pas
+new file mode 100644
+index 00000000..9af88fb1
+--- /dev/null
++++ b/test/lcltests/testcocoatextshortcuts.pas
+@@ -0,0 +1,143 @@
++program TestCocoaTextShortcuts;
++
++{$mode objfpc}{$H+}
++{$modeswitch objectivec1}
++{$IFNDEF DARWIN}
++  {$fatal This regression requires macOS and the Cocoa widgetset}
++{$ENDIF}
++
++uses
++  Interfaces, Forms, StdCtrls, SysUtils, CocoaAll;
++
++var
++  Form: TForm;
++  Edit: TEdit;
++  Window: NSWindow;
++  Passed: Boolean = True;
++
++procedure Check(Condition: Boolean; const Description: String);
++begin
++  if not Condition then
++  begin
++    Passed := False;
++    WriteLn('FAIL: ', Description);
++  end;
++end;
++
++function NativeKey(Key: Char; KeyCode: Word;
++  Flags: NSEventModifierFlags): Boolean;
++var
++  Characters, IgnoringModifiers: NSString;
++  Event: NSEvent;
++  Raw, Modified: String;
++begin
++  Raw := Key;
++  Modified := Raw;
++  if (Flags and (NSShiftKeyMask or NSAlphaShiftKeyMask)) <> 0 then
++    Modified := UpperCase(Modified);
++  Characters := NSString.alloc.initWithUTF8String(PChar(Modified));
++  IgnoringModifiers := NSString.alloc.initWithUTF8String(PChar(Raw));
++  try
++    Event := NSEvent.keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
++      NSKeyDown, NSZeroPoint, Flags, 0, Window.windowNumber, nil,
++      Characters, IgnoringModifiers, False, KeyCode);
++    Result := Window.contentView.performKeyEquivalent(Event);
++  finally
++    IgnoringModifiers.release;
++    Characters.release;
++  end;
++end;
++
++function PrepareNativeEdit: NSUndoManager;
++begin
++  Edit.Text := 'abc';
++  Edit.SetFocus;
++  Application.ProcessMessages;
++  if not Assigned(Window.firstResponder) or
++     not NSObject(Window.firstResponder).isKindOfClass(NSTextView) then
++    raise Exception.Create('TEdit has no native NSTextView field editor');
++  Result := Window.firstResponder.undoManager;
++  if Result = nil then
++    raise Exception.Create('Native text field has no undo manager');
++  Result.removeAllActions;
++  NSApp.sendAction_to_from(ObjCSelector('selectAll:'), Window.firstResponder, nil);
++  NSApp.sendAction_to_from(ObjCSelector('insertText:'), Window.firstResponder, NSSTR('x'));
++  Check((Edit.Text = 'x') and Result.canUndo,
++    'Native insertText did not create the independent undo fixture');
++end;
++
++procedure CheckUndo(const Name: String; Flags: NSEventModifierFlags);
++var
++  Manager: NSUndoManager;
++  Handled: Boolean;
++begin
++  Manager := PrepareNativeEdit;
++  Handled := NativeKey('z', 6, Flags);
++  WriteLn(Name, ': handled=', Handled, ', text=', Edit.Text,
++    ', canRedo=', Manager.canRedo);
++  Check(Handled and (Edit.Text = 'abc') and Manager.canRedo,
++    Name + ' must undo the native edit');
++end;
++
++procedure CheckRedoAndUnrelatedKey;
++var
++  Manager: NSUndoManager;
++  Handled: Boolean;
++begin
++  Manager := PrepareNativeEdit;
++  Manager.undo;
++  Check((Edit.Text = 'abc') and Manager.canRedo, 'Native undo fixture failed');
++  // Real shifted key events contain uppercase characters and unshifted
++  // charactersIgnoringModifiers. An unrelated shortcut must preserve redo.
++  Handled := NativeKey('s', 1, NSCommandKeyMask or NSShiftKeyMask);
++  WriteLn('shift_command_s: handled=', Handled, ', text=', Edit.Text,
++    ', canRedo=', Manager.canRedo);
++  Check(not Handled and (Edit.Text = 'abc') and Manager.canRedo,
++    'Shift+Command+S must remain unhandled and preserve native redo');
++  // Restore the fixture after a failing unrelated key, so the positive redo
++  // control still runs against a native undo entry on the stock widgetset.
++  if not Manager.canRedo then
++    Manager.undo;
++  Handled := NativeKey('z', 6, NSCommandKeyMask or NSShiftKeyMask);
++  WriteLn('shift_command_z: handled=', Handled, ', text=', Edit.Text);
++  Check(Handled and (Edit.Text = 'x'),
++    'Shift+Command+Z must redo the native edit');
++end;
++
++procedure CheckSelectAll(Flags: NSEventModifierFlags; const Name: String);
++var
++  Handled: Boolean;
++begin
++  Edit.Text := 'abc';
++  Edit.SelStart := 0;
++  Edit.SelLength := 0;
++  Handled := NativeKey('a', 0, Flags);
++  WriteLn(Name, ': handled=', Handled, ', selection=', Edit.SelLength);
++  Check(Handled and (Edit.SelLength = 3), Name + ' must select native text');
++end;
++
++begin
++  Application.Initialize;
++  Form := TForm.Create(nil);
++  try
++    Edit := TEdit.Create(Form);
++    Edit.Parent := Form;
++    Edit.SetBounds(10, 10, 160, 24);
++    Form.Show;
++    Application.ProcessMessages;
++    Window := NSView(Form.Handle).window;
++    if Window = nil then
++      raise Exception.Create('Cocoa form has no native window');
++    CheckUndo('command_z', NSCommandKeyMask);
++    CheckUndo('caps_lock_command_z', NSCommandKeyMask or NSAlphaShiftKeyMask);
++    CheckRedoAndUnrelatedKey;
++    CheckSelectAll(NSCommandKeyMask, 'command_a');
++    CheckSelectAll(NSCommandKeyMask or NSAlphaShiftKeyMask, 'caps_lock_command_a');
++  finally
++    Form.Free;
++  end;
++  if Passed then
++    WriteLn('PASS: native text shortcuts preserve their undo and selection contracts')
++  else
++    ExitCode := 1;
++end.
+diff --git a/test/lcltests/testcocoatextshortcuts.sh b/test/lcltests/testcocoatextshortcuts.sh
+new file mode 100755
+index 00000000..d2c2931b
+--- /dev/null
++++ b/test/lcltests/testcocoatextshortcuts.sh
+@@ -0,0 +1,40 @@
++#!/bin/sh
++# Opens a test-owned Cocoa text field; coordinate with the GUI session owner.
++# An optional argument selects the provider source tree to build and test.
++set -eu
++test_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
++lazarus_dir=${1:-$(CDPATH= cd -- "$test_dir/../.." && pwd)}
++compiler=${FPC:-fpc}
++target=$($compiler -iTP)-$($compiler -iTO)
++case "$target" in
++  *-darwin) ;;
++  *) printf 'This native shortcut regression requires macOS.\n'; exit 1 ;;
++esac
++test_tmp=$(mktemp -d)
++trap 'rm -rf "$test_tmp"' EXIT HUP INT TERM
++# Build the chosen provider rather than relying on unrelated installed units.
++# Direct FPC builds need no Lazarus IDE primary configuration directory.
++for component in components/lazutils components/freetype packager/registration lcl; do
++  "${MAKE:-make}" -C "$lazarus_dir/$component" LCL_PLATFORM=cocoa FPC="$compiler" \
++    > "$test_tmp/provider-build.log" 2>&1 || {
++      cat "$test_tmp/provider-build.log"; exit 1;
++    }
++done
++"$compiler" -Fu"$lazarus_dir/lcl/units/$target" \
++  -Fu"$lazarus_dir/lcl/units/$target/cocoa" \
++  -Fu"$lazarus_dir/components/lazutils/lib/$target" \
++  -Fu"$lazarus_dir/packager/units/$target" \
++  -k-weak_framework -kAppKit -k-weak_framework -kUserNotifications \
++  -FU"$test_tmp" -FE"$test_tmp" "$test_dir/testcocoatextshortcuts.pas" \
++  > "$test_tmp/build.log" 2>&1 || { cat "$test_tmp/build.log"; exit 1; }
++python3 - "$test_tmp/testcocoatextshortcuts" <<'PY'
++import subprocess
++import sys
++
++try:
++    result = subprocess.run([sys.argv[1]], timeout=15)
++except subprocess.TimeoutExpired:
++    print('FAIL: native shortcut regression exceeded 15 seconds', flush=True)
++    sys.exit(1)
++sys.exit(result.returncode)
++PY
