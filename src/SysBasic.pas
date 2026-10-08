@@ -70,7 +70,43 @@ implementation
 
 uses
 //WinBasic,
-  MainUnit, Math{$IFDEF FPC}, Process{$ENDIF};
+  MainUnit, Math{$IFDEF FPC}, Classes, Process, ExtCtrls{$ENDIF};
+
+{$IFDEF FPC}
+type
+  TBackgroundTool = class(TComponent)
+  private
+    Child: TProcess;
+    Timer: TTimer;
+    procedure Poll(Sender: TObject);
+  public
+    constructor Create(AChild: TProcess); reintroduce;
+    destructor Destroy; override;
+  end;
+
+constructor TBackgroundTool.Create(AChild: TProcess);
+begin
+  inherited Create(Application);
+  Timer := TTimer.Create(Self);
+  Timer.Enabled := False;
+  Timer.Interval := 100;
+  Timer.OnTimer := Poll;
+  Child := AChild;
+  Timer.Enabled := True;
+end;
+
+destructor TBackgroundTool.Destroy;
+begin
+  if Assigned(Timer) then Timer.Enabled := False;
+  Child.Free;
+  inherited Destroy;
+end;
+
+procedure TBackgroundTool.Poll(Sender: TObject);
+begin
+  if not Child.Running then Free;
+end;
+{$ENDIF}
 
 function QuoteShellArg(const Value: string): string;
 var
@@ -277,6 +313,10 @@ begin
     try
       Child.Execute;
       Result := not aWait or (Child.ExitStatus = 0);
+      if not aWait then begin
+        TBackgroundTool.Create(Child);
+        Child := nil;
+      end;
     except
       Result := False;
     end;

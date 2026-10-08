@@ -83,11 +83,11 @@ const
   AsyncCommand = 'powershell -NoProfile -NonInteractive -Command "Start-Sleep -Seconds 1; Set-Content finished done"';
   WaitCommand = 'powershell -NoProfile -NonInteractive -Command "Start-Sleep -Milliseconds 100; Set-Content finished waited"';
 {$ELSE}
-  AsyncCommand = 'sleep 1; printf done > finished';
+  AsyncCommand = 'printf %s "$$" > childpid; sleep 1; printf done > finished';
   WaitCommand = 'sleep 0.1; printf waited > finished';
 {$ENDIF}
 var
-  Directory, Marker: string;
+  Directory, Marker, ChildPID: string;
   Started: QWord;
   Contents: TStringList;
 begin
@@ -102,6 +102,20 @@ begin
     Check(not FileExists(Marker), 'Child finished before async return');
     while not FileExists(Marker) and (GetTickCount64 - Started < 4000) do Sleep(20);
     Check(FileExists(Marker), 'Async child did not finish');
+{$IFDEF LINUX}
+    Contents := TStringList.Create;
+    try
+      Contents.LoadFromFile(Directory + PathDelim + 'childpid');
+      ChildPID := Trim(Contents.Text);
+      Started := GetTickCount64;
+      while DirectoryExists('/proc/' + ChildPID) and
+        (GetTickCount64 - Started < 3000) do begin
+        Application.ProcessMessages;
+        Sleep(20);
+      end;
+      Check(not DirectoryExists('/proc/' + ChildPID), 'Async child was not reaped');
+    finally Contents.Free end;
+{$ENDIF}
     Check(FileExec(WaitCommand, '', '', Directory, True, True),
       'Waiting command failed');
     Contents := TStringList.Create;
@@ -109,7 +123,8 @@ begin
       Contents.LoadFromFile(Marker);
       Check(Trim(Contents.Text) = 'waited', 'Wait=True returned before completion');
     finally Contents.Free end;
-  finally DeleteFile(Marker); RemoveDir(Directory) end;
+  finally DeleteFile(Marker); DeleteFile(Directory + PathDelim + 'childpid');
+    RemoveDir(Directory) end;
 end;
 
 procedure TestDefaultOpener;
@@ -253,6 +268,7 @@ begin
       Image.SetSize(16, 8); Image.Canvas.Brush.Color := clRed;
       Image.Canvas.FillRect(Rect(0, 0, 16, 8)); Image.SaveToFile(ImageName);
     finally Image.Free end;
+    Drawing.FileName := FileName;
     Drawing.AddObject(-1, TBitmap2D.CreateSpec(-1, Point2D(0, 0), Point2D(4, 2),
       Drawing.RegisterBitmap(ImageName)));
     Check(StoreToFile_TpX(Drawing, FileName, False), 'Valid linked bitmap did not save');
