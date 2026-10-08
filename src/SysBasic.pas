@@ -16,6 +16,8 @@ uses Types,
 function CheckFilePath(var FilePath: string;
   const FileDescription: string): Boolean;
 function PrepareFilePath(const FilePath: string): string;
+function TpXResourcePath(const FileName: string): string;
+function TpXTemplatePath(const FileName: string): string;
 function FileExec(const aCmdLine, InFile, OutFile, Directory:
   string; aHide, aWait: Boolean): Boolean;
 procedure OpenOrExec(const ViewerPath, FileName: string);
@@ -117,6 +119,52 @@ begin
   Result := Q + StringReplace(Value, Q, Q + '\' + Q + Q, [rfReplaceAll]) + Q;
 {$ELSE}
   Result := AnsiQuotedStr(Value, '"');
+{$ENDIF}
+end;
+
+function TpXResourcePath(const FileName: string): string;
+var
+  ExeDir: string;
+{$IFDEF DARWIN}
+  ContentsDir, BundlePath: string;
+{$ENDIF}
+begin
+  ExeDir := ExtractFilePath(Application.ExeName);
+{$IFDEF DARWIN}
+  ContentsDir := ExtractFileDir(ExcludeTrailingPathDelimiter(ExeDir));
+  if SameText(ExtractFileName(ContentsDir), 'Contents') and
+    FileExists(IncludeTrailingPathDelimiter(ContentsDir) + 'Info.plist') then
+  begin
+    BundlePath := IncludeTrailingPathDelimiter(
+      IncludeTrailingPathDelimiter(ContentsDir) + 'Resources') + FileName;
+    if FileExists(BundlePath) or DirectoryExists(BundlePath) then
+    begin
+      Result := BundlePath;
+      Exit;
+    end;
+  end;
+{$ENDIF}
+  Result := IncludeTrailingPathDelimiter(ExeDir) + FileName;
+end;
+
+function TpXTemplatePath(const FileName: string): string;
+{$IFDEF DARWIN}
+var
+  ResourcePath, ConfigDir: string;
+{$ENDIF}
+begin
+{$IFDEF DARWIN}
+  ConfigDir := IncludeTrailingPathDelimiter(GetAppConfigDir(False));
+  Result := ConfigDir + FileName;
+  if FileExists(Result) then Exit;
+  if not ForceDirectories(ExtractFileDir(Result)) and
+    not DirectoryExists(ExtractFileDir(Result)) then
+    raise Exception.Create('Could not create TpX settings directory');
+  ResourcePath := TpXResourcePath(FileName);
+  if FileExists(ResourcePath) and not CopyFile(ResourcePath, Result) then
+    raise Exception.Create('Could not copy TpX template to user settings');
+{$ELSE}
+  Result := TpXResourcePath(FileName);
 {$ENDIF}
 end;
 

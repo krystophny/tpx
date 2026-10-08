@@ -1723,9 +1723,9 @@ begin
     Msg_PreviewPDF: Preview_Picture(Drawing, export_PDF);
     Msg_DrawingSource: View_Source(Drawing);
     Msg_preview_tex_inc: OpenOrExec(TextViewerPath,
-        ExtractFilePath(ParamStr(0)) + 'preview.tex.inc');
+        TpXTemplatePath('preview.tex.inc'));
     Msg_metapost_tex_inc: OpenOrExec(TextViewerPath,
-        ExtractFilePath(ParamStr(0)) + 'metapost.tex.inc');
+        TpXTemplatePath('metapost.tex.inc'));
     Msg_CaptureEMF: MainForm.CaptureEMFExecute(Self);
     Msg_ImageTool:
 {$IFDEF VER140}

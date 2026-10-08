@@ -40,10 +40,13 @@ def check_exports(binary):
 def stage_runtime(package, binary, platform, version):
     """Put TpX and its editable preambles where the executable finds them."""
     executable_dir = package
+    resource_dir = package
     if platform.startswith("macos-"):
         contents = package / "TpX.app" / "Contents"
         executable_dir = contents / "MacOS"
         executable_dir.mkdir(parents=True)
+        resource_dir = contents / "Resources"
+        resource_dir.mkdir()
         bundle_version = version.split("-", 1)[0]
         with (contents / "Info.plist").open("wb") as stream:
             plistlib.dump({
@@ -60,8 +63,8 @@ def stage_runtime(package, binary, platform, version):
     packaged_binary = executable_dir / binary.name
     shutil.copy2(binary, packaged_binary)
     for filename in ("preview.tex.inc", "metapost.tex.inc"):
-        shutil.copy2(ROOT / "ci" / filename, executable_dir / filename)
-    help_dir = executable_dir / "help"
+        shutil.copy2(ROOT / "ci" / filename, resource_dir / filename)
+    help_dir = resource_dir / "help"
     help_dir.mkdir()
     shutil.copy2(ROOT / "ci" / "help.html",
                  help_dir / "tpx_tpxabout_tpx_drawing_tool.htm")
@@ -186,7 +189,7 @@ def build_and_package():
             altered = Path(temporary) / "tampered.app"
             shutil.copytree(app, altered)
             command("codesign", "--verify", "--deep", "--strict", altered)
-            with (altered / "Contents/MacOS/preview.tex.inc").open("a") as stream:
+            with (altered / "Contents/Resources/preview.tex.inc").open("a") as stream:
                 stream.write("\n% signature test\n")
             result = subprocess.run(["codesign", "--verify", "--strict", str(altered)],
                                     capture_output=True, text=True)

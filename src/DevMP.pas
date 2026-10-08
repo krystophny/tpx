@@ -60,7 +60,7 @@ type
 
 implementation
 
-uses ColorEtc, Output, StrUtils;
+uses ColorEtc, Output, StrUtils, SysBasic;
 
 // =====================================================================
 // T_MetaPost_Device
@@ -150,8 +150,7 @@ var
   List: TStringList;
 begin
   Result := '';
-  IncludeFile := ExtractFilePath(Application.ExeName) +
-    'metapost.tex.inc';
+  IncludeFile := TpXTemplatePath('metapost.tex.inc');
   List := TStringList.Create;
   try
     if FileExists(IncludeFile) then

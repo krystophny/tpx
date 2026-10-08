@@ -21,7 +21,7 @@ bitmap conversion and external tool paths containing spaces.
 
 macOS now uses Command editing shortcuts, respects text-field editing, handles
 font-dialog cancellation correctly, and stores preferences outside the signed
-app. Closing an unsaved drawing follows Save, Discard or Cancel with one prompt;
+app, including editable user copies of TeX preambles. Closing an unsaved drawing follows Save, Discard or Cancel with one prompt;
 failed saves leave the drawing available for retry.
 
 Every package is built and tested in GitHub Actions. Checks cover saved drawing

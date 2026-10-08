@@ -30,8 +30,10 @@ See [Apple's instructions](https://support.apple.com/en-us/102445).
 A managed Mac may prevent this exception.
 
 Keep the app bundle intact. Preferences are saved in your user configuration
-folder. Editing files inside the app, including its TeX preambles, invalidates
-its signature.
+folder. Bundled defaults and help are sealed in `Contents/Resources`.
+The template-editing menu opens writable copies in your configuration folder;
+changes there preserve the app signature. Editing files inside the app
+invalidates its signature.
 
 ## Linux
 

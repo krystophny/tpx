@@ -45,7 +45,8 @@ def verify(directory, version, commit):
         assert {"native exports", "native GUI scenarios", "packaged exports"} <= set(manifest["checks"])
         executable = prefix + manifest["executable"]
         assert files[executable], "empty executable"
-        location = executable.rsplit("/", 1)[0] + "/"
+        location = (prefix + "TpX.app/Contents/Resources/" if platform.startswith("macos-")
+                    else executable.rsplit("/", 1)[0] + "/")
         for required in ("preview.tex.inc", "metapost.tex.inc",
                          "help/tpx_tpxabout_tpx_drawing_tool.htm"):
             assert files[location + required], f"missing {required}"

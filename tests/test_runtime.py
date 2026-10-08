@@ -196,6 +196,76 @@ class RuntimeTests(unittest.TestCase):
                     self.assertFalse(bundle_ini.exists(),
                                      "Saving created TpX.ini inside the app bundle")
 
+    @unittest.skipUnless(sys.platform == "darwin", "macOS bundle resources")
+    def test_macos_resources_and_editable_templates(self):
+        for layout in ("bundle", "legacy-bundle", "bare"):
+            with self.subTest(layout=layout), \
+                    tempfile.TemporaryDirectory(prefix="tpx-mac-resources-") as directory:
+                root = Path(directory).resolve()
+                bundled = layout == "bundle"
+                app_bundle = layout != "bare"
+                if app_bundle:
+                    executable_dir = root / "TpX.app" / "Contents" / "MacOS"
+                    resource_dir = root / "TpX.app" / "Contents" / "Resources"
+                    resource_dir.mkdir(parents=True)
+                    (resource_dir.parent / "Info.plist").write_text("test app bundle\n")
+                else:
+                    executable_dir = root / "bare-bin"
+                    resource_dir = root / "unused-resources"
+                template_dir = resource_dir if bundled else executable_dir
+                help_source_dir = resource_dir if bundled else executable_dir
+                help_dir = resource_dir / "help"
+                executable_dir.mkdir(parents=True)
+                if bundled:
+                    help_dir.mkdir(parents=True)
+                else:
+                    (help_source_dir / "help").mkdir(parents=True)
+                executable = executable_dir / "RuntimeTests"
+                shutil.copy2(BINARY, executable)
+                resources = {
+                    "preview.tex.inc": b"% packaged preview default\n",
+                    "metapost.tex.inc": b"% packaged MetaPost default\n",
+                    "help/tpx_tpxabout_tpx_drawing_tool.htm":
+                        b"<html>packaged TpX help</html>\n",
+                }
+                for name, contents in resources.items():
+                    source_dir = help_source_dir if name.startswith("help/") else template_dir
+                    (source_dir / name).write_bytes(contents)
+
+                home = root / "home"
+                config_home = root / "config"
+                home.mkdir()
+                config_home.mkdir()
+                env = os.environ.copy()
+                env.update(HOME=str(home), XDG_CONFIG_HOME=str(config_home),
+                           TMPDIR=str(root),
+                           TPX_RESOURCE_EXPECT_BUNDLE="1" if bundled else "0")
+                result = subprocess.run([str(executable), "mac-resources"], cwd=root,
+                                        env=env, capture_output=True, text=True,
+                                        timeout=40)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("PASS mac-resources", result.stdout, result.stderr)
+                for name, original in resources.items():
+                    source_dir = help_source_dir if name.startswith("help/") else template_dir
+                    self.assertEqual((source_dir / name).read_bytes(), original,
+                                     f"Packaged resource changed: {name}")
+                template_paths = [line.split("=", 2)[2]
+                                  for line in result.stdout.splitlines()
+                                  if line.startswith("TEMPLATE_PATH=")]
+                self.assertEqual(len(template_paths), 2, result.stdout)
+                for name, path in zip(("preview.tex.inc", "metapost.tex.inc"),
+                                      template_paths):
+                    user_template = Path(path).resolve()
+                    self.assertTrue(user_template.is_file())
+                    self.assertTrue(user_template.is_relative_to(root))
+                    self.assertNotEqual(user_template, (template_dir / name).resolve())
+                    self.assertIn("% user customization", user_template.read_text())
+                help_path = next(line.split("=", 1)[1]
+                                 for line in result.stdout.splitlines()
+                                 if line.startswith("HELP_PATH="))
+                expected_help = help_source_dir / "help/tpx_tpxabout_tpx_drawing_tool.htm"
+                self.assertEqual(Path(help_path).resolve(), expected_help.resolve())
+
 
 if __name__ == "__main__":
     unittest.main()

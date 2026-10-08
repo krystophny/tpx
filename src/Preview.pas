@@ -72,8 +72,7 @@ var
   IncludeFile: string;
   List: TStringList;
 begin
-  IncludeFile := ExtractFilePath(Application.ExeName) +
-    'preview.tex.inc';
+  IncludeFile := TpXTemplatePath('preview.tex.inc');
   List := TStringList.Create;
   //List.Insert();'%TpX%'
   try

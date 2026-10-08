@@ -1038,8 +1038,7 @@ begin
 {$ELSE}
   OpenOrExec(HtmlViewerPath,
     PChar('file://' +
-    ExtractFilePath(Application.ExeName)
-    + 'help/tpx_tpxabout_tpx_drawing_tool.htm'));
+    TpXResourcePath('help/tpx_tpxabout_tpx_drawing_tool.htm')));
 //  FileExec(Format('%s "%s"',
 //    [HtmlViewerPath,
 //      PChar(ExtractFilePath(Application.ExeName)

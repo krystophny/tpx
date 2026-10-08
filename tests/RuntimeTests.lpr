@@ -766,6 +766,78 @@ begin
     'Saved user setting did not reload');
   WriteLn('SETTINGS_FILE=', ConfigFile);
 end;
+
+procedure TestMacResourcePaths;
+var
+  Files: array[0..1] of string;
+  I: Integer;
+  ResourcePath, UserPath, HelpPath: string;
+  ResourceContents, UserContents: string;
+  Strings: TStringList;
+  ExpectBundle: Boolean;
+  ExeDir: string;
+  function ReadText(const FileName: string): string;
+  var
+    TextFile: TStringList;
+  begin
+    TextFile := TStringList.Create;
+    try
+      TextFile.LoadFromFile(FileName);
+      Result := TextFile.Text;
+    finally
+      TextFile.Free;
+    end;
+  end;
+begin
+  ExpectBundle := GetEnvironmentVariable('TPX_RESOURCE_EXPECT_BUNDLE') = '1';
+  ExeDir := IncludeTrailingPathDelimiter(ExtractFilePath(Application.ExeName));
+  Files[0] := 'preview.tex.inc';
+  Files[1] := 'metapost.tex.inc';
+  for I := Low(Files) to High(Files) do
+  begin
+    ResourcePath := TpXResourcePath(Files[I]);
+    Check(FileExists(ResourcePath), 'Bundled template was not found: ' + ResourcePath);
+    if ExpectBundle then
+      Check(Pos('/Contents/Resources/', ResourcePath) > 0,
+        'Template did not resolve under Contents/Resources: ' + ResourcePath)
+    else
+      Check(ExpandFileName(ResourcePath) = ExpandFileName(ExeDir + Files[I]),
+        'Bare executable did not use its adjacent legacy template');
+    ResourceContents := ReadText(ResourcePath);
+
+    UserPath := TpXTemplatePath(Files[I]);
+    Check(FileExists(UserPath), 'User template was not initialized: ' + UserPath);
+    Check(ExpandFileName(UserPath) <> ExpandFileName(ResourcePath),
+      'Editable template points at the sealed bundled resource');
+    Check(ReadText(UserPath) = ResourceContents,
+      'Packaged template default was not copied to the user settings directory');
+    Strings := TStringList.Create;
+    try
+      Strings.Text := ResourceContents + '% user customization';
+      Strings.SaveToFile(UserPath);
+    finally
+      Strings.Free;
+    end;
+    UserPath := TpXTemplatePath(Files[I]);
+    UserContents := ReadText(UserPath);
+    Check(Pos('% user customization', UserContents) > 0,
+      'A user template override was replaced on the next lookup');
+    Check(ReadText(ResourcePath) = ResourceContents,
+      'Looking up or editing a template modified its packaged default');
+    WriteLn('TEMPLATE_PATH=', Files[I], '=', UserPath);
+  end;
+
+  HelpPath := TpXResourcePath('help/tpx_tpxabout_tpx_drawing_tool.htm');
+  Check(FileExists(HelpPath), 'Bundled help document was not found: ' + HelpPath);
+  if ExpectBundle then
+    Check(Pos('/Contents/Resources/help/', HelpPath) > 0,
+      'Help did not resolve under Contents/Resources: ' + HelpPath)
+  else
+    Check(ExpandFileName(HelpPath) = ExpandFileName(ExeDir +
+      'help/tpx_tpxabout_tpx_drawing_tool.htm'),
+      'Bare executable did not use adjacent legacy help');
+  WriteLn('HELP_PATH=', HelpPath);
+end;
 {$ENDIF}
 
 procedure TestExit(const Scenario: string);
@@ -920,6 +992,7 @@ begin
     else if ParamStr(1) = 'labeled-preview' then TestLabeledPreview
 {$IFDEF DARWIN}
     else if ParamStr(1) = 'mac-settings' then TestMacSettings
+    else if ParamStr(1) = 'mac-resources' then TestMacResourcePaths
 {$ENDIF}
     else TestExit(ParamStr(1));
     if GetEnvironmentVariable('TPX_STARTUP_EXPECTED') <> '' then
