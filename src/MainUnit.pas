@@ -918,6 +918,8 @@ procedure TMainForm.LocalViewMouseDown2D(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; WX, WY: TRealTypeX;
   X, Y: Integer);
 begin
+  if LocalView.CanFocus and not LocalView.Focused then
+    LocalView.SetFocus;
   EventManager.MouseDown(Sender, Button, Shift, X, Y);
 end;
 

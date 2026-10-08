@@ -224,9 +224,35 @@ begin
   end;
 end;
 
+procedure SendNativeClick(X, Y: Integer);
+var
+  ClickSender: TProcess;
+begin
+  ClickSender := TProcess.Create(nil);
+  try
+    ClickSender.Executable := FileSearch('xdotool', GetEnvironmentVariable('PATH'));
+    Check(ClickSender.Executable <> '', 'xdotool is required for the GTK shortcut test');
+    ClickSender.Parameters.Add('mousemove');
+    ClickSender.Parameters.Add('--sync');
+    ClickSender.Parameters.Add(IntToStr(X));
+    ClickSender.Parameters.Add(IntToStr(Y));
+    ClickSender.Parameters.Add('click');
+    ClickSender.Parameters.Add('1');
+    ClickSender.Options := [poWaitOnExit];
+    ClickSender.Execute;
+    Check(ClickSender.ExitStatus = 0, 'xdotool failed to click the canvas');
+  finally
+    ClickSender.Free;
+  end;
+  Application.ProcessMessages;
+  Sleep(20);
+  Application.ProcessMessages;
+end;
+
 procedure TestEditableShortcutRouting;
 var
   Line: TLine2D;
+  CanvasPoint: TPoint;
 begin
   Line := TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(20, 10));
   MainForm.TheDrawing.AddObject(-1, Line);
@@ -238,6 +264,8 @@ begin
   MainForm.ComboBox6.SelLength := 0;
   MainForm.ComboBox6.SetFocus;
   Application.ProcessMessages;
+  Check(MainForm.ActiveControl = MainForm.ComboBox6,
+    'Editable combo was not focused before native keyboard input');
 
   SendNativeKey('ctrl+a');
   Check(MainForm.ComboBox6.SelText = '0.2',
@@ -277,8 +305,12 @@ begin
   Check(MainForm.ComboBox6.Text = '',
     'Delete did not erase selected text in the editable combo');
 
-  MainForm.LocalView.SetFocus;
+  MainForm.ComboBox6.SetFocus;
   Application.ProcessMessages;
+  CanvasPoint := MainForm.LocalView.ClientToScreen(Point(20, 20));
+  SendNativeClick(CanvasPoint.X, CanvasPoint.Y);
+  Check(MainForm.ActiveControl = MainForm.LocalView,
+    'Native canvas click did not move focus out of the editable combo');
   SendNativeKey('ctrl+a');
   Check(MainForm.TheDrawing.SelectedObjects.Count = 1,
     'Ctrl+A with canvas focus did not select the drawing object');
@@ -288,6 +320,21 @@ begin
   SendNativeKey('Delete');
   Check(MainForm.TheDrawing.ObjectsCount = 0,
     'Delete with canvas focus did not delete the selected drawing object');
+end;
+
+procedure TestCanvasFocusTransfer;
+begin
+  MainForm.Show;
+  Application.ProcessMessages;
+  MainForm.ComboBox6.SetFocus;
+  Application.ProcessMessages;
+  Check(MainForm.ActiveControl = MainForm.ComboBox6,
+    'Editable combo was not focused before the canvas mouse message');
+
+  MainForm.LocalView.Perform(LM_LBUTTONDOWN, MK_LBUTTON, 0);
+  Application.ProcessMessages;
+  Check(MainForm.ActiveControl = MainForm.LocalView,
+    'LCL canvas mouse-down did not transfer focus from the editable combo');
 end;
 
 procedure CheckPlatformActionShortcut(Action: TAction; Key: Word;
@@ -762,6 +809,7 @@ begin
     else if ParamStr(1) = 'clipboard-format-width' then TestClipboardFormatWidth
     else if ParamStr(1) = 'clipboard-roundtrip' then TestClipboardRoundTrip
     else if ParamStr(1) = 'editable-shortcut-routing' then TestEditableShortcutRouting
+    else if ParamStr(1) = 'canvas-focus-transfer' then TestCanvasFocusTransfer
     else if ParamStr(1) = 'platform-shortcuts' then TestPlatformShortcuts
     else if ParamStr(1) = 'color-box-custom-state' then TestColorBoxCustomState
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
