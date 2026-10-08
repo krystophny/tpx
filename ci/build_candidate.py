@@ -87,6 +87,8 @@ def build_and_package():
         build.append("--compiler=" + os.environ["TPX_COMPILER"])
     command(*build, "TpX.lpi")
     command(*build, "tests/RuntimeTests.lpi")
+    if platform.startswith("macos-"):
+        command("sh", lazarus / "test/lcltests/testcocoafontdialog.sh", lazarus)
     suffix = ".exe" if platform.startswith("windows-") else ""
     binary_dir = ROOT / "obj" / f"{cpu}-{operating_system}"
     binary = binary_dir / ("TpX" + suffix)
@@ -127,6 +129,11 @@ def build_and_package():
             "lazarus_patch_sha256": hashlib.sha256(
                 (ROOT / "ci/patches/lazarus-4.8-opendocument.patch").read_bytes()
             ).hexdigest() if operating_system != "win64" else None,
+            "lazarus_patches_sha256": {
+                name: hashlib.sha256((ROOT / "ci/patches" / name).read_bytes()).hexdigest()
+                for name in ("lazarus-4.8-opendocument.patch",
+                             "lazarus-4.8-cocoa-font-cancel.patch")
+            } if operating_system != "win64" else {},
             "fpc_source": os.environ.get("FPC_SOURCE", "3.2.2 distribution"),
             "run_id": os.environ.get("GITHUB_RUN_ID", "local"),
             "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", "local"),
@@ -134,6 +141,8 @@ def build_and_package():
         }
         if platform.startswith("linux-"):
             manifest["checks"].extend(["TeX compilation", "packaged TeX compilation"])
+        if platform.startswith("macos-"):
+            manifest["checks"].append("native Cocoa font cancellation")
         (package / "BUILD.json").write_text(json.dumps(manifest, indent=2) + "\n")
         fmt = "zip" if platform.startswith("windows-") else "gztar"
         archive = Path(shutil.make_archive(str(dist / name), fmt,

@@ -1,0 +1,192 @@
+diff --git a/lcl/interfaces/cocoa/cocoawsdialogs.pas b/lcl/interfaces/cocoa/cocoawsdialogs.pas
+index d619b68d..c93cbb39 100644
+--- a/lcl/interfaces/cocoa/cocoawsdialogs.pas
++++ b/lcl/interfaces/cocoa/cocoawsdialogs.pas
+@@ -936,7 +936,7 @@ end;
+ 
+ procedure TFontPanelDelegate.selectFont;
+ begin
+-  FontDialog.UserChoice := mrCancel;
++  FontDialog.UserChoice := mrOk;
+   DontSelectFontOnClose := True;
+   doSelectFont();
+   exit();
+@@ -944,7 +944,6 @@ end;
+ 
+ procedure TFontPanelDelegate.exit;
+ begin
+-  FontDialog.UserChoice := mrOk;
+   DontSelectFontOnClose := True;
+   FontPanel.close();
+ end;
+diff --git a/test/lcltests/testcocoafontdialog.pas b/test/lcltests/testcocoafontdialog.pas
+new file mode 100644
+index 00000000..fb45a2e3
+--- /dev/null
++++ b/test/lcltests/testcocoafontdialog.pas
+@@ -0,0 +1,137 @@
++program TestCocoaFontDialog;
++
++{$mode objfpc}{$H+}
++{$modeswitch objectivec1}
++{$IFNDEF DARWIN}
++  {$fatal This regression requires macOS and the Cocoa widgetset}
++{$ENDIF}
++
++uses
++  Interfaces, Forms, Dialogs, Graphics, SysUtils, CocoaAll;
++
++const
++  ClickCancel = 0;
++  ClickSelect = 1;
++  ClickClose = 2;
++
++type
++  TPanelDriver = objcclass(NSObject)
++  public
++    RequestedAction: Integer;
++    Attempts: Integer;
++    PerformedAction: Boolean;
++    TimedOut: Boolean;
++    procedure tick(timer: NSTimer); message 'tick:';
++  end;
++
++procedure TPanelDriver.tick(timer: NSTimer);
++var
++  Panel: NSFontPanel;
++  View: NSView;
++  Views: NSArray;
++  Button: NSButton;
++  I: NSUInteger;
++  Caption: String;
++begin
++  Inc(Attempts);
++  Panel := NSFontPanel.sharedFontPanel;
++  if Attempts >= 50 then
++  begin
++    TimedOut := True;
++    timer.invalidate;
++    Panel.close;
++    NSApp.stopModal;
++    Exit;
++  end;
++  if PerformedAction then
++    Exit;
++  if not Panel.isVisible then
++    Exit;
++
++  if RequestedAction = ClickClose then
++  begin
++    Panel.setPanelFont_isMultiple(NSFont.fontWithName_size(NSSTR('Helvetica'), 36), False);
++    PerformedAction := True;
++    Panel.performClose(nil);
++    Exit;
++  end;
++
++  View := Panel.accessoryView;
++  if View = nil then
++    Exit;
++  Views := View.subviews;
++  I := 0;
++  while I < Views.count do
++  begin
++    View := NSView(Views.objectAtIndex(I));
++    Inc(I);
++    if not View.isKindOfClass(NSButton) then
++      Continue;
++    Button := NSButton(View);
++    Caption := StrPas(Button.title.UTF8String);
++    if ((RequestedAction = ClickCancel) and (Caption = 'Cancel')) or
++       ((RequestedAction = ClickSelect) and (Caption = 'Select')) then
++    begin
++      // Change the native selection first, so cancellation must discard it.
++      Panel.setPanelFont_isMultiple(NSFont.fontWithName_size(NSSTR('Helvetica'), 36), False);
++      PerformedAction := True;
++      Button.performClick(nil);
++      Exit;
++    end;
++  end;
++end;
++
++function CheckAction(const CaseName: String; Action: Integer;
++  ExpectedAccepted: Boolean; ExpectedSize: Integer): Boolean;
++var
++  Dialog: TFontDialog;
++  Driver: TPanelDriver;
++  Timer: NSTimer;
++  Accepted: Boolean;
++begin
++  Dialog := TFontDialog.Create(nil);
++  Driver := TPanelDriver.alloc.init;
++  Timer := nil;
++  try
++    Dialog.Font.PixelsPerInch := 72;
++    Dialog.Font.Name := 'Helvetica';
++    Dialog.Font.Size := 14;
++    Driver.RequestedAction := Action;
++    Timer := NSTimer.timerWithTimeInterval_target_selector_userInfo_repeats(
++      0.1, Driver, ObjCSelector('tick:'), nil, True);
++    Timer.retain;
++    NSRunLoop.currentRunLoop.addTimer_forMode(Timer, NSDefaultRunLoopMode);
++    NSRunLoop.currentRunLoop.addTimer_forMode(Timer, NSModalPanelRunLoopMode);
++    Accepted := Dialog.Execute;
++    Result := Driver.PerformedAction and not Driver.TimedOut and
++      (Accepted = ExpectedAccepted) and (Dialog.Font.Size = ExpectedSize);
++    WriteLn(CaseName, ': accepted=', Accepted, ', size=', Dialog.Font.Size,
++      ', clicked=', Driver.PerformedAction, ', timed_out=', Driver.TimedOut);
++    if not Result then
++      WriteLn('FAIL: expected accepted=', ExpectedAccepted, ', size=', ExpectedSize);
++  finally
++    if Timer <> nil then
++    begin
++      Timer.invalidate;
++      Timer.release;
++    end;
++    Driver.release;
++    Dialog.Free;
++  end;
++end;
++
++var
++  Passed, CasePassed: Boolean;
++begin
++  Application.Initialize;
++  Passed := CheckAction('font_cancel', ClickCancel, False, 14);
++  CasePassed := CheckAction('font_select', ClickSelect, True, 36);
++  Passed := Passed and CasePassed;
++  // Preserve the existing Cocoa behavior: the red close button selects the font.
++  CasePassed := CheckAction('font_red_close', ClickClose, True, 36);
++  Passed := Passed and CasePassed;
++  if Passed then
++    WriteLn('PASS: native Cancel, Select and close results match their contracts')
++  else
++    ExitCode := 1;
++end.
+diff --git a/test/lcltests/testcocoafontdialog.sh b/test/lcltests/testcocoafontdialog.sh
+new file mode 100755
+index 00000000..56d7000a
+--- /dev/null
++++ b/test/lcltests/testcocoafontdialog.sh
+@@ -0,0 +1,22 @@
++#!/bin/sh
++# This launches native font panels. Run only in a coordinated macOS GUI session.
++# Build LCL_PLATFORM=cocoa first. An optional argument selects a Lazarus tree.
++set -eu
++test_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
++lazarus_dir=${1:-$(CDPATH= cd -- "$test_dir/../.." && pwd)}
++compiler=${FPC:-fpc}
++target=$($compiler -iTP)-$($compiler -iTO)
++case "$target" in
++  *-darwin) ;;
++  *) printf 'This native dialog regression requires macOS.\n'; exit 1 ;;
++esac
++test_tmp=$(mktemp -d)
++trap 'rm -rf "$test_tmp"' EXIT HUP INT TERM
++"$compiler" -Fu"$lazarus_dir/lcl/units/$target" \
++  -Fu"$lazarus_dir/lcl/units/$target/cocoa" \
++  -Fu"$lazarus_dir/components/lazutils/lib/$target" \
++  -Fu"$lazarus_dir/packager/units/$target" \
++  -k-weak_framework -kAppKit -k-weak_framework -kUserNotifications \
++  -FU"$test_tmp" -FE"$test_tmp" "$test_dir/testcocoafontdialog.pas" \
++  > "$test_tmp/build.log" 2>&1 || { cat "$test_tmp/build.log"; exit 1; }
++"$test_tmp/testcocoafontdialog"
