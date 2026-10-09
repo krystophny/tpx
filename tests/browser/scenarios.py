@@ -372,11 +372,22 @@ def s_modal_properties(app):
     app.key('Escape')
     app.menu('Edit', 'Select all')
     app.menu('Edit', 'Object properties')
+    app.click(335, 17)  # Line color combo's dropdown arrow in the Properties LFM
+    choices = app.page.get_by_role('dialog').get_by_role('listbox')
+    choices.press('Escape')
+    app.page.get_by_role('dialog').wait_for(state='hidden')
+    app.click(335, 17)
+    choices = app.page.get_by_role('dialog').get_by_role('listbox')
+    choices.select_option('1')  # Custom, after Default; preserves Pascal item order
+    choices.press('Enter')
+    color = app.page.get_by_role('dialog').get_by_label('Color', exact=True)
+    color.fill('#1278b5')
+    app.page.get_by_role('dialog').get_by_role('button', name='OK', exact=True).click()
     app.page.get_by_role('textbox', name='RX', exact=True).fill('2.5')
     app.page.get_by_role('textbox', name='RY', exact=True).fill('3.5')
     app.page.get_by_role('button', name='OK', exact=True).click()
     objects = drawing_xml(app.save('properties.tpx'))
-    if len(objects) != 1 or float(objects[0].get('rx', '0')) != 2.5 or float(objects[0].get('ry', '0')) != 3.5:
+    if len(objects) != 1 or float(objects[0].get('rx', '0')) != 2.5 or float(objects[0].get('ry', '0')) != 3.5 or objects[0].get('lc') != '#1278B5':
         raise AssertionError(f'edited corner radii did not survive save: {[o.attrib for o in objects]}')
     app.menu('Edit', 'Object properties')
     if app.page.get_by_role('textbox', name='RX', exact=True).input_value() != '2.5':
@@ -390,7 +401,7 @@ def s_modal_properties(app):
     app.page.get_by_role('button', name='Acknowledgements').focus()
     app.key('Escape')
     app.page.wait_for_function('document.querySelector("#lcl").width > 500')
-    return 'property edits survive save; read-only memo and modal Escape work'
+    return 'custom color and property edits survive save; read-only memo and modal Escape work'
 
 
 def s_clipboard_roundtrip(app):
