@@ -164,6 +164,7 @@ var
   Bitmap: TBitmap;
   I, X, Y, Ink, Compilations: Integer;
   SavedPixels: string;
+  Started: QWord;
 
   function Draw(Key: PtrUInt; const Source: string; Height: Double = 32;
     Rotation: Double = 0): Boolean;
@@ -259,6 +260,34 @@ begin
     AwaitPreview;
     Check(Draw(501, '$z_{valid}$'), 'Malformed sibling blocked a valid batch label');
     Check(not Draw(500, '$\invalidBatchTpX$'), 'Malformed label lost its fallback');
+
+    Check(not Draw(600, '{\count255=0\loop\advance\count255 by1' +
+      '\ifnum\count255<2000000\repeat $w$}'), 'Slow source was already cached');
+    Started := GetTickCount64;
+    repeat
+      Application.ProcessMessages;
+      Sleep(5);
+    until GetTickCount64 - Started >= 250;
+    SetLiveTeXEnabled(False);
+    SetLiveTeXEnabled(True);
+    AwaitPreview;
+    Check(Draw(600, '{\count255=0\loop\advance\count255 by1' +
+      '\ifnum\count255<2000000\repeat $w$}'),
+      'Toggling during an active compile left the preview stuck');
+
+    Check(not Draw(601, '\loop\iftrue\repeat'), 'Infinite source was already cached');
+    Started := GetTickCount64;
+    repeat
+      Application.ProcessMessages;
+      Sleep(5);
+    until GetTickCount64 - Started >= 250;
+    Started := GetTickCount64;
+    Check(Draw(601, Formula[0]), 'New cached source did not supersede active TeX');
+    AwaitPreview;
+    Check(GetTickCount64 - Started < 3000, 'Superseded active TeX was not canceled');
+    SavedPixels := Pixels;
+    Check(Draw(100, Formula[0]) and (Pixels = SavedPixels),
+      'Stale active result replaced the latest formula');
 
     SetLiveTeXEnabled(False);
     Compilations := LiveTeXCompilationCount;
