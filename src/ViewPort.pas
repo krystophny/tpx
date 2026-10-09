@@ -813,11 +813,15 @@ procedure SetupCanvasDevice(Drawing: TDrawing2D;
 
 implementation
 
-uses Math, GObjects, SysBasic;
+uses Math, GObjects, SysBasic
+{$IFDEF FPC}, LiveTeX{$ENDIF};
 
 procedure SetupCanvasDevice(Drawing: TDrawing2D;
   Dvc: TCanvasDevice; const T: TTransf2D);
 begin
+{$IFDEF FPC}
+  ConfigureLiveTeX(Drawing);
+{$ENDIF}
   Dvc.T := T;
   if Drawing.PicScale <= 0 then Drawing.PicScale := 1;
   Dvc.FactorMM := Dvc.TScale / Drawing.PicScale;
