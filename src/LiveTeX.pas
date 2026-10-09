@@ -4,13 +4,14 @@ unit LiveTeX;
 
 interface
 
-uses Classes, Graphics, Geometry, Devices, Types;
+uses Classes, Graphics, Geometry, Devices, Types, Drawings;
 
 var
   LiveTeXEnabled: Boolean = True;
   LiveTeXStatus: string = '';
 
 procedure InitializeLiveTeX(const Changed: TNotifyEvent);
+procedure ConfigureLiveTeX(const Drawing: TDrawing2D);
 procedure ShutdownLiveTeX;
 procedure SetLiveTeXEnabled(Value: Boolean);
 procedure FlushLiveTeX;
@@ -31,6 +32,10 @@ uses WebTeXPreview;
 procedure InitializeLiveTeX(const Changed: TNotifyEvent);
 begin
   OnPreviewChanged := Changed;
+end;
+
+procedure ConfigureLiveTeX(const Drawing: TDrawing2D);
+begin
 end;
 
 procedure ShutdownLiveTeX;
@@ -109,7 +114,8 @@ type
     FTimer: TTimer;
     FWorker: TTeXPreviewWorker;
     FChanged: TNotifyEvent;
-    FDirectory, FPreamble: string;
+    FDirectory, FPreamble, FPackages: string;
+    FTeXFormat, FTeXFigure: Integer;
     FCache: TTeXPreviewCache;
     FPreambleAge: LongInt;
     FClosing, FWorkerCancelled: Boolean;
@@ -162,6 +168,8 @@ begin
     IncludeTrailingPathDelimiter(GetAppConfigDir(False))+'preview-cache');
   FDirectory := FCache.Directory;
   FPreambleAge := -2;
+  FTeXFormat := -1;
+  FTeXFigure := -1;
   ReadPreamble;
 end;
 
@@ -196,7 +204,7 @@ begin
   try
     if FileExists(Name) then Lines.LoadFromFile(Name)
     else Lines.Add('\documentclass[10pt]{article}');
-    FPreamble := Lines.Text;
+    FPreamble := Lines.Text+FPackages;
   finally
     Lines.Free;
   end;
@@ -344,6 +352,7 @@ begin
         if Error <> '' then begin Error := ''; Pending := True; end;
   end;
   LiveTeXStatus := '';
+  if Value then Schedule(nil);
 end;
 
 procedure TTeXPreviewManager.AddDamage(const R: TRect);
@@ -529,6 +538,25 @@ begin
     Manager := TTeXPreviewManager.Create(Changed);
   except
     on E: Exception do LiveTeXStatus := 'LaTeX preview: '+E.Message;
+  end;
+end;
+
+procedure ConfigureLiveTeX(const Drawing: TDrawing2D);
+var
+  Packages: TStringList;
+begin
+  if not Assigned(Manager) or not Assigned(Drawing) then Exit;
+  if (Manager.FTeXFormat=Ord(Drawing.TeXFormat)) and
+    (Manager.FTeXFigure=Ord(Drawing.TeXFigure)) then Exit;
+  Packages := TStringList.Create;
+  try
+    AddTeXPreviewPackages(Packages,Drawing,ltxview_Dvi);
+    Manager.FPackages := Packages.Text;
+    Manager.FTeXFormat := Ord(Drawing.TeXFormat);
+    Manager.FTeXFigure := Ord(Drawing.TeXFigure);
+    Manager.FPreambleAge := -2;
+  finally
+    Packages.Free;
   end;
 end;
 
