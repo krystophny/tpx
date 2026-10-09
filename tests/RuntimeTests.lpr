@@ -261,8 +261,15 @@ begin
     Check(Draw(501, '$z_{valid}$'), 'Malformed sibling blocked a valid batch label');
     Check(not Draw(500, '$\invalidBatchTpX$'), 'Malformed label lost its fallback');
 
+    Check(not Draw(650, '$q_{queued}$'), 'Queued source was already cached');
+    SetLiveTeXEnabled(False);
+    SetLiveTeXEnabled(True);
+    AwaitPreview;
+    Check(Draw(650, '$q_{queued}$'), 'Toggling during debounce left the preview stuck');
+
     Check(not Draw(600, '{\count255=0\loop\advance\count255 by1' +
       '\ifnum\count255<2000000\repeat $w$}'), 'Slow source was already cached');
+    FlushLiveTeX;
     Started := GetTickCount64;
     repeat
       Application.ProcessMessages;
@@ -273,9 +280,10 @@ begin
     AwaitPreview;
     Check(Draw(600, '{\count255=0\loop\advance\count255 by1' +
       '\ifnum\count255<2000000\repeat $w$}'),
-      'Toggling during an active compile left the preview stuck');
+      'Toggling during an active compile left the preview stuck: ' + LiveTeXStatus);
 
     Check(not Draw(601, '\loop\iftrue\repeat'), 'Infinite source was already cached');
+    FlushLiveTeX;
     Started := GetTickCount64;
     repeat
       Application.ProcessMessages;
@@ -288,6 +296,22 @@ begin
     SavedPixels := Pixels;
     Check(Draw(100, Formula[0]) and (Pixels = SavedPixels),
       'Stale active result replaced the latest formula');
+
+    MainForm.TheDrawing.TeXFormat := tex_tikz;
+    ConfigureLiveTeX(MainForm.TheDrawing);
+    Check(not Draw(700, '\tikz{\draw(0,0)--(1,1);}'), 'Package context was cached');
+    AwaitPreview;
+    Check(Draw(700, '\tikz{\draw(0,0)--(1,1);}'), 'Drawing packages were not loaded');
+    MainForm.TheDrawing.TeXFormat := tex_eps;
+    ConfigureLiveTeX(MainForm.TheDrawing);
+    Check(Draw(700, '\tikz{\draw(0,0)--(1,1);}'), 'Context edit discarded last preview');
+    AwaitPreview;
+    Check(LiveTeXStatus <> '', 'Package context change did not invalidate TeX');
+    Compilations := LiveTeXCompilationCount;
+    MainForm.TheDrawing.TeXFormat := tex_tikz;
+    ConfigureLiveTeX(MainForm.TheDrawing);
+    Check(Draw(700, '\tikz{\draw(0,0)--(1,1);}'), 'Prior package context cache was lost');
+    Check(LiveTeXCompilationCount = Compilations, 'Prior context was recompiled');
 
     SetLiveTeXEnabled(False);
     Compilations := LiveTeXCompilationCount;
