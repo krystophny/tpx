@@ -7,6 +7,7 @@
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f3f5f7;color:#1c2635;font:15px system-ui,sans-serif}main{margin:16px auto;padding:0 16px;max-width:1100px}h1{font-size:22px;margin:4px 0}#status{font-size:14px;color:#345477}#status[data-state=error]{color:#a62121}
 canvas{display:block;border:1px solid #bcc7d4;background:white;touch-action:none}
+#notice{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;max-width:min(680px,92vw);display:flex;align-items:center;gap:12px;padding:10px 14px;background:#fff8e1;border:1px solid #d9a406;border-left:4px solid #d9a406;border-radius:6px;box-shadow:0 2px 10px rgba(20,30,45,.18);font-size:14px;color:#4a3608;z-index:40}#notice[hidden]{display:none}#notice button{border:1px solid #b58900;background:#fff;border-radius:4px;color:#6b4d00;padding:3px 12px;cursor:pointer}
 #lcl-surface{position:relative;max-width:100%}canvas{max-width:100%;height:auto}#lcl-dom{position:absolute;inset:0;pointer-events:none}#lcl-dom>*{pointer-events:auto;font-family:system-ui}#lcl-dom button{border:1px solid #a5b8ce;background:#fff;border-radius:4px;color:#203e69;cursor:pointer}#lcl-dom label{display:flex;align-items:center;gap:8px}.scroller{overflow:auto}
 </style>
 </head>

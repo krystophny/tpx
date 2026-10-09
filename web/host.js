@@ -62,7 +62,29 @@ const imports = {
       pixels[i+3] = Math.round(layer[i+2]*alpha + pixels[i+3]*(1-alpha));
     }
   },
-  present: (pointer, width, height, dirtyX, dirtyY, dirtyW, dirtyH) => {
+  message: (textPtr, captionPtr, textLen, captionLen, flags) => {
+    // Visible report instead of a crash. A browser has no modal native dialog, so
+    // the widgetset forwards the text here. Shown as a banner over the canvas
+    // with a dismiss button; the module keeps running and the caller gets an
+    // answer, so a disabled feature is explained rather than fatal.
+    const mem = new Uint8Array(instance.exports.memory.buffer);
+    const read = (ptr, len) => new TextDecoder().decode(mem.subarray(ptr, ptr + len));
+    const text = read(textPtr, textLen), caption = read(captionPtr, captionLen);
+    let el = document.querySelector('#notice');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'notice';
+      el.setAttribute('role', 'status');
+      el.innerHTML = '<span id="notice-text"></span><button id="notice-close" type="button">OK</button>';
+      document.body.appendChild(el);
+      el.querySelector('#notice-close').addEventListener('click', () => { el.hidden = true; });
+    }
+    el.querySelector('#notice-text').textContent = caption ? `${caption}: ${text}` : text;
+    el.dataset.flags = String(flags);
+    el.hidden = false;
+    document.dispatchEvent(new CustomEvent('lcl-notice', {detail: {text, caption, flags}}));
+  },
+  present: (pointer, width, height) => {
     if (canvas.width !== width) canvas.width = width;
     if (canvas.height !== height) canvas.height = height;
     // The surface is sized by CSS; the canvas keeps the form's pixel size and
@@ -70,17 +92,10 @@ const imports = {
     // LazCanvas clfARGB32 bytes A, R, G, B become canvas bytes R, G, B, A:
     // one shift per little-endian word into a reused buffer.
     if (!image || image.width !== width || image.height !== height) image = context.createImageData(width, height);
-    const surface = new Uint32Array(instance.exports.memory.buffer, pointer, width*height);
+    const source = new Uint32Array(instance.exports.memory.buffer, pointer, width*height);
     const target = new Uint32Array(image.data.buffer);
-    // Convert and upload only the damaged rows. A crosshair move dirties a few
-    // thousand pixels; converting all 840k of them took 45% of a core.
-    const x0 = Math.max(0, dirtyX|0), y0 = Math.max(0, dirtyY|0);
-    const x1 = Math.min(width, x0 + Math.max(0, dirtyW|0)), y1 = Math.min(height, y0 + Math.max(0, dirtyH|0));
-    for (let y=y0; y<y1; y++) {
-      const row = y*width;
-      for (let x=x0; x<x1; x++) { const i=row+x; target[i] = (surface[i] >>> 8) | 0xFF000000; }
-    }
-    if (x1 > x0 && y1 > y0) context.putImageData(image, 0, 0, x0, y0, x1-x0, y1-y0);
+    for (let i=0; i<source.length; i++) target[i] = (source[i] >>> 8) | 0xFF000000;
+    context.putImageData(image, 0, 0);
     canvas.dataset.frames = String(Number(canvas.dataset.frames || 0)+1);
   }
 };

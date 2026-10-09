@@ -43,6 +43,37 @@ clip, then re-measure with `python3 tests/browser/perf.py`.
 present. Not yet investigated; candidates are a gzipped serving path in
 `web/serve.py` and measuring compile versus instantiate separately.
 
+## D4 — A message box terminates the WASI instance (open, high)
+
+Observable: with a `MessageBoxError` call inserted at `TMainForm.FormShow`, the page
+never becomes ready and the host reports
+
+```
+state: error
+text : Application error: exit with exit code 0
+```
+
+so the app exits instead of showing a dialog. Before this campaign the CustomDrawn
+WASM `MessageBox` simply raised `ENotSupported`, which had the same user-visible
+effect: nothing was ever reported and the instance died.
+
+Changed so far (verified compile and suite, not the end-to-end dialog):
+the widgetset `MessageBox` no longer raises - it forwards text, caption and flags
+to a new host `message` import and answers `mrOk`/`mrYes` so the caller's logic
+keeps working; the host renders a dismissible banner over the canvas
+(`#notice`, styled in `web/index.html`). `SysBasic.FileExec` now reports the
+missing external tool by name instead of returning False silently, so LaTeX
+preview, sam2p bitmap import, MetaPost and printing explain themselves rather
+than looking like broken no-ops.
+
+Still open: something on the dialog path calls `proc_exit` (the exit code 0 shows
+up in the WASI trace at boot too), so the banner has not been seen from Pascal
+yet. Next step: trace `Application.MessageBox` in the WASI backend for the exit
+call and remove it, then add a `degrade-*` scenario per feature asserting the
+banner text and that the app stays interactive afterwards.
+Until then `graceful-degrade` cannot be claimed: the paths are silent-or-fatal
+in practice, which the contract explicitly forbids.
+
 ## Fixed in this campaign
 
 
