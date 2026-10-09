@@ -77,7 +77,20 @@ done
   cat "$BUILD/pas2js.log" >&2; exit 1; }
 "$ESBUILD" "$DIST/jobhost.js" --minify --outfile="$DIST/jobhost.js" --allow-overwrite --log-level=warning
 cp "$ROOT/web/index.html" "$ROOT/web/host.js" "$DIST/"
-"$ESBUILD" "$DIST/host.js" --bundle --format=esm --outfile="$DIST/host.bundle.js" \
+if ! cmp -s "$ROOT/web/package-lock.json" "$ROOT/web/node_modules/.tpx-package-lock.json"; then
+  (cd "$ROOT/web" && npm ci --ignore-scripts --no-audit --no-fund)
+  cp "$ROOT/web/package-lock.json" "$ROOT/web/node_modules/.tpx-package-lock.json"
+fi
+"$ESBUILD" "$ROOT/web/tex-svg.js" --bundle --minify --format=esm --outfile="$DIST/tex-svg.bundle.js" \
+  --alias:#default-font/svg/default.js="$ROOT/web/node_modules/@mathjax/mathjax-tex-font/mjs/svg/default.js" \
+  --log-level=warning
+{
+  printf '%s\n\n' 'MathJax JavaScript (@mathjax/src and @mathjax/mathjax-tex-font 4.1.3), Apache-2.0. https://www.mathjax.org/'
+  cat "$ROOT/web/node_modules/@mathjax/src/LICENSE"
+} > "$DIST/mathjax-LICENSE.txt"
+cp "$ROOT/web/mathjax-tex-OFL.txt" "$DIST/"
+"$ESBUILD" "$ROOT/web/host.js" --bundle --format=esm --outfile="$DIST/host.bundle.js" \
+  --external:./tex-svg.bundle.js \
   --alias:@lcl/browser-host="$WASM_LCL/examples/customdrawnwasm/web/lcl-host.js" \
   --alias:@bjorn3/browser_wasi_shim="$(dirname "$ESBUILD")/../@bjorn3/browser_wasi_shim" \
   --log-level=warning

@@ -558,6 +558,79 @@ def s_unsaved_confirmation(app):
     return 'confirmation labels and Cancel/No results preserve or discard the drawing'
 
 
+def s_tex_preview(app):
+    import re
+    import xml.etree.ElementTree as ET
+
+    preview = re.compile(r'(?:✓ )?Live LaTeX Preview')
+    formula = r'Energy $E=mc^2+\frac{1}{2}$'
+    root = ET.Element('TpX', v='5', TeXFormat='none', PdfTeXFormat='none')
+    ET.SubElement(root, 'text', x='20', y='30', h='7', t='Fallback', tex=formula)
+    ET.SubElement(root, 'text', x='20', y='50', h='7', t='Ordinary text')
+
+    def open_drawing(name):
+        path = app.output / name
+        ET.indent(root)
+        path.write_text('\n'.join('%' + line for line in ET.tostring(root, encoding='unicode').splitlines()))
+        app.menu('File', 'Open')
+        dialog = app.page.get_by_role('dialog')
+        dialog.get_by_label('Choose file').set_input_files(path)
+        dialog.get_by_role('button', name='OK', exact=True).click()
+        app.page.wait_for_timeout(250)
+
+    if app.page.evaluate("performance.getEntriesByType('resource').some(e=>e.name.endsWith('/tex-svg.bundle.js'))"):
+        raise AssertionError('MathJax loaded for a drawing without TeX')
+    open_drawing('tex-preview-input.tpx')
+    app.page.wait_for_function("performance.getEntriesByType('resource').some(e=>e.name.endsWith('/tex-svg.bundle.js'))")
+    app.page.wait_for_timeout(800)
+    v = app.viewport()
+    area = [v['x'], v['y'], v['w'], v['h']]
+
+    def capture(name):
+        app.page.evaluate('''([name, r]) => {
+          window.tpxTexTest ||= {};
+          window.tpxTexTest[name] = document.querySelector('#lcl').getContext('2d')
+            .getImageData(...r).data;
+        }''', [name, area])
+
+    def difference(name):
+        return app.page.evaluate('''([name, r]) => {
+          const a = window.tpxTexTest[name];
+          const b = document.querySelector('#lcl').getContext('2d').getImageData(...r).data;
+          let changed = 0;
+          for (let i = 0; i < a.length; i += 4)
+            if (Math.abs(a[i]-b[i]) > 8 || Math.abs(a[i+1]-b[i+1]) > 8 || Math.abs(a[i+2]-b[i+2]) > 8) changed++;
+          return changed;
+        }''', [name, area])
+
+    park(app, v)
+    capture('rendered')
+    app.menu('View', preview)
+    park(app, v)
+    changed = difference('rendered')
+    if changed < 80:
+        raise AssertionError(f'TeX preview differs from fallback by only {changed} pixels')
+    app.menu('View', preview)
+    park(app, v)
+    if difference('rendered') > 20:
+        raise AssertionError('cached TeX preview did not return after toggling')
+    if app.idle_frames(1.0):
+        raise AssertionError('TeX preview keeps repainting while idle')
+    saved = drawing_xml(app.save('tex-preview-saved.tpx'))
+    if saved[0].get('tex') != formula or saved[0].get('t') != 'Fallback':
+        raise AssertionError('preview changed the saved text sources')
+    root[0].set('tex', r'$\undefinedPreviewCommand$')
+    open_drawing('tex-preview-invalid.tpx')
+    app.page.locator('#notice:not([hidden])').wait_for()
+    park(app, v)
+    capture('invalid')
+    app.menu('View', preview)
+    park(app, v)
+    if difference('invalid') > 20:
+        raise AssertionError('new invalid TeX object retained another object\'s cached preview')
+    return f'lazy MathJax changed {changed} pixels; toggle/cache/save/fallback and idle verified'
+
+
 SCENARIOS = [
     ('default-view', s_default_view),
     ('viewport-fit', s_viewport_fit),
@@ -580,4 +653,5 @@ SCENARIOS = [
     ('modal-properties', s_modal_properties),
     ('nested-coordinates', s_nested_coordinates),
     ('unsaved-confirmation', s_unsaved_confirmation),
+    ('tex-preview', s_tex_preview),
 ]
