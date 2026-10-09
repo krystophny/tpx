@@ -8,6 +8,9 @@ uses
 type
   TLaTeXPreviewKind = (ltxview_Dvi, ltxview_Pdf, ltxview_PS);
 
+procedure AddTeXPreviewPackages(const List: TStrings;
+  const Drawing: TDrawing2D; const PreviewKind: TLaTeXPreviewKind);
+
 function Run_LaTeX_Temp(const Drawing: TDrawing2D;
   const PreviewKind: TLaTeXPreviewKind;
   var TempDvi: string; const Hide: Boolean;
@@ -64,27 +67,9 @@ begin
   List.Add('%\pdfoutput=0 % uncomment this to run pdfLaTeX in DVI mode');
 end;
 
-procedure WriteTempTeXFile(const FileName, TpXName: string;
-  const Drawing: TDrawing2D;
-  const PreviewKind: TLaTeXPreviewKind;
-  const PgfDvipsFixBB, Crop: Boolean);
-var
-  IncludeFile: string;
-  List: TStringList;
+procedure AddTeXPreviewPackages(const List: TStrings;
+  const Drawing: TDrawing2D; const PreviewKind: TLaTeXPreviewKind);
 begin
-  IncludeFile := TpXTemplatePath('preview.tex.inc');
-  List := TStringList.Create;
-  //List.Insert();'%TpX%'
-  try
-    if FileExists(IncludeFile) then List.LoadFromFile(IncludeFile)
-    else
-    begin
-      WritePreamble(List);
-      List.SaveToFile(IncludeFile);
-    end;
-    if PreviewKind = ltxview_Pdf then
-      List.Text := AnsiReplaceStr(
-        List.Text, '\pdfoutput=0', '\pdfoutput=1');
     List.Add('\usepackage{ifpdf}');
     List.Add('\usepackage{color}');
     if PreviewKind = ltxview_Pdf then
@@ -122,6 +107,30 @@ begin
       fig_floating: List.Add('\usepackage{floatflt}');
       fig_wrap: List.Add('\usepackage{wrapfig}');
     end;
+end;
+
+procedure WriteTempTeXFile(const FileName, TpXName: string;
+  const Drawing: TDrawing2D;
+  const PreviewKind: TLaTeXPreviewKind;
+  const PgfDvipsFixBB, Crop: Boolean);
+var
+  IncludeFile: string;
+  List: TStringList;
+begin
+  IncludeFile := TpXTemplatePath('preview.tex.inc');
+  List := TStringList.Create;
+  //List.Insert();'%TpX%'
+  try
+    if FileExists(IncludeFile) then List.LoadFromFile(IncludeFile)
+    else
+    begin
+      WritePreamble(List);
+      List.SaveToFile(IncludeFile);
+    end;
+    if PreviewKind = ltxview_Pdf then
+      List.Text := AnsiReplaceStr(
+        List.Text, '\pdfoutput=0', '\pdfoutput=1');
+    AddTeXPreviewPackages(List, Drawing, PreviewKind);
     if Crop then begin
       List.Add('\usepackage[active,tightpage]{preview}');
       List.Add('\setlength{\PreviewBorder}{0pt}');
