@@ -130,6 +130,35 @@ def s_draw_click(app):
     return 'two-click rectangle renders and survives save'
 
 
+def s_path_completion(app):
+    """Double-click commits each variable-length path through native LCL input."""
+    v, cx, cy = box(app)
+    paths = [('Insert polyline', 'polyline', False),
+             ('Insert polygon', 'polygon', False),
+             ('Insert curve', 'curve', False),
+             ('Insert closed curve', 'curve', True),
+             ('Insert Bezier path', 'bezier', False),
+             ('Insert closed Bezier path', 'bezier', True)]
+    for i, (caption, _, _) in enumerate(paths):
+        x, y = cx - 240 + i % 3 * 170, cy - 140 + i // 3 * 190
+        app.menu('Insert', caption)
+        for dx, dy in [(0, 0), (50, -40), (110, 10)]:
+            app.click(x + dx, y + dy)
+        px, py = app.at(x + 70, y + 80)
+        app.page.mouse.dblclick(px, py, delay=80)
+        app.key('Escape')
+    objects = drawing_xml(app.save('completed-paths.tpx'))
+    if len(objects) != len(paths):
+        raise AssertionError(f'double-click committed {len(objects)} of {len(paths)} paths')
+    for obj, (caption, tag, closed) in zip(objects, paths):
+        # The loader accepts these historical aliases for the same path types.
+        actual = {'path': 'polyline', 'smooth': 'curve'}.get(obj.tag, obj.tag)
+        points = (obj.text or '').split()
+        if actual != tag or (obj.get('closed', '0') != '0') != closed or len(set(points)) < 3:
+            raise AssertionError(f'{caption} saved invalid geometry: {obj.tag} {obj.attrib} {obj.text}')
+    return 'double-click commits all six open/closed path tools with saved geometry'
+
+
 def s_draw_cancel(app):
     """Escape during a drag cancels the object instead of inserting it."""
     v, cx, cy = box(app)
@@ -535,6 +564,7 @@ SCENARIOS = [
     ('resize-follows', s_resize_follows),
     ('draw-drag', s_draw_drag),
     ('draw-click', s_draw_click),
+    ('path-completion', s_path_completion),
     ('draw-cancel', s_draw_cancel),
     ('crosshair', s_crosshair),
     ('wheel-zoom', s_wheel_zoom),
