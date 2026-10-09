@@ -870,10 +870,18 @@ begin
 end;
 
 procedure TMainForm.LiveTeXChanged(Sender: TObject);
+var
+  Damage: TRect;
 begin
 {$IFDEF FPC}
   StatusBar1.Panels[1].Text := LiveTeXStatus;
-  LocalView.Repaint;
+  StatusBar1.Hint := LiveTeXStatus;
+  StatusBar1.ShowHint := True;
+  if TakeLiveTeXDamage(Damage) then LocalView.RepaintScreenRect(Damage)
+{$IFDEF CPUWASM32}
+  else LocalView.Repaint
+{$ENDIF}
+  ;
 {$ENDIF}
 end;
 
