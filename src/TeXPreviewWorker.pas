@@ -297,6 +297,17 @@ var
   CanSplit: Boolean;
 begin
   if (Length(Indices) = 0) or Terminated then Exit;
+  { Bound individual TeX jobs and keep syntax-error isolation complete. }
+  if Length(Indices)>256 then begin
+    I := 0;
+    while (I<Length(Indices)) and not Terminated do begin
+      SetLength(Half,Min(256,Length(Indices)-I));
+      for J := 0 to High(Half) do Half[J] := Indices[I+J];
+      CompileBatch(Half);
+      Inc(I,Length(Half));
+    end;
+    Exit;
+  end;
   CreateGUID(ID);
   BatchName := 'job-' + GUIDToString(ID);
   BatchDirectory := FDirectory + BatchName + PathDelim;
