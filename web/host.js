@@ -62,7 +62,7 @@ const imports = {
       pixels[i+3] = Math.round(layer[i+2]*alpha + pixels[i+3]*(1-alpha));
     }
   },
-  present: (pointer, width, height) => {
+  present: (pointer, width, height, dirtyX, dirtyY, dirtyW, dirtyH) => {
     if (canvas.width !== width) canvas.width = width;
     if (canvas.height !== height) canvas.height = height;
     // The surface is sized by CSS; the canvas keeps the form's pixel size and
@@ -70,10 +70,17 @@ const imports = {
     // LazCanvas clfARGB32 bytes A, R, G, B become canvas bytes R, G, B, A:
     // one shift per little-endian word into a reused buffer.
     if (!image || image.width !== width || image.height !== height) image = context.createImageData(width, height);
-    const source = new Uint32Array(instance.exports.memory.buffer, pointer, width*height);
+    const surface = new Uint32Array(instance.exports.memory.buffer, pointer, width*height);
     const target = new Uint32Array(image.data.buffer);
-    for (let i=0; i<source.length; i++) target[i] = (source[i] >>> 8) | 0xFF000000;
-    context.putImageData(image, 0, 0);
+    // Convert and upload only the damaged rows. A crosshair move dirties a few
+    // thousand pixels; converting all 840k of them took 45% of a core.
+    const x0 = Math.max(0, dirtyX|0), y0 = Math.max(0, dirtyY|0);
+    const x1 = Math.min(width, x0 + Math.max(0, dirtyW|0)), y1 = Math.min(height, y0 + Math.max(0, dirtyH|0));
+    for (let y=y0; y<y1; y++) {
+      const row = y*width;
+      for (let x=x0; x<x1; x++) { const i=row+x; target[i] = (surface[i] >>> 8) | 0xFF000000; }
+    }
+    if (x1 > x0 && y1 > y0) context.putImageData(image, 0, 0, x0, y0, x1-x0, y1-y0);
     canvas.dataset.frames = String(Number(canvas.dataset.frames || 0)+1);
   }
 };
