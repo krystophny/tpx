@@ -365,6 +365,65 @@ def s_export_formats(app):
     return 'SVG, EPS, PDF and MetaPost downloads contain the selected format'
 
 
+def s_bitmap_roundtrip(app):
+    import struct
+    import zlib
+
+    def chunk(kind, data):
+        return (struct.pack('>I', len(data)) + kind + data +
+                struct.pack('>I', zlib.crc32(kind + data)))
+
+    fixture = app.output / 'bitmap-fixture.png'
+    fixture.write_bytes(b'\x89PNG\r\n\x1a\n' +
+        chunk(b'IHDR', struct.pack('>IIBBBBB', 32, 32, 8, 2, 0, 0, 0)) +
+        chunk(b'IDAT', zlib.compress((b'\x00' + b'\xff\x00\xff' * 32) * 32)) +
+        chunk(b'IEND', b''))
+    v, cx, cy = box(app)
+    app.menu('Insert', 'Insert bitmap')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('Choose file', exact=True).set_input_files(fixture)
+    before = app.frames()
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    app.painted(before)  # Wait for Pascal to arm the bitmap tool after the file dialog.
+    app.drag(cx-70, cy-50, cx+70, cy+50)
+    app.key('Escape')
+    saved = app.save('bitmap-roundtrip.tpx')
+    objects = drawing_xml(saved)
+    if len(objects) != 1 or objects[0].get('link') != fixture.name:
+        raise AssertionError('saved drawing lost the bitmap reference')
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('saving a bitmap displayed an unexpected dialog')
+
+    app.menu('File', 'Save as...')
+    dialog = app.page.get_by_role('dialog')
+    option = dialog.get_by_label('File type').locator('option').filter(has_text='EPS').first
+    dialog.get_by_label('File type').select_option(option.get_attribute('value'))
+    dialog.get_by_label('File name').fill('bitmap-export.eps')
+    with app.page.expect_download() as exported:
+        dialog.get_by_role('button', name='OK', exact=True).click()
+    eps = app.output / exported.value.suggested_filename
+    exported.value.save_as(eps)
+    if b'colorimage' not in eps.read_bytes():
+        raise AssertionError('EPS export omitted the bitmap image data')
+
+    app.page.reload()
+    app.page.wait_for_selector('#status[data-state=ready]')
+    app.menu('File', 'Open')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('Choose file', exact=True).set_input_files(saved)
+    dialog.get_by_label('Related files (optional)', exact=True).set_input_files(fixture)
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    app.page.wait_for_function('''() => {
+        const c = document.querySelector('#lcl');
+        const p = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+        let n = 0;
+        for (let i = 0; i < p.length; i += 4)
+            if (p[i] === 255 && p[i+1] === 0 && p[i+2] === 255) n++;
+        return n > 1000;
+    }''')
+    return 'bitmap save has no converter dialog; EPS contains pixels; related PNG reopens'
+
+
 def s_modal_properties(app):
     v, cx, cy = box(app)
     app.menu('Insert', 'Insert rectangle')
@@ -487,6 +546,7 @@ SCENARIOS = [
     ('open-roundtrip', s_open_roundtrip),
     ('clipboard-roundtrip', s_clipboard_roundtrip),
     ('export-formats', s_export_formats),
+    ('bitmap-roundtrip', s_bitmap_roundtrip),
     ('modal-properties', s_modal_properties),
     ('nested-coordinates', s_nested_coordinates),
     ('unsaved-confirmation', s_unsaved_confirmation),

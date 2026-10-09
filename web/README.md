@@ -28,7 +28,7 @@ recreates the layout from the pins on a clean machine.
 | --- | --- | --- |
 | Lazarus | `krystophny/Lazarus` `feature/customdrawn-wasm-first-app` | CustomDrawn WASI widgetset, JOB DOM controls |
 | FPC | `freepascal.org/fpc/source` main, see pin | `ppcrosswasm32`, wasm32-wasip1 RTL and fcl packages |
-| pas2js | `krystophny/pas2js` `fix/job-release-object-id` | JOB object-release repair (upstream MR !103, unmerged) |
+| pas2js | `krystophny/pas2js` `fix/job-packed-strings` | JOB object-release and packed-string repairs |
 
 ## Layout
 
@@ -47,46 +47,47 @@ recreates the layout from the pins on a clean machine.
 Working: the drawing canvas, editing interactions, toolbars and dialogs, viewport
 and export text generation, in-memory filesystem through the WASI shim.
 
-Disabled because WASI cannot run external programs: LaTeX preview, `sam2p`
-bitmap conversion, MetaPost and printing. `SysBasic.FileExec` names the missing
-tool in a report instead of returning failure silently, and the widgetset answers
-a message box through a host banner rather than raising. **Not yet working end to
-end**: with a probe dialog the instance exits with code 0 instead of showing the
-banner, so today those paths are silent-or-fatal. Tracked as D4 in
-`tests/browser/DEFECTS.md`, which is the place to read before trusting any of
-this table.
+The browser cannot run external programs: full-document LaTeX compilation,
+MetaPost compilation and printing require desktop tools. Exporting MetaPost
+source still works. Unsupported external-process actions show an error dialog
+and leave the application interactive. Bitmap EPS data is generated directly
+from decoded pixels in the browser; saving a drawing with a bitmap does not
+require `sam2p`.
+
+Open `.tpx` files with their referenced images using **Related files (optional)**
+in the file dialog. The browser filesystem is temporary; keep the downloaded
+`.tpx` and its image files together. Browser support is exercised through the
+application scenarios below, not every LCL API or TpX drawing tool.
 
 ## Measured performance
 
-`python3 tests/browser/perf.py` (Chromium, renderer process CPU):
+`python3 tests/browser/perf.py` measures Chromium renderer-process CPU. The
+successful CI run for `efa73d6` (2026-10-09) recorded:
 
-| gate | measured | target | |
+| gate | measured | target | status |
 |---|---|---|---|
 | idle frames over 12 s | 0 | ~0 | pass |
-| idle CPU | 0.08 % of a core | ~1 % | pass |
-| CPU during continuous 120 Hz pointer move | 43 % of a core | < 10 % | **FAIL** |
-| first rendered frame | 2.6 s | < 2 s | **FAIL** |
-| `tpx.wasm` gzipped | 2.89 MB | < 10 MB | pass |
+| idle CPU | 0.17 % of a core | ~1 % | pass |
+| CPU during continuous 120 Hz pointer move | 6.66 % of a core | < 10 % | pass |
+| first rendered frame | 770 ms | < 2 s | pass |
+| `tpx.wasm` gzipped | 2.92 MB | < 10 MB | pass |
 
-The pointer number is the whole-form recompose in `RenderForm`: a crosshair move
-damages ~10k pixels and repaints 844k. A dirty-rect attempt was reverted
-(widgetset `0a258670cb`) because it swallowed the first frame and the upload was
-never the cost; the fix has to thread `rcPaint` through `RenderForm`
-/`RenderChildWinControls` and honour the clip inside control paints.
+Precise damage tracking, clipped control paints and coalesced pointer delivery
+avoid whole-form repaint work. The host renders only when Pascal invalidates
+pixels, so a stationary drawing does not run an animation loop. Measurements
+vary by machine and drawing complexity; rerun the performance gates after
+renderer changes.
 
 ## CI
 
 `.github/workflows/web.yml` builds the toolchain from `web/pins.env`
 (via `ci/web-toolchain.sh`, cached on the pins), runs `make web`, the bounded
-headless Chromium suite and the performance gates, and uploads the screenshot
-manifest. Desktop workflows (`test.yml`, `candidate.yml`) are untouched and
-`Linux tests` passes on this branch.
+headless Chromium suite and the performance gates. The pinned toolchain build
+and all 19 scenarios passed in
+[run 37909825292](https://github.com/krystophny/tpx/actions/runs/37909825292).
+The same 19 scenarios also passed locally in Firefox and WebKit.
 
-Current CI state, honestly: the web job fails at **Build the pinned WASI
-toolchain**. The pinned FPC source tree is flat (no `fpc/` subdirectory and no
-`configure` in this checkout), so the cross-compiler stage in
-`ci/web-toolchain.sh` has never been executed successfully anywhere - it was
-written from the documented layout, and CI is the first place that found out.
-Next step: reproduce the local toolchain build commands from
-`~/code/fpc-lcl-wasm` (its RTL is already built for wasm32-wasip1) in the
-script, or publish the toolchain as a release artifact and have CI restore it.
+Normal successful runs do not capture screenshots. Failure screenshots are
+retained; use `python3 tests/browser/playtest.py --screenshots` for a repeatable
+visual review outside CI. See `tests/browser/DEFECTS.md` for the remaining scope
+limits and verification commands.

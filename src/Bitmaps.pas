@@ -52,6 +52,9 @@ var
 implementation
 uses
   SysBasic,
+{$IFDEF WASI}
+  IntfGraphics, FPImage,
+{$ENDIF}
 {$IFNDEF FPC}
    Imaging.pngimage, Imaging.jpeg,
 {$ENDIF}
@@ -354,6 +357,70 @@ begin
   Result := CopyImage(GetFullLink, OutFileName);
 end;
 
+{$IFDEF WASI}
+function StoreBitmapToEPS(BMP: Graphics.TBitmap;
+  const FileName: string): Boolean;
+const
+  HexDigits = '0123456789ABCDEF';
+var
+  Image: TLazIntfImage;
+  F: TextFile;
+  Row: string;
+  X, Y, Offset: Integer;
+  Color: TFPColor;
+  procedure AddChannel(Value: Word);
+  var
+    Channel: LongWord;
+  begin
+    // PostScript has no alpha channel: flatten transparent pixels onto white.
+    Channel := (65535 - Color.Alpha +
+      LongWord(Value) * Color.Alpha div 65535) shr 8;
+    Row[Offset] := HexDigits[1 + (Channel shr 4)];
+    Row[Offset + 1] := HexDigits[1 + (Channel and 15)];
+    Inc(Offset, 2);
+  end;
+begin
+  Result := False;
+  if (BMP.Width <= 0) or (BMP.Height <= 0) then Exit;
+  Image := BMP.CreateIntfImage;
+  try
+    SetLength(Row, Image.Width * 6);
+    AssignFile(F, FileName);
+    Rewrite(F);
+    try
+      WriteLn(F, '%!PS-Adobe-3.0 EPSF-3.0');
+      WriteLn(F, '%%BoundingBox: 0 0 ', Image.Width, ' ', Image.Height);
+      WriteLn(F, '%%EndComments');
+      WriteLn(F, 'gsave');
+      WriteLn(F, Image.Width, ' ', Image.Height, ' scale');
+      WriteLn(F, '/row ', Image.Width * 3, ' string def');
+      WriteLn(F, Image.Width, ' ', Image.Height, ' 8');
+      WriteLn(F, '[', Image.Width, ' 0 0 -', Image.Height, ' 0 ', Image.Height, ']');
+      WriteLn(F, '{currentfile row readhexstring pop} false 3 colorimage');
+      for Y := 0 to Image.Height - 1 do
+      begin
+        Offset := 1;
+        for X := 0 to Image.Width - 1 do
+        begin
+          Color := Image.Colors[X, Y];
+          AddChannel(Color.Red);
+          AddChannel(Color.Green);
+          AddChannel(Color.Blue);
+        end;
+        WriteLn(F, Row);
+      end;
+      WriteLn(F, 'grestore');
+      WriteLn(F, '%%EOF');
+      Result := True;
+    finally
+      CloseFile(F);
+    end;
+  finally
+    Image.Free;
+  end;
+end;
+{$ENDIF}
+
 function TBitmapEntry.RequireEPS(
   const OutDir: string): Boolean;
 var
@@ -364,6 +431,12 @@ begin
   OutFileName := OutDir + GetOnlyName + '.eps';
   if (Pos(GetTempDir, OutDir) <> 1)
     and ImageFileExists(OutFileName) then Exit;
+{$IFDEF WASI}
+  // The browser already decoded the pixels; no external converter is needed.
+  Result := StoreBitmapToEPS(fBitmap, OutFileName);
+  if Result then fImageFiles.Add(OutFileName);
+  Exit;
+{$ENDIF}
   if (fKind = bek_JPEG) or
     ((fKind = bek_BMP)
     and (Pos('sam2p', LowerCase(Bitmap2EpsPath)) > 0))
