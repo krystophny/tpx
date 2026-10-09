@@ -1,11 +1,12 @@
 program RuntimeTests;
 {$mode Delphi}
 uses
+  {$IFDEF UNIX}{$IFNDEF CPUWASM32}cthreads,{$ENDIF}{$ENDIF}
   Interfaces, Forms, SysUtils, Classes, Types, Math, Controls, Dialogs, Clipbrd, InterfaceBase, LCLType, LMessages, Process,
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts;
+  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -110,6 +111,128 @@ begin
     GetEnvironmentVariable('TPX_EPS_OUTPUT'));
   Check(Converted = Expected, 'BitmapToEps returned ' + BoolToStr(Converted, True));
   Check(PromptCount = Ord(not Expected), 'Unexpected bitmap conversion error count');
+end;
+
+procedure TestLiveTeXSettings;
+begin
+  Check(LiveTeXEnabled, 'Live LaTeX preview must default to enabled');
+  SetLiveTeXEnabled(False);
+  SaveSettings;
+  SetLiveTeXEnabled(True);
+  LoadSettings;
+  Check(not LiveTeXEnabled, 'Live LaTeX preview preference did not persist');
+end;
+
+procedure TestLiveTeX;
+const
+  Formula: array[0..3] of string = ('$\alpha_i^2$', '$\omega_{ce}$',
+    '$\nabla \times B$', '$\frac{1}{2}mv^2$');
+var
+  Bitmap: TBitmap;
+  I, X, Y, Ink, Compilations: Integer;
+  SavedPixels: string;
+
+  function Draw(Key: PtrUInt; const Source: string; Height: Double = 32;
+    Rotation: Double = 0): Boolean;
+  begin
+    Bitmap.Canvas.Brush.Color := clWhite;
+    Bitmap.Canvas.FillRect(Rect(0, 0, Bitmap.Width, Bitmap.Height));
+    Result := DrawLiveTeX(Bitmap.Canvas, Key, Point2D(20, 80), Height,
+      Rotation, Source, ahLeft, jvBaseline, clBlack);
+  end;
+
+  function Pixels: string;
+  var
+    Stream: TMemoryStream;
+  begin
+    Stream := TMemoryStream.Create;
+    try
+      Bitmap.SaveToStream(Stream);
+      SetString(Result, PChar(Stream.Memory), Stream.Size);
+    finally
+      Stream.Free;
+    end;
+  end;
+
+  procedure AwaitPreview;
+  var
+    Started: QWord;
+  begin
+    Started := GetTickCount64;
+    while LiveTeXPending do begin
+      Application.ProcessMessages;
+      Sleep(5);
+      Check(GetTickCount64 - Started < 20000, 'Live LaTeX preview timed out');
+    end;
+  end;
+
+begin
+  ShutdownLiveTeX;
+  InitializeLiveTeX(nil);
+  SetLiveTeXEnabled(True);
+  Bitmap := TBitmap.Create;
+  try
+    Bitmap.SetSize(400, 180);
+    Compilations := LiveTeXCompilationCount;
+    for I := 0 to High(Formula) do
+      Check(not Draw(100 + I, Formula[I]), 'Uncached formula returned a preview');
+    Check(LiveTeXPending, 'Formula requests were not queued');
+    AwaitPreview;
+    Check(LiveTeXCompilationCount = Compilations + 1,
+      'Multiple pending formulas did not share one LaTeX invocation');
+    for I := 0 to High(Formula) do
+      Check(Draw(100 + I, Formula[I]), 'Real formula did not render: ' + LiveTeXStatus);
+    Ink := 0;
+    for Y := 0 to Bitmap.Height - 1 do
+      for X := 0 to Bitmap.Width - 1 do
+        if ColorToRGB(Bitmap.Canvas.Pixels[X, Y]) <> ColorToRGB(clWhite) then Inc(Ink);
+    Check(Ink > 50, 'Real formula produced an empty canvas image');
+    SavedPixels := Pixels;
+    Check(Draw(200, Formula[3]), 'Identical source did not reuse the cached preview');
+    Check(Pixels = SavedPixels, 'Cached formula changed the rendered output');
+    Compilations := LiveTeXCompilationCount;
+    Check(Draw(200, Formula[3], 64, 0.2), 'Zoom/rotation lost the last preview');
+    AwaitPreview;
+    Check(LiveTeXCompilationCount = Compilations,
+      'Zoom or rotation reran LaTeX for an existing formula');
+
+    Check(Draw(200, '$\definitelyUndefinedTpXCommand$'),
+      'Editing discarded the last good preview');
+    SavedPixels := Pixels;
+    AwaitPreview;
+    Check(LiveTeXStatus <> '', 'Malformed TeX did not expose an error status');
+    Check(Draw(200, '$\definitelyUndefinedTpXCommand$'),
+      'Malformed TeX discarded the last good preview');
+    Check(Pixels = SavedPixels, 'Failed preview replaced the last good pixels');
+    Compilations := LiveTeXCompilationCount;
+    Check(Draw(200, '$\anotherUndefinedTpXCommand$'),
+      'Pending edit discarded the last good preview');
+    Check(Draw(200, Formula[0]), 'Newer cached source was not applied immediately');
+    SavedPixels := Pixels;
+    AwaitPreview;
+    Check(Draw(100, Formula[0]), 'Reference formula was lost');
+    Check(Pixels = SavedPixels, 'Superseded source replaced the newest preview');
+    Check(LiveTeXCompilationCount = Compilations,
+      'Superseded pending edit still compiled');
+
+    Check(not Draw(400, '$x_{new}$'), 'New source unexpectedly had a cached preview');
+    Check(Draw(200, Formula[0]), 'Cache hit lost an existing preview');
+    Check(LiveTeXPending, 'Cache hit canceled another object preview');
+    AwaitPreview;
+    Check(Draw(400, '$x_{new}$'), 'Other object preview stalled after a cache hit');
+
+    SetLiveTeXEnabled(False);
+    Compilations := LiveTeXCompilationCount;
+    Check(not Draw(300, '$x_{disabled}$'), 'Disabled preview still rendered');
+    Check(not LiveTeXPending, 'Disabled preview scheduled background work');
+    Check(LiveTeXCompilationCount = Compilations, 'Disabled preview ran LaTeX');
+    SetLiveTeXEnabled(True);
+    Check(Draw(200, Formula[0]), 'Toggling preview discarded the reusable cache');
+    ForgetLiveTeXObject(200);
+  finally
+    Bitmap.Free;
+    ShutdownLiveTeX;
+  end;
 end;
 
 procedure TestPreviewState;
@@ -752,6 +875,8 @@ begin
   else
     Check(not FileExists(BundleFile), 'Fresh bundle unexpectedly contains settings');
 
+  Check(LiveTeXEnabled, 'Live LaTeX preview must default to enabled');
+  SetLiveTeXEnabled(False);
   LineWidthBase_Default := 2.75;
   SaveSettings;
   Check(FileExists(ConfigFile), 'User settings file was not created');
@@ -760,8 +885,10 @@ begin
   if ExpectedLegacy = '' then
     Check(not FileExists(BundleFile), 'Saving wrote settings beside the application');
 
+  SetLiveTeXEnabled(True);
   LineWidthBase_Default := 4.25;
   LoadSettings;
+  Check(not LiveTeXEnabled, 'Live LaTeX preview preference did not persist');
   Check(Abs(LineWidthBase_Default - 2.75) < 0.000001,
     'Saved user setting did not reload');
   WriteLn('SETTINGS_FILE=', ConfigFile);
@@ -966,6 +1093,8 @@ begin
     PromptDialogFunction := AnswerPrompt;
     if GetEnvironmentVariable('TPX_STARTUP_EXPECTED') <> '' then TestStartupFileName
     else if Pos('viewport-', ParamStr(1)) = 1 then TestViewport(ParamStr(1))
+    else if ParamStr(1) = 'live-tex' then TestLiveTeX
+    else if ParamStr(1) = 'live-tex-settings' then TestLiveTeXSettings
     else if ParamStr(1) = 'preview-state' then TestPreviewState
     else if ParamStr(1) = 'external-tools' then TestExternalTools
     else if ParamStr(1) = 'check-file-path' then TestCheckFilePath
