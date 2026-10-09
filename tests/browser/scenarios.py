@@ -129,33 +129,16 @@ def s_draw_click(app):
 
 
 def s_draw_cancel(app):
-    """Escape during a drag cancels the object instead of inserting it.
-
-    Classified behaviorally: after the cancelled gesture, select-all + delete is
-    used as the object probe. If a real object had been inserted, the probe
-    removes it and the paper changes; if the gesture was cancelled, the probe
-    changes nothing. This keeps the oracle independent of the viewport crosshair
-    (DEFECTS D1), whose lines survive repaints in the browser and would otherwise
-    be counted as leftover ink.
-    """
+    """Escape during a drag cancels the object instead of inserting it."""
     v, cx, cy = box(app)
-    reg = region(cx, cy)
+    reg = [cx - 140, cy - 110, 300, 240]
     focus_document(app, v)
     park(app, v)
     base = app.pixels(reg)
-
-    def probe(tag):
-        """Select all and delete; return how much ink that removed."""
-        before = app.pixels(reg)
-        app.key('Control+a')
-        app.page.wait_for_timeout(200)
-        app.key('Delete')
-        app.page.wait_for_timeout(300)
-        park(app, v)
-        gone = diff(before, app.pixels(reg))
-        return gone
-
     app.click(TOOL_X, tool('rect'))
+    park(app, v)
+    if diff(base, app.pixels(reg)) > 40:
+        raise AssertionError('arming the tool already painted on the paper')
     app.move(cx - 90, cy - 60)
     app.page.wait_for_timeout(200)
     app.press()
@@ -169,12 +152,11 @@ def s_draw_cancel(app):
     app.page.wait_for_timeout(250)
     app.release()
     park(app, v)
-    cancelled = probe('cancelled')
-    if cancelled > 40:
-        raise AssertionError(f'cancelled gesture still left an object ({cancelled} px removed)')
-
-    # control: the same gesture without Escape must insert an object that the very
-    # same probe then removes, so the cancel result cannot be a vacuous pass.
+    left = diff(base, app.pixels(reg))
+    if left > 40:
+        raise AssertionError(f'Escape left {left} of {live} pixels')
+    # control: the same gesture without Escape inserts an object that stays, so
+    # the cancel assertion cannot pass by accident.
     app.click(TOOL_X, tool('rect'))
     app.move(cx - 90, cy - 60)
     app.press()
@@ -182,11 +164,10 @@ def s_draw_cancel(app):
         app.move(cx - 90 + i * 24, cy - 60 + i * 16)
     app.release()
     park(app, v)
-    inserted = probe('control')
+    inserted = diff(base, app.pixels(reg))
     if inserted < 200:
-        raise AssertionError(f'control insert left no object for the probe ({inserted} px)')
-    return (f'preview {live} px, cancelled object probe {cancelled} px, '
-            f'control probe {inserted} px')
+        raise AssertionError(f'control insert showed only {inserted} pixels')
+    return f'preview {live} px, cancelled to {left} px, control insert {inserted} px'
 
 
 def s_crosshair(app):
