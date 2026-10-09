@@ -1,0 +1,106 @@
+name: Browser (WASI) target
+
+# Builds TpX for the browser and runs the headless Chromium behavioral suite.
+# The toolchain (FPC wasm32-wasip1 cross compiler, the CustomDrawn/WASM LCL from
+# the fork, pas2js) is built once from the pins in web/pins.env and cached; see
+# ci/web-toolchain.sh.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: wasm build and Chromium playtest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      TMPDIR: ${{ github.workspace }}/.tmp
+      WASM_LCL: ${{ github.workspace }}/toolchain/lazarus-lcl-wasm
+      WASM_FPC: ${{ github.workspace }}/toolchain/fpc-lcl-wasm
+      WASM_PAS2JS: ${{ github.workspace }}/toolchain/pas2js
+      WASM_BIN: ${{ github.workspace }}/toolchain/bin
+      CHROMIUM: ${{ github.workspace }}/chromium/chrome-linux/chrome
+      # Bounded subset, documented: every scenario that does not need an external
+      # tool (LaTeX, sam2p, MetaPost, printer). wheel-zoom and
+      # idle-stops-repainting are included because they gate the input and idle
+      # contracts. Open/save and the export formats need browser-file-system
+      # plumbing and are tracked separately, so they are not run here.
+      WEB_SCENARIOS: default-view,viewport-fit,resize-follows,draw-drag,draw-click,draw-cancel,crosshair,keyboard-shortcut,text-input,wheel-zoom,idle-stops-repainting,title-tracks-document
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Prepare scratch space
+        run: mkdir -p "$TMPDIR" "$WASM_BIN"
+
+      - name: Install build and browser dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fpc make git curl python3-pip libpng-tools
+          python3 -m pip install --break-system-packages playwright
+
+      - name: Install Chromium for Playwright
+        run: |
+          mkdir -p "$RUNNER_TEMP/chromium"
+          python3 -m playwright install chromium --path "$CHROMIUM" 2>/dev/null \
+            || python3 -m playwright install chromium
+
+      - name: Restore toolchain cache
+        id: tc
+        uses: actions/cache@000f79a7c19b5b00753646ea05bb9c8e37ee5c03 # v4
+        with:
+          path: |
+            ${{ github.workspace }}/toolchain
+          key: web-toolchain-${{ hashFiles('web/pins.env') }}
+
+      - name: Build the pinned WASI toolchain
+        if: steps.tc.outputs.cache-hit != 'true'
+        env:
+          ALLOW_LONG_BUILD: '1'
+        run: |
+          chmod +x ci/web-toolchain.sh web/build.sh
+          ci/web-toolchain.sh build
+
+      - name: Assert the toolchain layout
+        run: ci/web-toolchain.sh check
+
+      - name: Build TpX for the browser
+        run: make web
+
+      - name: Report payload size
+        run: |
+          ls -l web/dist
+          gzip -9 -c web/dist/tpx.wasm | wc -c | awk '{printf "tpx.wasm gzipped: %.2f MB\n", $1/1048576}'
+
+      - name: Run the headless browser behavioral suite
+        run: |
+          # CHROMIUM must point at the real binary; playwright's install path varies.
+          if [ ! -x "$CHROMIUM" ]; then
+            CHROMIUM=$(find "$HOME/.cache/ms-playwright" -name chrome -type f | head -1)
+            echo "CHROMIUM=$CHROMIUM" >> "$GITHUB_ENV"
+          fi
+          python3 tests/browser/playtest.py --chromium "$CHROMIUM" --only "$WEB_SCENARIOS"
+
+      - name: Performance gates
+        run: python3 tests/browser/perf.py
+
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@330a01c02c41b41d62a8f71a5b610fa96d389c72 # v4
+        with:
+          name: browser-playtest-${{ github.sha }}
+          path: |
+            dist/browser-playtest/
+          if-no-files-found: warn
+          retention-days: 14

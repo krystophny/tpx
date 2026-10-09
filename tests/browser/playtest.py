@@ -7,6 +7,7 @@ Each scenario gets a freshly loaded application so that failures cannot cascade
 into the next case. Prints one line per scenario and exits non-zero on failure.
 """
 import argparse
+import os
 import json
 import subprocess
 import sys
@@ -26,7 +27,7 @@ parser.add_argument('dist', nargs='?', default=str(ROOT / 'web/dist'))
 parser.add_argument('outdir', nargs='?', default=str(ROOT / 'dist/browser-playtest'))
 parser.add_argument('--only', default='')
 parser.add_argument('--port', type=int, default=8795)
-parser.add_argument('--chromium', default='/usr/bin/chromium')
+parser.add_argument('--chromium', default=os.environ.get('CHROMIUM', '/usr/bin/chromium'))
 args = parser.parse_args()
 
 wanted = set(n for n in args.only.split(',') if n)

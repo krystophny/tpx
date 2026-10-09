@@ -90,7 +90,7 @@ def main():
     results = []
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(executable_path='/usr/bin/chromium',
+            browser = p.chromium.launch(executable_path=os.environ.get('CHROMIUM', '/usr/bin/chromium'),
                                         args=['--no-sandbox'])
             page = browser.new_page(viewport={'width': 1280, 'height': 900})
             app = App(page, 'perf')
