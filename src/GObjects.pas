@@ -810,7 +810,8 @@ const
 
 implementation
 
-uses Math, Dialogs;
+uses Math, Dialogs
+{$IFDEF FPC}, DevCanvas, LiveTeX{$ENDIF};
 
 function GetLineStyleString(const LineStyle: TLineStyle): string;
 begin
@@ -1078,6 +1079,9 @@ end;
 procedure TPrimitive2D.DeviceDraw(Transf: TTransf2D;
   const Dvc: TDevice; const ClipRect2D: TRect2D);
 begin
+{$IFDEF FPC}
+  if Dvc is TCanvasDevice then TCanvasDevice(Dvc).PreviewObject := Self;
+{$ENDIF}
   DeviceDrawPieces(Transf, Dvc, ClipRect2D);
 end;
 
@@ -3866,6 +3870,9 @@ end;
 
 destructor TText2D.Destroy;
 begin
+{$IFDEF FPC}
+  ForgetLiveTeXObject(PtrUInt(Self));
+{$ENDIF}
   Font.Free;
   inherited Destroy;
 end;

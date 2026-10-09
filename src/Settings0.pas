@@ -16,6 +16,7 @@ var
 implementation
 
 uses Output, Input, Drawings, Preview,
+{$IFDEF FPC}  LiveTeX,{$ENDIF}
 {$IFNDEF FPC}
   EMF_Unit,
 {$ENDIF}
@@ -136,6 +137,10 @@ begin
     ExtractFilePath(ParamStr(0))) + IniFileName0;
 {$ENDIF}
   SettingsList := TOptionsList.Create;
+{$IFDEF FPC}
+  SettingsList.AddBoolean('LiveTeXPreview', @LiveTeXEnabled,
+    'Live LaTeX text preview');
+{$ENDIF}
 
   SettingsList.AddRealType('PicScale_Default',
     @PicScale_Default, 'Default value of PicScale');
