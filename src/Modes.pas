@@ -463,6 +463,7 @@ const Drag_Aperture = 4;
 implementation
 
 uses MainUnit, SysBasic, Propert, Options, TransForm, PreView,
+{$IFDEF FPC}  LiveTeX,{$ENDIF}
 {$IFNDEF FPC}
   EMF_Unit, WinBasic, ClpbrdOp,
 {$ELSE}
@@ -784,7 +785,10 @@ begin
   begin
     Drawing.NotifyChanged;
     Obj.UpdateExtension(nil);
-    Drawing.RepaintViewports
+    Drawing.RepaintViewports;
+{$IFDEF FPC}
+    FlushLiveTeX;
+{$ENDIF}
   end;
 //  Parent.SetFocus;
 //  SetFocus;

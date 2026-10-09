@@ -13,6 +13,7 @@ var
 procedure InitializeLiveTeX(const Changed: TNotifyEvent);
 procedure ShutdownLiveTeX;
 procedure SetLiveTeXEnabled(Value: Boolean);
+procedure FlushLiveTeX;
 procedure ForgetLiveTeXObject(ObjectKey: PtrUInt);
 function LiveTeXCompilationCount: Integer;
 function LiveTeXPending: Boolean;
@@ -42,6 +43,10 @@ procedure SetLiveTeXEnabled(Value: Boolean);
 begin
   LiveTeXEnabled := Value;
   SetWebTeXEnabled(Value);
+end;
+
+procedure FlushLiveTeX;
+begin
 end;
 
 procedure ForgetLiveTeXObject(ObjectKey: PtrUInt);
@@ -76,11 +81,11 @@ end;
 {$ELSE}
 
 uses SysUtils, Math, Forms, ExtCtrls, MD5, FileUtil, LazFileUtils,
-  SysBasic, Preview, TeXPreviewWorker;
+  SysBasic, Preview, TeXPreviewWorker, TeXPreviewCache;
 
 type
   TPreviewEntry = class
-    Key, ContentKey, Source, Preamble, LatexCommand, Error: string;
+    Key, ContentKey, Source, Preamble, LatexCommand, Error, ImageFile: string;
     Image: TPortableNetworkGraphic;
     RasterDPI, WantedDPI, OffsetX, OffsetY: Integer;
     Rotation: Double;
@@ -105,8 +110,9 @@ type
     FWorker: TTeXPreviewWorker;
     FChanged: TNotifyEvent;
     FDirectory, FPreamble: string;
+    FCache: TTeXPreviewCache;
     FPreambleAge: LongInt;
-    FClosing: Boolean;
+    FClosing, FWorkerCancelled: Boolean;
     FRuns: Integer;
     FDamage: TRect;
     FHasDamage: Boolean;
@@ -118,6 +124,7 @@ type
     procedure CollectResults(Data: PtrInt);
     procedure ReadPreamble;
     function IsUsed(Entry: TPreviewEntry): Boolean;
+    procedure CancelUnusedWorker;
   public
     constructor Create(const Changed: TNotifyEvent);
     destructor Destroy; override;
@@ -138,8 +145,6 @@ begin
 end;
 
 constructor TTeXPreviewManager.Create(const Changed: TNotifyEvent);
-var
-  ID: TGUID;
 begin
   inherited Create;
   FChanged := Changed;
@@ -153,9 +158,9 @@ begin
   FTimer.Enabled := False;
   FTimer.Interval := 180;
   FTimer.OnTimer := Schedule;
-  CreateGUID(ID);
-  FDirectory := IncludeTrailingPathDelimiter(GetAppConfigDir(False)) +
-    'preview-cache' + PathDelim + GUIDToString(ID);
+  FCache := TTeXPreviewCache.Create(
+    IncludeTrailingPathDelimiter(GetAppConfigDir(False))+'preview-cache');
+  FDirectory := FCache.Directory;
   FPreambleAge := -2;
   ReadPreamble;
 end;
@@ -173,7 +178,7 @@ begin
   Application.RemoveAsyncCalls(Self);
   FObjects.Free;
   FEntries.Free;
-  if DirectoryExists(FDirectory) then DeleteDirectory(FDirectory, False);
+  FCache.Free;
   inherited;
 end;
 
@@ -204,6 +209,20 @@ begin
   for I := 0 to FObjects.Count - 1 do
     if TPreviewObject(FObjects.Objects[I]).Current = Entry then Exit(True);
   Result := False;
+end;
+
+procedure TTeXPreviewManager.CancelUnusedWorker;
+var
+  I: Integer;
+  Entry: TPreviewEntry;
+begin
+  if not Assigned(FWorker) or FWorkerCancelled then Exit;
+  for I := 0 to FEntries.Count-1 do begin
+    Entry := TPreviewEntry(FEntries.Objects[I]);
+    if Entry.Running and IsUsed(Entry) then Exit;
+  end;
+  FWorkerCancelled := True;
+  FWorker.Terminate;
 end;
 
 procedure TTeXPreviewManager.Schedule(Sender: TObject);
@@ -258,6 +277,11 @@ begin
     if J < 0 then Continue;
     Entry := TPreviewEntry(FEntries.Objects[J]);
     Entry.Running := False;
+    if FWorkerCancelled then begin
+      Entry.Error := '';
+      Entry.Pending := True;
+      Continue;
+    end;
     Entry.Error := FWorker.Results[I].Error;
     if (Entry.Error = '') and FileExists(FWorker.Results[I].PNGFile) then begin
       PNG := TPortableNetworkGraphic.Create;
@@ -265,6 +289,7 @@ begin
         PNG.LoadFromFile(FWorker.Results[I].PNGFile);
         FreeAndNil(Entry.Image);
         Entry.Image := PNG;
+        Entry.ImageFile := FWorker.Results[I].PNGFile;
         PNG := nil;
         Entry.RasterDPI := FWorker.Results[I].RasterDPI;
         Entry.OffsetX := FWorker.Results[I].OffsetX;
@@ -288,6 +313,7 @@ begin
 
   end;
   FreeAndNil(FWorker);
+  FWorkerCancelled := False;
   LiveTeXStatus := '';
   for I := 0 to FEntries.Count-1 do begin
     Entry := TPreviewEntry(FEntries.Objects[I]);
@@ -308,7 +334,10 @@ var
 begin
   FTimer.Enabled := False;
   if not Value then begin
-    if Assigned(FWorker) then FWorker.Terminate;
+    if Assigned(FWorker) then begin
+      FWorkerCancelled := True;
+      FWorker.Terminate;
+    end;
   end else begin
     for I := 0 to FEntries.Count - 1 do
       with TPreviewEntry(FEntries.Objects[I]) do
@@ -329,6 +358,9 @@ var
   I,J: Integer;
   Entry: TPreviewEntry;
   Used: Boolean;
+  Content, Images, Jobs, Data: TStringList;
+  Search: TSearchRec;
+  Base, Name: string;
 begin
   I := FEntries.Count-1;
   while (I>=0) and (FEntries.Count>256) do begin
@@ -339,6 +371,54 @@ begin
         if (Current=Entry) or (LastGood=Entry) then Used := True;
     if not Used then FEntries.Delete(I);
     Dec(I);
+  end;
+  { A job DVI may back several labels. Keep it only while a retained content
+    manifest refers to it; expired variants and failed job files have no owner. }
+  Content := TStringList.Create;
+  Images := TStringList.Create;
+  Jobs := TStringList.Create;
+  Data := TStringList.Create;
+  try
+    Content.Sorted := True;
+    Content.Duplicates := dupIgnore;
+    Images.Sorted := True;
+    Images.Duplicates := dupIgnore;
+    Jobs.Sorted := True;
+    Jobs.Duplicates := dupIgnore;
+    for I := 0 to FEntries.Count-1 do begin
+      Entry := TPreviewEntry(FEntries.Objects[I]);
+      Content.Add(MD5Print(MD5String(Entry.ContentKey)));
+      if Entry.ImageFile<>'' then Images.Add(ExtractFileName(Entry.ImageFile));
+    end;
+    if FindFirst(FDirectory+PathDelim+'*',faAnyFile,Search)=0 then begin
+      repeat
+        if Search.Attr and faDirectory<>0 then Continue;
+        Name := Search.Name;
+        Base := Copy(Name,1,32);
+        if (Content.IndexOf(Base)<0) or
+          ((Pos('-r',Name)>0) and (Images.IndexOf(Name)<0)) then
+          DeleteFile(FDirectory+PathDelim+Name)
+        else if ExtractFileExt(Name)='.cache' then begin
+          Data.LoadFromFile(FDirectory+PathDelim+Name);
+          if Data.Count>0 then
+            Jobs.Add(ExcludeTrailingPathDelimiter(ExtractFilePath(Data[0])));
+        end;
+      until FindNext(Search)<>0;
+      FindClose(Search);
+    end;
+    if FindFirst(FDirectory+PathDelim+'job-*',faDirectory,Search)=0 then begin
+      repeat
+        if (Search.Attr and faDirectory<>0) and
+          (Jobs.IndexOf(Search.Name)<0) then
+          DeleteDirectory(FDirectory+PathDelim+Search.Name,False);
+      until FindNext(Search)<>0;
+      FindClose(Search);
+    end;
+  finally
+    Data.Free;
+    Jobs.Free;
+    Images.Free;
+    Content.Free;
   end;
 end;
 
@@ -423,6 +503,7 @@ begin
   Obj.VAlign := VAlign;
   if Obj.Current<>Entry then begin
     Obj.Current := Entry;
+    CancelUnusedWorker;
     if Entry.Pending then FTimer.Enabled := False;
   end;
   if Entry.Pending and not Assigned(FWorker) then FTimer.Enabled := True;
@@ -444,7 +525,11 @@ end;
 procedure InitializeLiveTeX(const Changed: TNotifyEvent);
 begin
   ShutdownLiveTeX;
-  Manager := TTeXPreviewManager.Create(Changed);
+  try
+    Manager := TTeXPreviewManager.Create(Changed);
+  except
+    on E: Exception do LiveTeXStatus := 'LaTeX preview: '+E.Message;
+  end;
 end;
 
 procedure ShutdownLiveTeX;
@@ -458,13 +543,21 @@ begin
   if Assigned(Manager) then Manager.Enable(Value);
 end;
 
+procedure FlushLiveTeX;
+begin
+  if Assigned(Manager) then Manager.Schedule(nil);
+end;
+
 procedure ForgetLiveTeXObject(ObjectKey: PtrUInt);
 var
   I: Integer;
 begin
   if not Assigned(Manager) then Exit;
   I := Manager.FObjects.IndexOf(IntToHex(ObjectKey,SizeOf(ObjectKey)*2));
-  if I>=0 then Manager.FObjects.Delete(I);
+  if I>=0 then begin
+    Manager.FObjects.Delete(I);
+    Manager.CancelUnusedWorker;
+  end;
 end;
 
 function LiveTeXCompilationCount: Integer;
