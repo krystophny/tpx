@@ -58,7 +58,7 @@ jobs:
 
       - name: Restore toolchain cache
         id: tc
-        uses: actions/cache@000f79a7c19b5b00753646ea05bb9c8e37ee5c03 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ${{ github.workspace }}/toolchain
@@ -97,7 +97,7 @@ jobs:
 
       - name: Upload screenshots and logs
         if: always()
-        uses: actions/upload-artifact@330a01c02c41b41d62a8f71a5b610fa96d389c72 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: browser-playtest-${{ github.sha }}
           path: |
