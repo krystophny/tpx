@@ -46,9 +46,18 @@ class App:
     def frames(self):
         return int(self.page.get_attribute('#lcl', 'data-frames') or 0)
 
+    def crashed(self):
+        """True if the wasm instance aborted: WASI proc_exit or a null call.
+
+        A dead instance keeps the last painted frame, so pixel assertions can
+        still look plausible; every scenario records this explicitly.
+        """
+        return any(('WASIProcExit' in e) or ('null function' in e) or ('memory access out of bounds' in e)
+                   for e in self.errors)
+
     def pixels(self, box=None):
-        """Return the canvas pixels of a client-space region as bytes."""
-        b = box or self.box()
+        """Return the canvas pixels of a client-space [x,y,w,h] region."""
+        b = box if box is not None else [0, 0, int(self.box()['nw']), int(self.box()['nh'])]
         return self.page.evaluate('''(r) => {
           const c=document.querySelector('#lcl');
           return Array.from(c.getContext('2d').getImageData(r.x, r.y, r.w, r.h).data);
@@ -68,30 +77,35 @@ class App:
     def viewport(self):
         """Measured client-space box of the white drawing paper.
 
-        The viewport is created at runtime (alClient inside Panel1), so its box
-        depends on the current layout; scanning the presented frame keeps the
-        scenarios correct after a resize instead of hard-coding LFM numbers.
+        The viewport is created at runtime (alClient inside Panel1), so the box
+        depends on the live layout. One full-canvas read decides: rows and
+        columns that are mostly pure white belong to the paper. The returned
+        edges are checked so a stale or misdetected frame fails loudly instead
+        of silently moving a scenario to the wrong coordinates.
         """
-        return self.page.evaluate('''() => {
+        v = self.page.evaluate('''() => {
           const c = document.querySelector('#lcl');
           const g = c.getContext('2d');
           const w = c.width, h = c.height;
-          const mid = g.getImageData(0, Math.floor(h/2), w, 1).data;
-          const white = i => mid[i] > 250 && mid[i+1] > 250 && mid[i+2] > 250;
-          let best = [0,0], run = -1;
-          for (let x = 0; x < w; x++) {
-            if (white(x*4)) { if (run < 0) run = x; }
-            else if (run >= 0) { if (x-run > best[1]-best[0]) best = [run, x]; run = -1; }
-          }
-          if (run >= 0 && w-run > best[1]-best[0]) best = [run, w];
-          const cx = Math.floor((best[0]+best[1])/2);
-          const col = g.getImageData(cx, 0, 1, h).data;
-          const whiteY = i => col[i] > 250 && col[i+1] > 250 && col[i+2] > 250;
-          let y0 = 0, y1 = h, y = 0;
-          while (y < h && !whiteY(y*4)) y++;
-          y0 = y; while (y < h && whiteY(y*4)) y++; y1 = y;
-          return {x: best[0], y: y0, w: best[1]-best[0], h: Math.max(0, y1-y0)};
+          const d = g.getImageData(0, 0, w, h).data;
+          const white = i => d[i] === 255 && d[i+1] === 255 && d[i+2] === 255;
+          const colOk = [], rowOk = [];
+          for (let x = 0; x < w; x += 2) { let n = 0;
+            for (let y = 0; y < h; y += 3) if (white((y*w + x)*4)) n++;
+            colOk.push(n > (h/3)*0.6); }
+          for (let y = 0; y < h; y += 2) { let n = 0;
+            for (let x = 0; x < w; x += 3) if (white((y*w + x)*4)) n++;
+            rowOk.push(n > (w/3)*0.6); }
+          const edges = a => { let first = -1, last = -1;
+            for (let i = 0; i < a.length; i++) if (a[i]) { if (first < 0) first = i; last = i; }
+            return [first, last]; };
+          const cx = edges(colOk), cy = edges(rowOk);
+          return {x: cx[0]*2, y: cy[0]*2, w: (cx[1]-cx[0])*2, h: (cy[1]-cy[0])*2,
+                  cols: colOk.filter(Boolean).length, rows: rowOk.filter(Boolean).length, w_total: w, h_total: h};
         }''')
+        if v['w'] < 100 or v['h'] < 100:
+            raise AssertionError(f'paper box undetected: {v}')
+        return v
 
     def center(self):
         v = self.viewport()
@@ -140,6 +154,21 @@ class App:
         px, py = self.at(x, y)
         self.page.mouse.move(px, py)
         self.page.mouse.wheel(0, delta)
+
+    def press(self):
+        self.page.mouse.down()
+
+    def release(self):
+        self.page.mouse.up()
+
+    def resize(self, w, h):
+        self.page.set_viewport_size({'width': w, 'height': h})
+        self.page.wait_for_timeout(400)
+
+    def idle_frames(self, seconds=3.0):
+        f0 = self.frames()
+        self.page.wait_for_timeout(int(seconds * 1000))
+        return self.frames() - f0
 
     def key(self, chord, name=None):
         self.page.keyboard.press(chord)

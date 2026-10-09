@@ -53,11 +53,15 @@ try:
                 page.wait_for_function('Number(document.querySelector("#lcl").dataset.frames)>0')
                 page.wait_for_timeout(500)
                 problem = fn(app)
-                if problem:
-                    status, detail = 'fail', problem
+                # Scenarios raise on failure and describe success, so a returned
+                # string is the evidence, not a problem.
+                detail = problem or ''
+                if app.crashed():
+                    status, detail = 'fail', f'instance died: {app.errors[0][:150]}'
             except Exception as exc:  # noqa: BLE001 - report, do not swallow silently
-                status, detail = 'error', str(exc)[:200].replace('\n', ' ')
-            if app.errors:
+                status = 'error'
+                detail = f'{type(exc).__name__}: {str(exc)[:180]}'.replace('\n', ' ')
+            if app.errors and status == 'pass':
                 detail = (detail + ' | ' if detail else '') + f'console: {app.errors[0][:160]}'
             if status != 'pass':
                 failures.append(name)
