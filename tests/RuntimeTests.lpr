@@ -313,6 +313,37 @@ begin
     Check(Draw(700, '\tikz{\draw(0,0)--(1,1);}'), 'Prior package context cache was lost');
     Check(LiveTeXCompilationCount = Compilations, 'Prior context was recompiled');
 
+    MainForm.TheDrawing.TeXFigure := fig_none;
+    MainForm.TheDrawing.TeXFigurePrologue := '\begingroup\newcommand{\tpxliveword}{Short}% figure macros';
+    MainForm.TheDrawing.TeXPicPrologue := '\begingroup\newcommand{\tpxlivelabel}{\tpxliveword}';
+    MainForm.TheDrawing.TeXPicEpilogue := '\endgroup';
+    MainForm.TheDrawing.TeXFigureEpilogue := '\endgroup% end figure scope';
+    ConfigureLiveTeX(MainForm.TheDrawing);
+    Compilations := LiveTeXCompilationCount;
+    Check(not Draw(800, '\tpxlivelabel% source'), 'Macro context was unexpectedly cached');
+    Check(not Draw(801, '\tpxlivelabel{} two'), 'Second macro label was already cached');
+    AwaitPreview;
+    Check(LiveTeXCompilationCount = Compilations + 1,
+      'Per-label macro definitions broke batch compilation');
+    Check(Draw(800, '\tpxlivelabel% source'), 'Drawing macro did not render: ' + LiveTeXStatus);
+    SavedPixels := Pixels;
+    Check(Draw(801, '\tpxlivelabel{} two'), 'Macros leaked between batched labels');
+    MainForm.TheDrawing.TeXFigurePrologue := '\begingroup\newcommand{\tpxliveword}{Much Longer}% changed macros';
+    ConfigureLiveTeX(MainForm.TheDrawing);
+    Compilations := LiveTeXCompilationCount;
+    Check(Draw(800, '\tpxlivelabel% source'), 'Macro edit discarded last preview');
+    Check(Pixels = SavedPixels, 'Macro edit changed pixels before completion');
+    AwaitPreview;
+    Check(LiveTeXCompilationCount = Compilations + 1,
+      'Changed macro definition did not invalidate the preview cache');
+    Check(Draw(800, '\tpxlivelabel% source') and (Pixels <> SavedPixels),
+      'Changed macro definition did not replace the rendered text');
+    MainForm.TheDrawing.TeXFigurePrologue := '';
+    MainForm.TheDrawing.TeXFigureEpilogue := '';
+    MainForm.TheDrawing.TeXPicPrologue := '';
+    MainForm.TheDrawing.TeXPicEpilogue := '';
+    ConfigureLiveTeX(MainForm.TheDrawing);
+
     SetLiveTeXEnabled(False);
     Compilations := LiveTeXCompilationCount;
     Check(not Draw(300, '$x_{disabled}$'), 'Disabled preview still rendered');

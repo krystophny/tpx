@@ -115,6 +115,7 @@ type
     FWorker: TTeXPreviewWorker;
     FChanged: TNotifyEvent;
     FDirectory, FPreamble, FPackages: string;
+    FFigurePrologue, FFigureEpilogue, FPicturePrologue, FPictureEpilogue: string;
     FTeXFormat, FTeXFigure: Integer;
     FCache: TTeXPreviewCache;
     FPreambleAge: LongInt;
@@ -481,7 +482,14 @@ begin
   RGB := ColorToRGB(Color);
   if Color = clDefault then RGB := 0;
   Text := Format('{\fontsize{10}{12}\selectfont\color[RGB]{%d,%d,%d}%s}',
-    [RGB and 255,(RGB shr 8) and 255,(RGB shr 16) and 255,Source]);
+    [RGB and 255,(RGB shr 8) and 255,(RGB shr 16) and 255,Source+'%'+LineEnding]);
+  { Match the export's hook order, inside the worker's per-label hbox group.
+    Local definitions and balanced hook pairs must not leak to other labels. }
+  if FPicturePrologue<>'' then Text := FPicturePrologue+'%'+LineEnding+Text;
+  if FFigurePrologue<>'' then Text := FFigurePrologue+'%'+LineEnding+Text;
+  if FPictureEpilogue<>'' then Text := Text+'%'+LineEnding+FPictureEpilogue;
+  if FFigureEpilogue<>'' then Text := Text+'%'+LineEnding+FFigureEpilogue;
+  Text := Text+'%'+LineEnding;
   ContentKey := MD5Print(MD5String(FPreamble+#0+LatexPath+#0+Text));
   Rotation := Rotation-Floor(Rotation/(2*Pi))*2*Pi;
   Key := MD5Print(MD5String(ContentKey+#0+FloatToStr(Rotation)));
@@ -547,13 +555,21 @@ var
 begin
   if not Assigned(Manager) or not Assigned(Drawing) then Exit;
   if (Manager.FTeXFormat=Ord(Drawing.TeXFormat)) and
-    (Manager.FTeXFigure=Ord(Drawing.TeXFigure)) then Exit;
+    (Manager.FTeXFigure=Ord(Drawing.TeXFigure)) and
+    (Manager.FFigurePrologue=Drawing.TeXFigurePrologue) and
+    (Manager.FFigureEpilogue=Drawing.TeXFigureEpilogue) and
+    (Manager.FPicturePrologue=Drawing.TeXPicPrologue) and
+    (Manager.FPictureEpilogue=Drawing.TeXPicEpilogue) then Exit;
   Packages := TStringList.Create;
   try
     AddTeXPreviewPackages(Packages,Drawing,ltxview_Dvi);
     Manager.FPackages := Packages.Text;
     Manager.FTeXFormat := Ord(Drawing.TeXFormat);
     Manager.FTeXFigure := Ord(Drawing.TeXFigure);
+    Manager.FFigurePrologue := Drawing.TeXFigurePrologue;
+    Manager.FFigureEpilogue := Drawing.TeXFigureEpilogue;
+    Manager.FPicturePrologue := Drawing.TeXPicPrologue;
+    Manager.FPictureEpilogue := Drawing.TeXPicEpilogue;
     Manager.FPreambleAge := -2;
   finally
     Packages.Free;
