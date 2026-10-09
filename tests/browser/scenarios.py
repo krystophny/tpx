@@ -378,6 +378,10 @@ def s_modal_properties(app):
     objects = drawing_xml(app.save('properties.tpx'))
     if len(objects) != 1 or float(objects[0].get('rx', '0')) != 2.5 or float(objects[0].get('ry', '0')) != 3.5:
         raise AssertionError(f'edited corner radii did not survive save: {[o.attrib for o in objects]}')
+    app.menu('Edit', 'Object properties')
+    if app.page.get_by_role('textbox', name='RX', exact=True).input_value() != '2.5':
+        raise AssertionError('reopened properties lost the edited value')
+    app.page.get_by_role('button', name='Cancel', exact=True).click()
     app.menu('Help', 'About')
     app.page.get_by_role('button', name='Acknowledgements').click()
     memo = app.page.locator('textarea:visible')
