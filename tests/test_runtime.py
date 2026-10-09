@@ -79,6 +79,25 @@ class RuntimeTests(unittest.TestCase):
             with self.subTest(scenario=scenario):
                 self.run_scenario(scenario)
 
+    @unittest.skipUnless(shutil.which("latex") and
+                         (shutil.which("dvipng") or
+                          (shutil.which("dvisvgm") and shutil.which("rsvg-convert"))),
+                         "real LaTeX and a preview rasterizer are required")
+    def test_live_latex_batch_cache_edits_and_failure(self):
+        self.run_scenario("live-tex")
+
+    @unittest.skipIf(sys.platform == "darwin", "covered by macOS settings test")
+    def test_live_latex_preference_persists(self):
+        # Settings on Linux/Windows live beside the executable: isolate the copy.
+        with tempfile.TemporaryDirectory(prefix="tpx-live-settings-") as directory:
+            executable = Path(directory) / BINARY.name
+            shutil.copy2(BINARY, executable)
+            result = subprocess.run([str(executable), "live-tex-settings"],
+                                    cwd=directory, capture_output=True, text=True,
+                                    timeout=40)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("PASS live-tex-settings", result.stdout)
+
     @unittest.skipUnless(sys.platform.startswith("linux"),
                          "native editable shortcut routing uses GTK2/X11")
     def test_gtk_editable_shortcut_routing(self):
