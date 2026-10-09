@@ -9,7 +9,8 @@ uses
 
 type
   TTeXPreviewInput = record
-    Key, Source, Preamble, LatexCommand: string;
+    Key, ContentKey, Source, Preamble, LatexCommand: string;
+    Rotation: Double;
     RasterDPI: Integer;
   end;
   TTeXPreviewInputs = array of TTeXPreviewInput;
@@ -17,6 +18,7 @@ type
   TTeXPreviewOutput = record
     Key, PNGFile, SVGFile, Error: string;
     WidthPt, HeightPt, DepthPt: Double;
+    OffsetX, OffsetY: Integer;
     RasterDPI: Integer;
   end;
   TTeXPreviewOutputs = array of TTeXPreviewOutput;
@@ -34,7 +36,8 @@ type
     function CacheBase(Index: Integer): string;
     function LoadCached(Index: Integer): Boolean;
     procedure Rasterize(Index: Integer; const DVIFile: string; Page: Integer);
-    procedure CompileBatch(const Indices: array of Integer);
+    procedure CompileBatch(const Indices: array of Integer; Depth: Integer = 0);
+    procedure RotateResults;
   protected
     procedure Execute; override;
   public
@@ -48,11 +51,34 @@ type
 implementation
 
 uses
-  Process, MD5;
+  Process, MD5, Math, FPImage, FPReadPNG, FPWritePNG;
 
 const
   ToolTimeoutMS = 15000;
   MaxLogLength = 65536;
+  MaxBatchSplitDepth = 8;
+
+function ResolvedExecutable(const Name: string): string;
+var
+  Candidate: string;
+begin
+  Result := Name;
+  if (Length(Result) > 1) and (Result[1] = '"') and
+     (Result[Length(Result)] = '"') then
+    Result := Copy(Result, 2, Length(Result) - 2);
+  if ExtractFilePath(Result) <> '' then Exit;
+  Candidate := FileSearch(Result, GetEnvironmentVariable('PATH'));
+  {$IFDEF DARWIN}
+  if Candidate = '' then Candidate := FileSearch(Result,
+    '/Library/TeX/texbin:/opt/homebrew/bin:/usr/local/bin');
+  {$ENDIF}
+  if Candidate <> '' then Result := ExpandFileName(Candidate);
+end;
+
+function ToolAvailable(const Name: string): Boolean;
+begin
+  Result := FileExists(ResolvedExecutable(Name));
+end;
 
 function ToolName(const Name, LatexCommand: string): string;
 var
@@ -65,7 +91,7 @@ begin
   Candidate := ExtractFilePath(LatexCommand) + Executable;
   if (ExtractFilePath(LatexCommand) <> '') and FileExists(Candidate) then
     Exit(Candidate);
-  Result := Executable;
+  Result := ResolvedExecutable(Executable);
 end;
 
 function ErrorSummary(const Log: string): string;
@@ -120,17 +146,19 @@ function TTeXPreviewWorker.RunTool(const Executable, WorkDirectory: string;
   const Arguments: array of string; out Log: string): Boolean;
 var
   Child: TProcess;
-  I, Count: Integer;
+  I, Count, Drained: Integer;
   Buffer: array[0..4095] of Byte;
   Chunk: string;
   Started: QWord;
   TimedOut: Boolean;
   procedure DrainOutput;
   begin
-    while Child.Output.NumBytesAvailable > 0 do
+    Drained := 0;
+    while (Child.Output.NumBytesAvailable > 0) and (Drained < MaxLogLength) do
     begin
       Count := Child.Output.Read(Buffer, SizeOf(Buffer));
       if Count <= 0 then Break;
+      Inc(Drained, Count);
       SetString(Chunk, PChar(@Buffer[0]), Count);
       Log := Log + Chunk;
       if Length(Log) > MaxLogLength then
@@ -144,7 +172,7 @@ begin
   Child := TProcess.Create(nil);
   try
     try
-      Child.Executable := Executable;
+      Child.Executable := ResolvedExecutable(Executable);
       Child.CurrentDirectory := WorkDirectory;
       Child.Options := [poUsePipes, poStderrToOutPut, poNoConsole];
       for I := Low(Arguments) to High(Arguments) do
@@ -180,7 +208,9 @@ end;
 function TTeXPreviewWorker.CacheBase(Index: Integer): string;
 begin
   { The caller's content key deliberately excludes display DPI. }
-  Result := FDirectory + MD5Print(MD5String(FInputs[Index].Key));
+  if FInputs[Index].ContentKey <> '' then
+    Result := FDirectory + MD5Print(MD5String(FInputs[Index].ContentKey))
+  else Result := FDirectory + MD5Print(MD5String(FInputs[Index].Key));
 end;
 
 procedure TTeXPreviewWorker.Rasterize(Index: Integer;
@@ -199,11 +229,17 @@ begin
   PNGPath := Base + '-' + IntToStr(DPI) + '.png';
   if not FileExists(SVGPath) then
     RunTool(ToolName('dvisvgm', FInputs[Index].LatexCommand),
-      ExtractFilePath(DVIFile), ['--no-fonts', '--exact',
+      ExtractFilePath(DVIFile), ['--no-fonts', '--exact', '--bbox=preview',
       '--page=' + IntToStr(Page), '--output=' + SVGPath, DVIFile], Log);
   if FileExists(SVGPath) then FResults[Index].SVGFile := SVGPath;
-  { DVI remains a reusable vector source when no SVG rasterizer is installed.
-    Zooming only repeats this cheap conversion; it never repeats LaTeX. }
+  { SVG is the canonical zoom-independent representation. Initial batches
+    use a single dvipng invocation; subsequent scales prefer this vector. }
+  if not FileExists(PNGPath) and FileExists(SVGPath) and
+     ToolAvailable(ToolName('rsvg-convert', FInputs[Index].LatexCommand)) then
+    if not RunTool(ToolName('rsvg-convert', FInputs[Index].LatexCommand),
+      FDirectory, ['--dpi-x=' + IntToStr(DPI), '--dpi-y=' + IntToStr(DPI),
+      '--output=' + PNGPath, SVGPath], Log) then DeleteFile(PNGPath);
+  { DVI is the fallback vector cache; neither route repeats LaTeX. }
   if not FileExists(PNGPath) then
     if not RunTool(ToolName('dvipng', FInputs[Index].LatexCommand),
       ExtractFilePath(DVIFile), ['-q', '-T', 'tight', '-bg', 'Transparent',
@@ -233,7 +269,7 @@ begin
       Data.LoadFromFile(FileName);
       if Data.Count <> 5 then Exit;
       DVIFile := FDirectory + Data[0];
-      if not FileExists(DVIFile) then Exit;
+      if not FileExists(DVIFile) and not FileExists(CacheBase(Index) + '.svg') then Exit;
       if not TryStrToInt(Data[1], Page) or (Page < 1) then Exit;
       FResults[Index].WidthPt := PointValue(Data[2]);
       FResults[Index].HeightPt := PointValue(Data[3]);
@@ -248,7 +284,7 @@ begin
   end;
 end;
 
-procedure TTeXPreviewWorker.CompileBatch(const Indices: array of Integer);
+procedure TTeXPreviewWorker.CompileBatch(const Indices: array of Integer; Depth: Integer);
 var
   Source, Metrics, Values, Cache: TStringList;
   ID: TGuid;
@@ -257,6 +293,8 @@ var
   DPIs: array of Integer;
   AlreadyRendered: Boolean;
   RenderedFile: string;
+  Half: array of Integer;
+  CanSplit: Boolean;
 begin
   if (Length(Indices) = 0) or Terminated then Exit;
   CreateGUID(ID);
@@ -280,6 +318,7 @@ begin
     Source.Add('\immediate\openout\tpxpreviewmetrics=metrics.txt');
     for I := 0 to High(Indices) do
     begin
+      Source.Add('\typeout{TPX-FORMULA-' + IntToStr(I + 1) + '}');
       Source.Add('\setbox\tpxpreviewbox=\hbox{' + FInputs[Indices[I]].Source + '}');
       Source.Add('\immediate\write\tpxpreviewmetrics{' + IntToStr(I + 1) +
         '|\the\wd\tpxpreviewbox|\the\ht\tpxpreviewbox|\the\dp\tpxpreviewbox}');
@@ -295,6 +334,21 @@ begin
     begin
       for I := 0 to High(Indices) do
         FResults[Indices[I]].Error := 'LaTeX: ' + ErrorSummary(Log);
+      { A syntax error in one label must not suppress all healthy labels.
+        Preamble, missing-tool and timeout failures affect every label and
+        cannot be repaired by splitting the batch. }
+      CanSplit := (Length(Indices) > 1) and (Depth < MaxBatchSplitDepth) and
+        (Pos('TPX-FORMULA-', Log) > 0) and
+        (Pos('timed out', Log) = 0) and not Terminated;
+      if CanSplit then begin
+        SetLength(Half, Length(Indices) div 2);
+        for I := 0 to High(Half) do Half[I] := Indices[I];
+        CompileBatch(Half, Depth + 1);
+        J := Length(Half);
+        SetLength(Half, Length(Indices) - J);
+        for I := 0 to High(Half) do Half[I] := Indices[J + I];
+        CompileBatch(Half, Depth + 1);
+      end;
       Exit;
     end;
     DVIFile := BatchDirectory + 'preview.dvi';
@@ -308,7 +362,7 @@ begin
     { Render all pages in each tool invocation: a drawing with many labels
       must not launch a new converter process for every object. }
     if RunTool(ToolName('dvisvgm', FInputs[Indices[0]].LatexCommand),
-      BatchDirectory, ['--no-fonts', '--exact', '--page=1-',
+      BatchDirectory, ['--no-fonts', '--exact', '--bbox=preview', '--page=1-',
       '--output=preview-%p.svg', DVIFile], Log) then
       for I := 0 to High(Indices) do
       begin
@@ -378,6 +432,73 @@ begin
   end;
 end;
 
+procedure TTeXPreviewWorker.RotateResults;
+var
+  Source, Target: TFPMemoryImage;
+  Reader: TFPReaderPNG;
+  Writer: TFPWriterPNG;
+  I, X, Y, SX, SY, W, H, Left, Top, Right, Bottom: Integer;
+  C, S, Angle: Double;
+  FileName: string;
+  Format: TFormatSettings;
+begin
+  Format := DefaultFormatSettings;
+  Format.DecimalSeparator := '.';
+  for I := 0 to High(FInputs) do begin
+    if Terminated then Exit;
+    Angle := FInputs[I].Rotation;
+    if (Abs(Angle) < 0.00001) or (FResults[I].PNGFile = '') then Continue;
+    Source := TFPMemoryImage.Create(0, 0);
+    Target := TFPMemoryImage.Create(0, 0);
+    Reader := TFPReaderPNG.Create;
+    Writer := TFPWriterPNG.Create;
+    try
+      try
+        Source.LoadFromFile(FResults[I].PNGFile, Reader);
+        W := Source.Width;
+        H := Source.Height;
+        C := Cos(Angle);
+        S := Sin(Angle);
+        Left := Floor(Min(Min(0, W*C), Min(H*S, W*C+H*S)));
+        Top := Floor(Min(Min(0, -W*S), Min(H*C, -W*S+H*C)));
+        Right := Ceil(Max(Max(0, W*C), Max(H*S, W*C+H*S)));
+        Bottom := Ceil(Max(Max(0, -W*S), Max(H*C, -W*S+H*C)));
+        FResults[I].OffsetX := Left;
+        FResults[I].OffsetY := Top;
+        FileName := ChangeFileExt(FResults[I].PNGFile, '') + '-r' +
+          MD5Print(MD5String(FloatToStr(Angle, Format))) + '.png';
+        if not FileExists(FileName) then begin
+          Target.SetSize(Max(1, Right-Left), Max(1, Bottom-Top));
+          for Y := 0 to Target.Height - 1 do begin
+            if Terminated then Exit;
+            for X := 0 to Target.Width - 1 do begin
+              SX := Floor((X+Left+0.5)*C - (Y+Top+0.5)*S);
+              SY := Floor((X+Left+0.5)*S + (Y+Top+0.5)*C);
+              if (SX >= 0) and (SY >= 0) and (SX < W) and (SY < H) then
+                Target.Colors[X,Y] := Source.Colors[SX,SY]
+              else Target.Colors[X,Y] := colTransparent;
+            end;
+          end;
+          Writer.UseAlpha := True;
+          Writer.WordSized := False;
+          Target.SaveToFile(FileName, Writer);
+        end;
+        FResults[I].PNGFile := FileName;
+      except
+        on E: Exception do begin
+          FResults[I].PNGFile := '';
+          FResults[I].Error := ErrorSummary(E.Message);
+        end;
+      end;
+    finally
+      Writer.Free;
+      Reader.Free;
+      Target.Free;
+      Source.Free;
+    end;
+  end;
+end;
+
 procedure TTeXPreviewWorker.Execute;
 var
   Handled: array of Boolean;
@@ -385,46 +506,55 @@ var
   I, J, K, Count: Integer;
   Duplicate: Boolean;
 begin
+  for I := 0 to High(FInputs) do begin
+    FResults[I].Key := FInputs[I].Key;
+    FResults[I].RasterDPI := FInputs[I].RasterDPI;
+    FInputs[I].LatexCommand := ResolvedExecutable(FInputs[I].LatexCommand);
+  end;
   try
-    if not ForceDirectories(FDirectory) then
-      raise Exception.Create('Cannot create LaTeX preview cache directory');
-    SetLength(Handled, Length(FInputs));
-    for I := 0 to High(FInputs) do
-    begin
-      FResults[I].Key := FInputs[I].Key;
-      FResults[I].RasterDPI := FInputs[I].RasterDPI;
+    try
+      if not ForceDirectories(FDirectory) then
+        raise Exception.Create('Cannot create LaTeX preview cache directory');
+      SetLength(Handled, Length(FInputs));
+      for I := 0 to High(FInputs) do
+      begin
+        if Terminated then Exit;
+        if Handled[I] then Continue;
+        Handled[I] := True;
+        if LoadCached(I) then Continue;
+        SetLength(Batch, Length(FInputs) - I);
+        Batch[0] := I;
+        Count := 1;
+        for J := I + 1 to High(FInputs) do
+          if not Handled[J] and
+             (FInputs[J].Preamble = FInputs[I].Preamble) and
+             (FInputs[J].LatexCommand = FInputs[I].LatexCommand) then
+          begin
+            Duplicate := False;
+            for K := 0 to Count - 1 do
+              if CacheBase(Batch[K]) = CacheBase(J) then Duplicate := True;
+            if Duplicate then Continue;
+            Handled[J] := True;
+            if LoadCached(J) then Continue;
+            Batch[Count] := J;
+            Inc(Count);
+          end;
+        SetLength(Batch, Count);
+        CompileBatch(Batch);
+      end;
+      RotateResults;
+    except
+      on E: Exception do
+        for I := 0 to High(FResults) do
+          if FResults[I].PNGFile = '' then
+            FResults[I].Error := ErrorSummary(E.Message);
     end;
-    for I := 0 to High(FInputs) do
-    begin
-      if Terminated then Exit;
-      if Handled[I] then Continue;
-      Handled[I] := True;
-      if LoadCached(I) then Continue;
-      SetLength(Batch, Length(FInputs) - I);
-      Batch[0] := I;
-      Count := 1;
-      for J := I + 1 to High(FInputs) do
-        if not Handled[J] and
-           (FInputs[J].Preamble = FInputs[I].Preamble) and
-           (FInputs[J].LatexCommand = FInputs[I].LatexCommand) then
-        begin
-          Duplicate := False;
-          for K := 0 to Count - 1 do
-            if FInputs[Batch[K]].Key = FInputs[J].Key then Duplicate := True;
-          if Duplicate then Continue;
-          Handled[J] := True;
-          if LoadCached(J) then Continue;
-          Batch[Count] := J;
-          Inc(Count);
-        end;
-      SetLength(Batch, Count);
-      CompileBatch(Batch);
-    end;
-  except
-    on E: Exception do
-      for I := 0 to High(FResults) do
-        if FResults[I].PNGFile = '' then
-          FResults[I].Error := ErrorSummary(E.Message);
+  finally
+    if Terminated then
+      for I := 0 to High(FResults) do begin
+        FResults[I].PNGFile := '';
+        FResults[I].Error := 'Preview cancelled';
+      end;
   end;
 end;
 
