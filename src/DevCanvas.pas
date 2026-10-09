@@ -384,7 +384,7 @@ procedure Draw2DSubSetAsPolygon(const Vect: Pointer; Count:
   const S: TTransf2D;
   const StartIdx, EndIdx: Integer);
 type
-  TPoints = array[0..0] of TPoint;
+  TPoints = array[0..MaxInt div SizeOf(TPoint) - 1] of TPoint;
 var
   VisPoints, VisPoints1, Cont: Integer;
   TmpPt1, TmpPt2: TPoint2D;
@@ -469,7 +469,7 @@ procedure Draw2DSubSetAsPolyline(const Vect: Pointer; Count:
   const StartIdx, EndIdx: Integer;
   const ToBeClosed: Boolean);
 type
-  TPoints = array[0..0] of TPoint;
+  TPoints = array[0..MaxInt div SizeOf(TPoint) - 1] of TPoint;
 var
   VisPoints, Cont, AllocatedMem: Integer;
   TmpPt1, TmpPt2: TPoint2D;
@@ -658,7 +658,7 @@ end;
 procedure DrawRect2DAsPolyline(const Cnv: TCanvas;
   const Box, Clip: TRect2D; const MT, S: TTransf2D);
 type
-  TPoints = array[0..0] of TPoint;
+  TPoints = array[0..MaxInt div SizeOf(TPoint) - 1] of TPoint;
 var
   VisPoints, Cont: Integer;
   TmpPt1, TmpPt2: TPoint2D;
@@ -729,7 +729,7 @@ end;
 procedure DrawRect2DAsPolygon(const Cnv: TCanvas; const
   Box, Clip: TRect2D; const MT, S: TTransf2D);
 type
-  TPoints = array[0..0] of TPoint;
+  TPoints = array[0..MaxInt div SizeOf(TPoint) - 1] of TPoint;
 var
   VisPoints, VisPoints1, Cont: Integer;
   TmpPt1, TmpPt2: TPoint2D;

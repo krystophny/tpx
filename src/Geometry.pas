@@ -123,7 +123,7 @@ type
   TTransf2D = array[1..3, 1..3] of TRealType;
 
   {: Vector of 2D points. }
-  TVectPoints2D = array[0..0] of TPoint2D;
+  TVectPoints2D = array[0..MaxInt div SizeOf(TPoint2D) - 1] of TPoint2D;
   {: Pointer to vector of 2D points. }
   PVectPoints2D = ^TVectPoints2D;
 

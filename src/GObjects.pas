@@ -1204,7 +1204,7 @@ end;
 type
 
   TSimplePoint2D = array[1..2] of TRealType;
-  TSimplePointArr2D = array[0..0] of TSimplePoint2D;
+  TSimplePointArr2D = array[0..MaxInt div SizeOf(TSimplePoint2D) - 1] of TSimplePoint2D;
   PSimplePointArr2D = ^TSimplePointArr2D;
   //TSimplePointArr2D = array of TSimplePoint2D;
 
