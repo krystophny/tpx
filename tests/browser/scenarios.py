@@ -582,7 +582,6 @@ def s_tex_preview(app):
         raise AssertionError('MathJax loaded for a drawing without TeX')
     open_drawing('tex-preview-input.tpx')
     app.page.wait_for_function("performance.getEntriesByType('resource').some(e=>e.name.endsWith('/tex-svg.bundle.js'))")
-    app.page.wait_for_timeout(800)
     v = app.viewport()
     area = [v['x'], v['y'], v['w'], v['h']]
 
@@ -603,13 +602,25 @@ def s_tex_preview(app):
           return changed;
         }''', [name, area])
 
-    park(app, v)
-    capture('rendered')
     app.menu('View', preview)
     park(app, v)
-    changed = difference('rendered')
+    capture('plain')
+    app.menu('View', preview)
+    app.page.wait_for_function('''r => {
+      const a = window.tpxTexTest.plain;
+      const b = document.querySelector('#lcl').getContext('2d').getImageData(...r).data;
+      let changed = 0;
+      for (let i = 0; i < a.length; i += 4)
+        if (Math.abs(a[i]-b[i]) > 8 || Math.abs(a[i+1]-b[i+1]) > 8 || Math.abs(a[i+2]-b[i+2]) > 8)
+          if (++changed > 80) return true;
+      return false;
+    }''', arg=area, polling=100, timeout=10000)
+    park(app, v)
+    changed = difference('plain')
     if changed < 80:
         raise AssertionError(f'TeX preview differs from fallback by only {changed} pixels')
+    capture('rendered')
+    app.menu('View', preview)
     app.menu('View', preview)
     park(app, v)
     if difference('rendered') > 20:
