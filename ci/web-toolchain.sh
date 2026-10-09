@@ -25,7 +25,7 @@ have() { [ -e "$1" ]; }
 check() {
   rc=0
   for pair in "ppcrosswasm32:$PPCWASM32" "fpcres:$FPCRES" "Lazarus fork lcl:$WASM_LCL/lcl" \
-              "FPC wasm RTL:$WASM_FPC/rtl/units/wasm32-wasip1" "pas2js:$PAS2JS" \
+              "FPC wasm32-wasip1 RTL:$WASM_FPC/rtl/units/wasm32-wasip1" "pas2js:$PAS2JS" \
               "esbuild:$ESBUILD"; do
     name=${pair%%:*}; path=${pair#*:}
     if have "$path"; then log "ok      $name"
@@ -52,9 +52,13 @@ clone_at() { # url rev dir
 }
 
 build_fpc() {
-  cd "$WASM_FPC/fpc"
+  # The pinned GitLab source tree is flat: compiler/, rtl/, packages/ at the root.
+  cd "$WASM_FPC"
+  if have "$WASM_FPC/rtl/units/wasm32-wasip1" && have "$PPCWASM32"; then
+    log "ok       wasm32-wasip1 RTL and cross compiler already present"
+    return 0
+  fi
   # Cross compiler for wasm32-wasip1 only; no native reinstall, no docs.
-  make clean 2>/dev/null || true
   sh ./configure --prefix="$WASM_BIN" --target=wasm32-wasip1 --build=x86_64-linux \
     --with-compiler-name=ppcrosswasm32
   make build FPCMAKE= NOPP= LCL= OPT=-O2 -j"$(nproc)"

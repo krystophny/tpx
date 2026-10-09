@@ -47,6 +47,46 @@ recreates the layout from the pins on a clean machine.
 Working: the drawing canvas, editing interactions, toolbars and dialogs, viewport
 and export text generation, in-memory filesystem through the WASI shim.
 
-Disabled on purpose, because WASI cannot run external programs: LaTeX preview,
-`sam2p` bitmap conversion, MetaPost and printing. Those menu entries report that
-they are unavailable in the browser instead of failing silently.
+Disabled because WASI cannot run external programs: LaTeX preview, `sam2p`
+bitmap conversion, MetaPost and printing. `SysBasic.FileExec` names the missing
+tool in a report instead of returning failure silently, and the widgetset answers
+a message box through a host banner rather than raising. **Not yet working end to
+end**: with a probe dialog the instance exits with code 0 instead of showing the
+banner, so today those paths are silent-or-fatal. Tracked as D4 in
+`tests/browser/DEFECTS.md`, which is the place to read before trusting any of
+this table.
+
+## Measured performance
+
+`python3 tests/browser/perf.py` (Chromium, renderer process CPU):
+
+| gate | measured | target | |
+|---|---|---|---|
+| idle frames over 12 s | 0 | ~0 | pass |
+| idle CPU | 0.08 % of a core | ~1 % | pass |
+| CPU during continuous 120 Hz pointer move | 43 % of a core | < 10 % | **FAIL** |
+| first rendered frame | 2.6 s | < 2 s | **FAIL** |
+| `tpx.wasm` gzipped | 2.89 MB | < 10 MB | pass |
+
+The pointer number is the whole-form recompose in `RenderForm`: a crosshair move
+damages ~10k pixels and repaints 844k. A dirty-rect attempt was reverted
+(widgetset `0a258670cb`) because it swallowed the first frame and the upload was
+never the cost; the fix has to thread `rcPaint` through `RenderForm`
+/`RenderChildWinControls` and honour the clip inside control paints.
+
+## CI
+
+`.github/workflows/web.yml` builds the toolchain from `web/pins.env`
+(via `ci/web-toolchain.sh`, cached on the pins), runs `make web`, the bounded
+headless Chromium suite and the performance gates, and uploads the screenshot
+manifest. Desktop workflows (`test.yml`, `candidate.yml`) are untouched and
+`Linux tests` passes on this branch.
+
+Current CI state, honestly: the web job fails at **Build the pinned WASI
+toolchain**. The pinned FPC source tree is flat (no `fpc/` subdirectory and no
+`configure` in this checkout), so the cross-compiler stage in
+`ci/web-toolchain.sh` has never been executed successfully anywhere - it was
+written from the documented layout, and CI is the first place that found out.
+Next step: reproduce the local toolchain build commands from
+`~/code/fpc-lcl-wasm` (its RTL is already built for wasm32-wasip1) in the
+script, or publish the toolchain as a release artifact and have CI restore it.
