@@ -54,6 +54,7 @@ type
       const LineColor: TColor; const LineStyle: TLineStyle;
       const LineWidth: TRealType); override;
   public
+    PreviewObject: TObject;
     constructor Create;
     destructor Destroy; override;
     procedure BoundingBox2D(const Box, Clip: TRect2D;
@@ -265,7 +266,8 @@ procedure DrawAsPolyline(PP: TPointsSet2D; const Cnv: TCanvas; const
 
 implementation
 
-uses Math, Drawings, SysBasic, Bitmaps;
+uses Math, Drawings, SysBasic, Bitmaps
+{$IFDEF FPC}, LiveTeX{$ENDIF};
 
 procedure CnvDrawLine(const Cnv: TCanvas;
   const P0, P1: TPoint2D);
@@ -1213,6 +1215,11 @@ var
   S: Types.TSize;
 //  Text_Metric: tagTEXTMETRIC;
 begin
+{$IFDEF FPC}
+  if not (Self is TRubberCanvasDevice) and
+    DrawLiveTeX(fCnv, PtrUInt(PreviewObject), P, H, ARot,
+      TeXText, HAlignment, VAlignment, LineColor) then Exit;
+{$ENDIF}
   AExtFont := TExtendedFont.Create;
   if AFaceName <> '' then
     AExtFont.FaceName := AFaceName
