@@ -123,7 +123,7 @@ type
     procedure SetVisualRect(ARect2D: TRect2D);
 
     { Se sono in repainting lo blocco e ricomincio. }
-    procedure UpdateViewport(const ARect: TRect2D);
+    procedure UpdateViewport(const ARect: TRect2D; ScreenClip: PRect = nil);
     procedure DoResize;
     procedure CopyBitmapOnCanvas(const DestCnv: TCanvas; const
       BMP: TBitmap; IRect: TRect);
@@ -378,6 +378,7 @@ type
        is fired.
     }
     procedure RepaintRect(const ARect: TRect2D);
+    procedure RepaintScreenRect(const ARect: TRect);
     {: This method refreshes a portion of the viewport contents.
 
        The refresh consist of a copy of the off screen buffer on the
@@ -1115,7 +1116,7 @@ begin
     fOnResize(Self);
 end;
 
-procedure TViewport.UpdateViewport(const ARect: TRect2D);
+procedure TViewport.UpdateViewport(const ARect: TRect2D; ScreenClip: PRect);
 var
   Obj: TGraphicObject;
   TmpCanvas: TCanvas;
@@ -1141,7 +1142,8 @@ begin
   try
     try
       TmpCanvas := fOffScreenCanvas;
-      TmpClipRect := RectToRect2D(ClientRect);
+      if Assigned(ScreenClip) then TmpClipRect := RectToRect2D(ScreenClip^)
+      else TmpClipRect := RectToRect2D(ClientRect);
       TmpCanvas.Lock;
       try
         if fShowGrid and not fGridOnTop then
@@ -1155,7 +1157,8 @@ begin
             Inc(I);
             if I = fCopingFrequency then
             begin
-              Invalidate;
+              if Assigned(ScreenClip) then InvalidateRect(Handle, ScreenClip, False)
+              else Invalidate;
               I := 0;
             end;
             Obj := fDrawing.ObjectList.NextObj;
@@ -1184,7 +1187,8 @@ begin
     except
     end;
   finally
-    Invalidate;
+    if Assigned(ScreenClip) then InvalidateRect(Handle, ScreenClip, False)
+    else Invalidate;
     if Assigned(fOnEndRedraw) then
       fOnEndRedraw(Self);
   end;
@@ -1193,6 +1197,31 @@ end;
 procedure TViewport.RepaintRect(const ARect: TRect2D);
 begin
   UpdateViewport(ARect);
+end;
+
+procedure TViewport.RepaintScreenRect(const ARect: TRect);
+{$IFDEF FPC}
+var
+  Clip, PreviousClip: TRect;
+  PreviousClipping: Boolean;
+{$ENDIF}
+begin
+{$IFDEF FPC}
+  if fInUpdate or not IntersectRect(Clip, ARect, ClientRect) then Exit;
+  PreviousClip := fOffScreenCanvas.ClipRect;
+  PreviousClipping := fOffScreenCanvas.Clipping;
+  try
+    fOffScreenCanvas.ClipRect := Clip;
+    fOffScreenCanvas.Clipping := True;
+    UpdateViewport(ReorderRect2D(TransformRect2D(RectToRect2D(Clip),
+      fScreenToViewport)), @Clip);
+  finally
+    fOffScreenCanvas.ClipRect := PreviousClip;
+    fOffScreenCanvas.Clipping := PreviousClipping;
+  end;
+{$ELSE}
+  Repaint;
+{$ENDIF}
 end;
 
 function RoundGridStep(D: TRealType): TRealType;

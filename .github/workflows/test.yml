@@ -19,7 +19,7 @@ jobs:
       - name: Install compiler and GTK2 development tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y fpc libgtk2.0-dev xvfb xdotool texlive-latex-extra texlive-pictures ghostscript
+          sudo apt-get install -y fpc libgtk2.0-dev xvfb xdotool texlive-latex-extra texlive-pictures ghostscript dvisvgm dvipng librsvg2-bin
       - name: Build the pinned Lazarus toolchain with the upstream opener repair
         run: bash ci/bootstrap-unix.sh
       - name: Build the pinned bitmap converter for real export tests
