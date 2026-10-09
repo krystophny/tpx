@@ -439,6 +439,26 @@ def s_nested_coordinates(app):
     return 'nested coordinate editor commits a cell; both Pascal modal forms close'
 
 
+def s_unsaved_confirmation(app):
+    v, cx, cy = box(app)
+    app.menu('Insert', 'Insert rectangle')
+    app.drag(cx-50, cy-40, cx+50, cy+40)
+    app.key('Escape')
+    app.menu('File', 'New')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_role('button', name='Cancel', exact=True).click()
+    if len(drawing_xml(app.save('cancel-preserved.tpx'))) != 1:
+        raise AssertionError('Cancel discarded the drawing')
+    app.menu('Insert', 'Insert line')
+    app.drag(cx-50, cy-40, cx+50, cy+40)
+    app.key('Escape')
+    app.menu('File', 'New')
+    app.page.get_by_role('dialog').get_by_role('button', name='No', exact=True).click()
+    if len(drawing_xml(app.save('discarded.tpx'))) != 0:
+        raise AssertionError('No did not start an empty drawing')
+    return 'confirmation labels and Cancel/No results preserve or discard the drawing'
+
+
 SCENARIOS = [
     ('default-view', s_default_view),
     ('viewport-fit', s_viewport_fit),
@@ -458,4 +478,5 @@ SCENARIOS = [
     ('export-formats', s_export_formats),
     ('modal-properties', s_modal_properties),
     ('nested-coordinates', s_nested_coordinates),
+    ('unsaved-confirmation', s_unsaved_confirmation),
 ]

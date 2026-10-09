@@ -70,7 +70,8 @@ try:
                 status = 'error'
                 detail = f'{type(exc).__name__}: {str(exc)[:180]}'.replace('\n', ' ')
             if app.errors and status == 'pass':
-                detail = (detail + ' | ' if detail else '') + f'console: {app.errors[0][:160]}'
+                status = 'fail'
+                detail = f'browser error: {app.errors[0][:160]}'
             if status != 'pass':
                 failures.append(name)
             if args.screenshots or status != 'pass':
