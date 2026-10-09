@@ -49,16 +49,24 @@ jobs:
           mkdir -p "$RUNNER_TEMP/chromium"
           python3 -m playwright install --with-deps chromium
 
+      - name: Read toolchain cache pins
+        id: pins
+        run: |
+          . web/pins.env
+          echo "fpc-rev=$WASM_FPC_REV" >> "$GITHUB_OUTPUT"
+
       - name: Restore toolchain cache
         id: tc
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ${{ github.workspace }}/toolchain
-          key: web-toolchain-${{ hashFiles('web/pins.env', 'ci/web-toolchain.sh') }}
+          key: web-toolchain-${{ runner.os }}-fpc-${{ steps.pins.outputs.fpc-rev }}-${{ hashFiles('web/pins.env', 'ci/web-toolchain.sh') }}
+          restore-keys: |
+            web-toolchain-${{ runner.os }}-fpc-${{ steps.pins.outputs.fpc-rev }}-
+            web-toolchain-
 
       - name: Build the pinned WASI toolchain
-        if: steps.tc.outputs.cache-hit != 'true'
         env:
           ALLOW_LONG_BUILD: '1'
         run: |

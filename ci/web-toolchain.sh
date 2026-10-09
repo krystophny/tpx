@@ -9,8 +9,8 @@
 #
 # It is deliberately long (a full FPC cross-compiler plus the Lazarus fork with
 # the CustomDrawn/WASM widgetset) and idempotent: every stage is skipped when
-# its output already exists, so caching the three target directories makes a
-# second run cheap. Point WASM_LCL / WASM_FPC / WASM_PAS2JS / WASM_BIN at your
+# its output already exists at the pinned revision, so caching the target
+# directories makes a second run cheap. Point WASM_LCL / WASM_FPC / WASM_PAS2JS / WASM_BIN at your
 # own checkout to reuse work.
 #
 set -eu
@@ -52,9 +52,27 @@ clone_at() { # url rev dir
 build_fpc() {
   # The pinned GitLab source tree is flat: compiler/, rtl/, packages/ at the root.
   cd "$WASM_FPC"
-  if have "$WASM_FPC/rtl/units/wasm32-wasip1" && have "$PPCWASM32" && have "$FPCRES"; then
-    log "ok       wasm32-wasip1 RTL and cross compiler already present"
+  fpc_revision=$(git rev-parse HEAD)
+  fpc_stamp="$WASM_BIN/.fpc-built-revision"
+  if have "$fpc_stamp"; then
+    fpc_built_revision=$(cat "$fpc_stamp")
+  else
+    # Old successful CI caches predate the stamp. Their source HEAD before
+    # checkout identifies their artifacts; never infer this from the new pin.
+    fpc_built_revision=$previous_fpc_revision
+  fi
+  if [ "$fpc_built_revision" = "$fpc_revision" ] &&
+     have "$WASM_FPC/rtl/units/wasm32-wasip1" && have "$PPCWASM32" && have "$FPCRES"; then
+    printf '%s\n' "$fpc_revision" > "$fpc_stamp"
+    log "ok       wasm32-wasip1 RTL and cross compiler at $fpc_revision"
     return 0
+  fi
+  mkdir -p "$WASM_BIN"
+  # A failed rebuild must not turn into a legacy cache hit on the next run.
+  printf 'building %s\n' "$fpc_revision" > "$fpc_stamp"
+  rm -f "$PPCWASM32" "$FPCRES"
+  if [ -n "$previous_fpc_revision" ]; then
+    make distclean FPC="$(command -v fpc)"
   fi
   # Cross compiler for wasm32-wasip1 only; no native reinstall, no docs.
   make crossall FPC="$(command -v fpc)" CPU_TARGET=wasm32 OS_TARGET=wasip1 BINUTILSPREFIX= OPT=-O2 \
@@ -64,6 +82,7 @@ build_fpc() {
   make -C packages all FPC="$WASM_FPC/compiler/ppc" -j"${BUILD_JOBS:-2}"
   make -C utils/fpcres FPC="$WASM_FPC/compiler/ppc"
   cp utils/fpcres/bin/x86_64-linux/fpcres "$FPCRES"
+  printf '%s\n' "$fpc_revision" > "$fpc_stamp"
   log "built    ppcrosswasm32"
 }
 
@@ -81,6 +100,7 @@ case ${1:-build} in
       echo "Re-run with ALLOW_LONG_BUILD=1, or point the pins at an existing toolchain." >&2
       exit 3
     }
+    previous_fpc_revision=$(git -C "$WASM_FPC" rev-parse HEAD 2>/dev/null || true)
     clone_at "$WASM_FPC_URL" "$WASM_FPC_REV" "$WASM_FPC"
     build_fpc
     clone_at "$WASM_LCL_URL" "$WASM_LCL_REV" "$WASM_LCL"
