@@ -3,6 +3,7 @@ program TpX;
 {$MODE Delphi}
 
 uses
+  {$IFDEF UNIX}{$IFNDEF CPUWASM32}cthreads,{$ENDIF}{$ENDIF}
   Forms, Interfaces,
   Settings0 in 'src\Settings0.pas', // Initialize settings first!
   MainUnit in 'src\MainUnit.pas' {MainForm},

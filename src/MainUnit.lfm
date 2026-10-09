@@ -1527,6 +1527,9 @@ object MainForm: TMainForm
       object N15: TMenuItem
         Caption = '-'
       end
+      object LiveTeXPreviewItem: TMenuItem
+        Action = LiveTeXPreview
+      end
       object Showgrid2: TMenuItem
         Action = ShowGrid
       end
@@ -2032,6 +2035,12 @@ object MainForm: TMainForm
       ImageIndex = 53
       OnExecute = InsertClosedCurveExecute
       ShortCut = 79
+    end
+    object LiveTeXPreview: TAction
+      Category = 'View'
+      Caption = 'Live LaTeX Preview'
+      Checked = True
+      OnExecute = LiveTeXPreviewExecute
     end
     object ShowGrid: TAction
       Category = 'View'

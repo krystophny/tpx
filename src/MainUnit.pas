@@ -157,6 +157,8 @@ type
     AngularSnap1: TMenuItem;
     Useareatoselectobjects2: TMenuItem;
     ShowGrid: TAction;
+    LiveTeXPreview: TAction;
+    LiveTeXPreviewItem: TMenuItem;
     SnapToGrid: TAction;
     SnapToShapes: TAction;
     SnapToShapesMenu: TMenuItem;
@@ -454,6 +456,8 @@ type
     procedure LocalViewMouseMove2D(Sender: TObject;
       Shift: TShiftState; WX, WY: TRealTypeX; X, Y: Integer);
     procedure ShowGridExecute(Sender: TObject);
+    procedure LiveTeXPreviewExecute(Sender: TObject);
+    procedure LiveTeXChanged(Sender: TObject);
     procedure InsertRectangleExecute(Sender: TObject);
     procedure InsertEllipseExecute(Sender: TObject);
     procedure InsertPolygonExecute(Sender: TObject);
@@ -590,6 +594,7 @@ implementation
 
 uses Output, Input, Settings0, ColorEtc, Geometry, Options,
   Preview,
+{$IFDEF FPC}  LiveTeX,{$ENDIF}
   SysBasic, Modify, Propert;
 
 {$IFDEF VER140}
@@ -657,6 +662,9 @@ begin
   LocalView.ShowCrossHair := True;
   LocalView.GridOnTop := False;
   LocalView.OnEndRedraw := LocalViewEndRedraw;
+{$IFDEF FPC}
+  InitializeLiveTeX(LiveTeXChanged);
+{$ENDIF}
   LocalView.OnDblClick := LocalViewDblClick;
   LocalView.OnKeyDown := LocalViewKeyDown;
   LocalView.OnKeyUp := LocalViewKeyUp;
@@ -852,6 +860,23 @@ begin
   EventManager.SendMessage(Msg_Panning, PanningBtn);
 end;
 
+procedure TMainForm.LiveTeXPreviewExecute(Sender: TObject);
+begin
+{$IFDEF FPC}
+  SetLiveTeXEnabled(not LiveTeXEnabled);
+  LiveTeXPreview.Checked := LiveTeXEnabled;
+  LocalView.Repaint;
+{$ENDIF}
+end;
+
+procedure TMainForm.LiveTeXChanged(Sender: TObject);
+begin
+{$IFDEF FPC}
+  StatusBar1.Panels[1].Text := LiveTeXStatus;
+  LocalView.Repaint;
+{$ENDIF}
+end;
+
 procedure TMainForm.ShowGridExecute(Sender: TObject);
 begin
   ShowGrid.Checked := not ShowGrid.Checked;
@@ -1011,7 +1036,10 @@ begin
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
-begin        
+begin
+{$IFDEF FPC}
+  ShutdownLiveTeX;
+{$ENDIF}        
 {$IFDEF VER140}
   GetFormPosition;        
 {$ENDIF}
@@ -1159,6 +1187,9 @@ end;
 
 procedure TMainForm.FormShow(Sender: TObject);
 begin
+{$IFDEF FPC}
+  LiveTeXPreview.Checked := LiveTeXEnabled;
+{$ENDIF}
   ShowGrid.Checked := LocalView.ShowGrid;
   ShowCrossHair.Checked := LocalView.ShowCrossHair;
   GridOnTop.Checked := LocalView.GridOnTop;
