@@ -1215,11 +1215,6 @@ var
   S: Types.TSize;
 //  Text_Metric: tagTEXTMETRIC;
 begin
-{$IFDEF FPC}
-  if not (Self is TRubberCanvasDevice) and
-    DrawLiveTeX(fCnv, PtrUInt(PreviewObject), P, H, ARot,
-      TeXText, HAlignment, VAlignment, LineColor) then Exit;
-{$ENDIF}
   AExtFont := TExtendedFont.Create;
   if AFaceName <> '' then
     AExtFont.FaceName := AFaceName
@@ -1277,6 +1272,15 @@ begin
       //P := ShiftPoint(P, D);
   Pnt.X := Pnt.X - Round(D.X);
   Pnt.Y := Pnt.Y + Round(D.Y);
+{$IFDEF FPC}
+  if not (Self is TRubberCanvasDevice) and
+    DrawLiveTeX(fCnv, PtrUInt(PreviewObject), P, H, ARot,
+      TeXText, HAlignment, VAlignment, LineColor,
+      Max(S.CX,S.CY)+2*H) then begin
+    AExtFont.Free;
+    Exit;
+  end;
+{$ENDIF}
 {$IFDEF VER140}
   AlignFlags := TA_BASELINE;
   case HAlignment of
