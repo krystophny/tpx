@@ -6,15 +6,19 @@ export function texPreviewImports(runtime) {
   const pending = new Set();
   const layer = document.createElement('canvas');
   const context = layer.getContext('2d', {willReadFrequently: true});
-  let loader, timer, enabled = true, running = false, rasterBytes = 0;
+  let loader, timer, enabled = true, running = false, rasterBytes = 0, sourceBytes = 0;
   const touch = (map, key, value) => { map.delete(key); map.set(key, value); return value; };
-  const trim = (map, limit) => { while (map.size > limit) map.delete(map.keys().next().value); };
 
-  function trimRasters(keep) {
+  function trimRasters(keep, needed = 0) {
     // Object references must not retain images after cache eviction.
+    const countLimit = Math.max(256, objects.size * 2);
+    if (rasterBytes + needed <= 16 * 1024 * 1024 && rasters.size <= countLimit) return;
+    const current = new Set([...objects.values()].map(object => object.request));
     for (const [key, old] of rasters) {
-      if (rasterBytes <= 16 * 1024 * 1024 && rasters.size <= 256) break;
-      if (old === keep || old.loading) continue;
+      if (rasterBytes + needed <= 16 * 1024 * 1024 && rasters.size <= countLimit) break;
+      // Evicting a visible formula would schedule it again on the completion
+      // repaint, creating an endless typeset/repaint loop in large drawings.
+      if (old === keep || old.loading || current.has(old)) continue;
       rasters.delete(key); pending.delete(old);
       if (old.image) {
         rasterBytes -= old.width * old.height * 4;
@@ -43,11 +47,19 @@ export function texPreviewImports(runtime) {
     if (!svg) {
       loader ||= import('./tex-svg.bundle.js');
       svg = (await loader).texSVG(entry.source);
-      touch(sources, entry.source, svg); trim(sources, 128);
-    }
+      sourceBytes += svg.xml.length * 2;
+      sources.set(entry.source, svg);
+      while (sourceBytes > 8 * 1024 * 1024 || sources.size > 128) {
+        const [key, old] = sources.entries().next().value;
+        sourceBytes -= old.xml.length * 2; sources.delete(key);
+      }
+    } else touch(sources, entry.source, svg);
     const width = Math.ceil(svg.width * entry.size), height = Math.ceil(svg.height * entry.size);
     if (width > 4096 || height > 4096 || width * height > 4 * 1024 * 1024)
       throw new Error('TeX text is too large at this zoom');
+    trimRasters(entry, width * height * 4);
+    if (rasterBytes + width * height * 4 > 16 * 1024 * 1024)
+      throw Object.assign(new Error('TeX preview cache is full'), {capacity: true});
     const node = new DOMParser().parseFromString(svg.xml, 'image/svg+xml').documentElement;
     node.setAttribute('width', width); node.setAttribute('height', height);
     node.style.color = `#${entry.color.toString(16).padStart(6, '0')}`;
@@ -59,7 +71,12 @@ export function texPreviewImports(runtime) {
         image.src = url;
       });
     } finally { URL.revokeObjectURL(url); }
-    entry.image = image; entry.width = width; entry.height = height;
+    // Retain pixels, not an SVG image tree that can be rasterized again on
+    // every pointer frame. The cache budget now describes its backing stores.
+    const raster = document.createElement('canvas');
+    raster.width = width; raster.height = height;
+    raster.getContext('2d').drawImage(image, 0, 0, width, height);
+    entry.image = raster; entry.width = width; entry.height = height;
     entry.baseline = svg.baseline * entry.size;
     rasterBytes += width * height * 4;
     trimRasters(entry);
@@ -77,7 +94,10 @@ export function texPreviewImports(runtime) {
         if (![...objects.values()].some(object => object.request === entry)) continue;
         entry.loading = true;
         try { await rasterize(entry); }
-        catch (error) { entry.error = true; if (enabled) notice(error); }
+        catch (error) {
+          entry.error = true; entry.capacityBlocked = error.capacity;
+          if (enabled) notice(error);
+        }
         finally { entry.loading = false; }
         changed = true;
       }
@@ -90,6 +110,7 @@ export function texPreviewImports(runtime) {
   function draw(pointer, width, height, key, x, y, size, rotation, sourcePtr, sourceLen,
                 horizontal, vertical, color, left, top, right, bottom) {
     if (!enabled || size <= 0) return 0;
+    let object = objects.get(key);
     const source = decoder.decode(new Uint8Array(runtime.memory().buffer, sourcePtr, sourceLen));
     size = Math.max(1, Math.round(size * 4) / 4);
     const cacheKey = JSON.stringify([source, size, color]);
@@ -98,11 +119,10 @@ export function texPreviewImports(runtime) {
       entry = {source, size, color}; rasters.set(cacheKey, entry);
     }
     touch(rasters, cacheKey, entry);
-    let object = objects.get(key);
     if (!object) object = {};
     object.request = entry;
     if (entry.image) object.valid = entry;
-    touch(objects, key, object); trim(objects, 512);
+    touch(objects, key, object);
     trimRasters(entry);
     if (!entry.image && !entry.error && !entry.loading && !pending.has(entry)) {
       pending.add(entry);
@@ -143,7 +163,10 @@ export function texPreviewImports(runtime) {
 
   return {tpx: {
     tex_draw: draw,
-    tex_forget: key => { objects.delete(key); },
+    tex_forget: key => {
+      objects.delete(key); trimRasters();
+      for (const entry of rasters.values()) if (entry.capacityBlocked) entry.error = false;
+    },
     tex_enable: value => {
       enabled = Boolean(value);
       if (!enabled) { clearTimeout(timer); timer = null; pending.clear(); objects.clear(); }
