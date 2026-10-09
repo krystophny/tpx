@@ -89,7 +89,19 @@ begin
     View.SetBounds(10, 10, 200, 200);
     PumpEvents;
     Frame.SetSize(200, 200);
-    if Scenario = 'viewport-crosshair' then begin
+    if Scenario = 'viewport-damage' then begin
+      // A sentinel outside the dirty area proves this stays a partial redraw.
+      View.OffScreenBitmap.Canvas.Pixels[20, 20] := clFuchsia;
+      TLine2D(Drawing.GetObject(0)).Points[0] := Point2D(20, 40);
+      TLine2D(Drawing.GetObject(0)).Points[1] := Point2D(80, 40);
+      View.RepaintScreenRect(Rect(35, 115, 165, 165));
+      PumpEvents;
+      Capture;
+      Check(HasColor(100, 120, clBlack), 'Partial redraw lost changed geometry');
+      Check(not HasColor(100, 160, clBlack), 'Partial redraw left old geometry');
+      Check(HasColor(20, 20, clFuchsia), 'Partial redraw touched the unchanged area');
+    end
+    else if Scenario = 'viewport-crosshair' then begin
       View.ShowCrossHair := True;
       View.DrawCursorCrossHair(Point2D(20, 30), True);
       Capture;

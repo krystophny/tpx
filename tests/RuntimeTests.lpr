@@ -254,6 +254,12 @@ begin
     AwaitPreview;
     Check(Draw(400, '$x_{new}$'), 'Other object preview stalled after a cache hit');
 
+    Check(not Draw(500, '$\invalidBatchTpX$'), 'Invalid batch source was cached');
+    Check(not Draw(501, '$z_{valid}$'), 'New batch source was cached');
+    AwaitPreview;
+    Check(Draw(501, '$z_{valid}$'), 'Malformed sibling blocked a valid batch label');
+    Check(not Draw(500, '$\invalidBatchTpX$'), 'Malformed label lost its fallback');
+
     SetLiveTeXEnabled(False);
     Compilations := LiveTeXCompilationCount;
     Check(not Draw(300, '$x_{disabled}$'), 'Disabled preview still rendered');
