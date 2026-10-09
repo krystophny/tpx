@@ -353,6 +353,29 @@ def s_edit_move_delete(app):
     return f'moved by {dx:g}, {dy:g} drawing units; Delete removed the object'
 
 
+def s_area_select(app):
+    """Dragging blank paper selects enclosed objects and changes the cursor."""
+    v, cx, cy = box(app)
+    app.menu('Insert', 'Insert rectangle')
+    app.drag(cx-30, cy-20, cx+30, cy+20)
+    app.key('Escape')
+    app.menu('Insert', 'Insert circle')
+    app.drag(cx+220, cy, cx+250, cy)
+    app.key('Escape')
+    app.move(cx-100, cy-100)
+    app.press()
+    app.move(cx-75, cy-75)
+    app.page.wait_for_function('getComputedStyle(document.querySelector("#lcl")).cursor === "crosshair"')
+    app.move(cx+100, cy+100)
+    app.release()
+    app.page.wait_for_function('getComputedStyle(document.querySelector("#lcl")).cursor === "default"')
+    app.key('Delete')
+    objects = drawing_xml(app.save('area-selection.tpx'))
+    if len(objects) != 1 or objects[0].tag != 'circle':
+        raise AssertionError('area selection did not delete only the enclosed rectangle')
+    return 'blank-paper drag uses crosshair, restores cursor and selects only enclosed objects'
+
+
 def s_open_roundtrip(app):
     v, cx, cy = box(app)
     app.menu('Insert', 'Insert rectangle')
@@ -657,6 +680,7 @@ SCENARIOS = [
     ('idle-stops-repainting', s_idle_stops_repainting),
     ('title-tracks-document', s_title_tracks_document),
     ('edit-move-delete', s_edit_move_delete),
+    ('area-select', s_area_select),
     ('open-roundtrip', s_open_roundtrip),
     ('clipboard-roundtrip', s_clipboard_roundtrip),
     ('export-formats', s_export_formats),
