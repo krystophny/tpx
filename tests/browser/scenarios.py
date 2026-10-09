@@ -39,13 +39,28 @@ def region(cx, cy, w=320, h=240):
 
 
 def park(app, v):
-    """Move the pointer out of the measured region.
+    """Move the pointer inside the paper but out of the measured region.
 
-    The viewport paints full-width crosshair lines under the pointer, which
-    otherwise read as ~width+height leftover pixels in every undo comparison.
+    The viewport paints full-width crosshair lines under the pointer; they must
+    be moved somewhere outside the measured region before comparing pixels, or
+    width+height leftover pixels show up in every undo comparison. The target
+    has to stay on the paper: parked over the gray gutter the crosshair is not
+    repainted and its old lines stay in the frame.
     """
-    app.move(v['x'] + 4, v['y'] + 4)
-    app.page.wait_for_timeout(250)
+    app.move(v['x'] + v['w'] - 30, v['y'] + v['h'] - 30)
+    app.page.wait_for_timeout(300)
+
+
+def focus_document(app, v):
+    """Click an empty corner of the paper so the document owns the keyboard.
+
+    At startup focus sits on a properties combo box, exactly as on the desktop;
+    a real user clicks the drawing before expecting shortcuts to act on it.
+    Clicking a toolbar button must not take that focus away (fixed in the WASI
+    CustomDrawn backend), which is what makes Ctrl+Z and Escape work here.
+    """
+    app.click(v['x'] + v['w'] - 60, v['y'] + 40)
+    app.page.wait_for_timeout(200)
 
 
 def s_default_view(app):
@@ -117,6 +132,7 @@ def s_draw_cancel(app):
     """Escape during a drag cancels the in-progress object."""
     v, cx, cy = box(app)
     reg = region(cx, cy)
+    focus_document(app, v)
     app.click(TOOL_X, tool('ellipse'))
     app.move(cx, cy)
     clean = app.pixels(reg)
@@ -176,6 +192,7 @@ def s_keyboard_shortcut(app):
     """Ctrl+Z then Ctrl+Shift+Z undo and redo a real drawn object."""
     v, cx, cy = box(app)
     reg = region(cx, cy)
+    focus_document(app, v)
     app.click(TOOL_X, tool('line'))
     clean = app.pixels(reg)
     app.drag(cx - 100, cy - 50, cx + 100, cy + 50)
@@ -185,6 +202,7 @@ def s_keyboard_shortcut(app):
     if ink < 150:
         raise AssertionError(f'setup drag drew only {ink} pixels')
     app.key('Control+z')
+    park(app, v)
     left = diff(clean, app.pixels(reg))
     if left > 120:
         raise AssertionError(f'Ctrl+Z left {left} of {ink} pixels')
