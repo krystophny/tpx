@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
-"""Screenshot-driven behavioral playtest of the browser build of TpX.
+"""Behavioral playtest helpers for the browser build of TpX.
 
 The oracle is the real rendered output: canvas pixels, frame counter, DOM
-children and the application title - not just "the page loaded". Every action
-writes a numbered screenshot and the run writes a manifest.
+children, saved documents and the application title. Screenshots are optional.
 
   tests/browser/playtest.py [dist] [outdir] [--only name1,name2]
 
 Exit status is non-zero when a scenario fails.
 """
 import json
-import os
-import subprocess
-import sys
-import time
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
@@ -21,8 +16,6 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parents[2]
 DIST = ROOT / 'web/dist'
 OUT = ROOT / 'dist/browser-playtest'
-PORT = int(os.environ.get('TPX_WEB_PORT', '8795'))
-CHROMIUM = os.environ.get('CHROMIUM', '/usr/bin/chromium')
 
 
 class App:
@@ -131,9 +124,22 @@ class App:
         b = self.box()
         return b['x'] + x * b['w'] / b['nw'], b['y'] + y * b['h'] / b['nh']
 
+    def observe_input(self, event):
+        self.page.evaluate('''(event) => {
+          window.tpxInputPresented = false;
+          document.querySelector('#lcl').addEventListener(event, () => {
+            requestAnimationFrame(() => requestAnimationFrame(() => window.tpxInputPresented = true));
+          }, {once: true});
+        }''', event)
+
+    def input_presented(self):
+        self.page.wait_for_function('window.tpxInputPresented === true')
+
     def click(self, x, y, button='left', name=None):
         px, py = self.at(x, y)
+        self.observe_input('pointerup')
         self.page.mouse.click(px, py, button=button)
+        self.input_presented()
         if name:
             self.shot(name)
 
@@ -172,7 +178,9 @@ class App:
     def wheel(self, x, y, delta):
         px, py = self.at(x, y)
         self.page.mouse.move(px, py)
+        self.observe_input('wheel')
         self.page.mouse.wheel(0, delta)
+        self.input_presented()
 
     def press(self):
         self.page.mouse.down()

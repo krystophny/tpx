@@ -29,8 +29,6 @@ jobs:
       WASM_PAS2JS: ${{ github.workspace }}/toolchain/pas2js
       WASM_BIN: ${{ github.workspace }}/toolchain/bin
       CHROMIUM: ${{ github.workspace }}/chromium/chrome-linux/chrome
-      # Browser operations, including file and clipboard round trips.
-      WEB_SCENARIOS: default-view,viewport-fit,resize-follows,draw-drag,draw-click,draw-cancel,crosshair,keyboard-shortcut,text-input,wheel-zoom,idle-stops-repainting,title-tracks-document,edit-move-delete,open-roundtrip,clipboard-roundtrip
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -85,7 +83,7 @@ jobs:
             CHROMIUM=$(find "$HOME/.cache/ms-playwright" -name chrome -type f | head -1)
             echo "CHROMIUM=$CHROMIUM" >> "$GITHUB_ENV"
           fi
-          python3 tests/browser/playtest.py --chromium "$CHROMIUM" --only "$WEB_SCENARIOS"
+          python3 tests/browser/playtest.py --chromium "$CHROMIUM"
 
       - name: Performance gates
         run: python3 tests/browser/perf.py

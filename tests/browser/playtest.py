@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run the browser playtest scenarios and write a manifest.
 
-  tests/browser/playtest.py [dist] [outdir] [--only name,name] [--keep-open]
+  tests/browser/playtest.py [dist] [outdir] [--only name,name] [--screenshots]
 
 Each scenario gets a freshly loaded application so that failures cannot cascade
 into the next case. Prints one line per scenario and exits non-zero on failure.
@@ -9,9 +9,10 @@ into the next case. Prints one line per scenario and exits non-zero on failure.
 import argparse
 import os
 import json
-import subprocess
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from functools import partial
+from threading import Thread
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -27,7 +28,7 @@ parser.add_argument('dist', nargs='?', default=str(ROOT / 'web/dist'))
 parser.add_argument('outdir', nargs='?', default=str(ROOT / 'dist/browser-playtest'))
 parser.add_argument('--only', default='')
 parser.add_argument('--screenshots', action='store_true')
-parser.add_argument('--port', type=int, default=8795)
+parser.add_argument('--port', type=int, default=0)
 parser.add_argument('--browser', choices=['chromium', 'firefox', 'webkit'], default='chromium')
 parser.add_argument('--chromium', default=os.environ.get('CHROMIUM', '/usr/bin/chromium'))
 args = parser.parse_args()
@@ -36,9 +37,12 @@ wanted = set(n for n in args.only.split(',') if n)
 OUT = Path(args.outdir)
 OUT.mkdir(parents=True, exist_ok=True)
 
-srv = subprocess.Popen([sys.executable, '-m', 'http.server', str(args.port), '--bind', '127.0.0.1',
-                       '--directory', args.dist], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-time.sleep(0.8)
+class QuietHandler(SimpleHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+srv = ThreadingHTTPServer(('127.0.0.1', args.port), partial(QuietHandler, directory=args.dist))
+Thread(target=srv.serve_forever, daemon=True).start()
 results, failures = [], []
 try:
     with sync_playwright() as p:
@@ -52,7 +56,7 @@ try:
             status = 'pass'
             detail = ''
             try:
-                page.goto(f'http://127.0.0.1:{args.port}/')
+                page.goto(f'http://127.0.0.1:{srv.server_port}/')
                 page.wait_for_selector('#status[data-state=ready]', timeout=30000)
                 page.wait_for_function('Number(document.querySelector("#lcl").dataset.frames)>0')
                 page.wait_for_timeout(500)
@@ -77,7 +81,8 @@ try:
             page.close()
         browser.close()
 finally:
-    srv.terminate()
+    srv.shutdown()
+    srv.server_close()
 
 manifest = {'passed': len(results) - len(failures), 'failed': len(failures),
             'failures': failures, 'results': results}

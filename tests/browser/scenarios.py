@@ -118,14 +118,16 @@ def s_draw_click(app):
     app.menu('Insert', 'Insert rectangle')
     clean = app.pixels(reg)
     app.click(cx - 40, cy - 30)
-    one = app.pixels(reg)
-    if diff(clean, one) < 80:
-        raise AssertionError(f'click draw produced only {diff(clean, one)} pixels')
     app.click(cx + 60, cy + 40)
+    app.key('Escape')
+    park(app, v)
     two = app.pixels(reg)
-    if diff(one, two) < 40:
-        raise AssertionError('tool did not stay armed for a second click-draw')
-    return 'two objects drawn'
+    if diff(clean, two) < 80:
+        raise AssertionError(f'two-click drawing produced only {diff(clean, two)} pixels')
+    objects = drawing_xml(app.save('two-click.tpx'))
+    if len(objects) != 1 or float(objects[0].get('w', '0')) <= 0 or float(objects[0].get('h', '0')) <= 0:
+        raise AssertionError('two clicks did not save a rectangle with positive dimensions')
+    return 'two-click rectangle renders and survives save'
 
 
 def s_draw_cancel(app):
@@ -236,14 +238,14 @@ def s_text_input(app):
     """Accept the text dialog, place text, and verify saved content."""
     app.menu('Insert', 'Insert text')
     app.page.wait_for_function('document.querySelector("#lcl").width < 500')
-    app.type('WASM playtest')
-    app.click(155, 75)  # OK on the ordinary LCL InputQuery form
+    app.type('WASM Grüße λ 漢字 🐈')
+    app.key('Enter')  # Accept through the ordinary LCL default button
     app.page.wait_for_function('document.querySelector("#lcl").width > 500')
     v, cx, cy = box(app)
     app.click(cx-60, cy-20)
     app.key('Escape')
     saved = app.save('text-roundtrip.tpx').read_text()
-    if 'WASM playtest' not in saved:
+    if 'WASM Grüße λ 漢字 🐈' not in saved:
         raise AssertionError('accepted text is missing from the saved drawing')
     return 'accepted and placed text survives save'
 
@@ -341,6 +343,52 @@ def s_open_roundtrip(app):
     return 'downloaded drawing reopens with identical geometry'
 
 
+def s_export_formats(app):
+    v, cx, cy = box(app)
+    app.menu('Insert', 'Insert rectangle')
+    app.drag(cx-70, cy-50, cx+70, cy+50)
+    app.key('Escape')
+    formats = [('SVG', b'<svg'), ('EPS', b'%!PS'), ('PDF', b'%PDF'), ('.mp', b'beginfig')]
+    for name, signature in formats:
+        app.menu('File', 'Save as...')
+        dialog = app.page.get_by_role('dialog')
+        option = dialog.get_by_label('File type').locator('option').filter(has_text=name).first
+        dialog.get_by_label('File type').select_option(option.get_attribute('value'))
+        dialog.get_by_label('File name').fill('browser-export')
+        with app.page.expect_download() as saved:
+            dialog.get_by_role('button', name='OK', exact=True).click()
+        download = saved.value
+        path = app.output / download.suggested_filename
+        download.save_as(path)
+        if signature not in path.read_bytes()[:1000]:
+            raise AssertionError(f'{name} export has the wrong content')
+    return 'SVG, EPS, PDF and MetaPost downloads contain the selected format'
+
+
+def s_modal_properties(app):
+    v, cx, cy = box(app)
+    app.menu('Insert', 'Insert rectangle')
+    app.drag(cx-70, cy-50, cx+70, cy+50)
+    app.key('Escape')
+    app.menu('Edit', 'Select all')
+    app.menu('Edit', 'Object properties')
+    app.page.get_by_role('textbox', name='RX', exact=True).fill('2.5')
+    app.page.get_by_role('textbox', name='RY', exact=True).fill('3.5')
+    app.page.get_by_role('button', name='OK', exact=True).click()
+    objects = drawing_xml(app.save('properties.tpx'))
+    if len(objects) != 1 or float(objects[0].get('rx', '0')) != 2.5 or float(objects[0].get('ry', '0')) != 3.5:
+        raise AssertionError(f'edited corner radii did not survive save: {[o.attrib for o in objects]}')
+    app.menu('Help', 'About')
+    app.page.get_by_role('button', name='Acknowledgements').click()
+    memo = app.page.locator('textarea:visible')
+    if memo.count() != 1 or not memo.input_value():
+        raise AssertionError('acknowledgements memo is empty or hidden')
+    app.page.get_by_role('button', name='Acknowledgements').focus()
+    app.key('Escape')
+    app.page.wait_for_function('document.querySelector("#lcl").width > 500')
+    return 'property edits survive save; read-only memo and modal Escape work'
+
+
 def s_clipboard_roundtrip(app):
     v, cx, cy = box(app)
     app.menu('Insert', 'Insert rectangle')
@@ -379,4 +427,6 @@ SCENARIOS = [
     ('edit-move-delete', s_edit_move_delete),
     ('open-roundtrip', s_open_roundtrip),
     ('clipboard-roundtrip', s_clipboard_roundtrip),
+    ('export-formats', s_export_formats),
+    ('modal-properties', s_modal_properties),
 ]
