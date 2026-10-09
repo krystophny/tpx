@@ -13,8 +13,6 @@
 # second run cheap. Point WASM_LCL / WASM_FPC / WASM_PAS2JS / WASM_BIN at your
 # own checkout to reuse work.
 #
-# Not verified end-to-end in CI yet; the local layout it produces is the one
-# web/pins.env documents and `ci/web-toolchain.sh check` is what CI asserts.
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/web/pins.env"
@@ -26,7 +24,7 @@ check() {
   rc=0
   for pair in "ppcrosswasm32:$PPCWASM32" "fpcres:$FPCRES" "Lazarus fork lcl:$WASM_LCL/lcl" \
               "FPC wasm32-wasip1 RTL:$WASM_FPC/rtl/units/wasm32-wasip1" "pas2js:$PAS2JS" \
-              "esbuild:$ESBUILD"; do
+              "esbuild:$ESBUILD" "lazres:$LAZRES"; do
     name=${pair%%:*}; path=${pair#*:}
     if have "$path"; then log "ok      $name"
     else log "MISSING $name  ($path)"; rc=1; fi
@@ -54,40 +52,30 @@ clone_at() { # url rev dir
 build_fpc() {
   # The pinned GitLab source tree is flat: compiler/, rtl/, packages/ at the root.
   cd "$WASM_FPC"
-  if have "$WASM_FPC/rtl/units/wasm32-wasip1" && have "$PPCWASM32"; then
+  if have "$WASM_FPC/rtl/units/wasm32-wasip1" && have "$PPCWASM32" && have "$FPCRES"; then
     log "ok       wasm32-wasip1 RTL and cross compiler already present"
     return 0
   fi
   # Cross compiler for wasm32-wasip1 only; no native reinstall, no docs.
-  sh ./configure --prefix="$WASM_BIN" --target=wasm32-wasip1 --build=x86_64-linux \
-    --with-compiler-name=ppcrosswasm32
-  make build FPCMAKE= NOPP= LCL= OPT=-O2 -j"$(nproc)"
-  make install-compiler install-cross -j"$(nproc)"
+  make crossall FPC="$(command -v fpc)" CPU_TARGET=wasm32 OS_TARGET=wasip1 BINUTILSPREFIX= OPT=-O2 \
+    -j"${BUILD_JOBS:-2}"
+  mkdir -p "$WASM_BIN"
+  cp compiler/ppcrosswasm32 "$PPCWASM32"
+  make -C packages all FPC="$WASM_FPC/compiler/ppc" -j"${BUILD_JOBS:-2}"
+  make -C utils/fpcres FPC="$WASM_FPC/compiler/ppc"
+  cp utils/fpcres/bin/x86_64-linux/fpcres "$FPCRES"
   log "built    ppcrosswasm32"
-}
-
-build_lazarus_lcl() {
-  cd "$WASM_LCL/lcl"
-  make clean || true
-  make LCL_PLATFORM=wasm32 CPU_TARGET=wasm32 OS_TARGET=wasip1 \
-    FPC=$(basename "$PPCWASM32") FPCDIR="$WASM_FPC/fpc" \
-    INSTALL_PREFIX="$WASM_BIN" -j"$(nproc)"
-  log "built    CustomDrawn/WASM LCL"
 }
 
 build_pas2js() {
   cd "$WASM_PAS2JS"
-  make clean || true
-  make -j"$(nproc)"
+  make -j"${BUILD_JOBS:-2}"
   log "built    pas2js"
 }
 
 case ${1:-build} in
   check) check ;;
   build)
-    if have "$PPCWASM32" && have "$WASM_LCL/lcl/units/wasm32-wasip1" && have "$PAS2JS"; then
-      log "toolchain already complete"; exit 0
-    fi
     [ -n "${GITHUB_ACTIONS:-}" ] || [ "${ALLOW_LONG_BUILD:-0}" = 1 ] || {
       echo "This builds FPC + Lazarus + pas2js from source (tens of minutes)." >&2
       echo "Re-run with ALLOW_LONG_BUILD=1, or point the pins at an existing toolchain." >&2
@@ -96,7 +84,10 @@ case ${1:-build} in
     clone_at "$WASM_FPC_URL" "$WASM_FPC_REV" "$WASM_FPC"
     build_fpc
     clone_at "$WASM_LCL_URL" "$WASM_LCL_REV" "$WASM_LCL"
-    build_lazarus_lcl
+    (cd "$WASM_LCL/examples/customdrawnwasm" && npm ci --no-audit --no-fund)
+    mkdir -p "$WASM_BIN/lazres-units"
+    fpc -Fu"$WASM_LCL/components/lazutils" -Fu"$WASM_LCL/lcl" \
+      -FU"$WASM_BIN/lazres-units" -FE"$WASM_BIN" "$WASM_LCL/tools/lazres.pp"
     clone_at "$WASM_PAS2JS_URL" "$WASM_PAS2JS_REV" "$WASM_PAS2JS"
     build_pas2js
     check

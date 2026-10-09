@@ -47,14 +47,13 @@ jobs:
       - name: Install build and browser dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y fpc make git curl python3-pip libpng-tools
+          sudo apt-get install -y fpc make git curl python3-pip libpng-tools nodejs npm
           python3 -m pip install --break-system-packages playwright
 
       - name: Install Chromium for Playwright
         run: |
           mkdir -p "$RUNNER_TEMP/chromium"
-          python3 -m playwright install chromium --path "$CHROMIUM" 2>/dev/null \
-            || python3 -m playwright install chromium
+          python3 -m playwright install --with-deps chromium
 
       - name: Restore toolchain cache
         id: tc
@@ -62,7 +61,7 @@ jobs:
         with:
           path: |
             ${{ github.workspace }}/toolchain
-          key: web-toolchain-${{ hashFiles('web/pins.env') }}
+          key: web-toolchain-${{ hashFiles('web/pins.env', 'ci/web-toolchain.sh') }}
 
       - name: Build the pinned WASI toolchain
         if: steps.tc.outputs.cache-hit != 'true'
