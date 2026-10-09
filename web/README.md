@@ -46,6 +46,8 @@ recreates the layout from the pins on a clean machine.
 
 Working: the drawing canvas, editing interactions, toolbars and dialogs, viewport
 and export text generation, in-memory filesystem through the WASI shim.
+TeX text labels have cached MathJax previews; the typesetter loads only when
+a drawing contains TeX text. The View menu can disable live previews.
 
 The browser cannot run external programs: full-document LaTeX compilation,
 MetaPost compilation and printing require desktop tools. Exporting MetaPost

@@ -109,7 +109,11 @@ points farther away still use the grid when it is enabled.
 Text can be selected across its visible area. Text properties offer left,
 center, and right alignment. Enter a complete math expression such as
 `$(a+b)$` in the text field, or use the TeX text field for other LaTeX code.
-The canvas shows the editable text; LaTeX previews and exports typeset it.
+Desktop live previews typeset TeX text in the canvas using LaTeX and `dvipng`,
+with reusable SVG output when `dvisvgm` is available. **View → Live LaTeX
+Preview** toggles this behavior; it is enabled by default. Without the tools,
+the canvas shows editable text. Explicit LaTeX previews and exports still work
+as before.
 
 TikZ output supplies drawing defaults for `\tpxLineWidth`, `\tpxTextSize`,
 `\tpxDashSize`, and `\tpxDotSize`. Define these before including the drawing
