@@ -415,6 +415,30 @@ def s_clipboard_roundtrip(app):
     return 'copy, paste, cut and restore preserve drawing objects'
 
 
+def s_nested_coordinates(app):
+    v, cx, cy = box(app)
+    app.menu('Insert', 'Insert line')
+    app.drag(cx-70, cy-50, cx+70, cy+50)
+    app.key('Escape')
+    app.menu('Edit', 'Select all')
+    app.menu('Edit', 'Object properties')
+    app.page.get_by_role('button', name='Points', exact=True).click()
+    app.page.wait_for_function('document.querySelector("#lcl").width === 530')
+    app.click(155, 55)  # First x-coordinate cell in the fixed-size Table LFM
+    app.key('F2')
+    editor = app.page.get_by_role('textbox').last
+    editor.fill('125.5')
+    app.key('Enter')
+    app.page.get_by_role('button', name='OK', exact=True).click()
+    app.page.wait_for_function('document.querySelector("#lcl").width === 460')
+    app.page.get_by_role('button', name='OK', exact=True).click()
+    app.page.wait_for_function('document.querySelector("#lcl").width > 600')
+    objects = drawing_xml(app.save('coordinates.tpx'))
+    if len(objects) != 1 or float(objects[0].get('x1', '0')) != 125.5:
+        raise AssertionError('coordinate editor did not update the saved line')
+    return 'nested coordinate editor commits a cell; both Pascal modal forms close'
+
+
 SCENARIOS = [
     ('default-view', s_default_view),
     ('viewport-fit', s_viewport_fit),
@@ -433,4 +457,5 @@ SCENARIOS = [
     ('clipboard-roundtrip', s_clipboard_roundtrip),
     ('export-formats', s_export_formats),
     ('modal-properties', s_modal_properties),
+    ('nested-coordinates', s_nested_coordinates),
 ]
