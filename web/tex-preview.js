@@ -169,7 +169,7 @@ export function texPreviewImports(runtime) {
     },
     tex_enable: value => {
       enabled = Boolean(value);
-      if (!enabled) { clearTimeout(timer); timer = null; pending.clear(); objects.clear(); }
+      if (!enabled) { clearTimeout(timer); timer = null; pending.clear(); }
     }
   }};
 }
