@@ -113,6 +113,39 @@ begin
   Check(PromptCount = Ord(not Expected), 'Unexpected bitmap conversion error count');
 end;
 
+procedure TestLiveTeXMissingTool;
+var
+  Bitmap: TBitmap;
+  Started: QWord;
+  SavedLatex: string;
+begin
+  SavedLatex := LatexPath;
+  ShutdownLiveTeX;
+  InitializeLiveTeX(nil);
+  SetLiveTeXEnabled(True);
+  LatexPath := IncludeTrailingPathDelimiter(GetTempDir) + 'tpx-absent-latex';
+  Bitmap := TBitmap.Create;
+  try
+    Bitmap.SetSize(200, 100);
+    Check(not DrawLiveTeX(Bitmap.Canvas, 100, Point2D(20, 80), 24, 0,
+      '$x^2$', ahLeft, jvBaseline, clBlack), 'Missing TeX did not use fallback');
+    Started := GetTickCount64;
+    while LiveTeXPending do begin
+      Application.ProcessMessages;
+      Sleep(5);
+      Check(GetTickCount64 - Started < 5000, 'Missing TeX left a stuck preview');
+    end;
+    Check(LiveTeXStatus <> '', 'Missing TeX did not expose a status');
+    Check(not DrawLiveTeX(Bitmap.Canvas, 100, Point2D(20, 80), 24, 0,
+      '$x^2$', ahLeft, jvBaseline, clBlack), 'Missing TeX discarded fallback');
+    Check(not LiveTeXPending, 'Missing TeX was retried on every paint');
+  finally
+    Bitmap.Free;
+    ShutdownLiveTeX;
+    LatexPath := SavedLatex;
+  end;
+end;
+
 procedure TestLiveTeXSettings;
 begin
   Check(LiveTeXEnabled, 'Live LaTeX preview must default to enabled');
@@ -1093,6 +1126,7 @@ begin
     PromptDialogFunction := AnswerPrompt;
     if GetEnvironmentVariable('TPX_STARTUP_EXPECTED') <> '' then TestStartupFileName
     else if Pos('viewport-', ParamStr(1)) = 1 then TestViewport(ParamStr(1))
+    else if ParamStr(1) = 'live-tex-missing-tool' then TestLiveTeXMissingTool
     else if ParamStr(1) = 'live-tex' then TestLiveTeX
     else if ParamStr(1) = 'live-tex-settings' then TestLiveTeXSettings
     else if ParamStr(1) = 'preview-state' then TestPreviewState

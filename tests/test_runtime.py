@@ -18,7 +18,7 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "text-metrics", "path-first-click", "async-tools",
              "canvas-focus-transfer",
              "property-dimensions", "font-choice", "conversion-save",
-             "unsupported-exports", "clipboard-format-width",
+             "unsupported-exports", "live-tex-missing-tool", "clipboard-format-width",
              "clipboard-roundtrip", "color-box-custom-state",
              "platform-shortcuts")
 
