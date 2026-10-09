@@ -267,7 +267,7 @@ procedure DrawAsPolyline(PP: TPointsSet2D; const Cnv: TCanvas; const
 implementation
 
 uses Math, Drawings, SysBasic, Bitmaps
-{$IFDEF FPC}, LiveTeX{$ENDIF};
+{$IFDEF FPC}, LiveTeX, Output{$ENDIF};
 
 procedure CnvDrawLine(const Cnv: TCanvas;
   const P0, P1: TPoint2D);
@@ -1273,6 +1273,8 @@ begin
   Pnt.X := Pnt.X - Round(D.X);
   Pnt.Y := Pnt.Y + Round(D.Y);
 {$IFDEF FPC}
+  if TeXText <> '' then
+    TeXText := Get_TeXText(clDefault, Style, WideText, TeXText);
   if not (Self is TRubberCanvasDevice) and
     DrawLiveTeX(fCnv, PtrUInt(PreviewObject), P, H, ARot,
       TeXText, HAlignment, VAlignment, LineColor,
