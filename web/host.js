@@ -158,6 +158,15 @@ function resize() {
   const [width, height] = surfaceBox();
   guarded(() => instance.exports.lcl_resize(width, height));
 }
+// Native widgetsets receive WM_MOUSELEAVE; the browser must say so as well, or
+// a crosshair painted on the paper is never erased.
+canvas.addEventListener('pointerleave', () => {
+  if (ready) guarded(() => instance.exports.lcl_leave());
+});
+canvas.addEventListener('pointercancel', () => {
+  if (ready) guarded(() => instance.exports.lcl_pointer(1, 0, 0, 0, 0));
+});
+
 window.addEventListener('resize', () => requestAnimationFrame(resize));
 async function start() {
   const wasi = new WASI(['tpx'], [], [
