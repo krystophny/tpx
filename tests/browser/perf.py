@@ -17,7 +17,9 @@ Prints a PASS/FAIL line per gate and exits non-zero on any miss. Run after
 import argparse
 import gzip
 import os
-import subprocess
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 import sys
 import time
 from pathlib import Path
@@ -74,7 +76,7 @@ def chromium_pids(kind):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--port', type=int, default=8137)
+    ap.add_argument('--port', type=int, default=0)
     ap.add_argument('--idle', type=float, default=12.0)
     ap.add_argument('--pointer', type=float, default=6.0)
     args = ap.parse_args()
@@ -88,11 +90,14 @@ def main():
     # compress it the way a production server would ( gzip -9 ).
     gz = len(gzip.compress(wasm.read_bytes(), 9))
 
-    srv = subprocess.Popen(
-        [sys.executable, '-m', 'http.server', str(args.port), '--bind', '127.0.0.1',
-         '--directory', str(ROOT / 'web' / 'dist')],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(0.8)
+    class QuietHandler(SimpleHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+    srv = ThreadingHTTPServer(
+        ('127.0.0.1', args.port),
+        partial(QuietHandler, directory=str(ROOT / 'web' / 'dist')))
+    Thread(target=srv.serve_forever, daemon=True).start()
 
     from playwright.sync_api import sync_playwright
 
@@ -105,7 +110,7 @@ def main():
             app = App(page, 'perf')
 
             nav_start = time.monotonic()
-            page.goto(f'http://127.0.0.1:{args.port}/')
+            page.goto(f'http://127.0.0.1:{srv.server_port}/')
             page.wait_for_selector('#status[data-state=ready]', timeout=30000)
             page.wait_for_function(
                 "() => Number(document.querySelector('#lcl').dataset.frames||0) > 0",
@@ -158,6 +163,8 @@ def main():
                                        - idle_after_cpu0) / 3.0
 
             browser.close()
+            if app.errors:
+                raise RuntimeError(f'Browser error during performance check: {app.errors[0]}')
 
             results = [
                 ('startup first frame', startup_ms, MAX_STARTUP_MS, 'ms'),
@@ -172,7 +179,8 @@ def main():
                   f'({100.0 * gz / raw:.1f}%)')
             print(f'pointer frames moved: {moved_frames}')
     finally:
-        srv.terminate()
+        srv.shutdown()
+        srv.server_close()
 
     failed = 0
     for name, got, limit, unit in results:
