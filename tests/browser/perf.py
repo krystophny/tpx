@@ -50,17 +50,26 @@ def renderer_cpu(pids):
 
 def chromium_pids(kind):
     """Pids of running chromium processes of the given --type= kind."""
-    pids = []
+    processes = {}
     for entry in Path('/proc').iterdir():
         if not entry.name.isdigit():
             continue
         try:
-            cmd = Path(f'/proc/{entry.name}/cmdline').read_bytes().decode('ascii', 'replace')
-        except OSError:
+            fields = (entry / 'stat').read_text().rsplit(')', 1)[1].split()
+            cmd = (entry / 'cmdline').read_bytes().decode('ascii', 'replace')
+            processes[int(entry.name)] = (int(fields[1]), cmd)
+        except (OSError, ValueError, IndexError):
             continue
-        if f'--type={kind}' in cmd and 'chromium' in cmd:
-            pids.append(entry.name)
-    return pids
+    def owned(pid):
+        seen = set()
+        while pid in processes and pid not in seen:
+            seen.add(pid)
+            pid = processes[pid][0]
+            if pid == os.getpid():
+                return True
+        return False
+    return [str(pid) for pid, (_, cmd) in processes.items()
+            if f'--type={kind}' in cmd and owned(pid)]
 
 
 def main():
@@ -115,15 +124,27 @@ def main():
             # Pointer: continuous ~120 Hz move inside the paper.
             v = app.viewport()
             cx, cy = v['x'] + v['w'] // 2, v['y'] + v['h'] // 2
-            steps = int(args.pointer * 120)
-            cpu_a = renderer_cpu(chromium_pids('renderer'))
+            pids = chromium_pids('renderer')
+            cpu_a = renderer_cpu(pids)
             t1 = time.monotonic()
-            for i in range(steps):
-                page.mouse.move(cx + int(120 * ((i % 40) - 20) / 20.0),
-                               cy + int(80 * (((i // 5) % 16) - 8) / 8.0))
-            while time.monotonic() - t1 < args.pointer:
-                page.wait_for_timeout(50)
-            cpu_b = renderer_cpu(chromium_pids('renderer'))
+            bounds = app.box()
+            page.evaluate("""async ({x, y, ms}) => {
+              const canvas = document.querySelector('#lcl');
+              let i = 0;
+              await new Promise(resolve => {
+                const timer = setInterval(() => {
+                  canvas.dispatchEvent(new PointerEvent('pointermove', {
+                    clientX: x + 120*((i%40)-20)/20,
+                    clientY: y + 80*((Math.floor(i/5)%16)-8)/8,
+                    pointerId: 1, pointerType: 'mouse', bubbles: true
+                  }));
+                  i++;
+                }, 1000/120);
+                setTimeout(() => { clearInterval(timer); resolve(); }, ms);
+              });
+            }""", {'x': bounds['x'] + cx, 'y': bounds['y'] + cy,
+                    'ms': args.pointer*1000})
+            cpu_b = renderer_cpu(pids)
             pointer_cpu = 100.0 * (cpu_b - cpu_a) / (time.monotonic() - t1)
             moved_frames = app.frames() - f1
 

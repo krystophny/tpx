@@ -45,7 +45,7 @@ clone_at() { # url rev dir
     cd "$dir"
     git checkout --quiet "$rev"
   fi
-  git submodule update --init --recursive --quiet || true
+  git submodule update --init --recursive --quiet
   log "checked  $(basename "$dir") @ $(git rev-parse --short HEAD)"
 }
 
@@ -69,7 +69,7 @@ build_fpc() {
 
 build_pas2js() {
   cd "$WASM_PAS2JS"
-  make -j"${BUILD_JOBS:-2}"
+  FPCDIR="$WASM_FPC" make -j"${BUILD_JOBS:-2}"
   log "built    pas2js"
 }
 

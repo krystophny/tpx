@@ -29,12 +29,8 @@ jobs:
       WASM_PAS2JS: ${{ github.workspace }}/toolchain/pas2js
       WASM_BIN: ${{ github.workspace }}/toolchain/bin
       CHROMIUM: ${{ github.workspace }}/chromium/chrome-linux/chrome
-      # Bounded subset, documented: every scenario that does not need an external
-      # tool (LaTeX, sam2p, MetaPost, printer). wheel-zoom and
-      # idle-stops-repainting are included because they gate the input and idle
-      # contracts. Open/save and the export formats need browser-file-system
-      # plumbing and are tracked separately, so they are not run here.
-      WEB_SCENARIOS: default-view,viewport-fit,resize-follows,draw-drag,draw-click,draw-cancel,crosshair,keyboard-shortcut,text-input,wheel-zoom,idle-stops-repainting,title-tracks-document
+      # Browser operations, including file and clipboard round trips.
+      WEB_SCENARIOS: default-view,viewport-fit,resize-follows,draw-drag,draw-click,draw-cancel,crosshair,keyboard-shortcut,text-input,wheel-zoom,idle-stops-repainting,title-tracks-document,edit-move-delete,open-roundtrip,clipboard-roundtrip
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

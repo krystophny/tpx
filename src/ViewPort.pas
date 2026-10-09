@@ -1942,20 +1942,19 @@ end;
 
 procedure TViewport2D.DrawCursorCrossHair(P: TPoint2D; Visible: Boolean);
 var
-  R: TRect;
   Prev, Curr: TPoint;
   HadCross: Boolean;
 
-  { A move only changes the two cursor lines, so only the union of the old
-    and the new lines has to be repainted. One pixel pen, inclusive edges. }
+  { A move only changes the two cursor lines, so keep the old and new strips
+    separate; their bounding rectangle would cover the whole viewport. One pixel pen, inclusive edges. }
   procedure AddCross(const C: TPoint);
   var
     Line: TRect;
   begin
-    Line := Rect(C.X - 1, 0, C.X + 2, ClientHeight);
-    UnionRect(R, R, Line);
-    Line := Rect(0, C.Y - 1, ClientWidth, C.Y + 2);
-    UnionRect(R, R, Line);
+    Line := Rect(C.X, 0, C.X + 1, ClientHeight);
+    InvalidateRect(Handle, @Line, True);
+    Line := Rect(0, C.Y, ClientWidth, C.Y + 1);
+    InvalidateRect(Handle, @Line, True);
   end;
 
 begin
@@ -1966,16 +1965,14 @@ begin
   else fLastCursorPos := Point2D(MaxInt, MaxInt);
   if not HadCross and not (ShowCrossHair and Visible)
     then Exit;
-  R := Rect(0, 0, 0, 0);
-  if HadCross then AddCross(Prev);
   if ShowCrossHair and Visible then
   begin
     Curr := Point2DToPoint(ViewportToScreen(fLastCursorPos));
     if HadCross and (Prev.X = Curr.X) and (Prev.Y = Curr.Y)
       then Exit; { snapped to the same pixel: nothing changed }
-    AddCross(Curr);
   end;
-  InvalidateRect(Handle, @R, True);
+  if HadCross then AddCross(Prev);
+  if ShowCrossHair and Visible then AddCross(Curr);
 end;
 
 initialization

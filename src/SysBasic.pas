@@ -74,12 +74,6 @@ uses
 //WinBasic,
   MainUnit, Math{$IFDEF FPC}, Classes, {$IFNDEF WASI}Process,{$ENDIF} ExtCtrls{$ENDIF};
 
-{$IFDEF WASI}
-var
-  { Remember the last reported tool so a repeated action does not spam the banner. }
-  LastWasmMissingTool: string = '';
-{$ENDIF}
-
 {$IF DEFINED(FPC) AND NOT DEFINED(WASI)}
 type
   TBackgroundTool = class(TComponent)
@@ -349,19 +343,11 @@ begin
       'Error', MB_OK);}
 {$ELSE}
   {$IFDEF WASI}
-  { Browsers cannot start external programs. Report it instead of failing quietly:
-    callers only see False and often stay silent, which would make LaTeX preview,
-    sam2p bitmap import, MetaPost and printing look like broken no-ops. The name
-    of the missing tool is in the report, and the CustomDrawn/WASM MessageBox shows
-    it as a banner in the page (a raise there used to kill the instance). }
+  { External tools require the desktop version; explain every failed request. }
   Result := False;
-  if LastWasmMissingTool <> aCmdLine then
-  begin
-    LastWasmMissingTool := aCmdLine;
-    MessageBoxError(Format('"%s" cannot run in the browser: WebAssembly has no '
-      + 'external programs. This feature needs the desktop version of TpX.',
-      [ExtractFileName(aCmdLine)]));
-  end;
+  MessageBoxError(Format('"%s" cannot run in the browser: WebAssembly has no '
+    + 'external programs. This feature needs the desktop version of TpX.',
+    [ExtractFileName(aCmdLine)]));
   {$ELSE}
   Result := False;
   Child := TProcess.Create(nil);

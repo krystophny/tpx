@@ -101,7 +101,7 @@ def s_draw_drag(app):
     """A drag with the line tool armed leaves persistent ink."""
     v, cx, cy = box(app)
     reg = region(cx, cy)
-    app.click(TOOL_X, tool('line'))
+    app.menu('Insert', 'Insert line')
     clean = app.pixels(reg)
     app.drag(cx - 90, cy - 60, cx + 90, cy + 60)
     after = app.pixels(reg)
@@ -115,7 +115,7 @@ def s_draw_click(app):
     """The rectangle tool stays armed, so a second object appears after one."""
     v, cx, cy = box(app)
     reg = region(cx, cy)
-    app.click(TOOL_X, tool('rect'))
+    app.menu('Insert', 'Insert rectangle')
     clean = app.pixels(reg)
     app.click(cx - 40, cy - 30)
     one = app.pixels(reg)
@@ -135,7 +135,7 @@ def s_draw_cancel(app):
     focus_document(app, v)
     park(app, v)
     base = app.pixels(reg)
-    app.click(TOOL_X, tool('rect'))
+    app.menu('Insert', 'Insert rectangle')
     park(app, v)
     if diff(base, app.pixels(reg)) > 40:
         raise AssertionError('arming the tool already painted on the paper')
@@ -157,7 +157,7 @@ def s_draw_cancel(app):
         raise AssertionError(f'Escape left {left} of {live} pixels')
     # control: the same gesture without Escape inserts an object that stays, so
     # the cancel assertion cannot pass by accident.
-    app.click(TOOL_X, tool('rect'))
+    app.menu('Insert', 'Insert rectangle')
     app.move(cx - 90, cy - 60)
     app.press()
     for i in range(6):
@@ -210,7 +210,7 @@ def s_keyboard_shortcut(app):
     v, cx, cy = box(app)
     reg = region(cx, cy)
     focus_document(app, v)
-    app.click(TOOL_X, tool('line'))
+    app.menu('Insert', 'Insert line')
     clean = app.pixels(reg)
     app.drag(cx - 100, cy - 50, cx + 100, cy + 50)
     park(app, v)
@@ -233,18 +233,19 @@ def s_keyboard_shortcut(app):
 
 
 def s_text_input(app):
-    """Text tool: click in the viewport, type, and the glyphs appear."""
-    v, cx, cy = box(app)
-    reg = region(cx, cy, 400, 300)
-    app.click(TOOL_X, tool('text'))
-    clean = app.pixels(reg)
-    app.click(cx - 60, cy - 20)
+    """Accept the text dialog, place text, and verify saved content."""
+    app.menu('Insert', 'Insert text')
+    app.page.wait_for_function('document.querySelector("#lcl").width < 500')
     app.type('WASM playtest')
-    after = app.pixels(reg)
-    ink = diff(clean, after)
-    if ink < 200:
-        raise AssertionError(f'typing produced only {ink} pixels (keys not rendered)')
-    return f'{ink} pixels of typed text'
+    app.click(155, 75)  # OK on the ordinary LCL InputQuery form
+    app.page.wait_for_function('document.querySelector("#lcl").width > 500')
+    v, cx, cy = box(app)
+    app.click(cx-60, cy-20)
+    app.key('Escape')
+    saved = app.save('text-roundtrip.tpx').read_text()
+    if 'WASM playtest' not in saved:
+        raise AssertionError('accepted text is missing from the saved drawing')
+    return 'accepted and placed text survives save'
 
 
 def s_idle_stops_repainting(app):
@@ -257,15 +258,109 @@ def s_idle_stops_repainting(app):
 
 
 def s_title_tracks_document(app):
-    base = app.title()
     v, cx, cy = box(app)
-    app.click(TOOL_X, tool('line'))
-    app.drag(cx - 100, cy - 40, cx + 100, cy + 40)
-    app.key('Control+z')
-    app.key('Control+Shift+z')
-    if app.title() != base:
-        return f'title now: {app.title()}'
-    return f'title stable: {base}'
+    app.menu('Insert', 'Insert line')
+    app.drag(cx-100, cy-40, cx+100, cy+40)
+    app.key('Escape')
+    app.save('browser-title.tpx')
+    if 'browser-title.tpx' not in app.title():
+        raise AssertionError(f'saved document title is missing: {app.title()}')
+    return app.title()
+
+
+def drawing_xml(path):
+    import xml.etree.ElementTree as ET
+    lines = path.read_text().splitlines()
+    xml = []
+    for line in lines:
+        if line.startswith('%'):
+            xml.append(line[1:])
+            if line.startswith('%</TpX>') or (line.startswith('%<TpX ') and line.endswith('/>')):
+                return ET.fromstring('\n'.join(xml))
+    raise AssertionError('saved file has no TpX drawing')
+
+
+def _ink(pixels, w):
+    """Centroid and count of non-white pixels in an RGBA row-major region."""
+    sx = sy = n = 0
+    for i in range(0, len(pixels), 4):
+        if pixels[i] < 200 and pixels[i+1] < 200 and pixels[i+2] < 200:
+            px = (i // 4) % w
+            py = (i // 4) // w
+            sx += px
+            sy += py
+            n += 1
+    if n == 0:
+        return None, None, 0
+    return sx / n, sy / n, n
+
+
+SELECT_Y = 104          # select / pick tool row, measured
+
+
+def s_edit_move_delete(app):
+    v, cx, cy = box(app)
+    app.menu('Insert', 'Insert rectangle')
+    app.drag(cx-90, cy-60, cx+60, cy+40)
+    app.key('Escape')
+    before = drawing_xml(app.save('before-move.tpx'))
+    if len(before) != 1:
+        raise AssertionError(f'expected one drawn object, got {len(before)}')
+    app.menu('Edit', 'Select all')
+    app.drag(cx-90, cy-10, cx-20, cy+30)
+    after = drawing_xml(app.save('after-move.tpx'))
+    if len(after) != 1:
+        raise AssertionError('move changed the object count')
+    dx = float(after[0].get('x'))-float(before[0].get('x'))
+    dy = float(after[0].get('y'))-float(before[0].get('y'))
+    if abs(dx) < 1 or abs(dy) < 1:
+        raise AssertionError(f'saved object did not move: {dx}, {dy}')
+    app.key('Delete')
+    deleted = drawing_xml(app.save('after-delete.tpx'))
+    if len(deleted):
+        raise AssertionError('Delete left objects in the saved drawing')
+    return f'moved by {dx:g}, {dy:g} drawing units; Delete removed the object'
+
+
+def s_open_roundtrip(app):
+    v, cx, cy = box(app)
+    app.menu('Insert', 'Insert rectangle')
+    app.drag(cx-90, cy-60, cx+60, cy+40)
+    app.key('Escape')
+    saved = app.save('open-roundtrip.tpx')
+    before = drawing_xml(saved)
+    app.menu('File', 'New')
+    app.menu('File', 'Open')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('Choose file').set_input_files(saved)
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    app.page.wait_for_timeout(300)
+    after = drawing_xml(app.save('reopened.tpx'))
+    if len(after) != len(before) or [c.attrib for c in after] != [c.attrib for c in before]:
+        raise AssertionError('open/save changed the drawing geometry')
+    return 'downloaded drawing reopens with identical geometry'
+
+
+def s_clipboard_roundtrip(app):
+    v, cx, cy = box(app)
+    app.menu('Insert', 'Insert rectangle')
+    app.drag(cx-90, cy-60, cx+60, cy+40)
+    app.key('Escape')
+    app.menu('Edit', 'Select all')
+    app.menu('Edit', 'Copy')
+    app.menu('Edit', 'Paste')
+    pasted = drawing_xml(app.save('clipboard-paste.tpx'))
+    if len(pasted) != 2:
+        raise AssertionError(f'copy/paste produced {len(pasted)} objects instead of 2')
+    app.menu('Edit', 'Select all')
+    app.menu('Edit', 'Cut')
+    if len(drawing_xml(app.save('clipboard-cut.tpx'))):
+        raise AssertionError('cut left objects in the drawing')
+    app.menu('Edit', 'Paste')
+    restored = drawing_xml(app.save('clipboard-restored.tpx'))
+    if len(restored) != 2:
+        raise AssertionError('paste did not restore the cut objects')
+    return 'copy, paste, cut and restore preserve drawing objects'
 
 
 SCENARIOS = [
@@ -281,4 +376,7 @@ SCENARIOS = [
     ('text-input', s_text_input),
     ('idle-stops-repainting', s_idle_stops_repainting),
     ('title-tracks-document', s_title_tracks_document),
+    ('edit-move-delete', s_edit_move_delete),
+    ('open-roundtrip', s_open_roundtrip),
+    ('clipboard-roundtrip', s_clipboard_roundtrip),
 ]

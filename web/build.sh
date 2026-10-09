@@ -47,7 +47,7 @@ done
 
 CFG=$BUILD/compiler.cfg
 {
-  printf '%s\n' -n -Twasip1 -Pwasm32 -O1 -Mdelphi \
+  printf '%s\n' -n -Twasip1 -Pwasm32 -O2 -Mdelphi \
     -dBorland -dVer150 -dDelphi7 -dCompiler6_Up -dPUREPASCAL \
     -dLCL -dLCLcustomdrawn -dCPUWASM32 \
     "-Fi$ROOT" "-Fu$ROOT" "-Fisrc" "-Fusrc" "-Fusrc/lib/PowerPdf" "-Fusrc/lib/XML" \
@@ -78,6 +78,7 @@ done
 "$ESBUILD" "$DIST/jobhost.js" --minify --outfile="$DIST/jobhost.js" --allow-overwrite --log-level=warning
 cp "$ROOT/web/index.html" "$ROOT/web/host.js" "$DIST/"
 "$ESBUILD" "$DIST/host.js" --bundle --format=esm --outfile="$DIST/host.bundle.js" \
+  --alias:@lcl/browser-host="$WASM_LCL/examples/customdrawnwasm/web/lcl-host.js" \
   --alias:@bjorn3/browser_wasi_shim="$(dirname "$ESBUILD")/../@bjorn3/browser_wasi_shim" \
   --log-level=warning
 

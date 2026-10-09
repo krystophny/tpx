@@ -28,9 +28,10 @@ CHROMIUM = os.environ.get('CHROMIUM', '/usr/bin/chromium')
 class App:
     """Drive the browser TpX and observe it through its rendered output."""
 
-    def __init__(self, page, prefix=''):
+    def __init__(self, page, prefix='', output=OUT):
         self.page = page
         self.prefix = prefix
+        self.output = Path(output)
         self.shots = 0
         self.errors = []
         page.on('pageerror', lambda e: self.errors.append(str(e)[:400]))
@@ -121,7 +122,7 @@ class App:
     # --- action ----------------------------------------------------------
     def shot(self, name):
         self.shots += 1
-        path = OUT / f'{self.shots:02d}-{self.prefix}-{name}.png'
+        path = self.output / f'{self.shots:02d}-{self.prefix}-{name}.png'
         self.page.screenshot(path=str(path))
         return path.name
 
@@ -135,6 +136,24 @@ class App:
         self.page.mouse.click(px, py, button=button)
         if name:
             self.shot(name)
+
+    def menu(self, group, item):
+        menu = self.page.locator('#lcl-menus > details').filter(
+            has=self.page.locator('summary').get_by_text(group, exact=True))
+        menu.locator(':scope > summary').click()
+        menu.get_by_role('button', name=item, exact=True).click()
+        self.page.wait_for_timeout(150)
+
+    def save(self, filename):
+        self.menu('File', 'Save as...')
+        dialog = self.page.get_by_role('dialog')
+        dialog.get_by_label('File name').fill(filename)
+        with self.page.expect_download() as saved:
+            dialog.get_by_role('button', name='OK', exact=True).click()
+        download = saved.value
+        path = self.output / download.suggested_filename
+        download.save_as(path)
+        return path
 
     def drag(self, x0, y0, x1, y1, name=None, steps=12):
         px, py = self.at(x0, y0)

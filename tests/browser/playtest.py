@@ -26,7 +26,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument('dist', nargs='?', default=str(ROOT / 'web/dist'))
 parser.add_argument('outdir', nargs='?', default=str(ROOT / 'dist/browser-playtest'))
 parser.add_argument('--only', default='')
+parser.add_argument('--screenshots', action='store_true')
 parser.add_argument('--port', type=int, default=8795)
+parser.add_argument('--browser', choices=['chromium', 'firefox', 'webkit'], default='chromium')
 parser.add_argument('--chromium', default=os.environ.get('CHROMIUM', '/usr/bin/chromium'))
 args = parser.parse_args()
 
@@ -40,12 +42,13 @@ time.sleep(0.8)
 results, failures = [], []
 try:
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path=args.chromium, args=['--no-sandbox'])
+        browser = (p.chromium.launch(executable_path=args.chromium, args=['--no-sandbox'])
+                   if args.browser == 'chromium' else getattr(p, args.browser).launch())
         for name, fn in SCENARIOS:
             if wanted and name not in wanted:
                 continue
             page = browser.new_page(viewport={'width': 1280, 'height': 900})
-            app = App(page, name)
+            app = App(page, name, OUT)
             status = 'pass'
             detail = ''
             try:
@@ -66,6 +69,8 @@ try:
                 detail = (detail + ' | ' if detail else '') + f'console: {app.errors[0][:160]}'
             if status != 'pass':
                 failures.append(name)
+            if args.screenshots or status != 'pass':
+                app.shot(status)
             results.append({'scenario': name, 'status': status, 'detail': detail,
                             'frames': app.frames(), 'shots': app.shots})
             print(f'{status:5} {name:24} {detail[:150]}')
