@@ -8,43 +8,57 @@ done with the project's own authority: `make test` plus
 
 Suite state: 10/12 scenarios green.
 
-## D1 — Pointer input stops after a mouse press (blocker)
+## D1 — Crosshair painted just before a mouse-down is not erased (open, medium)
 
-Observable: hovering repaints the canvas (crosshair follows, status-bar
-readout updates: 375 px changed over 4 moves). After a `pointerdown`/`move`/
-`pointerup` sequence the application stops reacting to the pointer completely:
+Observable: hovering repaints correctly and the crosshair is erased when the
+pointer leaves the canvas. But when the pointer is pressed right after a hover,
+the crosshair lines painted for that hover survive every later repaint: after
+`press -> drag -> up -> leave` a full-width row plus a full-height column remain
+on the paper (measured 559 px in a 320x240 region, `row 120 / col 160` = the
+hover point).
+
+Evidence, stage by stage with the frame counter:
 
 ```
-after drag, moving crosshair diff: 0
-hover frames 3  after drag 3  after move 3   # frame counter frozen
+clean f4 | mid 1146 f13 | esc 1114 f14 | rel 1114 f15 | park 559 f16
+at park: row 120 -> 320 px, col 160 -> 240 px
 ```
 
-The frame counter stops advancing, so the render scheduler never runs again.
-Native: `RuntimeTests draw-drag`, `draw-click`, `draw-cancel` all PASS, so the
-TpX logic is fine.
+Native: `RuntimeTests draw-drag`, `draw-click`, `draw-cancel` all PASS, and the
+native widgetsets paint through the window system, which owns the cursor erasure.
+Class: WASI widgetset damage/capture interaction - during a captured drag the
+viewport's stored cursor position no longer matches what it painted, so the erase
+rectangle misses the stale lines.
 
-Class: WASI widgetset / browser host JS (mouse capture and coalescing state).
-State: open — highest priority, it gates every interactive scenario.
-
-Repro: `python3 tests/browser/playtest.py --only keyboard-shortcut`
-(the scenario's own oracle is unaffected; use `web/diag-input.py` for the
-frame numbers) or the sequence click → press → move → up → move.
-
-## D2 — Escape during a drag does not cancel (depends on D1)
-
-`draw-cancel`: preview 1146 px, after Escape 1114 px remain. The difference
-between preview and leftover is exactly the crosshair pair (width + height - 1
-= 559 px at the drag endpoint), i.e. the preview object is covered by the
-frozen crosshair measurement. Native `RuntimeTests draw-cancel` PASSes via
-`Msg_Escape`.
-
-Class: same as D1; the scenario must re-read pixels after the pointer has been
-parked on the paper and the frame has actually been repainted.
-State: open, expected to fall out of the D1 fix.
+Consequence for the suite: pixel-exact paper oracles are not usable across a
+press-drag. `draw-cancel` therefore classifies behaviorally (select-all + delete
+as the object probe): a cancelled gesture gives `probe 0 px`, an inserted control
+gives `probe 455 px`. That is the honest observable, not a workaround for a
+failing comparison: it asks whether an object exists, which is what cancel means.
+State: open, cosmetic residue; no functional blocking.
 
 ## Fixed in this campaign
 
+### Pointer moves and crosshair tracking (was: input stopped after the first frames)
+
+`TViewport2D.MouseMove` paints its crosshair straight onto the control canvas.
+On native widgetsets that writing reaches the window immediately; in the browser
+the frame is composed from the control image, so a move that only painted never
+dirtied the frame and the cursor never followed the pointer (measured 0 changed
+pixels). Two widgetset fixes:
+
+1. Invalidate the hovered `TCustomControl` on every pointer move (fork
+   `9bcd19690c`), chrome controls excluded so hovering panels/toolbars stays free
+   of repaints. Crosshair repaint went from 0 to 1114 changed pixels.
+2. Deliver mouse enter/leave the way a window system does (fork, this commit):
+   enter sets `FMouseInClient`, leave clears it and the application erases its
+   cursor. `TControl.CMMouseLeave` fires its event only when `LParam = 0`, which
+   is why the first attempt (passing the control) still left the cursor stuck.
+   Measured: after the pointer leaves the canvas the paper returns to **0**
+   changed pixels.
+
 ### Ctrl+Z / redo now work (was: object survived undo)
+
 
 Symptom: `Ctrl+Z` left 559 px of a 1016 px drawing. The residual was a
 full-width row plus full-height column — the viewport crosshair frozen at the

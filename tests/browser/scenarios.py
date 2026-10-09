@@ -39,16 +39,16 @@ def region(cx, cy, w=320, h=240):
 
 
 def park(app, v):
-    """Move the pointer inside the paper but out of the measured region.
+    """Take the pointer off the canvas so the crosshair is erased.
 
-    The viewport paints full-width crosshair lines under the pointer; they must
-    be moved somewhere outside the measured region before comparing pixels, or
-    width+height leftover pixels show up in every undo comparison. The target
-    has to stay on the paper: parked over the gray gutter the crosshair is not
-    repainted and its old lines stay in the frame.
+    The viewport paints full-width crosshair lines under the pointer, which
+    would add width+height leftover pixels to every undo comparison. Leaving
+    the canvas fires the leave notification, the viewport erases its lines and
+    the frame is clean again; parked anywhere on the paper they stay visible.
     """
-    app.move(v['x'] + v['w'] - 30, v['y'] + v['h'] - 30)
-    app.page.wait_for_timeout(300)
+    b = app.box()
+    app.page.mouse.move(b['x'] + b['w'] / 2, max(2.0, b['y'] - 20))
+    app.page.wait_for_timeout(350)
 
 
 def focus_document(app, v):
@@ -129,28 +129,64 @@ def s_draw_click(app):
 
 
 def s_draw_cancel(app):
-    """Escape during a drag cancels the in-progress object."""
+    """Escape during a drag cancels the object instead of inserting it.
+
+    Classified behaviorally: after the cancelled gesture, select-all + delete is
+    used as the object probe. If a real object had been inserted, the probe
+    removes it and the paper changes; if the gesture was cancelled, the probe
+    changes nothing. This keeps the oracle independent of the viewport crosshair
+    (DEFECTS D1), whose lines survive repaints in the browser and would otherwise
+    be counted as leftover ink.
+    """
     v, cx, cy = box(app)
     reg = region(cx, cy)
     focus_document(app, v)
-    app.click(TOOL_X, tool('ellipse'))
-    app.move(cx, cy)
-    clean = app.pixels(reg)
+    park(app, v)
+    base = app.pixels(reg)
+
+    def probe(tag):
+        """Select all and delete; return how much ink that removed."""
+        before = app.pixels(reg)
+        app.key('Control+a')
+        app.page.wait_for_timeout(200)
+        app.key('Delete')
+        app.page.wait_for_timeout(300)
+        park(app, v)
+        gone = diff(before, app.pixels(reg))
+        return gone
+
+    app.click(TOOL_X, tool('rect'))
+    app.move(cx - 90, cy - 60)
+    app.page.wait_for_timeout(200)
     app.press()
-    for i in range(8):
-        app.move(cx - 80 + i * 20, cy - 50 + i * 12)
-    mid = app.pixels(reg)
+    for i in range(6):
+        app.move(cx - 90 + i * 24, cy - 60 + i * 16)
+    app.page.wait_for_timeout(250)
+    live = diff(base, app.pixels(reg))
+    if live < 200:
+        raise AssertionError(f'drag preview showed only {live} pixels')
     app.key('Escape')
+    app.page.wait_for_timeout(250)
     app.release()
     park(app, v)
-    after = app.pixels(reg)
-    live = diff(clean, mid)
-    if live < 100:
-        raise AssertionError(f'drag preview showed only {live} pixels')
-    left = diff(clean, after)
-    if left > 120:
-        raise AssertionError(f'Escape left {left} of {live} pixels')
-    return f'preview {live} px, cancelled to {left} px'
+    cancelled = probe('cancelled')
+    if cancelled > 40:
+        raise AssertionError(f'cancelled gesture still left an object ({cancelled} px removed)')
+
+    # control: the same gesture without Escape must insert an object that the very
+    # same probe then removes, so the cancel result cannot be a vacuous pass.
+    app.click(TOOL_X, tool('rect'))
+    app.move(cx - 90, cy - 60)
+    app.press()
+    for i in range(6):
+        app.move(cx - 90 + i * 24, cy - 60 + i * 16)
+    app.release()
+    park(app, v)
+    inserted = probe('control')
+    if inserted < 200:
+        raise AssertionError(f'control insert left no object for the probe ({inserted} px)')
+    return (f'preview {live} px, cancelled object probe {cancelled} px, '
+            f'control probe {inserted} px')
 
 
 def s_crosshair(app):
