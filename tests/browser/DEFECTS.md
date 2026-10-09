@@ -8,36 +8,43 @@ done with the project's own authority: `make test` plus
 
 Suite state: 10/12 scenarios green.
 
-## D1 — Crosshair painted just before a mouse-down is not erased (open, medium)
+## D2 — Pointer-move recompose costs 43 % of a core (open, performance)
 
-Observable: hovering repaints correctly and the crosshair is erased when the
-pointer leaves the canvas. But when the pointer is pressed right after a hover,
-the crosshair lines painted for that hover survive every later repaint: after
-`press -> drag -> up -> leave` a full-width row plus a full-height column remain
-on the paper (measured 559 px in a 320x240 region, `row 120 / col 160` = the
-hover point).
+Measured by `tests/browser/perf.py` (Chromium, renderer process CPU):
 
-Evidence, stage by stage with the frame counter:
+| gate | measured | limit | status |
+|---|---|---|---|
+| first rendered frame | 2.6 s | < 2 s | FAIL |
+| idle frames over 12 s | 0 | ~0 | pass |
+| idle CPU | 0.08 % of a core | ~1 % | pass |
+| CPU during continuous 120 Hz pointer move | 43 % of a core | < 10 % | FAIL |
+| payload `tpx.wasm` gzipped | 2.89 MB | < 10 MB | pass |
 
-```
-clean f4 | mid 1146 f13 | esc 1114 f14 | rel 1114 f15 | park 559 f16
-at park: row 120 -> 320 px, col 160 -> 240 px
-```
+Cause: `RenderForm` recomposes the whole 1068x791 form for every frame, so a
+crosshair move that damages ~10k pixels repaints 844k of them. Native widgetsets
+receive `rcPaint` in `WM_PAINT` and paint only the damaged clip.
 
-Native: `RuntimeTests draw-drag`, `draw-click`, `draw-cancel` all PASS, and the
-native widgetsets paint through the window system, which owns the cursor erasure.
-Class: WASI widgetset damage/capture interaction - during a captured drag the
-viewport's stored cursor position no longer matches what it painted, so the erase
-rectangle misses the stale lines.
+Attempted and reverted (fork `0a258670cb`): passing the damaged rect as
+`struct.rcPaint` and skipping controls outside it. It broke the first frame -
+a render scheduled before the form is sized consumed the only dirty mark, the
+image stayed 0x0, nothing ever presented again and the whole suite timed out. A
+guarded retry recovered that case but the suite stayed red and the CPU gain was
+illusory anyway, because the recompose, not the upload, is the cost. Kept from
+that attempt: no blanket `InvalidateRect(nil)` in the pointer-move path, so TpX's
+own precise cursor rects survive.
 
-Consequence for the suite: pixel-exact paper oracles are not usable across a
-press-drag. `draw-cancel` therefore classifies behaviorally (select-all + delete
-as the object probe): a cancelled gesture gives `probe 0 px`, an inserted control
-gives `probe 455 px`. That is the honest observable, not a workaround for a
-failing comparison: it asks whether an object exists, which is what cancel means.
-State: open, cosmetic residue; no functional blocking.
+Proper fix, still open: thread `rcPaint` through `RenderForm` /
+`RenderChildWinControls` **and** make the CustomDrawn control paints honour the
+clip, then re-measure with `python3 tests/browser/perf.py`.
+
+## D3 — First frame takes 2.6 s (open, performance)
+
+16.7 MB module (2.89 MB gzipped), compiled and instantiated before the first
+present. Not yet investigated; candidates are a gzipped serving path in
+`web/serve.py` and measuring compile versus instantiate separately.
 
 ## Fixed in this campaign
+
 
 ### Pointer moves and crosshair tracking (was: input stopped after the first frames)
 
