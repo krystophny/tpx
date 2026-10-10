@@ -249,6 +249,8 @@ begin
   inherited Create(Drawing);
   fSAX := TPrimSAX.Create(
     StartElement, nil, SAX_Comment);
+  // SVG XML defaults to UTF-8 when it has no encoding declaration.
+  fSAX.DefaultEncoding := enUTF8;
   AddProc('svg', SVGProc, nil);
   AddProc('defs', DefsStartProc, DefsEndProc);
   AddProc('use', nil, UseProc);
