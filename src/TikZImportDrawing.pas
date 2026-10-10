@@ -470,9 +470,9 @@ begin
   Format.Extensions := '.tikz;.tex';
   Format.CanOpen := True;
   Format.CanSaveBack := False;
-  Format.RoundTripProfile := 'Editable supported drawing semantics';
-  Format.RuntimeRequirements :=
-    'Images must be existing local PNG, JPEG or BMP files in the document directory';
+  Format.RoundTripProfile :=
+    'Editable supported semantics; local PNG, JPEG or BMP basename images only';
+  Format.RuntimeRequirements := '';
   RegisterDocumentCodec(Format, @TikZDocumentLoader, nil);
 end;
 
