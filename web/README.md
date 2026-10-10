@@ -56,6 +56,13 @@ and leave the application interactive. Bitmap EPS data is generated directly
 from decoded pixels in the browser; saving a drawing with a bitmap does not
 require `sam2p`.
 
+An uploaded file is a snapshot copied into the browser's temporary virtual
+filesystem. TpX does not retain an authorized handle to the desktop file, so
+external-file auto-refresh is unavailable in this workflow; use **File → Open**
+again after changing the source. Imported TeX labels stay as editable text until
+you explicitly approve **View → Trust TeX preview for this document**; browser
+previews use the existing MathJax renderer and do not launch a local process.
+
 Open `.tpx` files with their referenced images using **Related files (optional)**
 in the file dialog. The browser filesystem is temporary; keep the downloaded
 `.tpx` and its image files together. Browser support is exercised through the

@@ -6,13 +6,23 @@ interface
 
 uses Classes, Graphics, Geometry, Devices, Types, Drawings;
 
+const
+  LiveTeXTrustStatus =
+    'TeX preview is blocked for this source. Approve it in View to render.';
+
 var
   LiveTeXEnabled: Boolean = True;
   LiveTeXStatus: string = '';
+  { Documents created in the editor are trusted for live preview. Source files
+    replace this with False until the user explicitly approves TeX preview. }
+  LiveTeXDocumentTrusted: Boolean = True;
+  LiveTeXDocumentGeneration: QWord = 1;
 
 procedure InitializeLiveTeX(const Changed: TNotifyEvent);
 procedure ConfigureLiveTeX(const Drawing: TDrawing2D);
 procedure ShutdownLiveTeX;
+procedure BeginLiveTeXDocument(Trusted: Boolean);
+procedure SetLiveTeXDocumentTrusted(Trusted: Boolean);
 procedure SetLiveTeXEnabled(Value: Boolean);
 procedure FlushLiveTeX;
 procedure ForgetLiveTeXObject(ObjectKey: PtrUInt);
@@ -44,10 +54,41 @@ begin
   SetWebTeXEnabled(False);
 end;
 
+procedure BeginLiveTeXDocument(Trusted: Boolean);
+begin
+  Inc(LiveTeXDocumentGeneration);
+  LiveTeXDocumentTrusted := Trusted;
+  ResetWebTeXDocument;
+  SetWebSourceSnapshotStatus(not Trusted);
+  if not Trusted then
+  begin
+    LiveTeXStatus := LiveTeXTrustStatus;
+  end
+  else
+    LiveTeXStatus := '';
+  if Assigned(OnPreviewChanged) then OnPreviewChanged(nil);
+end;
+
+procedure SetLiveTeXDocumentTrusted(Trusted: Boolean);
+begin
+  if LiveTeXDocumentTrusted = Trusted then Exit;
+  Inc(LiveTeXDocumentGeneration);
+  LiveTeXDocumentTrusted := Trusted;
+  ResetWebTeXDocument;
+  if not Trusted then
+    LiveTeXStatus := LiveTeXTrustStatus
+  else
+    LiveTeXStatus := '';
+  if Assigned(OnPreviewChanged) then OnPreviewChanged(nil);
+end;
+
 procedure SetLiveTeXEnabled(Value: Boolean);
 begin
   LiveTeXEnabled := Value;
   SetWebTeXEnabled(Value);
+  if not LiveTeXDocumentTrusted then LiveTeXStatus := LiveTeXTrustStatus
+  else LiveTeXStatus := '';
+  if Assigned(OnPreviewChanged) then OnPreviewChanged(nil);
 end;
 
 procedure FlushLiveTeX;
@@ -80,7 +121,7 @@ function DrawLiveTeX(const Canvas: TCanvas; const ObjectKey: PtrUInt;
   const HAlign: THAlignment; const VAlign: TVAlignment;
   const Color: TColor; FallbackRadius: Double): Boolean;
 begin
-  Result := LiveTeXEnabled and (Source <> '') and
+  Result := LiveTeXEnabled and LiveTeXDocumentTrusted and (Source <> '') and
     DrawWebTeX(Canvas, ObjectKey, P, H, Rotation, Source, HAlign, VAlign, Color);
 end;
 {$ELSE}
@@ -120,6 +161,7 @@ type
     FCache: TTeXPreviewCache;
     FPreambleAge: LongInt;
     FClosing, FWorkerCancelled: Boolean;
+    FDocumentGeneration, FWorkerDocumentGeneration: QWord;
     FRuns: Integer;
     FDamage: TRect;
     FHasDamage: Boolean;
@@ -132,6 +174,7 @@ type
     procedure ReadPreamble;
     function IsUsed(Entry: TPreviewEntry): Boolean;
     procedure CancelUnusedWorker;
+    procedure InvalidateDocument;
   public
     constructor Create(const Changed: TNotifyEvent);
     destructor Destroy; override;
@@ -155,6 +198,7 @@ constructor TTeXPreviewManager.Create(const Changed: TNotifyEvent);
 begin
   inherited Create;
   FChanged := Changed;
+  FDocumentGeneration := LiveTeXDocumentGeneration;
   FEntries := TStringList.Create;
   FEntries.Sorted := True;
   FEntries.OwnsObjects := True;
@@ -234,6 +278,15 @@ begin
   FWorker.Terminate;
 end;
 
+procedure TTeXPreviewManager.InvalidateDocument;
+begin
+  FDocumentGeneration := LiveTeXDocumentGeneration;
+  FObjects.Clear;
+  FHasDamage := False;
+  CancelUnusedWorker;
+  if Assigned(FChanged) then FChanged(Self);
+end;
+
 procedure TTeXPreviewManager.Schedule(Sender: TObject);
 var
   Inputs: TTeXPreviewInputs;
@@ -261,6 +314,7 @@ begin
   end;
   SetLength(Inputs, N);
   if N = 0 then Exit;
+  FWorkerDocumentGeneration := FDocumentGeneration;
   FWorker := TTeXPreviewWorker.Create(Inputs, FDirectory, WorkerTerminated);
   FWorker.Start;
 end;
@@ -279,6 +333,20 @@ var
   PreviousStatus: string;
 begin
   if FClosing or not Assigned(FWorker) then Exit;
+  if FWorkerDocumentGeneration <> FDocumentGeneration then begin
+    for I := 0 to High(FWorker.Results) do begin
+      J := FEntries.IndexOf(FWorker.Results[I].Key);
+      if J < 0 then Continue;
+      Entry := TPreviewEntry(FEntries.Objects[J]);
+      Entry.Running := False;
+      Entry.Error := '';
+      Entry.Pending := LiveTeXDocumentTrusted and IsUsed(Entry);
+    end;
+    FreeAndNil(FWorker);
+    FWorkerCancelled := False;
+    if LiveTeXEnabled and LiveTeXDocumentTrusted then Schedule(nil);
+    Exit;
+  end;
   PreviousStatus := LiveTeXStatus;
   Inc(FRuns, FWorker.Runs);
   for I := 0 to High(FWorker.Results) do begin
@@ -288,7 +356,7 @@ begin
     Entry.Running := False;
     if FWorkerCancelled then begin
       Entry.Error := '';
-      Entry.Pending := True;
+      Entry.Pending := LiveTeXDocumentTrusted and IsUsed(Entry);
       Continue;
     end;
     Entry.Error := FWorker.Results[I].Error;
@@ -353,6 +421,7 @@ begin
         if Error <> '' then begin Error := ''; Pending := True; end;
   end;
   LiveTeXStatus := '';
+  if not LiveTeXDocumentTrusted then LiveTeXStatus := LiveTeXTrustStatus;
   if Value then Schedule(nil);
 end;
 
@@ -473,7 +542,7 @@ var
   Radius: Integer;
 begin
   Result := False;
-  if not LiveTeXEnabled or (H<=0) then Exit;
+  if not LiveTeXEnabled or not LiveTeXDocumentTrusted or (H<=0) then Exit;
   if Source='' then begin
     ForgetLiveTeXObject(ObjectKey);
     Exit;
@@ -519,6 +588,7 @@ begin
   Obj.HAlign := HAlign;
   Obj.VAlign := VAlign;
   if Obj.Current<>Entry then begin
+    Obj.LastGood := nil;
     Obj.Current := Entry;
     CancelUnusedWorker;
     if Entry.Pending then FTimer.Enabled := False;
@@ -581,6 +651,23 @@ begin
   FreeAndNil(Manager);
 end;
 
+procedure BeginLiveTeXDocument(Trusted: Boolean);
+begin
+  Inc(LiveTeXDocumentGeneration);
+  LiveTeXDocumentTrusted := Trusted;
+  if not Trusted then
+    LiveTeXStatus := LiveTeXTrustStatus
+  else
+    LiveTeXStatus := '';
+  if Assigned(Manager) then Manager.InvalidateDocument;
+end;
+
+procedure SetLiveTeXDocumentTrusted(Trusted: Boolean);
+begin
+  if LiveTeXDocumentTrusted = Trusted then Exit;
+  BeginLiveTeXDocument(Trusted);
+end;
+
 procedure SetLiveTeXEnabled(Value: Boolean);
 begin
   LiveTeXEnabled := Value;
@@ -631,7 +718,7 @@ function DrawLiveTeX(const Canvas: TCanvas; const ObjectKey: PtrUInt;
   const HAlign: THAlignment; const VAlign: TVAlignment;
   const Color: TColor; FallbackRadius: Double): Boolean;
 begin
-  Result := Assigned(Manager) and LiveTeXEnabled and
+  Result := Assigned(Manager) and LiveTeXEnabled and LiveTeXDocumentTrusted and
     Manager.Draw(Canvas,ObjectKey,P,H,Rotation,Source,HAlign,VAlign,Color,FallbackRadius);
 end;
 

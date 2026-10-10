@@ -604,6 +604,14 @@ def s_tex_preview(app):
     if app.page.evaluate("performance.getEntriesByType('resource').some(e=>e.name.endsWith('/tex-svg.bundle.js'))"):
         raise AssertionError('MathJax loaded for a drawing without TeX')
     open_drawing('tex-preview-input.tpx')
+    if app.page.evaluate("performance.getEntriesByType('resource').some(e=>e.name.endsWith('/tex-svg.bundle.js'))"):
+        raise AssertionError('untrusted imported TeX triggered MathJax')
+    snapshot_status = app.page.locator('#source-snapshot-status')
+    snapshot_status.wait_for()
+    status_text = snapshot_status.text_content()
+    if 'auto-refresh is unavailable' not in status_text or 'File → Open again' not in status_text:
+        raise AssertionError('browser snapshot refresh capability is not explained')
+    app.menu('View', 'Trust TeX preview for this document')
     app.page.wait_for_function("performance.getEntriesByType('resource').some(e=>e.name.endsWith('/tex-svg.bundle.js'))")
     v = app.viewport()
     area = [v['x'], v['y'], v['w'], v['h']]
@@ -653,8 +661,48 @@ def s_tex_preview(app):
     saved = drawing_xml(app.save('tex-preview-saved.tpx'))
     if saved[0].get('tex') != formula or saved[0].get('t') != 'Fallback':
         raise AssertionError('preview changed the saved text sources')
+    root[0].set('tex', r'Energy $E=mc^2+\frac{1}{3}$')
+    open_drawing('tex-preview-delayed.tpx')
+    app.page.evaluate('''() => {
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+      window.__tpxOriginalImageSrc = descriptor;
+      window.__tpxLateRasterPending = false;
+      Object.defineProperty(HTMLImageElement.prototype, 'src', {
+        configurable: true,
+        get() { return descriptor.get.call(this); },
+        set(value) {
+          if (String(value).startsWith('blob:')) {
+            window.__tpxLateRasterPending = true;
+            setTimeout(() => this.dispatchEvent(new Event('error')), 1400);
+          } else descriptor.set.call(this, value);
+        }
+      });
+    }''')
+    app.menu('View', 'Trust TeX preview for this document')
+    app.page.wait_for_function('window.__tpxLateRasterPending === true')
+    open_drawing('tex-preview-replacement.tpx')
+    app.page.wait_for_timeout(1600)
+    if app.page.locator('#notice:not([hidden])').count():
+        raise AssertionError('old asynchronous TeX failure reached the replacement document')
+    app.page.evaluate('''() => Object.defineProperty(
+      HTMLImageElement.prototype, 'src', window.__tpxOriginalImageSrc)''')
+    park(app, v)
+    capture('replacement-plain')
+    app.menu('View', 'Trust TeX preview for this document')
+    app.page.wait_for_function('''r => {
+      const a = window.tpxTexTest['replacement-plain'];
+      const b = document.querySelector('#lcl').getContext('2d').getImageData(...r).data;
+      let changed = 0;
+      for (let i = 0; i < a.length; i += 4)
+        if (Math.abs(a[i]-b[i]) > 8 || Math.abs(a[i+1]-b[i+1]) > 8 || Math.abs(a[i+2]-b[i+2]) > 8)
+          if (++changed > 80) return true;
+      return false;
+    }''', arg=area, polling=100, timeout=10000)
     root[0].set('tex', r'$\undefinedPreviewCommand$')
     open_drawing('tex-preview-invalid.tpx')
+    if app.page.locator('#notice:not([hidden])').count():
+        raise AssertionError('untrusted imported TeX produced a preview notice')
+    app.menu('View', 'Trust TeX preview for this document')
     app.page.locator('#notice:not([hidden])').wait_for()
     park(app, v)
     capture('invalid')
@@ -662,7 +710,10 @@ def s_tex_preview(app):
     park(app, v)
     if difference('invalid') > 20:
         raise AssertionError('new invalid TeX object retained another object\'s cached preview')
-    return f'lazy MathJax changed {changed} pixels; toggle/cache/save/fallback and idle verified'
+    app.menu('File', 'New')
+    if snapshot_status.is_visible():
+        raise AssertionError('new drawing retained the prior source snapshot notice')
+    return f'lazy MathJax changed {changed} pixels; toggle/cache/save/fallback, stale-generation and idle checks passed'
 
 
 SCENARIOS = [

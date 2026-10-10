@@ -122,6 +122,7 @@ begin
   SavedLatex := LatexPath;
   ShutdownLiveTeX;
   InitializeLiveTeX(nil);
+  BeginLiveTeXDocument(True);
   SetLiveTeXEnabled(True);
   LatexPath := IncludeTrailingPathDelimiter(GetTempDir) + 'tpx-absent-latex';
   Bitmap := TBitmap.Create;
@@ -143,6 +144,34 @@ begin
     Bitmap.Free;
     ShutdownLiveTeX;
     LatexPath := SavedLatex;
+  end;
+end;
+
+procedure TestLiveTeXTrustGate;
+var
+  Bitmap: TBitmap;
+  Compilations: Integer;
+begin
+  ShutdownLiveTeX;
+  InitializeLiveTeX(nil);
+  SetLiveTeXEnabled(True);
+  Bitmap := TBitmap.Create;
+  try
+    Bitmap.SetSize(100, 60);
+    BeginLiveTeXDocument(False);
+    Compilations := LiveTeXCompilationCount;
+    Check(not DrawLiveTeX(Bitmap.Canvas, 42, Point2D(20, 40), 20, 0,
+      '\input{untrusted}', ahLeft, jvBaseline, clBlack),
+      'Untrusted source entered the live preview pipeline');
+    Check(not LiveTeXPending, 'Untrusted source queued a preview job');
+    Check(LiveTeXCompilationCount = Compilations,
+      'Untrusted source launched a preview compile');
+    Check(Pos('blocked', LowerCase(LiveTeXStatus)) > 0,
+      'Untrusted source did not expose the preview trust state');
+  finally
+    Bitmap.Free;
+    BeginLiveTeXDocument(True);
+    ShutdownLiveTeX;
   end;
 end;
 
@@ -203,6 +232,7 @@ var
 begin
   ShutdownLiveTeX;
   InitializeLiveTeX(nil);
+  BeginLiveTeXDocument(True);
   SetLiveTeXEnabled(True);
   Bitmap := TBitmap.Create;
   try
@@ -960,19 +990,25 @@ end;
 procedure TestStartupFileName;
 var
   Expected: string;
+  ExpectedNew: Boolean;
+  ExpectedTrusted: Boolean;
   ExpectedCount: Integer;
   Line: TLine2D;
 begin
   Expected := GetEnvironmentVariable('TPX_STARTUP_EXPECTED');
   ExpectedCount := StrToInt(GetEnvironmentVariable('TPX_STARTUP_OBJECTS'));
+  ExpectedNew := GetEnvironmentVariable('TPX_STARTUP_NEW') = '1';
+  ExpectedTrusted := GetEnvironmentVariable('TPX_STARTUP_TRUSTED') = '1';
   Check(MainForm.TheDrawing.FileName = Expected,
     'Startup document filename differs: ' + MainForm.TheDrawing.FileName);
-  if ExpectedCount = 0 then
+  if ExpectedNew then
     Check(MainForm.Caption = Expected, 'New startup document title differs')
   else Check(MainForm.Caption = ExtractFileName(Expected), 'Loaded startup title differs');
   Check(MainForm.TheDrawing.ObjectsCount = ExpectedCount,
     'Startup loaded an unexpected object count');
   Check(not MainForm.TheDrawing.History.IsChanged, 'Startup document is dirty');
+  Check(LiveTeXDocumentTrusted = ExpectedTrusted,
+    'Startup source did not establish the expected TeX preview trust state');
   if ExpectedCount = 1 then begin
     Line := MainForm.TheDrawing.GetObject(0) as TLine2D;
     Check((Line.Points[1].X = 20) and (Line.Points[1].Y = 10),
@@ -1217,6 +1253,7 @@ begin
     if GetEnvironmentVariable('TPX_STARTUP_EXPECTED') <> '' then TestStartupFileName
     else if Pos('viewport-', ParamStr(1)) = 1 then TestViewport(ParamStr(1))
     else if ParamStr(1) = 'live-tex-missing-tool' then TestLiveTeXMissingTool
+    else if ParamStr(1) = 'live-tex-trust' then TestLiveTeXTrustGate
     else if ParamStr(1) = 'live-tex' then TestLiveTeX
     else if ParamStr(1) = 'live-tex-settings' then TestLiveTeXSettings
     else if ParamStr(1) = 'preview-state' then TestPreviewState

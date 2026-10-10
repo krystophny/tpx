@@ -158,6 +158,7 @@ type
     Useareatoselectobjects2: TMenuItem;
     ShowGrid: TAction;
     LiveTeXPreview: TAction;
+    TrustTeXPreview: TAction;
     LiveTeXPreviewItem: TMenuItem;
     SnapToGrid: TAction;
     SnapToShapes: TAction;
@@ -457,6 +458,7 @@ type
       Shift: TShiftState; WX, WY: TRealTypeX; X, Y: Integer);
     procedure ShowGridExecute(Sender: TObject);
     procedure LiveTeXPreviewExecute(Sender: TObject);
+    procedure TrustTeXPreviewExecute(Sender: TObject);
     procedure LiveTeXChanged(Sender: TObject);
     procedure InsertRectangleExecute(Sender: TObject);
     procedure InsertEllipseExecute(Sender: TObject);
@@ -866,6 +868,17 @@ begin
   SetLiveTeXEnabled(not LiveTeXEnabled);
   LiveTeXPreview.Checked := LiveTeXEnabled;
   LocalView.Repaint;
+  LiveTeXChanged(Self);
+{$ENDIF}
+end;
+
+procedure TMainForm.TrustTeXPreviewExecute(Sender: TObject);
+begin
+{$IFDEF FPC}
+  SetLiveTeXDocumentTrusted(not LiveTeXDocumentTrusted);
+  TrustTeXPreview.Checked := LiveTeXDocumentTrusted;
+  LocalView.Repaint;
+  LiveTeXChanged(Self);
 {$ENDIF}
 end;
 
@@ -874,6 +887,7 @@ var
   Damage: TRect;
 begin
 {$IFDEF FPC}
+  TrustTeXPreview.Checked := LiveTeXDocumentTrusted;
   StatusBar1.Panels[1].Text := LiveTeXStatus;
   StatusBar1.Hint := LiveTeXStatus;
   StatusBar1.ShowHint := True;
@@ -1197,6 +1211,7 @@ procedure TMainForm.FormShow(Sender: TObject);
 begin
 {$IFDEF FPC}
   LiveTeXPreview.Checked := LiveTeXEnabled;
+  TrustTeXPreview.Checked := LiveTeXDocumentTrusted;
 {$ENDIF}
   ShowGrid.Checked := LocalView.ShowGrid;
   ShowCrossHair.Checked := LocalView.ShowCrossHair;

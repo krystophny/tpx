@@ -113,7 +113,12 @@ Desktop live previews typeset TeX text in the canvas using LaTeX and `dvipng`,
 with reusable SVG output when `dvisvgm` is available. **View → Live LaTeX
 Preview** toggles this behavior; it is enabled by default. Without the tools,
 the canvas shows editable text. Explicit LaTeX previews and exports still work
-as before.
+as before. A newly created drawing trusts the labels entered in that editor;
+opening a source file blocks live TeX preview until **View → Trust TeX preview
+for this document** is selected. The preview compiler disables shell escape and
+limits each compiler process to 15 seconds, but it is not a sandbox: approved
+TeX can still read files available to the current user. Only approve source you
+trust; labels remain editable as plain text while preview is blocked.
 
 TikZ output supplies drawing defaults for `\tpxLineWidth`, `\tpxTextSize`,
 `\tpxDashSize`, and `\tpxDotSize`. Define these before including the drawing

@@ -19,6 +19,7 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "canvas-focus-transfer",
              "property-dimensions", "font-choice", "conversion-save",
              "unsupported-exports", "live-tex-missing-tool", "clipboard-format-width",
+             "live-tex-trust",
              "clipboard-roundtrip", "color-box-custom-state",
              "platform-shortcuts")
 
@@ -111,15 +112,20 @@ class RuntimeTests(unittest.TestCase):
             source.write_text('%<TpX v="5">\n'
                               '%<line x1="0" y1="0" x2="20" y2="10"/>\n'
                               '%</TpX>\n')
-            cases = [([], ": Unnamed drawing :", 0),
-                     (["-f", ""], ": Unnamed drawing :", 0),
-                     (["new drawing.tpx"], str(root / "new drawing.tpx"), 0),
-                     (["-f", source.name], str(source), 1)]
-            for arguments, expected, count in cases:
+            empty_source = root / "empty drawing.tpx"
+            empty_source.write_text('%<TpX v="5">\n%</TpX>\n')
+            cases = [([], ": Unnamed drawing :", 0, True, True),
+                     (["-f", ""], ": Unnamed drawing :", 0, True, True),
+                     (["new drawing.tpx"], str(root / "new drawing.tpx"), 0, True, True),
+                     (["-f", source.name], str(source), 1, False, False),
+                     (["-f", empty_source.name], str(empty_source), 0, False, False)]
+            for arguments, expected, count, trusted, is_new in cases:
                 with self.subTest(arguments=arguments):
                     env = os.environ.copy()
                     env.update(TPX_STARTUP_EXPECTED=expected,
-                               TPX_STARTUP_OBJECTS=str(count))
+                               TPX_STARTUP_OBJECTS=str(count),
+                               TPX_STARTUP_TRUSTED="1" if trusted else "0",
+                               TPX_STARTUP_NEW="1" if is_new else "0")
                     result = subprocess.run([str(BINARY), *arguments], cwd=root,
                                             env=env, capture_output=True,
                                             text=True, timeout=40)

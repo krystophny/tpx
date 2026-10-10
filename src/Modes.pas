@@ -1075,6 +1075,9 @@ begin
         MainForm.Enabled := True;
         ViewPort.EndUpdate;
       end;
+{$IFDEF FPC}
+      BeginLiveTeXDocument(False);
+{$ENDIF}
       MainForm.Caption := Drawing.FileName;
       ViewPort.Repaint;
       Drawing.History.SaveCheckSum;
@@ -1088,6 +1091,9 @@ begin
     finally
       Loader.Free;
     end;
+{$IFDEF FPC}
+    BeginLiveTeXDocument(False);
+{$ENDIF}
     ViewPort.ZoomToExtension;
     ViewPort.Repaint;
     MainForm.Caption := ExtractFileName(Drawing.FileName);
@@ -1101,6 +1107,9 @@ end;
 
 procedure TTpXMode.NewDrawing(const FileName: string);
 begin
+{$IFDEF FPC}
+  BeginLiveTeXDocument(True);
+{$ENDIF}
   Drawing.Clear;
   Drawing.RepaintViewports;
   Drawing.FileName := FileName;
