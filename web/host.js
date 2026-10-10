@@ -2,6 +2,7 @@
 import {startLCL} from '@lcl/browser-host';
 import {texPreviewImports} from './tex-preview.js';
 import {documentStatusImports} from './document-status.js';
+import {localRecoveryImports} from './local-recovery.js';
 
 function mergeImports(...groups) {
   const result = {};
@@ -11,4 +12,5 @@ function mergeImports(...groups) {
 }
 
 startLCL({moduleURL: './tpx.wasm', argv: ['tpx'], createImports: runtime =>
-  mergeImports(texPreviewImports(runtime), documentStatusImports(runtime))});
+  mergeImports(texPreviewImports(runtime), documentStatusImports(runtime),
+    localRecoveryImports(runtime))});
