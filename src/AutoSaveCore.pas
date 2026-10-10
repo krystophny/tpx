@@ -35,6 +35,7 @@ type
     FSaveDueMS: QWord;
     FRecoveryDueMS: QWord;
     FLastFailure: string;
+    FLastFailureKind: TAutoSaveWorkKind;
     procedure AdvanceDocumentGeneration;
     procedure CancelSourceSave;
     procedure CancelRecovery;
@@ -69,6 +70,8 @@ type
       NewWatchGeneration: QWord): Boolean;
     procedure SourceSaveSucceeded(const Ticket: TAutoSaveTicket;
       NewWatchGeneration: QWord);
+    procedure WorkSucceeded(const Kind: TAutoSaveWorkKind;
+      const Ticket: TAutoSaveTicket);
     procedure WorkFailed(const Kind: TAutoSaveWorkKind;
       const Ticket: TAutoSaveTicket; const ErrorText: string);
     procedure SourceSaveFailed(const Ticket: TAutoSaveTicket;
@@ -159,7 +162,7 @@ begin
   FInteractionDepth := 0;
   FSaveDueSet := False;
   FRecoveryDueSet := False;
-  FLastFailure := '';
+    FLastFailure := '';
   if FDirty then SchedulePending(NowMS);
 end;
 
@@ -356,11 +359,20 @@ begin
   AcceptSavedRevision(Ticket, NewWatchGeneration);
 end;
 
+procedure TAutoSaveCoordinator.WorkSucceeded(const Kind: TAutoSaveWorkKind;
+  const Ticket: TAutoSaveTicket);
+begin
+  if not IsTicketCurrent(Ticket) then Exit;
+  if (FLastFailure <> '') and (FLastFailureKind = Kind) then
+    FLastFailure := '';
+end;
+
 procedure TAutoSaveCoordinator.WorkFailed(const Kind: TAutoSaveWorkKind;
   const Ticket: TAutoSaveTicket; const ErrorText: string);
 begin
   if not IsTicketCurrent(Ticket) then Exit;
   FLastFailure := ErrorText;
+  FLastFailureKind := Kind;
   if Kind = aswSourceSave then CancelSourceSave
   else CancelRecovery;
 end;
