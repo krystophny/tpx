@@ -960,9 +960,6 @@ end;
 
 
 procedure TMainForm.FormCreate(Sender: TObject);
-{$IFDEF FPC}{$IFDEF CPUWASM32}
-var InfoMenu: TMenuItem;
-{$ENDIF}{$ENDIF}
 begin
   FormPos_Left := MainForm.Left;
   FormPos_Top := MainForm.Top;
@@ -996,11 +993,8 @@ begin
   InitializeAutoReload;
   InitializeAutoSave;
 {$ELSE}
-  InfoMenu := TMenuItem.Create(Self);
-  InfoMenu.Caption := 'Persistent AutoSave and recovery unavailable in browser builds';
-  InfoMenu.Enabled := False;
-  InfoMenu.Hint := 'Browser downloads are temporary snapshots and do not track desktop files';
-  File1.Add(InfoMenu);
+  SaveDoc.Caption := 'Download a copy';
+  SaveAs.Caption := 'Download a copy as...';
 {$ENDIF}
 {$ENDIF}
   RefreshSourceStatus;
