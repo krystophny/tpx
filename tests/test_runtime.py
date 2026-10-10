@@ -122,6 +122,21 @@ class RuntimeTests(unittest.TestCase):
             with self.subTest(scenario=scenario):
                 self.run_scenario(scenario)
 
+    def test_registered_tikz_open_materializes_native_scene(self):
+        fixture_dir = Path(__file__).parent / "core" / "fixtures" / "tikz"
+        with tempfile.TemporaryDirectory(prefix="tpx-tikz-import-") as directory:
+            source = Path(directory) / "independent-scene.tex"
+            fragment = Path(directory) / "bare-fragment.tikz"
+            shutil.copy2(fixture_dir / source.name, source)
+            shutil.copy2(fixture_dir / "acceptance-image.png", source.parent)
+            fragment.write_text(
+                r"\path[line width=0mm] (0,0) rectangle +(2,1);" +
+                r"\draw (0,0)--(2,1);", encoding="ascii")
+            self.run_scenario("tikz-import-native", {
+                "TPX_TIKZ_FIXTURE": str(source),
+                "TPX_TIKZ_FRAGMENT_FIXTURE": str(fragment),
+            })
+
     @unittest.skipUnless(shutil.which("latex") and
                          (shutil.which("dvipng") or
                           (shutil.which("dvisvgm") and shutil.which("rsvg-convert"))),
