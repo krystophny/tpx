@@ -440,6 +440,11 @@ begin
     @(MainForm.LocalView.ShowRulers), 'Show rulers');
   SettingsList.AddBoolean('ShowScrollBars',
     @(MainForm.ShowScrollBars.Checked), 'Show scroll bars');
+  SettingsList.AddInteger('ObjectInspector.Width',
+    @(MainForm.InspectorPanelWidth), 240, 1000,
+    'Object inspector panel width');
+  SettingsList.AddBoolean('ObjectInspector.Visible',
+    @(MainForm.InspectorPanelVisible), 'Show object inspector');
 //  SettingsList.AddBoolean('ShowPropertiesToolbar1',
 //    @(MainForm.ShowPropertiesToolbar1.Checked),
 //      'Show the first properties toolbar');
@@ -468,6 +473,7 @@ begin
     @(MainForm.FormPos_Maximized), 'Main window state');
 
   LoadSettings;
+  MainForm.ApplyInspectorSettings;
 end;
 
 initialization
