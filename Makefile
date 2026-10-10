@@ -6,11 +6,12 @@ LAZBUILD_FLAGS ?=
 FPC ?= fpc
 TPX_BINARY = obj/$(shell $(FPC) -iTP)-$(shell $(FPC) -iTO)/TpX
 RUNTIME_BINARY = obj/$(shell $(FPC) -iTP)-$(shell $(FPC) -iTO)/RuntimeTests
+CORE_BUILD_DIR = obj/$(shell $(FPC) -iTP)-$(shell $(FPC) -iTO)/core-tests
 BUILD_OPTIONS = --pcp="$(LAZARUS_CONFIG)" $(if $(LAZARUS_DIR),--lazarusdir="$(LAZARUS_DIR)") --ws="$(WIDGETSET)" $(LAZBUILD_FLAGS)
 
 WEB_PORT ?= 8791
 
-.PHONY: all build run test web web-check web-serve
+.PHONY: all build run test test-core test-gui test-tex test-watch web web-check web-serve
 
 all: build
 
@@ -20,11 +21,24 @@ build:
 run: build
 	"$(TPX_BINARY)"
 
-test: build
+test: test-core test-gui test-tex
+
+test-core:
+	python3 tests/test_core.py --compiler "$(FPC)" --build-dir "$(CORE_BUILD_DIR)"
+
+test-gui: build
 	TPX_BINARY="$(CURDIR)/$(TPX_BINARY)" python3 tests/test_exports.py
-	TPX_BINARY="$(CURDIR)/$(TPX_BINARY)" python3 tests/test_tex.py
 	$(LAZBUILD) $(BUILD_OPTIONS) tests/RuntimeTests.lpi
 	RUNTIME_BINARY="$(CURDIR)/$(RUNTIME_BINARY)" python3 tests/test_runtime.py
+
+test-tex: build
+	python3 tests/check_tex_tools.py
+	TPX_BINARY="$(CURDIR)/$(TPX_BINARY)" python3 tests/test_tex.py
+
+# The first production watcher cases arrive with issue #63. Until then, a
+# zero-match result is a failure instead of a green empty watcher job.
+test-watch:
+	python3 tests/test_core.py --compiler "$(FPC)" --build-dir "$(CORE_BUILD_DIR)" --filter=watch
 
 # Browser (WASI) target. Toolchain pins and locations: web/pins.env, web/README.md.
 web:

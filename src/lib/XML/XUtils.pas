@@ -93,7 +93,7 @@ uses
 {$IFNDEF FPC}
   Windows,
 {$ELSE}
-  LCLIntf,
+  {$IFDEF MSWINDOWS}Windows,{$ENDIF}
 {$ENDIF}
  SysUtils;
 	
