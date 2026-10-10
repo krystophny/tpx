@@ -1,0 +1,16 @@
+\begingroup%
+\providecommand{\tpxLineWidth}{0.4mm}%
+\providecommand{\tpxTextSize}{10pt}%
+\providecommand{\tpxDashSize}{1mm}%
+\providecommand{\tpxDotSize}{0.2mm}%
+\beginpgfgraphicnamed{\pgfactualjobname}%
+\begin{tikzpicture}[x=1.00mm, y=1.00mm, inner xsep=0pt, inner ysep=0pt, outer xsep=0pt, outer ysep=0pt, miter limit = 12.00]
+\path[line width=0mm] (0,0) rectangle +(10,10);
+\path[line width=0.400000*\tpxLineWidth, draw=L, fill=F, dash pattern=on 2*\tpxDashSize off \tpxDashSize] (1.25,2.50) -- (8.00,2.50) -- (8.00,6.00) -- cycle;
+\path[line width=0.4*\tpxLineWidth, draw=L] (5.00,4.00) [rotate around={30:(5.00,4.00)}] arc (0:180:4.20mm);
+\definecolor{T}{rgb}{0.2,0.4,0.8}
+\draw[T] (2.00,3.00) node[anchor=base west,rotate=30]{\pgfmathsetlengthmacro{\tpxObjectFontSize}{1.25*\tpxTextSize}\pgfmathsetlengthmacro{\tpxObjectBaseline}{1.5*\tpxTextSize}\fontsize{\tpxObjectFontSize}{\tpxObjectBaseline}\selectfont TpX \frac{1}{2}};
+\node at (9.00,1.00)[anchor=south west]{\includegraphics[width=8.25mm,height=4.75mm]{images/sample.png}};
+\end{tikzpicture}%
+\endpgfgraphicnamed
+\endgroup%
