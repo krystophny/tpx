@@ -65,6 +65,11 @@ in the file dialog. The browser filesystem is temporary; keep the downloaded
 opened, edited and saved in their source format. Every browser-opened file is a
 snapshot without desktop filesystem access; the status notice explains that
 external auto-refresh is unavailable and **File → Open** re-imports changes.
+**File → Download a copy** requests a browser download of the current document
+and linked assets; the status reports that request without claiming the browser
+saved it to disk or synchronized the original file. A best-effort leave-page
+warning is active only while the drawing has unsaved work, but browsers may
+suppress that warning, so keep an explicit downloaded copy.
 Browser support is exercised through the application scenarios below, not every
 LCL API or TpX drawing tool.
 

@@ -57,7 +57,8 @@ try:
             restart_page = None
             profile = None
             persistent_context = [None]
-            if name == 'recovery-restart-geometry':
+            if name in {'recovery-restart-geometry', 'recovery-restart-raw-label',
+                        'recovery-source-assets'}:
                 profile = tempfile.mkdtemp(prefix='tpx-browser-recovery-')
 
                 def restart_page():
