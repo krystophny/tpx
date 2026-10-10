@@ -593,6 +593,14 @@ begin
     end;
 end;
 
+function NativeTextBody(TextObject: TText2D): RawByteString;
+begin
+  if TextObject.TeXText <> '' then
+    Result := RawByteString(TextObject.TeXText)
+  else
+    Result := TeXText(TextObject.Text);
+end;
+
 procedure AddNativeChanges(Context: TTikZImportContext; BindingIndex: SizeInt;
   Native: TPrimitive2D; Drawing: TDrawing2D; Source: TBytes;
   var Edits: TEditArray);
@@ -867,7 +875,7 @@ begin
       DepIndex := FindDependency(Binding, tdTextBody);
       if DepIndex < 0 then
         raise EWriteError.Create('Changed text body has no TikZ source dependency');
-      Body := string(TeXText(TextObject.Text));
+      Body := string(NativeTextBody(TextObject));
       AddBoundEdit(Edits, BindingIndex, DepIndex, RawByteString(Body));
     end;
   end;
@@ -906,6 +914,12 @@ begin
   Result := True;
 end;
 
+procedure AppendTikZOption(var Options: string; const Value: string);
+begin
+  if Options <> '' then Options := Options + ', ';
+  Options := Options + Value;
+end;
+
 function PointText(const P: TPoint2D): string;
 begin
   if not FinitePoint(P) then
@@ -930,12 +944,14 @@ begin
     TextObject := Primitive as TText2D;
     if not NearValue(TextObject.Height, Drawing.DefaultFontHeight) then
       raise EWriteError.Create('New text size cannot be represented by the imported TikZ defaults');
-    Body := string(TeXText(TextObject.Text));
-    if TextObject.HAlignment = ahLeft then Options := Options + ', anchor=base west'
-    else if TextObject.HAlignment = ahRight then Options := Options + ', anchor=base east';
+    Body := string(NativeTextBody(TextObject));
+    if TextObject.HAlignment = ahLeft then
+      AppendTikZOption(Options, 'anchor=base west')
+    else if TextObject.HAlignment = ahRight then
+      AppendTikZOption(Options, 'anchor=base east');
     if not NearValue(TextObject.Rot, 0) then
-      Options := Options + ', rotate=' + FormatTikZReal(
-        TextObject.Rot * 180 / Pi, SizeOf(TRealType));
+      AppendTikZOption(Options, 'rotate=' + FormatTikZReal(
+        TextObject.Rot * 180 / Pi, SizeOf(TRealType)));
     if Options <> '' then Options := '[' + Options + ']';
     Exit(RawByteString('\node' + Options + ' at ' +
       PointText(Primitive.Points[0]) + ' {' + Body + '};'));
@@ -966,14 +982,16 @@ begin
       NearValue(B.Y / B.W, C.Y / C.W)) then
       raise EWriteError.Create('Rotated rectangles cannot be inserted into this TikZ source');
     Result := Result + RawByteString(PointText(A) + ' rectangle ' +
-      PointText(Point2D(B.X - C.X + A.X, B.Y - C.Y + A.Y)) + ';');
+      PointText(B) + ';');
     Exit;
   end;
   if not (Primitive is TPolyline2D0) and
     not (Primitive is TBezierPath2D) and
     not (Primitive is TClosedBezierPath2D) and
     not (Primitive is TLine2D) then
-    raise EWriteError.Create('This new native object type has no TikZ source serializer');
+    raise EWriteError.CreateFmt(
+      'This new native object type has no TikZ source serializer (%s)',
+      [Primitive.ClassName]);
   N := Primitive.Points.Count;
   if (N < 2) then
     raise EWriteError.Create('New TikZ paths require at least two control points');
@@ -1007,8 +1025,48 @@ end;
 function SerializeNewObject(Obj: TObject2D; Drawing: TDrawing2D): RawByteString;
 begin
   if not (Obj is TPrimitive2D) then
-    raise EWriteError.Create('Only standalone primitive objects can be inserted into a TikZ picture');
+    raise EWriteError.CreateFmt(
+      'Only standalone primitive objects can be inserted into a TikZ picture (%s)',
+      [Obj.ClassName]);
   Result := SerializeNewPrimitive(TPrimitive2D(Obj), Drawing);
+end;
+
+function SerializeNewDocument(Drawing: TDrawing2D;
+  const FileName: TDocumentPath): RawByteString;
+var
+  Obj: TObject2D;
+  IsTeXDocument: Boolean;
+  EOL, FontDefault: RawByteString;
+begin
+  if Drawing = nil then
+    raise EWriteError.Create('A new TikZ document has no drawing');
+  IsTeXDocument := SameText(ExtractFileExt(string(FileName)), '.tex');
+  EOL := RawByteString(LineEnding);
+  if (Drawing.DefaultFontHeight <= 0) or IsNan(Drawing.DefaultFontHeight) or
+    IsInfinite(Drawing.DefaultFontHeight) then
+    raise EWriteError.Create('New TikZ document has no valid default text size');
+  FontDefault := RawByteString('\providecommand{\tpxTextSize}{' +
+    FormatTikZReal(Drawing.DefaultFontHeight * 72 / 25.4,
+      SizeOf(TRealType)) + 'pt}');
+  if IsTeXDocument then
+    Result := '\documentclass{standalone}' + EOL +
+      '\usepackage{tikz}' + EOL +
+      FontDefault + EOL +
+      '\begin{document}' + EOL +
+      '\begin{tikzpicture}[x=1mm,y=1mm]' + EOL
+  else
+    Result := FontDefault + EOL +
+      '\begin{tikzpicture}[x=1mm,y=1mm]' + EOL;
+  Obj := Drawing.ObjectList.FirstObj as TObject2D;
+  if Obj = nil then
+    raise EWriteError.Create('An empty drawing has no TikZ objects to save');
+  while Obj <> nil do
+  begin
+    Result := Result + SerializeNewObject(Obj, Drawing) + EOL;
+    Obj := Drawing.ObjectList.NextObj as TObject2D;
+  end;
+  Result := Result + '\end{tikzpicture}' + EOL;
+  if IsTeXDocument then Result := Result + '\end{document}' + EOL;
 end;
 
 function BuildSourceEdits(Drawing: TDrawing2D; Context: TTikZImportContext;
@@ -1240,11 +1298,21 @@ end;
 function SaveTikZDocument(Drawing: TDrawing2D;
   const FileName: TDocumentPath; Destination: TStream;
   CodecContext: TObject): Boolean;
-var Source, Updated: TBytes; Context: TTikZImportContext;
+var
+  Source, Updated: TBytes;
+  Context: TTikZImportContext;
+  NewDocument: RawByteString;
 begin
   Result := False;
+  if CodecContext = nil then
+  begin
+    NewDocument := SerializeNewDocument(Drawing, FileName);
+    if Length(NewDocument) > 0 then
+      Destination.WriteBuffer(NewDocument[1], Length(NewDocument));
+    Exit(True);
+  end;
   if not (CodecContext is TTikZImportContext) then
-    raise EWriteError.Create('TikZ save-back requires an accepted source context');
+    raise EWriteError.Create('TikZ save-back context has an unsupported type');
   Context := CodecContext as TTikZImportContext;
   Source := Context.CopySource;
   if not BuildSourceEdits(Drawing, Context, Source, Updated) then Exit;
