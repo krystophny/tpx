@@ -638,6 +638,7 @@ type
     procedure InitializeBrowserRecovery;
     procedure BrowserRecoveryCheckpoint;
     procedure UpdateBrowserDocumentDirty;
+    function BrowserRecoveryIsDirty: Boolean;
     procedure ProcessBrowserRecoveryDeadline(Sender: TObject);
     procedure SetBrowserRecoveryEnabled(Value: Boolean);
     procedure ResetBrowserRecoveryDocument;
@@ -1384,18 +1385,21 @@ begin
   begin
     if FBrowserRecoveryTimer <> nil then FBrowserRecoveryTimer.Enabled := False;
   end
-  else if (TheDrawing <> nil) and
-    (TheDrawing.History.IsChanged or
-      ((FEditSession <> nil) and FEditSession.HasUncommittedWork)) then
-    BrowserRecoveryDocumentEdited;
+  else if BrowserRecoveryIsDirty then BrowserRecoveryDocumentEdited;
+end;
+
+function TMainForm.BrowserRecoveryIsDirty: Boolean;
+begin
+  Result := (TheDrawing <> nil) and (TheDrawing.History <> nil) and
+    TheDrawing.History.IsChanged;
+  if (FEditSession <> nil) and FEditSession.IsActive and
+    FEditSession.HasUncommittedWork then Result := True;
 end;
 
 procedure TMainForm.UpdateBrowserDocumentDirty;
 var IsDirty, HasSource: Boolean;
 begin
-  IsDirty := (TheDrawing <> nil) and TheDrawing.History.IsChanged;
-  if (FEditSession <> nil) and FEditSession.IsActive and
-    FEditSession.HasUncommittedWork then IsDirty := True;
+  IsDirty := BrowserRecoveryIsDirty;
   HasSource := (EventManager <> nil) and
     (EventManager.DocumentSession.SourcePath <> '');
   SetBrowserDocumentSource(HasSource);
@@ -1404,20 +1408,26 @@ begin
 end;
 
 procedure TMainForm.BrowserRecoveryDocumentEdited;
+var IsDirty: Boolean;
 begin
   if FBrowserRecoveryRevision < High(QWord) then
     Inc(FBrowserRecoveryRevision);
+  IsDirty := BrowserRecoveryIsDirty;
   UpdateBrowserDocumentDirty;
-  if FBrowserRecoveryEnabled and (FBrowserRecoveryTimer <> nil) then
+  if not FBrowserRecoveryEnabled or (FBrowserRecoveryTimer = nil) then Exit;
+  FBrowserRecoveryTimer.Enabled := False;
+  if IsDirty then
   begin
-    FBrowserRecoveryTimer.Enabled := False;
+    BrowserRecoveryShowStatus(16);
     FBrowserRecoveryTimer.Enabled := True;
-  end;
+  end
+  else BrowserRecoveryShowStatus(17);
 end;
 
 procedure TMainForm.BrowserRecoveryDownloadRequested;
 begin
-  if FBrowserRecoveryEnabled then BrowserRecoveryCheckpoint;
+  if FBrowserRecoveryEnabled and BrowserRecoveryIsDirty then
+    BrowserRecoveryCheckpoint;
   ResetBrowserRecoveryDocument;
 end;
 
