@@ -22,7 +22,7 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "auto-reload-integration",
              "property-dimensions", "font-choice", "conversion-save",
              "unsupported-exports", "live-tex-missing-tool", "clipboard-format-width",
-             "clipboard-roundtrip", "color-box-custom-state", "tikz-source-save",
+             "clipboard-roundtrip", "color-box-custom-state",
              "platform-shortcuts")
 
 

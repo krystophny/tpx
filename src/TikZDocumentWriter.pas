@@ -142,7 +142,7 @@ begin
     $000000: Name := 'black';
     $FFFFFF: Name := 'white';
     $FF0000: Name := 'red';
-    $008000: Name := 'green';
+    $00FF00: Name := 'green';
     $0000FF: Name := 'blue';
     $808080: Name := 'gray';
     $00FFFF: Name := 'cyan';
@@ -612,6 +612,7 @@ var
   PhysicalWidth: Extended;
   Name, Value, Body: string;
   RGB: LongWord;
+  BodyChanged: Boolean;
   TextObject: TText2D;
   Circular: TCircular2D;
   Ellipse: TEllipse2D;
@@ -737,7 +738,7 @@ begin
       AddScalarEdit(tdHeight, CurrentHeight);
   end;
 
-  if SceneObject.Kind <> tsoImage then
+  if (SceneObject.Kind <> tsoImage) and (SceneObject.Kind <> tsoText) then
   begin
   DepIndex := FindDependency(Binding, tdLineWidth);
   if Native.LineStyle <> liNone then
@@ -751,14 +752,9 @@ begin
     begin
       if DepIndex < 0 then
         raise EWriteError.Create('Changed line width has no local TikZ dependency');
-      Dep := Binding.Dependencies[DepIndex];
       Value := FormatTikZReal(PhysicalWidth, SizeOf(TRealType)) + 'mm';
-      if Dep.DependencySource in [tdepLocalLiteral, tdepLocalStyle] then
-        AddPropertyEdit(Context, BindingIndex, DepIndex, RawByteString(Value),
-          'line width', Edits)
-      else
-        AddPropertyEdit(Context, BindingIndex, DepIndex, RawByteString(Value),
-          'line width', Edits);
+      AddPropertyEdit(Context, BindingIndex, DepIndex, RawByteString(Value),
+        'line width', Edits);
     end;
   end
   else if SceneObject.StrokeEnabled then
@@ -870,7 +866,29 @@ begin
       AddPropertyEdit(Context, BindingIndex, DepIndex, RawByteString(Value),
         'rotate', Edits);
     end;
-    if TextObject.Text <> string(SceneObject.TextContent) then
+    RGB := ColorToRGB24(TextObject.LineColor);
+    if RGB <> (SceneObject.StrokeRGB and $FFFFFF) then
+    begin
+      if not RGBColorName(RGB, Name) then
+        raise EWriteError.Create('This edited text color has no safe local TikZ color name');
+      DepIndex := FindDependency(Binding, tdTextColor);
+      if DepIndex < 0 then
+        raise EWriteError.Create('Changed text color has no TikZ source dependency');
+      AddPropertyEdit(Context, BindingIndex, DepIndex, RawByteString(Name),
+        'text', Edits);
+    end;
+    if TextObject.TeXText <> '' then
+      BodyChanged := RawByteString(TextObject.TeXText) <>
+        SceneObject.TextContent
+    else
+    begin
+      BodyChanged := RawByteString(TextObject.Text) <>
+        SceneObject.TextContent;
+      if not BodyChanged then
+        BodyChanged := (Pos('$', string(SceneObject.TextContent)) > 0) or
+          (Pos('\', string(SceneObject.TextContent)) > 0);
+    end;
+    if BodyChanged then
     begin
       DepIndex := FindDependency(Binding, tdTextBody);
       if DepIndex < 0 then
@@ -890,6 +908,16 @@ begin
   if (Primitive.Hatching <> haNone) or
     (Primitive.BeginArrowKind <> arrNone) or
     (Primitive.EndArrowKind <> arrNone) then Exit;
+  if Primitive is TText2D then
+  begin
+    if Primitive.FillColor <> clDefault then Exit;
+    if Primitive.LineColor <> clDefault then
+    begin
+      if not RGBColorName(ColorToRGB24(Primitive.LineColor), Name) then Exit;
+      Options := 'text=' + Name;
+    end;
+    Exit(True);
+  end;
   if Primitive.LineStyle <> liNone then
   begin
     if Drawing.LineWidthBase <= 0 then Exit;
@@ -935,6 +963,7 @@ var
   I, N: SizeInt;
   A, B, C: TPoint2D;
   TextObject: TText2D;
+  SizeRatio: Extended;
   Bezier: Boolean;
 begin
   if not ColorOption(Primitive, Drawing, Options) then
@@ -942,17 +971,28 @@ begin
   if Primitive is TText2D then
   begin
     TextObject := Primitive as TText2D;
-    if not NearValue(TextObject.Height, Drawing.DefaultFontHeight) then
-      raise EWriteError.Create('New text size cannot be represented by the imported TikZ defaults');
+    if (Drawing.DefaultFontHeight <= 0) or IsNan(Drawing.DefaultFontHeight) or
+      IsInfinite(Drawing.DefaultFontHeight) or (TextObject.Height <= 0) or
+      IsNan(TextObject.Height) or IsInfinite(TextObject.Height) then
+      raise EWriteError.Create('New TikZ text has no valid font size');
+    SizeRatio := TextObject.Height / Drawing.DefaultFontHeight;
     Body := string(NativeTextBody(TextObject));
     if TextObject.HAlignment = ahLeft then
       AppendTikZOption(Options, 'anchor=base west')
     else if TextObject.HAlignment = ahRight then
-      AppendTikZOption(Options, 'anchor=base east');
+      AppendTikZOption(Options, 'anchor=base east')
+    else
+      AppendTikZOption(Options, 'anchor=base');
     if not NearValue(TextObject.Rot, 0) then
       AppendTikZOption(Options, 'rotate=' + FormatTikZReal(
         TextObject.Rot * 180 / Pi, SizeOf(TRealType)));
     if Options <> '' then Options := '[' + Options + ']';
+    Body := '\pgfmathsetlengthmacro{\tpxObjectFontSize}{' +
+      FormatTikZReal(SizeRatio, SizeOf(TRealType)) + '*\tpxTextSize}' +
+      '\pgfmathsetlengthmacro{\tpxObjectBaseline}{' +
+      FormatTikZReal(SizeRatio * 1.2, SizeOf(TRealType)) +
+      '*\tpxTextSize}\fontsize{\tpxObjectFontSize}' +
+      '{\tpxObjectBaseline}\selectfont ' + Body;
     Exit(RawByteString('\node' + Options + ' at ' +
       PointText(Primitive.Points[0]) + ' {' + Body + '};'));
   end;
@@ -1046,7 +1086,7 @@ begin
     IsInfinite(Drawing.DefaultFontHeight) then
     raise EWriteError.Create('New TikZ document has no valid default text size');
   FontDefault := RawByteString('\providecommand{\tpxTextSize}{' +
-    FormatTikZReal(Drawing.DefaultFontHeight * 72 / 25.4,
+    FormatTikZReal(Drawing.DefaultFontHeight * 72.27 / 25.4,
       SizeOf(TRealType)) + 'pt}');
   if IsTeXDocument then
     Result := '\documentclass{standalone}' + EOL +
