@@ -13,11 +13,13 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from functools import partial
 from threading import Thread
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from harness import App  # noqa: E402
 from scenarios import SCENARIOS  # noqa: E402
+from recovery_scenarios import SCENARIOS as RECOVERY_SCENARIOS  # noqa: E402
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
@@ -36,6 +38,9 @@ args = parser.parse_args()
 wanted = set(n for n in args.only.split(',') if n)
 OUT = Path(args.outdir)
 OUT.mkdir(parents=True, exist_ok=True)
+SCENARIOS = SCENARIOS + RECOVERY_SCENARIOS
+RESTART_SCENARIOS = {'recovery-restart-geometry', 'recovery-restart-raw-label',
+                     'recovery-source-assets'}
 
 class QuietHandler(SimpleHTTPRequestHandler):
     def log_message(self, *args):
@@ -46,17 +51,31 @@ Thread(target=srv.serve_forever, daemon=True).start()
 results, failures = [], []
 try:
     with sync_playwright() as p:
-        browser = (p.chromium.launch(executable_path=args.chromium, args=['--no-sandbox'])
-                   if args.browser == 'chromium' else getattr(p, args.browser).launch())
+        browser_type = getattr(p, args.browser)
+        launch_options = ({'executable_path': args.chromium, 'args': ['--no-sandbox']}
+                          if args.browser == 'chromium' else {})
+        browser = browser_type.launch(**launch_options)
         for name, fn in SCENARIOS:
             if wanted and name not in wanted:
                 continue
-            page = browser.new_page(viewport={'width': 1280, 'height': 900})
-            app = App(page, name, OUT)
+            profile = None
+            context = None
+            restart_factory = None
+            if name in RESTART_SCENARIOS:
+                profile = tempfile.mkdtemp(prefix='tpx-browser-recovery-')
+                restart_factory = lambda: browser_type.launch_persistent_context(
+                    profile, viewport={'width': 1280, 'height': 900}, **launch_options)
+                context = restart_factory()
+                page = context.pages[0] if context.pages else context.new_page()
+            else:
+                context = browser.new_context(viewport={'width': 1280, 'height': 900})
+                page = context.new_page()
+            app = App(page, name, OUT, context, restart_factory)
             status = 'pass'
             detail = ''
             try:
-                page.goto(f'http://127.0.0.1:{srv.server_port}/')
+                app.url = f'http://127.0.0.1:{srv.server_port}/'
+                page.goto(app.url)
                 page.wait_for_selector('#status[data-state=ready]', timeout=30000)
                 page.wait_for_function('Number(document.querySelector("#lcl").dataset.frames)>0')
                 page.wait_for_timeout(500)
@@ -79,7 +98,11 @@ try:
             results.append({'scenario': name, 'status': status, 'detail': detail,
                             'frames': app.frames(), 'shots': app.shots})
             print(f'{status:5} {name:24} {detail[:150]}')
-            page.close()
+            if context is not None:
+                context.close()
+            if profile is not None:
+                import shutil
+                shutil.rmtree(profile, ignore_errors=True)
         browser.close()
 finally:
     srv.shutdown()
