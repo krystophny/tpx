@@ -1280,6 +1280,8 @@ begin
 {$ENDIF}
 end;
 
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
 procedure TMainForm.RefreshRecoveryAfterEditSessionEnd;
 begin
   if FSaveRuntime = nil then Exit;
@@ -1288,6 +1290,8 @@ begin
   ArmAutoSaveTimer;
   UpdateAutoSaveUi;
 end;
+{$ENDIF}
+{$ENDIF}
 
 function TMainForm.SendSettledMessage(Msg: TEventMessage;
   Sender: TObject): Boolean;
