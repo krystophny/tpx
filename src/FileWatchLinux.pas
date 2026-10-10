@@ -25,11 +25,11 @@ type
     procedure RunWorker;
     procedure ProcessBuffer(Buffer: PByte; Count: LongInt);
     procedure ProcessEvent(WatchDescriptor: LongInt; Mask: LongWord;
-      Cookie: LongWord; const Name: string);
+      Cookie: LongWord; const Name: UTF8String);
     procedure WakeWorker;
     function ReadStopping: Boolean;
     function ErrorText(const Operation: string; ErrorCode: LongInt): string;
-    function AddDirectoryWatch(const Directory: string;
+    function AddDirectoryWatch(const Directory: UTF8String;
       out ErrorCode: LongInt): LongInt;
     procedure PublishInvalidation(const MessageText: string);
     procedure UpdateWatchStatus;
@@ -39,7 +39,7 @@ type
     destructor Destroy; override;
     procedure Start; override;
     procedure Stop; override;
-    function Subscribe(const Path: string; Generation: QWord;
+    function Subscribe(const Path: UTF8String; Generation: QWord;
       out SubscriptionID: QWord): TFileWatchStatus; override;
     procedure Unsubscribe(SubscriptionID: QWord); override;
     {$IFDEF TPX_FILEWATCH_TESTS}
@@ -106,9 +106,9 @@ type
   TWatchSubscription = class
     ID: QWord;
     Generation: QWord;
-    Path: string;
-    ParentPath: string;
-    BaseName: string;
+    Path: UTF8String;
+    ParentPath: UTF8String;
+    BaseName: UTF8String;
     WatchDescriptor: LongInt;
     Present: Boolean;
   end;
@@ -196,7 +196,7 @@ begin
   c_write(FWakeWriteFD, @WakeByte, 1);
 end;
 
-function TLinuxFileChangeSource.AddDirectoryWatch(const Directory: string;
+function TLinuxFileChangeSource.AddDirectoryWatch(const Directory: UTF8String;
   out ErrorCode: LongInt): LongInt;
 var
   EncodedDirectory: UTF8String;
@@ -348,12 +348,12 @@ begin
   end;
 end;
 
-function TLinuxFileChangeSource.Subscribe(const Path: string;
+function TLinuxFileChangeSource.Subscribe(const Path: UTF8String;
   Generation: QWord; out SubscriptionID: QWord): TFileWatchStatus;
 var
   I: Integer;
   Item: TWatchSubscription;
-  NormalizedPath, ParentPath: string;
+  NormalizedPath, ParentPath: UTF8String;
   WatchDescriptor, WatchError: LongInt;
 begin
   SubscriptionID := 0;
@@ -443,7 +443,7 @@ procedure TLinuxFileChangeSource.ProcessBuffer(Buffer: PByte; Count: LongInt);
 var
   Offset, NameLength: LongInt;
   Header: TInotifyEventHeader;
-  Name: string;
+  Name: UTF8String;
 begin
   Offset := 0;
   while Offset < Count do
@@ -475,7 +475,7 @@ begin
 end;
 
 procedure TLinuxFileChangeSource.ProcessEvent(WatchDescriptor: LongInt;
-  Mask: LongWord; Cookie: LongWord; const Name: string);
+  Mask: LongWord; Cookie: LongWord; const Name: UTF8String);
 var
   I: Integer;
   Item: TWatchSubscription;

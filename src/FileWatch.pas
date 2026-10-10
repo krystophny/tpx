@@ -22,7 +22,7 @@ type
   TFileChangeEvent = record
     SubscriptionID: QWord;
     Generation: QWord;
-    Path: string;
+    Path: UTF8String;
     Kind: TFileChangeKind;
     Status: TFileWatchStatus;
     ErrorText: string;
@@ -59,7 +59,7 @@ type
     procedure SetStatus(Status: TFileWatchStatus);
     function AllocateSubscriptionID: QWord;
     class function MakeEvent(SubscriptionID, Generation: QWord;
-      const Path: string; Kind: TFileChangeKind; Status: TFileWatchStatus;
+      const Path: UTF8String; Kind: TFileChangeKind; Status: TFileWatchStatus;
       const ErrorText: string = ''): TFileChangeEvent; static;
   public
     constructor Create; virtual;
@@ -68,7 +68,7 @@ type
     procedure Start; virtual; abstract;
     function WaitUntilReady(TimeoutMS: LongInt): TFileWatchStatus;
     procedure Stop; virtual; abstract;
-    function Subscribe(const Path: string; Generation: QWord;
+    function Subscribe(const Path: UTF8String; Generation: QWord;
       out SubscriptionID: QWord): TFileWatchStatus; virtual; abstract;
     procedure Unsubscribe(SubscriptionID: QWord); virtual; abstract;
 
@@ -79,7 +79,7 @@ type
 
 procedure RegisterFileChangeSourceFactory(Factory: TFileChangeSourceFactory);
 function CreateFileChangeSource: TFileChangeSource;
-function NormalizeFileWatchPath(const Path: string): string;
+function NormalizeFileWatchPath(const Path: UTF8String): UTF8String;
 
 implementation
 
@@ -88,7 +88,7 @@ type
   public
     procedure Start; override;
     procedure Stop; override;
-    function Subscribe(const Path: string; Generation: QWord;
+    function Subscribe(const Path: UTF8String; Generation: QWord;
       out SubscriptionID: QWord): TFileWatchStatus; override;
     procedure Unsubscribe(SubscriptionID: QWord); override;
   end;
@@ -100,6 +100,30 @@ begin
     Result := Event.WaitFor(High(Cardinal))
   else
     Result := Event.WaitFor(Cardinal(TimeoutMS));
+end;
+{$ENDIF}
+
+{$IFDEF MSWINDOWS}
+function c_GetFullPathNameW(FileName: PWideChar; BufferLength: Cardinal;
+  Buffer: PWideChar; FilePart: Pointer): Cardinal; stdcall;
+  external 'kernel32' name 'GetFullPathNameW';
+
+function IsWindowsRootPath(const Path: UTF8String): Boolean;
+var
+  I, Separators: Integer;
+begin
+  Result := False;
+  if Length(Path) = 3 then
+    Result := (Path[2] = ':') and (Path[3] = PathDelim);
+  if Result then Exit;
+  if Length(Path) < 5 then Exit;
+  if Path[1] <> PathDelim then Exit;
+  if Path[2] <> PathDelim then Exit;
+  if Path[Length(Path)] <> PathDelim then Exit;
+  Separators := 0;
+  for I := 1 to Length(Path) - 1 do
+    if Path[I] = PathDelim then Inc(Separators);
+  Result := Separators = 3;
 end;
 {$ENDIF}
 
@@ -297,7 +321,7 @@ begin
 end;
 
 class function TFileChangeSource.MakeEvent(SubscriptionID, Generation: QWord;
-  const Path: string; Kind: TFileChangeKind; Status: TFileWatchStatus;
+  const Path: UTF8String; Kind: TFileChangeKind; Status: TFileWatchStatus;
   const ErrorText: string): TFileChangeEvent;
 begin
   Result.SubscriptionID := SubscriptionID;
@@ -320,7 +344,7 @@ begin
   SetStatus(fwsStopped);
 end;
 
-function TUnavailableFileChangeSource.Subscribe(const Path: string;
+function TUnavailableFileChangeSource.Subscribe(const Path: UTF8String;
   Generation: QWord; out SubscriptionID: QWord): TFileWatchStatus;
 begin
   SubscriptionID := 0;
@@ -342,12 +366,42 @@ begin
   else Result := TUnavailableFileChangeSource.Create;
 end;
 
-function NormalizeFileWatchPath(const Path: string): string;
+function NormalizeFileWatchPath(const Path: UTF8String): UTF8String;
+{$IFDEF MSWINDOWS}
+var
+  WideInput, WideOutput: UnicodeString;
+  Required, Written: Cardinal;
+{$ENDIF}
 begin
   if Path = '' then Exit('');
-  Result := ExpandFileName(Path);
+  {$IFDEF MSWINDOWS}
+  WideInput := UTF8Decode(Path);
+  Required := c_GetFullPathNameW(PWideChar(WideInput), 0, nil, nil);
+  if Required = 0 then
+    Result := Path
+  else
+  begin
+    SetLength(WideOutput, Required);
+    Written := c_GetFullPathNameW(PWideChar(WideInput), Required,
+      PWideChar(WideOutput), nil);
+    if (Written = 0) or (Written >= Required) then
+      Result := Path
+    else
+    begin
+      SetLength(WideOutput, Written);
+      Result := UTF8Encode(WideOutput);
+    end;
+  end;
+  {$ELSE}
+  Result := UTF8String(ExpandFileName(string(Path)));
+  {$ENDIF}
   while (Length(Result) > 1) and (Result[Length(Result)] = PathDelim) do
+  begin
+    {$IFDEF MSWINDOWS}
+    if IsWindowsRootPath(Result) then Break;
+    {$ENDIF}
     Delete(Result, Length(Result), 1);
+  end;
 end;
 
 end.

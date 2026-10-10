@@ -15,7 +15,7 @@ type
   public
     procedure Start; override;
     procedure Stop; override;
-    function Subscribe(const Path: string; Generation: QWord;
+    function Subscribe(const Path: UTF8String; Generation: QWord;
       out SubscriptionID: QWord): TFileWatchStatus; override;
     procedure Unsubscribe(SubscriptionID: QWord); override;
     procedure Emit(const Event: TFileChangeEvent);
@@ -61,7 +61,7 @@ begin
   SetStatus(fwsStopped);
 end;
 
-function TFakeFileChangeSource.Subscribe(const Path: string;
+function TFakeFileChangeSource.Subscribe(const Path: UTF8String;
   Generation: QWord; out SubscriptionID: QWord): TFileWatchStatus;
 begin
   SubscriptionID := 0;
@@ -112,11 +112,25 @@ procedure TestFileWatchQueueAndLifecycle;
 var
   Source: TFakeFileChangeSource;
   Event: TFileChangeEvent;
+  WatchPath: UTF8String;
   SubscriptionID: QWord;
   I: Integer;
   Entered, Finished: TEvent;
   Waiter: TSourceWaiter;
 begin
+  WatchPath := UTF8String(GetTempDir(False));
+  while (Length(WatchPath) > 1) and
+    (WatchPath[Length(WatchPath)] = PathDelim) do
+    Delete(WatchPath, Length(WatchPath), 1);
+  if Length(WatchPath) = 0 then
+    WatchPath := WatchPath + PathDelim;
+  if WatchPath[Length(WatchPath)] <> PathDelim then
+    WatchPath := WatchPath + PathDelim;
+  WatchPath := WatchPath + 'filewatch-' +
+    UTF8String(#$CE#$94#$2D#$C3#$BC#$C3#$B1);
+  CheckCore(NormalizeFileWatchPath(WatchPath) = WatchPath,
+    'normalization must preserve UTF-8 path bytes');
+
   Source := TFakeFileChangeSource.Create;
   try
     Entered := TEvent.Create(nil, True, False, '');

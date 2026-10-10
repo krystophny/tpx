@@ -182,6 +182,13 @@ begin
         WriteLn('POLL_COUNT|', Source.PollReturnsForTest);
         Flush(Output);
       end
+      else if Argument = 'WAIT' then
+      begin
+        WaitMS := StrToIntDef(Rest, 3000);
+        if Source.WaitForEvent(WaitMS) then WriteLn('PENDING')
+        else WriteLn('EMPTY');
+        Flush(Output);
+      end
       else if Argument = 'RESTARTS' then
       begin
         RestartCount := StrToIntDef(Rest, 0);

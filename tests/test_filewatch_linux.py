@@ -217,9 +217,7 @@ class LinuxFileWatchTests(unittest.TestCase):
         self.assertEqual((status, generation), ("ready", "42"))
         second_id = int(second_id)
         self.mutate("atomic")
-        events = self.events()
-        self.assert_event(events, "replaced", self.watcher.subscription, 41)
-        self.assert_event(events, "replaced", second_id, 42)
+        self.assertEqual(self.watcher.command("WAIT|3000"), "PENDING")
         self.assertEqual(self.watcher.command(f"UNSUB|{self.watcher.subscription}"),
                          f"UNSUB|{self.watcher.subscription}")
         self.assertEqual(self.watcher.command(f"UNSUB|{second_id}"), f"UNSUB|{second_id}")
@@ -227,11 +225,28 @@ class LinuxFileWatchTests(unittest.TestCase):
         _, status, third_id, generation = response.split("|")
         self.assertEqual(status, "ready")
         third_id = int(third_id)
+        events = self.events()
+        self.assert_event(events, "replaced", self.watcher.subscription, 41)
+        self.assert_event(events, "replaced", second_id, 42)
+        self.assertFalse(any(event["id"] == third_id for event in events),
+                         "pending old-generation events were retagged to a new subscription")
         self.mutate("atomic2")
         events = self.events()
         self.assert_event(events, "replaced", third_id, 52)
         self.assertFalse(any(event["id"] in (self.watcher.subscription, second_id)
                              for event in events))
+
+    def test_edit_between_subscribe_and_baseline_remains_queued(self):
+        response = self.watcher.command("SUB|77")
+        _, status, subscription, generation = response.split("|")
+        self.assertEqual((status, generation), ("ready", "77"))
+        subscription = int(subscription)
+        self.mutate("atomic")
+        self.assertEqual(self.watcher.command("WAIT|3000"), "PENDING")
+        baseline = self.path.read_bytes()
+        self.assertEqual(baseline, b"atomic content\n")
+        events = self.events()
+        self.assert_event(events, "replaced", subscription, 77)
 
     def test_injected_malformed_overflow_watch_loss_and_bounded_queue(self):
         self.assertEqual(self.watcher.command("INJECT_BAD"), "INJECTED")
