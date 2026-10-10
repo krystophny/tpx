@@ -109,8 +109,16 @@ class RuntimeTests(unittest.TestCase):
 
     def run_scenario(self, scenario, extra_env=None, directory_prefix="tpx-runtime-"):
         with tempfile.TemporaryDirectory(prefix=directory_prefix) as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
             env = os.environ.copy()
-            env["TMPDIR"] = directory
+            env.update({"TMPDIR": str(root), "TMP": str(root), "TEMP": str(root),
+                        "HOME": str(home), "USERPROFILE": str(home),
+                        "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                        "LOCALAPPDATA": str(config)})
             env.update(extra_env or {})
             result = subprocess.run([str(BINARY), scenario], cwd=directory,
                                     env=env, capture_output=True, text=True, timeout=40)
@@ -189,6 +197,19 @@ class RuntimeTests(unittest.TestCase):
                    "TPX_AUTOSAVE_NAMED_SOURCE": str(root / "named.tpx")}
             self.run_scenario("autosave-named-recovery-create", env)
             self.run_scenario("autosave-named-recovery-restore", env)
+
+    def test_recovery_retires_old_source_watch_only_after_commit(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-autosave-watch-restore-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
+            env = {"HOME": str(home), "USERPROFILE": str(home),
+                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                   "LOCALAPPDATA": str(config),
+                   "TPX_AUTOSAVE_WATCH_SOURCE": str(root / "active.tpx")}
+            self.run_scenario("autosave-recovery-watch-binding", env)
 
     def test_source_autosave_undo_picture_properties_and_conflict(self):
         with tempfile.TemporaryDirectory(prefix="tpx-autosave-source-") as directory:

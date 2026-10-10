@@ -8,11 +8,15 @@ implementation
 
 uses SysUtils, Classes, AutoSaveStore, DocumentFormats, CoreTestSupport;
 
-function Utf8Bytes(First, Second: Byte): TDocumentPath;
+function UnicodePathChar(Codepoint: Word): TDocumentPath;
+var Value: UnicodeString;
 begin
-  SetLength(Result, 2);
-  Result[1] := AnsiChar(First);
-  Result[2] := AnsiChar(Second);
+  SetLength(Value, 1);
+  Value[1] := WideChar(Codepoint);
+  Result := UTF8Encode(Value);
+  CheckCore((Length(Result) = 2) and (Byte(Result[1]) = $CE) and
+    (Byte(Result[2]) = (Codepoint and $FF)),
+    'Unicode path fixture must contain the expected UTF-8 bytes');
 end;
 
 function EmptyRevision: TDiskRevision;
@@ -207,9 +211,9 @@ var
 begin
   CheckCore(CreateGUID(ID) = 0, 'could not create Unicode-path test id');
   Token := StringReplace(StringReplace(GUIDToString(ID), '{', '', []), '}', '', []);
-  Root := TDocumentPath(GetTempDir(False)) + 'tpx-autosave-' +
-    Utf8Bytes($CE, $B1) + '-' + Token;
-  SourcePath := Root + PathDelim + 'source-' + Utf8Bytes($CE, $B2) + '.tpx';
+  Root := TDocumentPath(UTF8String(GetCurrentDir)) + PathDelim + 'tpx-autosave-' +
+    UnicodePathChar($03B1) + '-' + Token;
+  SourcePath := Root + PathDelim + 'source-' + UnicodePathChar($03B2) + '.tpx';
   CheckCore(UTF8Encode(UTF8Decode(Root)) = Root,
     'the Unicode config directory must round-trip as UTF-8');
   Store := TAutoSaveStore.Create(Root);

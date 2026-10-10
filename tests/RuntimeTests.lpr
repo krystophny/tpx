@@ -60,6 +60,9 @@ begin
     Inc(PromptCount);
     Exit(idButtonYes);
   end;
+  if (ParamStr(1) = 'autosave-recovery-watch-binding') and
+    (Pos('Could not recover the selected draft', Message) > 0) then
+    Exit(idButtonOK);
   if (ParamStr(1) = 'bitmap-eps') and
     (Pos('Conversion of bitmap to EPS failed:', Message) > 0) then begin
     Inc(PromptCount);
@@ -1323,6 +1326,7 @@ begin
     else if ParamStr(1) = 'autosave-recovery-restore' then TestAutoSaveRecoveryRestore
     else if ParamStr(1) = 'autosave-named-recovery-create' then TestAutoSaveNamedRecoveryCreate
     else if ParamStr(1) = 'autosave-named-recovery-restore' then TestAutoSaveNamedRecoveryRestore
+    else if ParamStr(1) = 'autosave-recovery-watch-binding' then TestAutoSaveRecoveryWatchBinding
     else if ParamStr(1) = 'color-box-custom-state' then TestColorBoxCustomState
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
     else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))

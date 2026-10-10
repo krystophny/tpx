@@ -9,11 +9,15 @@ implementation
 uses SysUtils, Classes, DocumentFormats, AutoSaveCore, AutoSavePreferences,
   CoreTestSupport;
 
-function Utf8Bytes(First, Second: Byte): TDocumentPath;
+function UnicodePathChar(Codepoint: Word): TDocumentPath;
+var Value: UnicodeString;
 begin
-  SetLength(Result, 2);
-  Result[1] := AnsiChar(First);
-  Result[2] := AnsiChar(Second);
+  SetLength(Value, 1);
+  Value[1] := WideChar(Codepoint);
+  Result := UTF8Encode(Value);
+  CheckCore((Length(Result) = 2) and (Byte(Result[1]) = $CE) and
+    (Byte(Result[2]) = (Codepoint and $FF)),
+    'Unicode path fixture must contain the expected UTF-8 bytes');
 end;
 
 procedure TestDefaultsAndCapability;
@@ -149,7 +153,7 @@ begin
     CheckCore(C.TakeDue(2250, Work, Ticket) and
       (Work = [aswSourceSave, aswRecoveryDraft]),
       'an edit after an accepted conflict resolution may be saved again');
-    C.SourceSaveFailed(Ticket, 'source replace failed');
+    C.WorkFailed(aswSourceSave, Ticket, 'source replace failed');
     CheckCore(C.Dirty and (C.LastFailure = 'source replace failed'),
       'failed publication must retain the dirty state and its error');
     CheckCore(C.NextDelayMS(2250) < 0,
@@ -222,7 +226,7 @@ begin
     C.NotifyLocalEdit(3, 2100, True);
     CheckCore(C.TakeDue(2850, Work, Ticket),
       'both independent mechanisms should become due together');
-    C.SourceSaveFailed(Ticket, 'source publication failed');
+    C.WorkFailed(aswSourceSave, Ticket, 'source publication failed');
     C.WorkSucceeded(aswRecoveryDraft, Ticket);
     CheckCore(C.LastFailure = 'source publication failed',
       'recovery success must not hide an unrelated source-save failure');
@@ -254,10 +258,10 @@ begin
       not Enabled, 'a per-document preference should be independently disableable');
     CheckCore(not ReadDocumentAutoSavePreference(Values, '', Enabled) and
       not Enabled, 'untitled documents use the default without a path key');
-    UpperGreekPath := TDocumentPath(GetTempDir(False)) + 'drawing-' +
-      Utf8Bytes($CE, $91) + '.tpx';
-    LowerGreekPath := TDocumentPath(GetTempDir(False)) + 'drawing-' +
-      Utf8Bytes($CE, $B1) + '.tpx';
+    UpperGreekPath := TDocumentPath(UTF8String(GetCurrentDir)) + PathDelim + 'drawing-' +
+      UnicodePathChar($0391) + '.tpx';
+    LowerGreekPath := TDocumentPath(UTF8String(GetCurrentDir)) + PathDelim + 'drawing-' +
+      UnicodePathChar($03B1) + '.tpx';
     {$IFDEF MSWINDOWS}
     CheckCore(SameDocumentPath(UpperGreekPath, LowerGreekPath),
       'Windows document path identity should fold Unicode case');

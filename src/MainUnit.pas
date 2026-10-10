@@ -1823,7 +1823,7 @@ begin
     if Entry.PayloadFormatId = 'tpx-assets' then
     begin
       FSaveRuntime.UnpackTpXRecoveryPayload(Entry.Payload,
-        TDocumentPath(UTF8String(GetTempDir)), PayloadBytes,
+        FSaveRuntime.Store.Root, PayloadBytes,
         RecoveryAssets, UnresolvedLinks);
       CandidatePath := RecoveryAssets.CandidatePath;
     end;
@@ -1846,6 +1846,10 @@ begin
       WatchStarted := True;
     end;
     CommitDocumentCandidate(TheDrawing, Candidate);
+    { A recovery draft may be untitled or lack a safe source writer. Retire
+      the prior document's watcher only after the replacement scene commits;
+      a failed parse/commit must leave the current binding intact. }
+    if not WatchStarted then ClearDocumentWatchBinding;
     BeginLiveTeXDocument(False);
     FormatId := Entry.SourceFormatId;
     if FormatId = '' then FormatId := 'tpx';
