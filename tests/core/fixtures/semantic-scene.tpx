@@ -1,0 +1,15 @@
+\begin{picture}(0,0)
+%<TpX v="5" PicScale="1.25" TeXFormat="tikz" PdfTeXFormat="tikz" FontName="Latin Modern" IncludePath="assets">
+%<caption label="fig:core-fixture">Independent fixture</caption>
+%<comment>Authored by hand to exercise core document structure.</comment>
+%<group>
+%<line x1="1.125" y1="2.25" x2="9.5" y2="5.75" li="dash" lw="0.4" lc="#123456"/>
+%<group>
+%<text x="3.5" y="4.25" h="2.5" rotdeg="30" t="Café α" tex="\alpha_i^2"/>
+%<rect x="4" y="5" w="2.5" h="1.75" rotdeg="10" lw="0.75" lc="#123456" fill="#e0f0ff" ha="1" hc="#808080"/>
+%</group>
+%<bitmap x="-1.5" y="2.0" w="8.25" h="4.75" link="assets/plots/parallel.png" keepaspectratio="0"/>
+%</group>
+%<curve lc="#804020">0,0 1.25,2.5 3.75,4.0 6,1</curve>
+%</TpX>
+\end{picture}

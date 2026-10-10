@@ -69,6 +69,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./ci/bootstrap-windows.ps1
+      - name: Build and run strict core tests on Unix
+        if: runner.os != 'Windows'
+        run: python3 tests/test_core.py --compiler "$FPC" --build-dir "$RUNNER_TEMP/tpx-core-tests"
+      - name: Build and run strict core tests on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python tests/test_core.py --compiler "$env:FPC" --build-dir "$env:RUNNER_TEMP\tpx-core-tests"
       - name: Build, check, and package Linux candidate
         if: runner.os == 'Linux'
         run: xvfb-run -a python3 ci/build_candidate.py
@@ -86,3 +93,10 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
+      - name: Upload strict core failure report
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: tpx-core-failure-${{ matrix.platform }}-${{ github.sha }}
+          path: ${{ runner.temp }}/tpx-core-tests/core-report.json
+          if-no-files-found: ignore
