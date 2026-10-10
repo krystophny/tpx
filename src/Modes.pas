@@ -1444,6 +1444,11 @@ begin
     //SaveDoc.Enabled := History.IsChanged;
   end;
   LoadSettings_Ex(MainForm);
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  MainForm.ApplyAutoReloadSettings;
+{$ENDIF}
+{$ENDIF}
   ParseParameters(FileName, IncludePath, OutputFormats);
     //ShowMessage(FileName);
   if DocumentFileExists(TDocumentPath(FileName)) then
