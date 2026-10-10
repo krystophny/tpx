@@ -12,7 +12,8 @@ const
   AutoSaveMaxRetainedRecords = 20;
   AutoSaveMaxRetainedBytes: Int64 = 513 * 1024 * 1024;
   AutoSaveMaxRecordBytes: Int64 = 513 * 1024 * 1024;
-  AutoSaveMaxPayloadBytes: Int64 = 268435456;
+  AutoSaveDefaultMaxPayloadBytes = 268435456;
+  AutoSaveMaxPayloadBytes: Int64 = AutoSaveDefaultMaxPayloadBytes;
 
 type
   TAutoSaveRecordKind = (asrDraft, asrPriorVersion);
