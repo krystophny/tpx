@@ -7,7 +7,7 @@ uses
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats;
+  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, Pieces;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -1109,12 +1109,15 @@ begin
   PromptCount := 0;
   ReplyButton := idButtonNo;
   SaveFailed := False;
-  if Scenario <> 'exit-clean' then begin
+  if Scenario = 'exit-empty-cancel' then
+    MainForm.TheDrawing.History.MarkDirty
+  else if Scenario <> 'exit-clean' then begin
     Line := TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(20, 10));
     MainForm.TheDrawing.AddObject(-1, Line);
     MainForm.TheDrawing.History.SetPropertiesChanged;
   end;
-  if Pos('exit-cancel', Scenario) = 1 then ReplyButton := idButtonCancel;
+  if (Pos('exit-cancel', Scenario) = 1) or
+    (Scenario = 'exit-empty-cancel') then ReplyButton := idButtonCancel;
   if Scenario = 'exit-save-failure' then begin
     MainForm.TheDrawing.FileName := IncludeTrailingPathDelimiter(
       SysUtils.GetTempDir(False)) + 'tpx-missing-save-parent-' + IntToStr(GetProcessID) +
@@ -1149,10 +1152,14 @@ begin
   else MainForm.UserEventExecute(MainForm.ExitProgram);
   if Scenario = 'exit-clean' then Check(PromptCount = 0, 'Clean drawing prompted')
   else Check(PromptCount = 1, 'Expected one save prompt, got ' + IntToStr(PromptCount));
-  if Pos('exit-cancel', Scenario) = 1 then begin
+  if (Pos('exit-cancel', Scenario) = 1) or
+    (Scenario = 'exit-empty-cancel') then begin
     Check(Observer.CloseRequests = 0, 'Cancel requested closing');
     Check(MainForm.EventManager.Mode = ModeBefore, 'Cancel discarded the active mode');
-    Check(MainForm.TheDrawing.ObjectsCount = 1, 'Cancel discarded the drawing');
+    Check(MainForm.TheDrawing.ObjectsCount =
+      Ord(Scenario <> 'exit-empty-cancel'), 'Cancel discarded the drawing');
+    Check(MainForm.TheDrawing.History.IsChanged,
+      'Cancel cleared the modified state');
     if Scenario = 'exit-cancel-retry' then begin
       ReplyButton := idButtonNo;
       MainForm.OnClose := Observer.ClosingDefault;

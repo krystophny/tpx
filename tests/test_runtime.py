@@ -10,7 +10,7 @@ import uuid
 import unittest
 
 BINARY = Path(os.environ["RUNTIME_BINARY"]).resolve()
-SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-yes",
+SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-empty-cancel", "exit-yes",
              "exit-destroy-no", "exit-destroy-yes", "exit-close",
              "exit-fallback", "exit-save-failure", "text-selection",
              "default-view", "toolbar", "draw-click", "draw-drag", "draw-rectangle", "draw-jitter", "draw-cancel", "shape-snap", "external-tools", "preview-state",
