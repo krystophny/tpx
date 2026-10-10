@@ -111,6 +111,37 @@ begin
   end;
 end;
 
+procedure TestEditSessionDefersOnlySourcePublication;
+var
+  C: TAutoSaveCoordinator;
+  Work: TAutoSaveWork;
+  Ticket: TAutoSaveTicket;
+begin
+  C := TAutoSaveCoordinator.Create;
+  try
+    C.BindDocument(8, 12, True, True, True, True, 100);
+    C.BeginEditSession;
+    CheckCore(C.NextDelayMS(100) = AutoSaveCoalesceMS,
+      'recovery should remain armed while the editor hides source publication');
+    CheckCore(C.TakeDue(850, Work, Ticket) and
+      (Work = [aswRecoveryDraft]),
+      'recovery of the committed scene must remain available during editing');
+    CheckCore(C.CanStart(aswRecoveryDraft, Ticket) and
+      not C.CanStart(aswSourceSave, Ticket),
+      'draft recovery may run while source publication is blocked');
+    CheckCore(C.NextDelayMS(850) < 0,
+      'a deferred source timer must not spin while the editor remains open');
+    C.EndEditSession(900);
+    CheckCore(C.NextDelayMS(900) = AutoSaveCoalesceMS,
+      'ending the edit must reschedule the unchanged committed dirty scene');
+    CheckCore(C.TakeDue(1650, Work, Ticket) and
+      (Work = [aswSourceSave, aswRecoveryDraft]),
+      'canceling an edit must not require another completed model change');
+  finally
+    C.Free;
+  end;
+end;
+
 procedure TestConflictFailuresAndGenerationInvalidation;
 var
   C: TAutoSaveCoordinator;
@@ -287,6 +318,8 @@ initialization
   RegisterCoreTest('autosave-defaults-capability', @TestDefaultsAndCapability);
   RegisterCoreTest('autosave-interaction-debounce',
     @TestCompletedInteractionAndIndependentDebounce);
+  RegisterCoreTest('autosave-edit-session-source-gate',
+    @TestEditSessionDefersOnlySourcePublication);
   RegisterCoreTest('autosave-conflict-failure-generations',
     @TestConflictFailuresAndGenerationInvalidation);
   RegisterCoreTest('autosave-save-undo-reschedule',
