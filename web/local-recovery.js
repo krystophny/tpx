@@ -25,6 +25,8 @@ const statusText = new Map([
   [13, 'A newer recovery record already exists for this session. It was kept.'],
   [14, 'This update was not saved because a linked image could not be captured. Earlier drafts remain available; use Download to keep a separate copy.'],
   [15, 'The drawing was recovered, but its pending editor could not be reopened. The saved draft remains available; start a new drawing before retrying.'],
+  [16, 'New changes are not yet saved as a browser recovery draft. The previous draft remains available.'],
+  [17, 'There are no unsaved changes. Any earlier browser recovery draft remains available.'],
 ]);
 
 function openDatabase() {
@@ -145,8 +147,6 @@ export function localRecoveryImports(runtime) {
     const blocked = sourceOpen || dirty || !wasmReady || pending !== null;
     for (const button of list.querySelectorAll('[data-restore]'))
       button.disabled = blocked || button.dataset.corrupt === 'true';
-    if (enabled && (sourceOpen || dirty))
-      show(statusText.get(sourceOpen ? 11 : 12));
   }
 
   function bytesFromWasm(pointer, length) {
