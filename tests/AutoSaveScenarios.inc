@@ -198,6 +198,8 @@ begin
   CanvasPosition(Point2D(10, 5), CanvasX, CanvasY, MappedStart);
   CanvasPosition(Point2D(25, 5), CanvasX, CanvasY, MappedEnd);
   ExpectedDelta := MappedEnd.X - MappedStart.X;
+  Check(ExpectedDelta > 10,
+    'The pointer fixture did not map to a meaningful drag distance');
   ExpectedEndX := 20 + ExpectedDelta;
   MouseDownAt(Point2D(10, 5));
   MouseMoveAt(Point2D(25, 5), [ssLeft]);
