@@ -1,0 +1,8 @@
+\begin{tikzpicture}[x=1mm,y=1mm]
+\begin{scope}[shift={(1mm,-2)},rotate=17.5]
+  \draw (0,0) -- (2,0);
+  \begin{scope}[scale=0.5,xscale=2,yscale=1]
+    \fill (1e-3,2) circle (0.5mm);
+  \end{scope}
+\end{scope}
+\end{tikzpicture}

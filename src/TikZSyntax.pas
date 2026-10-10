@@ -170,7 +170,7 @@ var
 begin
   Value := TokenText(Source, Token);
   if (Length(Value) > 0) and (Value[1] = '\') then Delete(Value, 1, 1);
-  Result := LowerAscii(Value);
+  Result := Value;
 end;
 
 function IsTrivia(const Token: TTikZToken): Boolean; inline;
@@ -221,6 +221,121 @@ begin
   if (Token.Kind <> ttkOpenBrace) and (Token.Kind <> ttkOpenBracket) and
     (Token.Kind <> ttkOpenParen) then Exit(-1);
   Result := Token.MatchingToken;
+end;
+
+function ConsumeLiteralScalar(ResultDoc: TTikZSyntaxResult;
+  var Cursor: SizeInt; AllowDimension: Boolean): Boolean;
+var
+  Token: TTikZToken;
+  Text: string;
+begin
+  Result := False;
+  Cursor := NextSignificant(ResultDoc, Cursor);
+  if Cursor >= ResultDoc.TokenCount then Exit;
+  Token := ResultDoc.TokenAt(Cursor);
+  if Token.Kind = ttkOperator then
+  begin
+    Text := TokenText(ResultDoc.FSource, Token);
+    if (Text <> '+') and (Text <> '-') then Exit;
+    Cursor := NextSignificant(ResultDoc, Cursor + 1);
+    if Cursor >= ResultDoc.TokenCount then Exit;
+    Token := ResultDoc.TokenAt(Cursor);
+  end;
+  if (Token.Kind <> ttkNumber) and
+    not (AllowDimension and (Token.Kind = ttkDimension)) then Exit;
+  Inc(Cursor);
+  Result := True;
+end;
+
+function ScopeShiftValueValid(ResultDoc: TTikZSyntaxResult;
+  OpenBrace: SizeInt): Boolean;
+var
+  CloseBrace, OpenParen, CloseParen, Cursor: SizeInt;
+begin
+  Result := False;
+  CloseBrace := GroupClose(ResultDoc, OpenBrace);
+  if CloseBrace <= OpenBrace then Exit;
+  OpenParen := NextSignificant(ResultDoc, OpenBrace + 1);
+  if (OpenParen >= CloseBrace) or
+    (ResultDoc.TokenAt(OpenParen).Kind <> ttkOpenParen) then Exit;
+  CloseParen := GroupClose(ResultDoc, OpenParen);
+  if (CloseParen <= OpenParen) or (CloseParen >= CloseBrace) then Exit;
+  Cursor := NextSignificant(ResultDoc, OpenParen + 1);
+  if (Cursor >= CloseParen) or
+    not ConsumeLiteralScalar(ResultDoc, Cursor, True) then Exit;
+  Cursor := NextSignificant(ResultDoc, Cursor);
+  if (Cursor >= CloseParen) or
+    (ResultDoc.TokenAt(Cursor).Kind <> ttkComma) then Exit;
+  Cursor := NextSignificant(ResultDoc, Cursor + 1);
+  if (Cursor >= CloseParen) or
+    not ConsumeLiteralScalar(ResultDoc, Cursor, True) then Exit;
+  Cursor := NextSignificant(ResultDoc, Cursor);
+  if Cursor <> CloseParen then Exit;
+  Result := NextSignificant(ResultDoc, CloseParen + 1) = CloseBrace;
+end;
+
+function ScopeTransformOptionsValid(ResultDoc: TTikZSyntaxResult;
+  OpenBracket: SizeInt; CancelCheck: TTikZCancelCheck;
+  CancelContext: Pointer; out BadToken: SizeInt;
+  out WasCancelled: Boolean): Boolean;
+var
+  CloseBracket, Cursor, KeyToken, EqualsToken, ValueToken, ValueClose: SizeInt;
+  Steps: SizeInt;
+  Key: string;
+begin
+  Result := False;
+  WasCancelled := False;
+  BadToken := OpenBracket;
+  CloseBracket := GroupClose(ResultDoc, OpenBracket);
+  if CloseBracket <= OpenBracket then Exit;
+  Cursor := NextSignificant(ResultDoc, OpenBracket + 1);
+  if Cursor = CloseBracket then Exit(True);
+  Steps := 0;
+  while Cursor < CloseBracket do
+  begin
+    Inc(Steps);
+    if (Steps mod 1024 = 0) and Assigned(CancelCheck) and
+      CancelCheck(CancelContext) then
+    begin
+      WasCancelled := True;
+      Exit;
+    end;
+    KeyToken := Cursor;
+    BadToken := KeyToken;
+    if ResultDoc.TokenAt(KeyToken).Kind <> ttkWord then Exit;
+    Key := TokenText(ResultDoc.FSource, ResultDoc.TokenAt(KeyToken));
+    EqualsToken := NextSignificant(ResultDoc, KeyToken + 1);
+    BadToken := EqualsToken;
+    if (EqualsToken >= CloseBracket) or
+      (ResultDoc.TokenAt(EqualsToken).Kind <> ttkEquals) then Exit;
+    ValueToken := NextSignificant(ResultDoc, EqualsToken + 1);
+    BadToken := ValueToken;
+    if ValueToken >= CloseBracket then Exit;
+    if Key = 'shift' then
+    begin
+      if ResultDoc.TokenAt(ValueToken).Kind <> ttkOpenBrace then Exit;
+      if not ScopeShiftValueValid(ResultDoc, ValueToken) then Exit;
+      ValueClose := GroupClose(ResultDoc, ValueToken);
+      Cursor := ValueClose + 1;
+    end
+    else if (Key = 'rotate') or (Key = 'scale') or (Key = 'xscale') or
+      (Key = 'yscale') then
+    begin
+      Cursor := ValueToken;
+      if not ConsumeLiteralScalar(ResultDoc, Cursor, False) then Exit;
+    end
+    else Exit;
+    Cursor := NextSignificant(ResultDoc, Cursor);
+    if Cursor = CloseBracket then Exit(True);
+    BadToken := Cursor;
+    if ResultDoc.TokenAt(Cursor).Kind <> ttkComma then Exit;
+    Cursor := NextSignificant(ResultDoc, Cursor + 1);
+    if Cursor >= CloseBracket then
+    begin
+      BadToken := Cursor - 1;
+      Exit;
+    end;
+  end;
 end;
 
 function PlainGroupValue(ResultDoc: TTikZSyntaxResult; OpenToken: SizeInt): string;
@@ -313,9 +428,9 @@ begin
     (ResultDoc.TokenAt(NameToken).Kind <> ttkControlWord) then Exit;
   if NextSignificant(ResultDoc, NameToken + 1) <> CloseToken then Exit;
   MacroName := ControlName(ResultDoc.FSource, ResultDoc.TokenAt(NameToken));
-  if (MacroName = 'tpxlinewidth') or (MacroName = 'tpxdashsize') or
-    (MacroName = 'tpxdotsize') then UnitName := 'mm'
-  else if MacroName = 'tpxtextsize' then UnitName := 'pt'
+  if (MacroName = 'tpxLineWidth') or (MacroName = 'tpxDashSize') or
+    (MacroName = 'tpxDotSize') then UnitName := 'mm'
+  else if MacroName = 'tpxTextSize' then UnitName := 'pt'
   else Exit;
   ValueArg := NextSignificant(ResultDoc, CloseToken + 1);
   if (ValueArg >= ResultDoc.TokenCount) or
@@ -508,6 +623,8 @@ var
   MacroGroups: TStringStack;
   Candidate: TTikZPictureRegion;
   CandidateCount, I, J, ArgToken, ArgClose, HeaderClose: SizeInt;
+  ScopeOptionToken, ScopeBadToken: SizeInt;
+  ScopeCancelled: Boolean;
   EnvironmentUsed, EnvironmentCapacity, MacroGroupUsed,
     MacroGroupCapacity: SizeInt;
   LastParserCheck: SizeInt;
@@ -679,7 +796,7 @@ var
     Target := NextSignificant(Doc, CommandToken + 1);
     if (Target >= Doc.TokenCount) or
       (Doc.TokenAt(Target).Kind <> ttkControlWord) or
-      (ControlName(Doc.FSource, Doc.TokenAt(Target)) <> 'previewborder') then Exit;
+      (ControlName(Doc.FSource, Doc.TokenAt(Target)) <> 'PreviewBorder') then Exit;
     ValueArg := NextSignificant(Doc, Target + 1);
     Result := GroupHasOnlyDimension(Doc, ValueArg, 'pt');
   end;
@@ -766,7 +883,7 @@ var
           'Only supported packages and literal preview options are supported');
         AlreadyReported := True;
       end;
-      if (Cmd = 'previewenvironment') and
+      if (Cmd = 'PreviewEnvironment') and
         not PreviewEnvironmentValid(C) then
       begin
         MarkUnsupported(C, tdcUnsupportedContext,
@@ -779,7 +896,7 @@ var
           'Only the literal PreviewBorder point length is supported');
         AlreadyReported := True;
       end;
-      if (Cmd = 'declareunicodecharacter') and
+      if (Cmd = 'DeclareUnicodeCharacter') and
         not UnicodeDeclarationValid(C) then
       begin
         MarkUnsupported(C, tdcUnsupportedContext,
@@ -793,8 +910,8 @@ var
           Allowed := (Cmd = 'path') or (Cmd = 'draw') or (Cmd = 'node') or
             (Cmd = 'fill') or (Cmd = 'filldraw') or
             (Cmd = 'begin') or (Cmd = 'end') or
-            (Cmd = 'tpxlinewidth') or (Cmd = 'tpxdashsize') or
-            (Cmd = 'tpxdotsize') or (Cmd = 'tpxtextsize')
+            (Cmd = 'tpxLineWidth') or (Cmd = 'tpxDashSize') or
+            (Cmd = 'tpxDotSize') or (Cmd = 'tpxTextSize')
         else
           Allowed := (Cmd = 'begin') or (Cmd = 'end') or
             (Cmd = 'begingroup') or (Cmd = 'endgroup') or
@@ -808,13 +925,13 @@ var
           Allowed := DocumentClassValid(C);
         if Cmd = 'usepackage' then
           Allowed := UsePackageValid(C);
-        if Cmd = 'previewenvironment' then
+        if Cmd = 'PreviewEnvironment' then
           Allowed := PreviewEnvironmentValid(C);
         if Cmd = 'setlength' then
           Allowed := PreviewBorderValid(C);
-        if Cmd = 'previewborder' then
+        if Cmd = 'PreviewBorder' then
           Allowed := PreviewBorderTargetValid(C);
-        if Cmd = 'declareunicodecharacter' then
+        if Cmd = 'DeclareUnicodeCharacter' then
           Allowed := UnicodeDeclarationValid(C);
         if not Allowed and not AlreadyReported then
           MarkUnsupported(C, tdcUnsupportedCommand,
@@ -822,16 +939,16 @@ var
       end
       else if InSelectedRegion(C) and HasBracketAncestor(Doc, C) then
       begin
-        if (Cmd <> 'tpxlinewidth') and (Cmd <> 'tpxdashsize') and
-          (Cmd <> 'tpxdotsize') and (Cmd <> 'tpxtextsize') then
+        if (Cmd <> 'tpxLineWidth') and (Cmd <> 'tpxDashSize') and
+          (Cmd <> 'tpxDotSize') and (Cmd <> 'tpxTextSize') then
           MarkUnsupported(C, tdcUnsupportedCommand,
             'Unsupported command in a TikZ option: \' + Cmd);
       end;
       if InSelectedRegion(C) and (Item.ParentGroup >= 0) and
         not HasBraceAncestor(Doc, C) and
         not HasBracketAncestor(Doc, C) and
-        (Cmd <> 'tpxlinewidth') and (Cmd <> 'tpxdashsize') and
-        (Cmd <> 'tpxdotsize') and (Cmd <> 'tpxtextsize') then
+        (Cmd <> 'tpxLineWidth') and (Cmd <> 'tpxDashSize') and
+        (Cmd <> 'tpxDotSize') and (Cmd <> 'tpxTextSize') then
         MarkUnsupported(C, tdcUnsupportedCommand,
           'Unsupported command in a TikZ coordinate: \' + Cmd);
     end;
@@ -839,7 +956,8 @@ var
 
   procedure CheckStatements;
   var
-    C, CloseToken, StatementCount, ArgToken, ArgCount: SizeInt;
+    C, CloseToken, StatementCount, ArgToken, ArgCount,
+      ScopeOptionsOpen: SizeInt;
     Item: TTikZToken;
     StatementOpen: Boolean;
     Cmd: string;
@@ -876,6 +994,28 @@ var
       if (Item.Kind = ttkControlWord) and (Item.ParentGroup < 0) then
       begin
         Cmd := ControlName(Doc.FSource, Item);
+        if (Cmd = 'begin') or (Cmd = 'end') then
+        begin
+          ArgToken := NextSignificant(Doc, C + 1);
+          if (ArgToken < Doc.TokenCount) and
+            (Doc.TokenAt(ArgToken).Kind = ttkOpenBrace) and
+            (PlainGroupValue(Doc, ArgToken) = 'scope') then
+          begin
+            if StatementOpen then
+              MarkUnsupported(C, tdcUnsupportedContext,
+                'A scope boundary cannot split a drawing statement');
+            CloseToken := GroupClose(Doc, ArgToken);
+            C := CloseToken + 1;
+            if Cmd = 'begin' then
+            begin
+              ScopeOptionsOpen := NextSignificant(Doc, C);
+              if (ScopeOptionsOpen < Doc.TokenCount) and
+                (Doc.TokenAt(ScopeOptionsOpen).Kind = ttkOpenBracket) then
+                C := GroupClose(Doc, ScopeOptionsOpen) + 1;
+            end;
+            Continue;
+          end;
+        end;
         if Cmd = 'definecolor' then
         begin
           if StatementOpen then
@@ -1012,13 +1152,13 @@ var
           C := AfterGroups(NextArg, 2);
           Continue;
         end;
-        if (Cmd = 'definecolor') or (Cmd = 'declareunicodecharacter') then
+        if (Cmd = 'definecolor') or (Cmd = 'DeclareUnicodeCharacter') then
         begin
           if Cmd = 'definecolor' then C := AfterGroups(NextArg, 3)
           else C := AfterGroups(NextArg, 2);
           Continue;
         end;
-        if Cmd = 'previewenvironment' then
+        if Cmd = 'PreviewEnvironment' then
         begin
           C := AfterGroups(NextArg, 1);
           Continue;
@@ -1138,13 +1278,42 @@ begin
         if Name = 'begin' then
         begin
           if (EnvName <> 'tikzpicture') and (EnvName <> 'document') and
-            (EnvName <> 'center') and (EnvName <> 'figure') then
+            (EnvName <> 'center') and (EnvName <> 'figure') and
+            (EnvName <> 'scope') then
             AddSyntaxDiagnostic(Result, tdcUnsupportedContext, Token.Span,
               'Unsupported environment: ' + EnvName, tsWarning);
-          if InsideTikZEnvironment and (EnvName <> 'tikzpicture') then
+          if (EnvName = 'scope') and not InsideTikZEnvironment then
+            AddSyntaxDiagnostic(Result, tdcUnsupportedContext, Token.Span,
+              'A scope environment is supported only inside tikzpicture',
+              tsWarning);
+          if InsideTikZEnvironment and (EnvName <> 'tikzpicture') and
+            (EnvName <> 'scope') then
             AddSyntaxDiagnostic(Result, tdcUnsupportedContext, Token.Span,
               'Nested environments inside a picture are unsupported',
               tsWarning);
+          if EnvName = 'scope' then
+          begin
+            ScopeOptionToken := NextSignificant(Result, ArgClose + 1);
+            if (ScopeOptionToken < Result.TokenCount) and
+              (Result.TokenAt(ScopeOptionToken).Kind = ttkOpenBracket) and
+              not ScopeTransformOptionsValid(Result, ScopeOptionToken,
+                Options.LexerOptions.CancelCheck,
+                Options.LexerOptions.CancelContext, ScopeBadToken,
+                ScopeCancelled) then
+            begin
+              if ScopeCancelled then
+              begin
+                AddSyntaxDiagnostic(Result, tdcCancelled, Token.Span,
+                  'TikZ parsing was cancelled', tsError);
+                Result.FOutcome := tpoCancelled;
+                Exit;
+              end;
+              AddSyntaxDiagnostic(Result, tdcUnsupportedContext,
+                Result.TokenAt(ScopeBadToken).Span,
+                'Scope options must use literal shift, rotate, or scale values',
+                tsWarning);
+            end;
+          end;
           if EnvironmentUsed >= Options.LexerOptions.MaxNestingDepth then
           begin
             AddSyntaxDiagnostic(Result, tdcNestingTooDeep, Token.Span,

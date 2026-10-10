@@ -19,6 +19,8 @@ bytes, start at one, and treat CRLF as one line break. Byte spans use zero-based
 Brace, bracket, and parenthesis groups link their opening and closing token
 indices. Comments and escaped control symbols do not alter group structure.
 Semicolons in groups or comments do not terminate a root TikZ statement.
+TeX control words are matched with their exact spelling; case variants are
+distinct commands and are diagnosed as unsupported when not in the profile.
 `\verb` payloads are kept opaque for delimiter scanning and diagnosed as
 unsupported TeX in the selected picture. Parsing an oversized source returns a
 limit diagnostic without copying that source into the result; other invalid or
@@ -71,6 +73,12 @@ for the generated beta text mapping. A picture may be empty. Declarative path
 statements and node text can contain nested groups,
 fractions, escaped percent/braces, comments, Unicode bytes, scientific
 notation, and semicolons that are not statement terminators.
+
+Nested `scope` environments are structurally supported with literal
+`shift={(x,y)}`, `rotate`, `scale`, `xscale`, and `yscale` options. Shift
+coordinates may use numeric or supported dimensional values; scale and angle
+values are numeric. Other scope options, macro-valued transforms, and matrix or
+canvas transforms are diagnosed as unsupported.
 
 This is a syntax eligibility profile, not a promise that every syntactically
 accepted construct has a scene representation. Scene conversion must reject

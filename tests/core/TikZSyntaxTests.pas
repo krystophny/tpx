@@ -224,6 +224,27 @@ begin
     end;
   end;
 
+  Source := BytesOf('\begin{tikzpicture}\draw (0,0)--(1,1);' +
+    '\end{tikzpicture}');
+  Parsed := ParseBytes(Source, tikFragmentInput);
+  try
+    CheckCore(Parsed.Outcome = tpoAccepted,
+      'the exact lowercase TeX drawing command should be accepted');
+  finally
+    Parsed.Free;
+  end;
+
+  Source := BytesOf('\begin{tikzpicture}\DRAW (0,0)--(1,1);' +
+    '\end{tikzpicture}');
+  Parsed := ParseBytes(Source, tikFragmentInput);
+  try
+    CheckCore((Parsed.Outcome = tpoUnsupported) and
+      HasDiagnostic(Parsed, tdcUnsupportedCommand),
+      'case variants of TeX control words must not be treated as aliases');
+  finally
+    Parsed.Free;
+  end;
+
   Source := BytesOf('\begin{tikzpicture}' +
     '\path[draw={\unresolvedStyle}] (0,0)--(1,1);' +
     '\end{tikzpicture}');
@@ -232,6 +253,58 @@ begin
     CheckCore((Parsed.Outcome = tpoUnsupported) and
       HasDiagnostic(Parsed, tdcUnsupportedCommand),
       'unresolved commands nested in TikZ option values must be diagnosed');
+  finally
+    Parsed.Free;
+  end;
+end;
+
+procedure TestNestedScopeTransformStructure;
+var
+  Source: TBytes;
+  Parsed: TTikZSyntaxResult;
+begin
+  Source := LoadFixture('scoped-transform.tikz');
+  Parsed := ParseBytes(Source, tikFragmentInput);
+  try
+    CheckCore(Parsed.Outcome = tpoAccepted,
+      'nested literal scope transforms should be structurally accepted');
+    CheckCore(Parsed.Region.Found and not Parsed.Region.IsFragment,
+      'scope fixture must remain inside one selected tikzpicture');
+    CheckCore(SameBytes(Source, Parsed.CopySource),
+      'scope option order and source bytes must be retained');
+  finally
+    Parsed.Free;
+  end;
+
+  Source := BytesOf('\begin{tikzpicture}\begin{scope}[rotate=17]' +
+    '\draw (0,0)--(1,1);\end{tikzpicture}');
+  Parsed := ParseBytes(Source, tikFragmentInput);
+  try
+    CheckCore((Parsed.Outcome = tpoInvalid) and
+      HasDiagnostic(Parsed, tdcUnmatchedEnvironment),
+      'an unclosed scope must fail balanced environment validation');
+  finally
+    Parsed.Free;
+  end;
+
+  Source := BytesOf('\begin{tikzpicture}\begin{scope}[foo=bar]' +
+    '\draw (0,0)--(1,1);\end{scope}\end{tikzpicture}');
+  Parsed := ParseBytes(Source, tikFragmentInput);
+  try
+    CheckCore((Parsed.Outcome = tpoUnsupported) and
+      HasDiagnostic(Parsed, tdcUnsupportedContext),
+      'unknown scope options must not be treated as harmless transforms');
+  finally
+    Parsed.Free;
+  end;
+
+  Source := BytesOf('\begin{tikzpicture}\begin{scope}[rotate=\angle]' +
+    '\draw (0,0)--(1,1);\end{scope}\end{tikzpicture}');
+  Parsed := ParseBytes(Source, tikFragmentInput);
+  try
+    CheckCore((Parsed.Outcome = tpoUnsupported) and
+      HasDiagnostic(Parsed, tdcUnsupportedContext),
+      'macro-valued scope transforms must remain unsupported');
   finally
     Parsed.Free;
   end;
@@ -506,6 +579,8 @@ initialization
     TestAmbiguityEmptyPictureAndLimits);
   RegisterCoreTest('tikz-dangerous-commands-are-diagnosed',
     TestDangerousCommandsRemainUnsupported);
+  RegisterCoreTest('tikz-nested-scope-transform-structure',
+    TestNestedScopeTransformStructure);
   RegisterCoreTest('tikz-truncation-and-seeded-grammar',
     TestEveryDocumentTokenBoundaryAndSeededGrammar);
 
