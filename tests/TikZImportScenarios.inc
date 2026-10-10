@@ -154,8 +154,12 @@ begin
   Near(Primitive.Points[1].X, 20, 'bare-fragment end x (mm)');
   Near(Primitive.Points[1].Y, 10, 'bare-fragment end y (mm)');
   RejectedFileName := ChangeFileExt(FragmentFileName, '.text-color.tex');
-  RejectedSource := '\begin{tikzpicture}' +
-    '\node[text=red,anchor=base] at (1,2) {Red};' +
+  RejectedSource := '\providecommand{\tpxTextSize}{10pt}' +
+    '\begin{tikzpicture}' +
+    '\node[text=red,anchor=base] at (1,2) {' +
+    '\pgfmathsetlengthmacro{\tpxObjectFontSize}{1.25*\tpxTextSize}' +
+    '\pgfmathsetlengthmacro{\tpxObjectBaseline}{1.5*\tpxTextSize}' +
+    '\fontsize{\tpxObjectFontSize}{\tpxObjectBaseline}\selectfont Red};' +
     '\end{tikzpicture}';
   RejectedStream := TFileStream.Create(RejectedFileName, fmCreate);
   try
@@ -173,7 +177,9 @@ begin
   Check((TextObject.Text = 'Red') and (TextObject.TeXText = '') and
     (TextObject.LineColor = RGBToColor(255, 0, 0)) and
     (TextObject.LineStyle = liNone),
-    'Node text color must color native glyphs without creating a frame');
+    'Wrapped node payload or glyph color must materialize without a frame');
+  Near(TextObject.Height, 1.25 * 10 * 25.4 / 72.27,
+    'wrapped native text height (mm)');
   Check(LiveTeXCompilationCount = CompilationsBefore,
     'Opening an imported colored text node must not launch TeX preview');
 end;

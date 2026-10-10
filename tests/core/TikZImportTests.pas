@@ -122,6 +122,12 @@ begin
       'exported TeX font size (mm)');
     CheckCore(Pos('\pgfmathsetlengthmacro', string(Obj.TextBody)) = 1,
       'original TeX text body was not retained');
+    CheckCore((Obj.TextContent = 'X') and
+      (RawStringOf(Syntax.SourceSlice(Obj.TextPayloadSpan)) = 'X'),
+      'recognized font wrapper must leave only the text payload in the model');
+    CheckCore(FindDependency(Obj, tdTextBody, Dependency) and
+      (RawStringOf(Syntax.SourceSlice(Dependency.ValueSpan)) = 'X'),
+      'text body binding must cover the payload without the font wrapper');
     CheckCore(FindDependency(Obj, tdTextSize, Dependency),
       'font-size expression is missing its source binding');
     CheckCore((Dependency.DependencySource = tdepSharedDefaultMacro) and

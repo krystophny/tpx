@@ -71,6 +71,7 @@ type
     LineWidthMM, DashOnMM, DashOffMM: Double;
     LineKind: TTikZLineKind;
     TextBody, TextContent, ImageReference: RawByteString;
+    TextPayloadSpan: TTikZSourceSpan;
     TextHeightMM, TextBaselineMM: Double;
     TextAnchor: string;
     ImageKeepAspectRatio: Boolean;
@@ -2231,11 +2232,71 @@ var
     ParentStrokeRGB, ParsedColor: LongWord;
     BareColorName: string;
     ResumeObj: TTikZSceneObject;
+    function FindGeneratedFontPayload(
+      out PayloadSpan: TTikZSourceSpan): Boolean;
+    var
+      Scan, Cursor, NameGroup, ValueGroup, FontGroup, BaselineGroup,
+        SelectFontToken, PayloadToken: SizeInt;
+      NameText, ValueText, FontText, BaselineText: RawByteString;
+      NameSpan, ValueSpan, FontSpan, FontBaselineSpan: TTikZSourceSpan;
+    begin
+      Result := False;
+      PayloadSpan := BodySpan;
+      Scan := NextSignificant(BodyGroupInfo.OpenToken + 1,
+        BodyGroupInfo.CloseToken);
+      if TokenText(Scan) <> '\pgfmathsetlengthmacro' then Exit;
+      Cursor := Scan + 1;
+      if not TryReadBraceGroup(Cursor, BodyGroupInfo.CloseToken,
+        NameGroup, NameText, NameSpan) or
+        (TrimASCII(string(NameText)) <> '\tpxObjectFontSize') or
+        not TryReadBraceGroup(Cursor, BodyGroupInfo.CloseToken,
+          ValueGroup, ValueText, ValueSpan) or
+        (ValueSpan.StartByte <> FontSizeSpan.StartByte) or
+        (ValueSpan.EndByte <> FontSizeSpan.EndByte) then Exit;
+
+      Scan := NextSignificant(Cursor, BodyGroupInfo.CloseToken);
+      if TokenText(Scan) <> '\pgfmathsetlengthmacro' then Exit;
+      Cursor := Scan + 1;
+      if not TryReadBraceGroup(Cursor, BodyGroupInfo.CloseToken,
+        NameGroup, NameText, NameSpan) or
+        (TrimASCII(string(NameText)) <> '\tpxObjectBaseline') or
+        not TryReadBraceGroup(Cursor, BodyGroupInfo.CloseToken,
+          ValueGroup, ValueText, ValueSpan) or
+        (ValueSpan.StartByte <> BaselineSpan.StartByte) or
+        (ValueSpan.EndByte <> BaselineSpan.EndByte) then Exit;
+
+      Scan := NextSignificant(Cursor, BodyGroupInfo.CloseToken);
+      if TokenText(Scan) <> '\fontsize' then Exit;
+      Cursor := Scan + 1;
+      if not TryReadBraceGroup(Cursor, BodyGroupInfo.CloseToken,
+        FontGroup, FontText, FontSpan) or
+        not TryReadBraceGroup(Cursor, BodyGroupInfo.CloseToken,
+          BaselineGroup, BaselineText, FontBaselineSpan) or
+        (TrimASCII(string(FontText)) <> '\tpxObjectFontSize') or
+        (TrimASCII(string(BaselineText)) <> '\tpxObjectBaseline') then Exit;
+      SelectFontToken := NextSignificant(Cursor, BodyGroupInfo.CloseToken);
+      if TokenText(SelectFontToken) <> '\selectfont' then Exit;
+      PayloadToken := NextSignificant(SelectFontToken + 1,
+        BodyGroupInfo.CloseToken);
+      if PayloadToken < BodyGroupInfo.CloseToken then
+        PayloadSpan := SpanBetween(PayloadToken, BodyGroupInfo.CloseToken)
+      else
+      begin
+        PayloadSpan := SpanAtZero;
+        PayloadSpan.StartByte := BodySpan.EndByte;
+        PayloadSpan.EndByte := BodySpan.EndByte;
+        PayloadSpan.StartLine := BodySpan.EndLine;
+        PayloadSpan.EndLine := BodySpan.EndLine;
+        PayloadSpan.StartColumn := BodySpan.EndColumn;
+        PayloadSpan.EndColumn := BodySpan.EndColumn;
+      end;
+      Result := True;
+    end;
     procedure ReadTextFontMetrics(BodyGroupIndex: SizeInt);
     var
       Scan, Cursor, NameGroup, ValueGroup, FontGroup, BaselineGroup: SizeInt;
       NameText, FontText, BaselineText: RawByteString;
-      NameSpan, ExprSpan, FontSpan, BaseSpan: TTikZSourceSpan;
+      NameSpan, ExprSpan, FontSpan, BaseSpan, PayloadSpan: TTikZSourceSpan;
       MacroValue: Double;
       SourceKind: TTikZDependencySource;
       DefinitionSpan: TTikZSourceSpan;
@@ -2350,6 +2411,9 @@ var
       end;
       if HasFontSize then Obj.TextHeightMM := FontSizeMM;
       if HasBaseline then Obj.TextBaselineMM := BaselineMM;
+      if HasFontSize and HasBaseline and
+        FindGeneratedFontPayload(PayloadSpan) then
+        Obj.TextPayloadSpan := PayloadSpan;
     end;
   begin
     NodeSpan := SpanAtZero;
@@ -2454,12 +2518,14 @@ var
       NodeSourceSpan := SpanBetween(NodeStartToken, Limit + 1);
     Obj.SourceSpan := NodeSourceSpan;
     Obj.TextBody := BodyBytes;
+    Obj.TextPayloadSpan := BodySpan;
     Obj.TextContent := BodyBytes;
     Obj.TextHeightMM := FResult.Scene.TextSizeMM;
     Obj.TextBaselineMM := 1.2 * Obj.TextHeightMM;
-    AddDependency(Obj, tdTextBody, tdepLocalLiteral, '', BodySpan,
-      SpanAtZero, SpanAtZero, SpanAtZero, True, -1, -1, 1, '', False);
     ReadTextFontMetrics(NodeBodyGroup);
+    Obj.TextContent := SourceText(Obj.TextPayloadSpan);
+    AddDependency(Obj, tdTextBody, tdepLocalLiteral, '', Obj.TextPayloadSpan,
+      SpanAtZero, SpanAtZero, SpanAtZero, True, -1, -1, 1, '', False);
     FoundImage := False;
     FoundWidth := False;
     FoundHeight := False;

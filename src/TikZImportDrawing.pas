@@ -271,12 +271,11 @@ begin
         TextObj.Height := Obj.TextHeightMM;
         TextObj.Rot := Obj.Rotation;
         TextObj.Text := string(Obj.TextContent);
-        { Plain labels render natively. Preserve TeX bodies for later trusted
-          preview/export, but loading an untrusted source must not make the
-          ordinary text-rendering path invoke TeX. }
-        if (Pos('$', string(Obj.TextBody)) > 0) or
-          (Pos('\', string(Obj.TextBody)) > 0) then
-          TextObj.TeXText := string(Obj.TextBody)
+        { Keep only the payload in the native model. Generated font wrappers
+          stay in the source binding and are restored by source-preserving save. }
+        if (Pos('$', string(Obj.TextContent)) > 0) or
+          (Pos('\', string(Obj.TextContent)) > 0) then
+          TextObj.TeXText := string(Obj.TextContent)
         else
           TextObj.TeXText := '';
         if Pos('west', Obj.TextAnchor) > 0 then
