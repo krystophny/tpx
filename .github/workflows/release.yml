@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Publish this reviewed version from master after all package gates pass
+        description: Publish this reviewed version from its supported release branch
         required: true
-        default: '1.6.0'
+        default: '1.6.1'
         type: string
 
 permissions:
@@ -19,25 +19,21 @@ concurrency:
 jobs:
   preflight:
     runs-on: ubuntu-24.04
+    outputs:
+      prerelease: ${{ steps.policy.outputs.prerelease }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
-      - name: Check source and unused tag
+      - name: Check branch, version, source and release history
+        id: policy
         run: |
-          python3 - <<'PY'
-          import os, re, subprocess
-          from pathlib import Path
-          version = os.environ['RELEASE_VERSION']
-          assert os.environ['GITHUB_REF'] == 'refs/heads/master', 'release only from master'
-          assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version), 'stable numeric version required'
-          assert f"About_Version = 'Version {version}'" in Path('src/tpx.inc').read_text()
-          tags = subprocess.check_output(['git', 'ls-remote', '--tags', 'origin', 'refs/tags/v' + version], text=True)
-          assert not tags.strip(), 'release tag already exists'
-          PY
+          python3 ci/release_policy.py preflight "$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
   packages:
     needs: preflight
     uses: ./.github/workflows/candidate.yml
@@ -45,7 +41,7 @@ jobs:
       version: ${{ inputs.version }}
       package_kind: release
   publish:
-    needs: packages
+    needs: [preflight, packages]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -55,6 +51,8 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
@@ -63,11 +61,27 @@ jobs:
           merge-multiple: true
       - name: Verify archives, source, provenance and checksums
         run: python3 ci/verify_release.py release-assets
-      - name: Create draft with tested artifacts and publish
+      - name: Choose the latest stable release
+        id: release_mode
         run: |
-          gh release create "v$RELEASE_VERSION" release-assets/* \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "TpX $RELEASE_VERSION" --notes-file ci/RELEASE_NOTES.md --draft
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases" > "$RUNNER_TEMP/tpx-releases.json"
+          python3 ci/release_policy.py latest "$RELEASE_VERSION" "$RUNNER_TEMP/tpx-releases.json" >> "$GITHUB_OUTPUT"
+      - name: Create exact tag and draft with tested artifacts
+        run: |
+          tag="v$RELEASE_VERSION"
+          if git ls-remote --exit-code origin "refs/tags/$tag" >/dev/null; then
+            echo "release tag already exists: $tag" >&2
+            exit 1
+          fi
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA"
+          git fetch --no-tags origin "refs/tags/$tag:refs/tags/$tag"
+          test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"
+          python3 ci/publish_release.py create "$tag" "$GITHUB_REPOSITORY" \
+            "$GITHUB_SHA" "$RELEASE_VERSION" \
+            "${{ needs.preflight.outputs.prerelease }}" \
+            "${{ steps.release_mode.outputs.latest }}" \
+            ci/RELEASE_NOTES.md release-assets
           gh release view "v$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --json assets > release-assets/uploaded.json
           python3 - <<'PY'
           import json
@@ -77,4 +91,6 @@ jobs:
           uploaded = {a['name'] for a in json.loads((folder / 'uploaded.json').read_text())['assets']}
           assert uploaded == expected, (uploaded, expected)
           PY
-          gh release edit "v$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          python3 ci/publish_release.py publish "$tag" "$GITHUB_REPOSITORY" \
+            "${{ needs.preflight.outputs.prerelease }}" \
+            "${{ steps.release_mode.outputs.latest }}"
