@@ -21,8 +21,10 @@ the desktop build.
 ## Toolchain
 
 `web/pins.env` holds the pinned revisions and the default checkout locations; every
-entry is overridable (`WASM_LCL=/path/to/lazarus make web`). `ci/web-toolchain.sh`
-recreates the layout from the pins on a clean machine.
+entry is overridable. The build verifies the Lazarus fork's checked-out Git revision
+against `WASM_LCL_REV` before compiling. To test a local fork, set both
+`WASM_LCL=/path/to/lazarus` and `WASM_LCL_REV=<that checkout's commit>` for `make web`.
+`ci/web-toolchain.sh` recreates the layout from the pins on a clean machine.
 
 | Component | Source | Role |
 | --- | --- | --- |

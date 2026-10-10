@@ -17,7 +17,21 @@ LRS=$BUILD/lrs
 
 need() { [ -e "$2" ] || { echo "missing $1: $2" >&2; echo "see web/README.md (or ci/web-toolchain.sh) to build it" >&2; exit 2; }; }
 
+verify_wasm_lazarus_revision() {
+  actual=$(git -C "$WASM_LCL" rev-parse HEAD 2>/dev/null) || {
+    echo "Lazarus fork checkout has no readable Git revision: $WASM_LCL" >&2
+    exit 2
+  }
+  if [ "$actual" != "$WASM_LCL_REV" ]; then
+    printf 'Lazarus fork revision mismatch: expected %s, found %s in %s\n' \
+      "$WASM_LCL_REV" "$actual" "$WASM_LCL" >&2
+    echo 'To test a local fork, set WASM_LCL to its checkout and WASM_LCL_REV to its commit.' >&2
+    exit 2
+  fi
+}
+
 check() {
+  verify_wasm_lazarus_revision
   need ppcrosswasm32 "$PPCWASM32"
   need fpcres "$FPCRES"
   need "Lazarus fork ($WASM_LCL_REV)" "$WASM_LCL/lcl"
@@ -29,6 +43,7 @@ check() {
 }
 
 if [ "${1:-}" = check ]; then check; exit 0; fi
+verify_wasm_lazarus_revision
 
 mkdir -p "$BUILD/units" "$DIST" "$LRS" "$(dirname "$BIN")"
 

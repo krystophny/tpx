@@ -1,0 +1,124 @@
+{
+  "units": "mm",
+  "tpx_physical_bounds_mm": [21.67, 16.26],
+  "tpx_style_defaults": {
+    "line_width_base": 1.0,
+    "dash_size": 1.0
+  },
+  "tpx": [
+    {
+      "kind": "line",
+      "start": [0.25, 1.5],
+      "end": [4.75, 2.25],
+      "stroke": "#336699",
+      "stroke_width": 0.75,
+      "dash": "dash",
+      "end_arrow": "h40",
+      "arrow_size_mm": 0.7,
+      "arrow_local_points": [[0, 0], [4, -1], [0, 0], [4, 1], [0, 0]]
+    },
+    {
+      "kind": "cubic",
+      "points": [[0.25, 0.5], [1.25, 3.0], [3.25, -0.5], [4.75, 2.75]],
+      "stroke": "#663399",
+      "stroke_width": 0.5
+    },
+    {
+      "kind": "rectangle",
+      "origin": [10.25, 5.5],
+      "size": [8.5, 4.25],
+      "rotation_degrees": 17.5,
+      "stroke": "#663399",
+      "stroke_width": 0.5,
+      "fill": "#DDEEFF",
+      "hatching": "diagonal-cross",
+      "hatch_color": "#CC2200",
+      "hatching_step_mm": 2.0
+    },
+    {
+      "kind": "text",
+      "position": [1.25, 10.5],
+      "height": 3.514598,
+      "anchor": "west",
+      "plain_text": "Label β",
+      "tex_text": ""
+    },
+    {
+      "kind": "text",
+      "position": [10.25, 14.0],
+      "height": 3.514598,
+      "anchor": "east",
+      "plain_text": "x squared",
+      "tex_text": "$x^2$"
+    },
+    {
+      "kind": "image",
+      "position": [12.0, 11.0],
+      "size": [4.0, 3.0],
+      "reference": "acceptance-image.png"
+    }
+  ],
+  "svg": {
+    "physical_bounds_mm": [24.0, 18.0],
+    "pic_scale": 1.0,
+    "objects": [
+      {
+        "kind": "line",
+        "start": [0.25, 1.5],
+        "end": [4.75, 2.25],
+        "stroke": "#336699",
+        "stroke_width": 0.75,
+        "dash": "dash",
+        "dash_pattern": [2.0, 1.0]
+      },
+      {
+        "kind": "cubic",
+        "points": [[0.25, 0.5], [1.25, 3.0], [3.25, -0.5], [4.75, 2.75]],
+        "stroke": "#663399",
+        "stroke_width": 0.5
+      },
+      {
+        "kind": "rectangle",
+        "origin": [10.25, 5.5],
+        "size": [8.5, 4.25],
+        "rotation_degrees": 17.5,
+        "stroke": "#663399",
+        "stroke_width": 0.5,
+        "fill": "#DDEEFF"
+      },
+      {
+        "kind": "text",
+        "position": [1.25, 10.5],
+        "height": 3.514598,
+        "anchor": "west",
+        "plain_text": "Label β"
+      },
+      {
+        "kind": "text",
+        "position": [10.25, 14.0],
+        "height": 3.514598,
+        "anchor": "east",
+        "plain_text": "$x^2$"
+      }
+    ],
+    "image_policy": "reported unsupported content; no image object is committed"
+  },
+  "tikz": {
+    "file": "independent-scene.tex",
+    "native_metadata_required": false,
+    "physical_bounds_range_mm": [17.0, 18.0, 14.0, 16.0],
+    "objects": [
+      {"kind": "line", "start": [7.771209432264, 2.365758455752], "end": [11.676393460744, 3.231516911505], "stroke": "#336699", "stroke_width": 0.75, "dash_on": 2.0, "dash_off": 1.0},
+      {"kind": "cubic", "points": [[3.649585789846, 2.476296007120], [7.554769818326, 3.342054462872], [7.338330204388, 4.318350469992], [11.243514232868, 5.184108925745]], "stroke": "#663399", "stroke_width": 0.5},
+      {"kind": "rectangle", "origin": [10.25, 5.5], "size": [8.5, 4.25], "rotation_degrees": 17.5, "stroke": "#663399", "stroke_width": 0.5, "fill": "#DDEEFF"},
+      {"kind": "text", "position": [1.25, 10.5], "anchor": "base west", "body": "Label β"},
+      {"kind": "text", "position": [10.25, 14.0], "anchor": "base east", "body": "$x^2$"},
+      {"kind": "image", "position": [12.0, 11.0], "size": [4.0, 3.0], "reference": "acceptance-image.png"}
+    ]
+  },
+  "tolerances": {
+    "coordinate_mm": 0.0001,
+    "rotation_degrees": 0.0001,
+    "pixel_comparison": "outside the edited-object region, identical raster pixels at a pinned TeX toolchain"
+  }
+}

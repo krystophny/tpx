@@ -562,14 +562,20 @@ end;
 
 var
   HelperPath: string;
+  ExecutedCases: Integer;
 begin
   try
     TestNotificationParser;
+    Inc(ExecutedCases);
     if ParamCount > 0 then HelperPath := ExpandFileName(ParamStr(1))
     else HelperPath := ExpandFileName('tests/watch_windows_helper.ps1');
     Check(FileExists(HelperPath), 'Missing external Windows watcher helper');
     TestNativeWatcher(HelperPath);
+    Inc(ExecutedCases);
     TestCompletionPortFailure;
+    Inc(ExecutedCases);
+    WriteLn('WINDOWS_WATCH_REPORT discovered=3 executed=', ExecutedCases,
+      ' passed=', ExecutedCases, ' failed=0 skipped=0');
     WriteLn('Windows file watcher tests passed');
   except
     on E: Exception do
