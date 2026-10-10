@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24mm" height="18mm" viewBox="0 0 24 18">
+  <line x1="1" y1="16" x2="7" y2="13" stroke="#336699" stroke-width="0.5"/>
+  <path d="M 2,11 C 3,10 4,9 5,8" fill="none" stroke="#663399" stroke-width="0.25"/>
+  <rect x="10" y="5" width="8" height="4" fill="#DDEEFF" stroke="#663399" stroke-width="0.3"/>
+  <circle cx="17" cy="13" r="1" fill="none" stroke="#336699" stroke-width="0.4"/>
+  <text x="1" y="14" font-family="Arial" font-size="3mm" text-anchor="start">Label β</text>
+</svg>

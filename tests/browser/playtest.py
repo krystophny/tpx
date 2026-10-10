@@ -18,10 +18,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from harness import App  # noqa: E402
 from scenarios import SCENARIOS  # noqa: E402
+from source_format_scenarios import SOURCE_FORMAT_SCENARIOS  # noqa: E402
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
+SCENARIOS = SCENARIOS + SOURCE_FORMAT_SCENARIOS
 
 parser = argparse.ArgumentParser()
 parser.add_argument('dist', nargs='?', default=str(ROOT / 'web/dist'))

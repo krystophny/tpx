@@ -33,12 +33,26 @@ type
     procedure Closing(Sender: TObject; var Action: TCloseAction);
     procedure ClosingDefault(Sender: TObject; var Action: TCloseAction);
   end;
+  TSourceWorkflowTimerObserver = class
+    Timer: TTimer;
+    Ticks: Integer;
+    Previous: TNotifyEvent;
+    procedure TimerTick(Sender: TObject);
+  end;
 
 var
   Observer: TObserver;
   PromptCount, ReplyButton, SaveErrorPromptCount: Integer;
   ShortcutModifierSimulation: Boolean = False;
   ShortcutModifiers: TShiftState = [];
+  SourceWorkflowFaultPhase: TDocumentIOPhase;
+  SourceWorkflowFaultTarget: TDocumentPath;
+  SourceWorkflowFaultCount: Integer;
+  SourceWorkflowWriteExternalBytes: Boolean;
+  SourceWorkflowExternalBytes: RawByteString;
+  SourceWorkflowIdleTarget: TDocumentPath;
+  SourceWorkflowIdlePathExistsCount, SourceWorkflowIdleMetadataCount,
+    SourceWorkflowIdleSnapshotCount, SourceWorkflowIdleWriteCount: Integer;
 
 {$IFDEF FPC}{$IFDEF WINDOWS}
 function TpxCreateHardLinkW(NewFileName, ExistingFileName: PWideChar;
@@ -68,6 +82,12 @@ end;
 procedure TObserver.ClosingDefault(Sender: TObject; var Action: TCloseAction);
 begin
   Inc(CloseRequests);
+end;
+
+procedure TSourceWorkflowTimerObserver.TimerTick(Sender: TObject);
+begin
+  Inc(Ticks);
+  if Assigned(Previous) then Previous(Sender);
 end;
 
 function AnswerPrompt(const Caption, Message: string; DialogType: LongInt;
@@ -132,6 +152,7 @@ end;
 {$I TikZSaveScenarios.inc}
 {$I AutoSaveScenarios.inc}
 {$I SvgCodecScenarios.inc}
+{$I SourceFormatWorkflowScenarios.inc}
 
 procedure RunBitmapFixtureConverter;
 var
@@ -1389,6 +1410,7 @@ end;
 
 begin
   try
+    RegisterTikZDocumentCodec;
     // Test-only converter copies independently defined EPS fixtures, without UI.
     if SameText(ChangeFileExt(ExtractFileName(ParamStr(0)), ''), 'sam2p-fixture') then begin
       RunBitmapFixtureConverter;
@@ -1434,6 +1456,16 @@ begin
     else if ParamStr(1) = 'auto-reload-integration' then TestAutoReloadIntegration
     else if ParamStr(1) = 'autosave-integration' then TestAutoSaveIntegration
     else if ParamStr(1) = 'autosave-source-formats' then TestAutoSaveSourceFormats
+    else if ParamStr(1) = 'source-format-tikz' then TestSourceFormatTikZWorkflow
+    else if ParamStr(1) = 'source-format-svg' then TestSourceFormatSVGWorkflow
+    else if ParamStr(1) = 'source-format-refresh-tikz' then TestSourceFormatRefreshTikZ
+    else if ParamStr(1) = 'source-format-refresh-svg' then TestSourceFormatRefreshSVG
+    else if ParamStr(1) = 'source-format-lifecycle-tikz' then
+      TestSourceFormatBindingBurstTikZ
+    else if ParamStr(1) = 'source-format-lifecycle-svg' then
+      TestSourceFormatBindingBurstSVG
+    else if ParamStr(1) = 'source-format-write-failures' then
+      TestSourceFormatWriteFailures
     else if ParamStr(1) = 'autosave-recovery-create' then TestAutoSaveRecoveryCreate
     else if ParamStr(1) = 'autosave-empty-recovery-create' then TestAutoSaveEmptyRecoveryCreate
     else if ParamStr(1) = 'autosave-empty-recovery-restore' then TestAutoSaveEmptyRecoveryRestore
