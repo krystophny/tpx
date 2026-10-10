@@ -1,0 +1,12 @@
+\begin{picture}(0,0)
+%<TpX v="5" PicScale="1.25" FontName="Latin Modern" TeXFormat="none" PdfTeXFormat="none">
+%<group>
+%<rect x="1.25" y="2.5" w="4.5" h="2.75" lw="0.4" lc="#123456" fill="#E0F0FF" rx="0.25" ry="0.5"/>
+%<group>
+%<rect x="7.75" y="2.5" w="3.25" h="2.75" lw="0.75" lc="#654321" fill="#FFE0D0" rx="0.125" ry="0.375"/>
+%<text x="4.125" y="9.5" h="2.25" rotdeg="17" ha="1" t="Fallback α" tex="\beta_{i}"/>
+%</group>
+%</group>
+%<text x="14.25" y="8.75" h="1.75" rotdeg="-9" t="Other label Ω" tex=""/>
+%</TpX>
+\end{picture}
