@@ -127,6 +127,9 @@ var
   FileName, ErrorText: string;
   Deadline: QWord;
   Line: TLine2D;
+  ExpectedDelta, ExpectedEndX, ActualStartX, ActualEndX, SavedEndX: Double;
+  CanvasX, CanvasY: Integer;
+  MappedStart, MappedEnd: TPoint2D;
   AutoSaveItem: TMenuItem;
   ScaleDriver: TPictureScaleDriver;
   procedure CanvasPosition(const World: TPoint2D; out X, Y: Integer;
@@ -192,8 +195,12 @@ begin
   Check(MainForm.EventManager.Mode = BaseMode,
     'The pointer fixture did not enter the normal selection mode');
   UseSnap := False;
-  MouseDownAt(Point2D(20, 10));
-  MouseMoveAt(Point2D(35, 10), [ssLeft]);
+  CanvasPosition(Point2D(10, 5), CanvasX, CanvasY, MappedStart);
+  CanvasPosition(Point2D(25, 5), CanvasX, CanvasY, MappedEnd);
+  ExpectedDelta := MappedEnd.X - MappedStart.X;
+  ExpectedEndX := 20 + ExpectedDelta;
+  MouseDownAt(Point2D(10, 5));
+  MouseMoveAt(Point2D(25, 5), [ssLeft]);
   Deadline := GetTickCount64 + 1000;
   repeat
     Application.ProcessMessages;
@@ -201,11 +208,18 @@ begin
   until GetTickCount64 >= Deadline;
   Check(ReadDocumentSnapshot(FileName).SourceBytes = InitialSource,
     'AutoSave published while the user still held the pointer down');
-  MouseUpAt(Point2D(35, 10));
-  Check(Abs(AutoSaveLineX2(MainForm.TheDrawing) - 35) < 0.0001,
-    'The completed canvas drag did not move the line endpoint to 35');
+  MouseUpAt(Point2D(25, 5));
+  Line := MainForm.TheDrawing.GetObject(0) as TLine2D;
+  ActualStartX := Line.Points[0].X;
+  ActualEndX := Line.Points[1].X;
+  Check((Abs(ActualStartX - ExpectedDelta) < 0.0001) and
+    (Abs(ActualEndX - ExpectedEndX) < 0.0001),
+    'The completed canvas drag did not apply its pointer-derived translation '
+      + '(start=' + FloatToStr(ActualStartX) + ', end=' +
+      FloatToStr(ActualEndX) + ', expected delta=' +
+      FloatToStr(ExpectedDelta) + ')');
   WaitForAutoSaveClean(FileName);
-  Check(Abs(SavedSourceLineX2(FileName) - 35) < 0.0001,
+  Check(Abs(SavedSourceLineX2(FileName) - ActualEndX) < 0.0001,
     'AutoSave did not publish the completed source edit (saved=' +
       FloatToStr(SavedSourceLineX2(FileName)) + ', dirty=' +
       BoolToStr(MainForm.TheDrawing.History.IsChanged, True) + ')');
@@ -217,8 +231,13 @@ begin
   Check(MainForm.TheDrawing.History.IsChanged,
     'Undo after AutoSave did not leave the drawing dirty');
   MainForm.ApplyAutoSavePreference(False);
-  Check(Abs(SavedSourceLineX2(FileName) - 35) < 0.0001,
-    'Undo unexpectedly rewrote the source while AutoSave was disabled');
+  SavedEndX := SavedSourceLineX2(FileName);
+  Check((not MainForm.CurrentAutoSaveEnabled) and
+    (Abs(SavedEndX - ActualEndX) < 0.0001),
+    'Undo unexpectedly rewrote the source while AutoSave was disabled '
+      + '(saved=' + FloatToStr(SavedEndX) + ', prior=' +
+      FloatToStr(ActualEndX) + ', enabled=' +
+      BoolToStr(MainForm.CurrentAutoSaveEnabled, True) + ')');
 
   Application.CreateForm(TOptionsForm, OptionsForm);
   MainForm.ApplyAutoSavePreference(True);
@@ -496,7 +515,7 @@ end;
 
 procedure TestAutoSaveRecoveryRestore;
 var Driver: TRecoveryDialogDriver; Deadline: QWord; BitmapObject: TBitmap2D;
-  SavePath, ErrorText: string;
+  SavePath, ErrorText: string; Saved: Boolean;
 begin
   Driver := TRecoveryDialogDriver.Create;
   Driver.Timer := TTimer.Create(nil);
@@ -525,9 +544,11 @@ begin
       'Restart recovery lost the pasted bitmap pixels after its source was deleted');
     SavePath := IncludeTrailingPathDelimiter(GetTempDir) +
       'autosave-recovered-image.tpx';
-    Check(BaseMode.SaveDocumentToPath(SavePath, 'tpx', True, True, ErrorText),
+    Saved := BaseMode.SaveDocumentToPath(SavePath, 'tpx', True, True, ErrorText);
+    Check(Saved,
       'Recovered bitmap could not be saved: ' + ErrorText);
-    Check(BaseMode.OpenDocumentFromPath(SavePath, ErrorText),
+    Saved := BaseMode.OpenDocumentFromPath(SavePath, ErrorText);
+    Check(Saved,
       'Saved recovery bitmap document could not be reopened: ' + ErrorText);
     BitmapObject := MainForm.TheDrawing.GetObject(0) as TBitmap2D;
     Check((BitmapObject.Bitmap <> nil) and (BitmapObject.Bitmap.Width = 2) and
@@ -697,5 +718,115 @@ begin
       'Manual save did not preserve the second bitmap pixels');
   finally
     Driver.Free;
+  end;
+end;
+
+procedure TestAutoSaveRecoveryWatchBinding;
+const
+  InitialSource: RawByteString =
+    '%<TpX v="5" TeXFormat="none" PdfTeXFormat="none">' + LineEnding +
+    '%<line x1="0" y1="0" x2="20" y2="10"/>' + LineEnding +
+    '%</TpX>' + LineEnding;
+  FirstExternal: RawByteString =
+    '%<TpX v="5" TeXFormat="none" PdfTeXFormat="none">' + LineEnding +
+    '%<line x1="0" y1="0" x2="30" y2="10"/>' + LineEnding +
+    '%</TpX>' + LineEnding;
+  SecondExternal: RawByteString =
+    '%<TpX v="5" TeXFormat="none" PdfTeXFormat="none">' + LineEnding +
+    '%<line x1="0" y1="0" x2="40" y2="10"/>' + LineEnding +
+    '%</TpX>' + LineEnding;
+var
+  SourcePath: string;
+  Store: TAutoSaveStore;
+  EntryRevision: TDiskRevision;
+  Driver: TRecoveryDialogDriver;
+  Deadline: QWord;
+  MenuItem: TMenuItem;
+  ErrorText: string;
+  Payload: RawByteString;
+
+  procedure RecoverFirstDraft;
+  begin
+    Driver := TRecoveryDialogDriver.Create;
+    Driver.Timer := TTimer.Create(nil);
+    Driver.Timer.Interval := 40;
+    Driver.Timer.OnTimer := Driver.FindAndRecover;
+    Driver.Timer.Enabled := True;
+    try
+      MenuItem := FindMenuCaption(MainForm.MainMenu1.Items,
+        'Recover drafts...');
+      Check(MenuItem <> nil, 'The recovery menu item is unavailable');
+      MenuItem.Click;
+      Check(Driver.Clicked, 'The recovery dialog did not offer its draft');
+    finally
+      Driver.Free;
+    end;
+  end;
+
+begin
+  SourcePath := GetEnvironmentVariable('TPX_AUTOSAVE_WATCH_SOURCE');
+  Check(SourcePath <> '', 'Recovery watch source path was not provided');
+  WriteReloadSource(SourcePath, InitialSource);
+  MainForm.Show;
+  Application.ProcessMessages;
+  Check(BaseMode.OpenDocumentFromPath(SourcePath, ErrorText),
+    'Could not open the source for recovery-watch testing: ' + ErrorText);
+  Check(MainForm.AutoReloadState.Open,
+    'Opening a named source did not bind its watcher');
+  Store := TAutoSaveStore.Create(AutoSaveRecoveryRoot);
+  EntryRevision.ContentDigest := '';
+  EntryRevision.Size := 0;
+  EntryRevision.ModifiedUTC := 0;
+  EntryRevision.Identity := '';
+  EntryRevision.Exists := False;
+  try
+    Store.SaveDraft('watch-binding-test', '', 'tpx', 'tpx', EntryRevision,
+      '', 1, 'not a TpX recovery model');
+    RecoverFirstDraft;
+    Check(MainForm.EventManager.DocumentSession.SourcePath = SourcePath,
+      'A failed recovery changed the active source binding');
+    Check(MainForm.AutoReloadState.Open,
+      'A failed recovery closed the existing watcher');
+
+    WriteReloadSource(SourcePath, FirstExternal);
+    Deadline := GetTickCount64 + 6000;
+    repeat
+      Application.ProcessMessages;
+      MainForm.ProcessPendingReload(GetTickCount64 + 1000);
+      if (MainForm.TheDrawing.ObjectsCount > 0) and
+        (Abs(AutoSaveLineX2(MainForm.TheDrawing) - 30) < 0.0001) then Break;
+      Sleep(10);
+    until GetTickCount64 >= Deadline;
+    Check((MainForm.AutoReloadState.Open) and
+      (Abs(AutoSaveLineX2(MainForm.TheDrawing) - 30) < 0.0001),
+      'The original watcher did not remain functional after a failed recovery');
+
+    Payload := SerializeTpXRecoveryBytes(MainForm.TheDrawing,
+      TDocumentPath(UTF8String(SourcePath)));
+    Store.SaveDraft('watch-binding-test', '', 'tpx', 'tpx', EntryRevision,
+      '', 2, Payload);
+    RecoverFirstDraft;
+    Check(MainForm.EventManager.DocumentSession.SourcePath = '',
+      'Untitled recovery retained the previous named source path');
+    Check(not MainForm.AutoReloadState.Open,
+      'Successful untitled recovery left the previous source watcher open');
+
+    WriteReloadSource(SourcePath, SecondExternal);
+    Deadline := GetTickCount64 + 1800;
+    repeat
+      Application.ProcessMessages;
+      MainForm.ProcessPendingReload(GetTickCount64 + 1000);
+      Sleep(10);
+    until GetTickCount64 >= Deadline;
+    Check(ReadDocumentSnapshot(SourcePath).SourceBytes = SecondExternal,
+      'The external source update did not reach disk');
+    Check((not MainForm.AutoReloadState.Open) and
+      (MainForm.EventManager.DocumentSession.SourcePath = '') and
+      (Abs(AutoSaveLineX2(MainForm.TheDrawing) - 30) < 0.0001),
+      'External edits to the old source affected the recovered untitled drawing');
+  finally
+    Store.DeleteDraft('watch-binding-test');
+    Store.Free;
+    DeleteFile(SourcePath);
   end;
 end;
