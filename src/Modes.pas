@@ -5,7 +5,7 @@ interface
 uses SysUtils, StrUtils, Classes, Controls, ExtCtrls, Graphics,
   Forms, Dialogs, ExtDlgs, Registry, Math,
   Manage, Options0, Geometry, Drawings, ViewPort, GObjBase,
-  GObjects,
+  GObjects, DocumentFormats, DocumentIO,
 {$IFNDEF FPC}
   Windows
 {$ELSE}
@@ -27,6 +27,7 @@ type
     function GetRecentShort(I: Integer): string;
   public
     RecentFiles: THistoryList;
+    DocumentSession: TDocumentSession;
     constructor Create(ADrawing: TDrawing2D; AViewPort:
       TViewport2D);
     destructor Destroy; override;
@@ -62,11 +63,13 @@ type
     procedure PictureProperties;
     procedure TpXSettings;
     procedure TransformSelected(const Transf: TTransf2D);
-    procedure DoSaveDrawing(FileName: string);
+    function DoSaveDrawing(const FileName: TDocumentPath): Boolean;
     procedure DrawingSaveDlgTypeChange(Sender: TObject);
-    function DlgSaveDrawing(FileName: string): Word;
-    function TrySaveDrawing(const FileName: string): Word;
-    procedure DoOpenDrawing(const FileName: string);
+    function DlgSaveDrawing(FileName: TDocumentPath;
+      const ForClosePrompt: Boolean = False): Word;
+    function TrySaveDrawing(const FileName: TDocumentPath;
+      const ForClosePrompt: Boolean = False): Word;
+    procedure DoOpenDrawing(const FileName: TDocumentPath);
     procedure DlgOpenDrawing;
     procedure NewDrawing(const FileName: string);
     procedure StartProgram;
@@ -82,6 +85,12 @@ type
     procedure Break_Path(P: TPoint2D);
   public
     function AskSaveCurrentDrawing: Word;
+    { These non-modal routes are shared by startup, menu dispatch and tests. }
+    function OpenDocumentFromPath(const FileName: TDocumentPath;
+      out ErrorText: string): Boolean;
+    function SaveDocumentToPath(const FileName: TDocumentPath;
+      const FormatId: string; const IsSaveAs, AllowOverwrite: Boolean;
+      out ErrorText: string): Boolean;
     procedure OnMessage(Msg: TEventMessage; Sender: TObject);
       override;
     property TpX_Manager: TTpXManager read GetManager;
@@ -469,7 +478,71 @@ uses MainUnit, SysBasic, Propert, Options, TransForm, PreView,
 {$ELSE}
 {$ENDIF}
   Settings0, AboutUnit, Input, Output, ScaleStandardUnit, Modify,
-  InfoForm, Devices;
+  InfoForm, Devices, Bitmaps;
+
+function IsAbsoluteDocumentLink(const Link: TDocumentPath): Boolean;
+begin
+{$IFDEF WINDOWS}
+  Result := (Length(Link) > 0) and (Link[1] in ['/', '\']);
+  if Length(Link) > 1 then Result := Result or (Link[2] = ':');
+{$ELSE}
+  Result := (Length(Link) > 0) and (Link[1] = '/');
+{$ENDIF}
+end;
+
+procedure StageRelativeBitmapAssets(Drawing: TDrawing2D;
+  const Destination, StageDirectory, StagingFileName: TDocumentPath;
+  StagedAssets, FinalAssets: TStrings; const UseLinkBasenames: Boolean;
+  out HasStagedAssets: Boolean);
+var
+  I, J: Integer;
+  Entry: TBitmapEntry;
+  Link, SourcePath, FinalPath, StagePath, Directory: TDocumentPath;
+  Snapshot: TDocumentSnapshot;
+  Duplicate: Boolean;
+begin
+  HasStagedAssets := False;
+  Directory := DocumentPathDirectory(Destination);
+  for I := 0 to Drawing.BitmapRegistry.Count - 1 do
+  begin
+    Entry := Drawing.BitmapRegistry.Objects[I] as TBitmapEntry;
+    Link := TDocumentPath(Entry.ImageLink);
+    if Link = '' then Continue;
+    if UseLinkBasenames then
+    begin
+      if IsAbsoluteDocumentLink(Link) or (Link = '.') or (Link = '..') or
+        (Pos('/', string(Link)) > 0) or (Pos('\', string(Link)) > 0) or
+        (Pos(':', string(Link)) > 0) or (Pos(#0, string(Link)) > 0) then
+        raise EWriteError.CreateFmt(
+          'This format requires bitmap links to be safe file basenames: "%s"',
+          [string(Link)]);
+    end
+    else if IsAbsoluteDocumentLink(Link) then Continue;
+    SourcePath := NormalizeDocumentPath(TDocumentPath(Entry.GetFullLink));
+    FinalPath := NormalizeDocumentPath(Directory + PathDelim + Link);
+    if SameDocumentPath(SourcePath, FinalPath) then Continue;
+    Duplicate := False;
+    for J := 0 to FinalAssets.Count - 1 do
+      if SameDocumentPath(TDocumentPath(FinalAssets[J]), FinalPath) then
+      begin
+        Duplicate := True;
+        Break;
+      end;
+    if Duplicate then Continue;
+    Snapshot := ReadDocumentSnapshot(SourcePath);
+    if UseLinkBasenames then
+      StagePath := IncludeTrailingPathDelimiter(StageDirectory) + Link
+    else
+      StagePath := IncludeTrailingPathDelimiter(StageDirectory) +
+        'bitmap-' + IntToStr(I) + DocumentPathExtension(Link);
+    if SameDocumentPath(StagePath, StagingFileName) then
+      raise EWriteError.Create('A bitmap asset collides with the staged document');
+    WriteDocumentStagingFile(StagePath, Snapshot.SourceBytes);
+    StagedAssets.Add(string(StagePath));
+    FinalAssets.Add(string(FinalPath));
+    HasStagedAssets := True;
+  end;
+end;
 
 { --================ TTpXManager ==================-- }
 
@@ -481,6 +554,7 @@ begin
   fViewPort := AViewPort;
   fPickFilter := TObject2D;
   RecentFiles := THistoryList.Create;
+  DocumentSession := TDocumentSession.Create;
   ADrawing.OnChangeDrawing := BaseMode.OnChangeDrawing;
   ADrawing.OnPasteMetafileFromClipboard :=
     BaseMode.OnPasteMetafileFromClipboard;
@@ -488,6 +562,7 @@ end;
 
 destructor TTpXManager.Destroy;
 begin
+  DocumentSession.Free;
   RecentFiles.Free;
   inherited Destroy;
 end;
@@ -740,7 +815,9 @@ end;
 
 procedure TTpXMode.EditUndo;
 begin
+  if not Drawing.History.CanUndo then Exit;
   Drawing.History.Undo;
+  TpX_Manager.DocumentSession.AdvanceLocalRevision;
   Drawing.Update;
   MainForm.Undo.Enabled := Drawing.History.CanUndo;
   MainForm.Redo.Enabled := Drawing.History.CanRedo;
@@ -749,7 +826,9 @@ end;
 
 procedure TTpXMode.EditRedo;
 begin
+  if not Drawing.History.CanRedo then Exit;
   Drawing.History.Redo;
+  TpX_Manager.DocumentSession.AdvanceLocalRevision;
   Drawing.Update;
   MainForm.Undo.Enabled := Drawing.History.CanUndo;
   MainForm.Redo.Enabled := Drawing.History.CanRedo;
@@ -758,6 +837,7 @@ end;
 
 procedure TTpXMode.OnChangeDrawing(ADrawing: TDrawing);
 begin
+  TpX_Manager.DocumentSession.AdvanceLocalRevision;
   with ADrawing as TDrawing2D do
     if Assigned(Drawing.History) then
     begin
@@ -812,6 +892,7 @@ begin
     begin
       if Drawing.PicScale <= 0 then Drawing.PicScale := 1;
       Drawing.History.SetPropertiesChanged;
+      TpX_Manager.DocumentSession.AdvanceLocalRevision;
       //MainForm.SaveDoc.Enabled := TheDrawing.History.IsChanged;
       Drawing.Update;
     end;
@@ -836,184 +917,366 @@ end;
 procedure TTpXMode.DlgOpenDrawing;
 var
   OpenDialog: TOpenAnyPictureDialog;
-  FileName: string;
+  FileName: TDocumentPath;
 begin
   OpenDialog := TOpenAnyPictureDialog.Create(MainForm);
   try
     OpenDialog.FilterIndex := OpenDialog_FilterIndex;
-    if PsToEditPath <> '' then
-      OpenDialog.Filter := 
-{$IFDEF LCLGtk2} // TODO: add case-insensitive variant for all file types
-       'All supported formats|*.[Tt][Pp][Xx];*.emf;*.wmf;*.svg;*.svgz;*.eps;*.ps;*.pdf'+
-       '|TpX drawing|*.[Tt][Pp][Xx]'+
-{$ELSE}
-       'All supported formats|*.tpx;*.emf;*.wmf;*.svg;*.svgz;*.eps;*.ps;*.pdf'+
-       '|TpX drawing|*.tpx'+
-{$ENDIF}
-       '|Windows (Enhanced) Metafiles (*.emf,*.wmf)|*.emf;*.wmf' +
-       '|Scalable Vector Graphics (*.svg;*.svgz)|*.svg;*.svgz';
-    if PsToEditPath <> '' then
-      OpenDialog.Filter := OpenDialog.Filter +
-        '|Encapsulated Postscript (*.eps)|*.eps' +
-        '|All Postscripts (*.eps, *.ps)|*.eps;*.ps' +
-        '|Portable document format (*.pdf)|*.pdf|*.*|*.*';
+    OpenDialog.Filter := BuildOpenFileFilter(PstoeditEmfImportAvailable);
     if not OpenDialog.Execute then Exit;
     if AskSaveCurrentDrawing = mrCancel then Exit;
-    FileName := OpenDialog.FileName;
+    FileName := TDocumentPath(OpenDialog.FileName);
     OpenDialog_FilterIndex := OpenDialog.FilterIndex;
   finally
     OpenDialog.Free;
   end;
   DoOpenDrawing(FileName);
-  //DoImportMetafile(EMFOpenDialog.FileName);
 end;
 
-procedure TTpXMode.DoSaveDrawing(FileName: string);
+function TTpXMode.OpenDocumentFromPath(const FileName: TDocumentPath;
+  out ErrorText: string): Boolean;
 var
-  PreviousName: string;
+  Path: TDocumentPath;
+  Snapshot: TDocumentSnapshot;
+  CurrentRevision: TDiskRevision;
+  Format: TDocumentFormat;
+  Candidate: TDrawing2D;
+  CodecContext: TObject;
+  Diagnostics: TStringList;
+  CanSaveBack: Boolean;
 begin
-  if not SameText(ExtractFileExt(FileName), '.tpx') then
-    FileName := ChangeFileExt(FileName, '.tpx');
-  PreviousName := Drawing.FileName;
-  Drawing.FileName := FileName;
+  Result := False;
+  ErrorText := '';
+  Candidate := nil;
+  CodecContext := nil;
+  Diagnostics := TStringList.Create;
   try
-    if not StoreToFile_TpX(Drawing, FileName, False) then
-      raise Exception.Create('Drawing was not saved');
-  except
-    Drawing.FileName := PreviousName;
-    raise;
+    try
+      Path := NormalizeDocumentPath(FileName);
+      Snapshot := ReadDocumentSnapshot(Path);
+      if not DetectDocumentFormat(Path, Snapshot.SourceBytes, Format) then
+        raise EReadError.Create('The file format is not supported for opening');
+      if not IsDocumentCodecRegistered(Format.Id) then
+        raise EReadError.CreateFmt('No loader is registered for %s',
+          [Format.DisplayName]);
+      Candidate := LoadDocumentCandidate(Format.Id, Path,
+        Snapshot.SourceBytes, CanSaveBack, CodecContext, Diagnostics);
+      CurrentRevision := ReadDocumentRevision(Path);
+      if not SameDiskRevision(CurrentRevision, Snapshot.Revision) then
+        raise EDocumentConflict.Create('The file changed while it was being opened');
+      CommitDocumentCandidate(Drawing, Candidate);
+      TpX_Manager.DocumentSession.AcceptSourceNormalized(Path, Format.Id,
+        Snapshot.SourceBytes, Snapshot.Revision, CanSaveBack, CodecContext);
+      CodecContext := nil;
+      Result := True;
+    except
+      on E: Exception do ErrorText := E.Message;
+    end;
+    if Result then
+    begin
+      try
+        TpX_Manager.DocumentSession.Diagnostics.Assign(Diagnostics);
+        ViewPort.BeginUpdate;
+        try
+          ViewPort.ZoomToExtension;
+          MainForm.Caption := ExtractFileName(Drawing.FileName);
+          TpX_Manager.RecentFiles.Update(Drawing.FileName);
+          ViewPort.Repaint;
+        finally
+          ViewPort.EndUpdate;
+        end;
+      except
+        { The scene and accepted source are already committed. A repaint error
+          must not report the document load as failed. }
+      end;
+    end;
+  finally
+    Candidate.Free;
+    CodecContext.Free;
+    Diagnostics.Free;
   end;
-  MainForm.Caption := ExtractFileName(Drawing.FileName);
-  TpX_Manager.RecentFiles.Update(Drawing.FileName);
-  Drawing.History.SaveCheckSum;
-  //SaveDoc.Enabled := TheDrawing.History.IsChanged;
 end;
 
-const
-  Save_Filter_Str = 'TpX drawing|*.tpx'
-    + '|Scalable vector graphics (SVG)|*.svg'
-{$IFDEF VER140}
-    + '|Enhanced metafile (EMF)|*.emf'
-{$ENDIF}
-    + '|Encapsulated PostScript (EPS)|*.eps'
-{$IFDEF VER140}
-    + '|Portable network graphics (PNG)|*.png'
-    + '|Windows bitmap (BMP)|*.bmp'
-{$ENDIF}
-    + '|Portable document format (PDF)|*.pdf'
-    + '|MetaPost (.mp)|*.mp'
-    + '|MetaPost EPS output (.mps)|*.mps'
-    + '|PDF from EPS|*.pdf'
-    + '|LaTeX EPS (latex-dvips)|*.eps'
-    + '|PDF from LaTeX EPS (latex-dvips-gs-pdf)|*.pdf'
-    + '|LaTeX custom (latex-dvips-gs)|*.*'
-    + '|LaTeX preview source|*.tex'
-    + '|PdfLaTeX preview source|*.tex'
-    ;
+procedure TTpXMode.DoOpenDrawing(const FileName: TDocumentPath);
+var ErrorText: string;
+begin
+  if not OpenDocumentFromPath(FileName, ErrorText) then
+    MessageBoxError('Can not open ' + string(FileName) + ': ' + ErrorText);
+end;
+
+function TTpXMode.SaveDocumentToPath(const FileName: TDocumentPath;
+  const FormatId: string; const IsSaveAs, AllowOverwrite: Boolean;
+  out ErrorText: string): Boolean;
+var
+  Path, StageDirectory, StagingFileName, BackupFileName,
+    PreviousBackup, CandidateFileName: TDocumentPath;
+  Format: TDocumentFormat;
+  ExpectedRevision, NewRevision: TDiskRevision;
+  Bytes: RawByteString;
+  Stream: TMemoryStream;
+  StagedAssets, FinalAssets, Diagnostics: TStringList;
+  Candidate: TDrawing2D;
+  CodecContext: TObject;
+  SaveCodecContext: TObject;
+  CanSaveBack, SameSource, ExtensionAllowed, UseStagedValidation,
+    HasStagedAssets: Boolean;
+  I, Sep: Integer;
+  Ext, Extensions: string;
+begin
+  Result := False;
+  ErrorText := '';
+  Stream := nil;
+  Candidate := nil;
+  CodecContext := nil;
+  StageDirectory := '';
+  StagingFileName := '';
+  StagedAssets := TStringList.Create;
+  FinalAssets := TStringList.Create;
+  Diagnostics := TStringList.Create;
+  try
+    try
+      if not FindDocumentFormatById(FormatId, Format) or
+        not Format.CanSaveBack or not IsDocumentCodecRegistered(Format.Id) then
+        raise EWriteError.CreateFmt('No save-back codec is available for %s',
+          [FormatId]);
+      Path := NormalizeDocumentPath(FileName);
+      Extensions := Format.Extensions;
+      Ext := DocumentPathExtension(Path);
+      ExtensionAllowed := False;
+      while Extensions <> '' do
+      begin
+        Sep := Pos(';', Extensions);
+        if Sep = 0 then Sep := Length(Extensions) + 1;
+        if SameText(Ext, Copy(Extensions, 1, Sep - 1)) then
+          ExtensionAllowed := True;
+        Delete(Extensions, 1, Sep);
+      end;
+      if not ExtensionAllowed then
+      begin
+        Ext := Format.Extensions;
+        Sep := Pos(';', Ext);
+        if Sep > 0 then Ext := Copy(Ext, 1, Sep - 1);
+        if Ext <> '' then Path := DocumentPathWithExtension(Path, Ext);
+      end;
+      SameSource := not IsSaveAs and
+        (TpX_Manager.DocumentSession.SourcePath <> '') and
+        SameDocumentPath(TpX_Manager.DocumentSession.SourcePath, Path) and
+        SameText(TpX_Manager.DocumentSession.SourceFormatId, Format.Id) and
+        TpX_Manager.DocumentSession.CanSaveBack;
+      if SameSource and not AllowOverwrite then
+        ExpectedRevision := TpX_Manager.DocumentSession.AcceptedRevision
+      else
+      begin
+        ExpectedRevision := ReadDocumentRevision(Path);
+        if ExpectedRevision.Exists and not AllowOverwrite then
+          raise EDocumentConflict.Create('The destination already exists');
+      end;
+      StageDirectory := CreateDocumentStagingDirectory(
+        DocumentPathDirectory(Path));
+      if StageDirectory = '' then
+        raise EWriteError.Create('Could not create a private staging directory');
+      StagingFileName := IncludeTrailingPathDelimiter(StageDirectory) +
+        DocumentPathFileName(Path);
+      Stream := TMemoryStream.Create;
+      SaveCodecContext := nil;
+      if SameText(TpX_Manager.DocumentSession.SourceFormatId, Format.Id) then
+        SaveCodecContext := TpX_Manager.DocumentSession.CodecContext;
+      if not SerializeDocumentForSave(Format.Id, Drawing, Path,
+        StagingFileName, Stream, SaveCodecContext, StagedAssets, FinalAssets,
+        True) then
+        raise EWriteError.Create('The document could not be serialized');
+      UseStagedValidation :=
+        DocumentCodecUsesStagedValidationPath(Format.Id);
+      StageRelativeBitmapAssets(Drawing, Path, StageDirectory,
+        StagingFileName, StagedAssets, FinalAssets, UseStagedValidation,
+        HasStagedAssets);
+      if Stream.Size > MaxDocumentBytes then
+        raise EWriteError.CreateFmt('Document exceeds the %d byte limit',
+          [MaxDocumentBytes]);
+      SetLength(Bytes, Stream.Size);
+      if Stream.Size > 0 then
+      begin
+        Stream.Position := 0;
+        Stream.ReadBuffer(Bytes[1], Stream.Size);
+      end;
+      CandidateFileName := Path;
+      if UseStagedValidation and HasStagedAssets then
+      begin
+        WriteDocumentStagingFile(StagingFileName, Bytes);
+        CandidateFileName := StagingFileName;
+      end;
+      Candidate := LoadDocumentCandidate(Format.Id, CandidateFileName, Bytes,
+        CanSaveBack, CodecContext, Diagnostics);
+      if not CanSaveBack then
+        raise EWriteError.CreateFmt(
+          'The serialized %s document cannot be safely reopened for editing',
+          [Format.DisplayName]);
+      RebindDocumentCodecContext(Format.Id, Drawing, Candidate, CodecContext);
+      WriteDocumentBundleAtomically(Path, Bytes, ExpectedRevision, True,
+        StagedAssets, FinalAssets, NewRevision, BackupFileName);
+
+      PreviousBackup := TpX_Manager.DocumentSession.RecoveryBackupPath;
+      if SameSource then
+        TpX_Manager.DocumentSession.AcceptSavedRevision(Bytes, NewRevision,
+          CodecContext, BackupFileName)
+      else
+        TpX_Manager.DocumentSession.RebindSavedSourceNormalized(Path,
+          Format.Id, Bytes, NewRevision, CanSaveBack, CodecContext,
+          BackupFileName);
+      CodecContext := nil;
+      Result := True;
+      try
+        TpX_Manager.DocumentSession.Diagnostics.Assign(Diagnostics);
+        if not SameSource then Drawing.RebindFileNameAfterAssetCommit(Path);
+        Drawing.History.SaveCheckSum;
+        TpX_Manager.RecentFiles.Update(Drawing.FileName);
+        MainForm.Caption := ExtractFileName(Drawing.FileName);
+        if (PreviousBackup <> '') and (PreviousBackup <> BackupFileName) then
+          DeleteDocumentFile(PreviousBackup);
+      except
+        { Publication and source acceptance already succeeded. }
+      end;
+    except
+      on E: Exception do ErrorText := E.Message;
+    end;
+  finally
+    Candidate.Free;
+    CodecContext.Free;
+    Stream.Free;
+    for I := 0 to StagedAssets.Count - 1 do
+      if DocumentFileExists(TDocumentPath(StagedAssets[I])) then
+        DeleteDocumentFile(TDocumentPath(StagedAssets[I]));
+    if (StagingFileName <> '') and DocumentFileExists(StagingFileName) then
+      DeleteDocumentFile(StagingFileName);
+    if StageDirectory <> '' then RemoveDocumentStagingDirectory(StageDirectory);
+    StagedAssets.Free;
+    FinalAssets.Free;
+    Diagnostics.Free;
+  end;
+end;
+
+function TTpXMode.DoSaveDrawing(const FileName: TDocumentPath): Boolean;
+var ErrorText: string;
+begin
+  Result := SaveDocumentToPath(FileName,
+    TpX_Manager.DocumentSession.SourceFormatId, False, False, ErrorText);
+  if not Result and (ErrorText <> '') then
+    MessageBoxError('Can not save ' + string(FileName) + ': ' + ErrorText);
+end;
 
 procedure TTpXMode.DrawingSaveDlgTypeChange(Sender: TObject);
 var
-  List: TStringList;
+  Format: TDocumentFormat;
+  ExportFormat: TExportFormat;
+  Extension: string;
+  Separator: Integer;
 begin
-  List := TStringList.Create;
-  ExtractStrings(['|'], [' ', '*', '.'],
-    PChar(AnsiReplaceStr(Save_Filter_Str, '.*',
-    '.???')), List);
-{$IFDEF WINDOWS}
-  MainForm.DrawingSaveDlg.DefaultExt :=
-    List[MainForm.DrawingSaveDlg.FilterIndex * 2 - 1];
-  if MainForm.DrawingSaveDlg.DefaultExt = '???'
-    then MainForm.DrawingSaveDlg.DefaultExt := '';
-{$ELSE}
-  MainForm.DrawingSaveDlg.DefaultExt := '???';
-{$ENDIF}
-  List.Free;
+  Extension := '';
+  if DocumentFormatForSaveFilterIndex(
+    MainForm.DrawingSaveDlg.FilterIndex, Format) then
+    Extension := Format.Extensions
+  else if ExportFormatForFilterIndex(
+    MainForm.DrawingSaveDlg.FilterIndex, ExportFormat) then
+    Extension := ExportFormat.Extension;
+  Separator := Pos(';', Extension);
+  if Separator > 0 then Extension := Copy(Extension, 1, Separator - 1);
+  if (Extension <> '') and (Extension <> '*') then
+  begin
+    if Extension[1] = '.' then Delete(Extension, 1, 1);
+    MainForm.DrawingSaveDlg.DefaultExt := Extension;
+  end
+  else MainForm.DrawingSaveDlg.DefaultExt := '';
 end;
 
-function TTpXMode.DlgSaveDrawing(FileName: string): Word;
+function TTpXMode.DlgSaveDrawing(FileName: TDocumentPath;
+  const ForClosePrompt: Boolean): Word;
 var
-  Path: string;
-//  Filter: string;
+  Path: TDocumentPath;
   ExecuteResult: Boolean;
-  Device, Ext, Ext2: string;
-  Format: ExportFormatKind;
-  Index: Integer;
-  //LaTeX custom (latex-dvips-gs) |LaTeX custom (latex-dvips-gs)|*.*
+  Format: TDocumentFormat;
+  ExportFormat: TExportFormat;
+  ErrorText: string;
 begin
-  if FileName = Drawing_NewFileName then
-    FileName := Drawing.FileName;
+  if FileName = Drawing_NewFileName then FileName := Drawing.FileName;
   if FileName = Drawing_NewFileName then FileName := '';
   MainForm.DrawingSaveDlg.FileName := ChangeFileExt(FileName, '');
+  MainForm.DrawingSaveDlg.Filter := BuildSaveFileFilter;
+  MainForm.DrawingSaveDlg.FilterIndex := 1;
+  MainForm.DrawingSaveDlg.Options :=
+    MainForm.DrawingSaveDlg.Options + [ofOverwritePrompt];
   MainForm.DrawingSaveDlg.OnShow := DrawingSaveDlgTypeChange;
-{$IFDEF VER140}
   MainForm.DrawingSaveDlg.OnTypeChange := DrawingSaveDlgTypeChange;
-{$ELSE}
-{$ENDIF}
   Path := ExtractFilePath(MainForm.DrawingSaveDlg.FileName);
   if Path = '' then Path := ExtractFilePath(Drawing.FileName);
   if Path <> '' then MainForm.DrawingSaveDlg.InitialDir := Path;
-  LaTeX_Custom_Parse(Device, Ext, Ext2);
-  if Ext <> '' then
-  begin
-    MainForm.DrawingSaveDlg.Filter
-      := AnsiReplaceStr(Save_Filter_Str, '-gs)',
-      '-gs-' + Device + ')');
-    if Ext2 <> '' then Ext := Ext + ';*.' + Ext2;
-    MainForm.DrawingSaveDlg.Filter
-      := AnsiReplaceStr(MainForm.DrawingSaveDlg.Filter, '*.*', '*.'
-      + Ext);
-  end;
   ExecuteResult := MainForm.DrawingSaveDlg.Execute;
-  if not ExecuteResult then
+  if not ExecuteResult then Exit(mrCancel);
+  Path := TDocumentPath(MainForm.DrawingSaveDlg.FileName);
+  if DocumentFormatForSaveFilterIndex(
+    MainForm.DrawingSaveDlg.FilterIndex, Format) then
   begin
-    Result := mrCancel;
-    Exit;
+    if not SaveDocumentToPath(Path, Format.Id, True, True, ErrorText) then
+    begin
+      MessageBoxError('Can not save ' + string(Path) + ': ' + ErrorText);
+      Exit(mrCancel);
+    end;
+    Exit(mrOK);
   end;
-  if MainForm.DrawingSaveDlg.FilterIndex > 1 then
+  if ExportFormatForFilterIndex(MainForm.DrawingSaveDlg.FilterIndex,
+    ExportFormat) then
   begin
-    Index := 1;
-    for Format := Low(ExportFormatKind) to High(ExportFormatKind) do
-      if ExportFormatSupported(Format) then
+    try
+      ExportToFile(Drawing, string(Path), ExportFormatKind(ExportFormat.Kind));
+      if not DocumentFileExists(Path) then
+        raise EWriteError.Create('Export file was not created');
+      if ForClosePrompt then Exit(mrCancel);
+      Exit(mrOK);
+    except
+      on E: Exception do
       begin
-        Inc(Index);
-        if Index = MainForm.DrawingSaveDlg.FilterIndex then
-        begin
-          ExportToFile(Drawing, MainForm.DrawingSaveDlg.FileName, Format);
-          if not FileExists(MainForm.DrawingSaveDlg.FileName) then
-            raise Exception.Create('Export file was not created');
-          Break;
-        end;
+        MessageBoxError('Can not export ' + string(Path) + ': ' + E.Message);
+        Exit(mrCancel);
       end;
-  end
-  else DoSaveDrawing(MainForm.DrawingSaveDlg.FileName);
-  Result := mrOK;
+    end;
+  end;
+  MessageBoxError('No writer is available for the selected output format');
+  Result := mrCancel;
 end;
 
-function TTpXMode.TrySaveDrawing(const FileName: string): Word;
+function TTpXMode.TrySaveDrawing(const FileName: TDocumentPath;
+  const ForClosePrompt: Boolean): Word;
+var ErrorText: string; Retry: Boolean;
 begin
-  if FileName = Drawing_NewFileName then
-  begin
-    Result := DlgSaveDrawing(FileName);
-  end
-  else
-  begin
-    DoSaveDrawing(FileName);
-    Result := mrOK;
-  end;
+  if (FileName = Drawing_NewFileName) or
+    (TpX_Manager.DocumentSession.SourcePath = '') or
+    not TpX_Manager.DocumentSession.CanSaveBack then
+    Exit(DlgSaveDrawing(FileName, ForClosePrompt));
+  Retry := False;
+  repeat
+    if SaveDocumentToPath(FileName,
+      TpX_Manager.DocumentSession.SourceFormatId, False, Retry, ErrorText) then
+      Exit(mrOK);
+    if (Pos('The destination changed on disk', ErrorText) = 0) and
+      (Pos('The destination changed before replace', ErrorText) = 0) and
+      (Pos('The destination was removed on disk', ErrorText) = 0) and
+      (Pos('The destination appeared before replace', ErrorText) = 0) then
+    begin
+      MessageBoxError('Can not save ' + string(FileName) + ': ' + ErrorText);
+      Exit(mrCancel);
+    end;
+    if MessageDlg('The document changed on disk. Overwrite the external changes?',
+      mtWarning, [mbYes, mbNo], 0) <> mrYes then Exit(mrCancel);
+    Retry := True;
+  until False;
 end;
 
 function TTpXMode.AskSaveCurrentDrawing: Word;
 begin
-  if (Drawing.ObjectsCount = 0)
-    or not Drawing.History.IsChanged then
-  begin
-    Result := mrOK;
-    Exit;
-  end;
+  if not Drawing.History.IsChanged then Exit(mrOK);
   Result := MessageDlg('Save current drawing?',
     mtWarning, [mbYes, mbNo, mbCancel], 0);
   if Result = mrYes then
-    Result := TrySaveDrawing(Drawing.FileName);
+    Result := TrySaveDrawing(Drawing.FileName, True);
 end;
 
 procedure TTpXMode.OnMessage(Msg: TEventMessage; Sender: TObject);
@@ -1050,58 +1313,10 @@ begin
   inherited OnMessage(Msg, Sender);
 end;
 
-procedure TTpXMode.DoOpenDrawing(const FileName: string);
-var
-  Loader: T_TpX_Loader;
-  Ext: string;
-begin
-  try
-    Ext := LowerCase(ExtractFileExt(FileName));
-    if Ext <> '.tpx' then
-    begin
-      Drawing.Clear;
-      ViewPort.BeginUpdate;
-      MainForm.Enabled := False;
-      try
-        if (Ext = '.emf') or (Ext = '.wmf') then
-          Import_Metafile(Drawing, FileName, nil)
-        else if (Ext = '.eps') or (Ext = '.ps') or (Ext = '.pdf')
-          then
-        begin
-          Import_Eps(Drawing, FileName);
-        end;
-        ViewPort.ZoomToExtension;
-      finally
-        MainForm.Enabled := True;
-        ViewPort.EndUpdate;
-      end;
-      MainForm.Caption := Drawing.FileName;
-      ViewPort.Repaint;
-      Drawing.History.SaveCheckSum;
-    //SaveDoc.Enabled := TheDrawing.History.IsChanged;
-      Exit;
-    end;
-    Drawing.Clear;
-    Loader := T_TpX_Loader.Create(Drawing);
-    try
-      Loader.LoadFromFile(FileName);
-    finally
-      Loader.Free;
-    end;
-    ViewPort.ZoomToExtension;
-    ViewPort.Repaint;
-    MainForm.Caption := ExtractFileName(Drawing.FileName);
-    TpX_Manager.RecentFiles.Update(Drawing.FileName);
-    Drawing.History.SaveCheckSum;
-  //SaveDoc.Enabled := TheDrawing.History.IsChanged;
-  except
-    MessageBoxError('Can not open ' + FileName);
-  end;
-end;
-
 procedure TTpXMode.NewDrawing(const FileName: string);
 begin
   Drawing.Clear;
+  TpX_Manager.DocumentSession.Clear;
   Drawing.RepaintViewports;
   Drawing.FileName := FileName;
   MainForm.Caption := FileName;
@@ -1126,7 +1341,7 @@ begin
   LoadSettings_Ex(MainForm);
   ParseParameters(FileName, IncludePath, OutputFormats);
     //ShowMessage(FileName);
-  if FileExists(FileName) then
+  if DocumentFileExists(TDocumentPath(FileName)) then
     DoOpenDrawing(FileName)
   else if FileName <> '' then
     NewDrawing(FileName)
@@ -1999,7 +2214,7 @@ begin
     Exit;
   end;
   FileName := TpX_Manager.RecentFiles[Index];
-  if not FileExists(FileName) then
+  if not DocumentFileExists(TDocumentPath(FileName)) then
   begin
     TpX_Manager.RecentFiles.Remove(FileName);
     PopSelf;

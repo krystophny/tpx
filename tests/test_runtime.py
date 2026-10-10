@@ -4,18 +4,20 @@ import os
 from pathlib import Path
 import subprocess
 import shutil
+import struct
 import sys
 import tempfile
 import uuid
 import unittest
 
 BINARY = Path(os.environ["RUNTIME_BINARY"]).resolve()
-SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-yes",
+SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-empty-cancel", "exit-yes",
              "exit-destroy-no", "exit-destroy-yes", "exit-close",
              "exit-fallback", "exit-save-failure", "text-selection",
              "default-view", "toolbar", "draw-click", "draw-drag", "draw-rectangle", "draw-jitter", "draw-cancel", "shape-snap", "external-tools", "preview-state",
              "viewport-events", "viewport-crosshair", "viewport-preview", "viewport-damage",
              "text-metrics", "path-first-click", "async-tools",
+             "document-io",
              "canvas-focus-transfer",
              "property-dimensions", "font-choice", "conversion-save",
              "unsupported-exports", "live-tex-missing-tool", "clipboard-format-width",
@@ -24,6 +26,46 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_transactional_pstoedit_emf_import(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-pstoedit-") as directory:
+            root = Path(directory).resolve()
+            suffix = ".exe" if sys.platform == "win32" else ""
+            converter = root / ("pstoedit-fixture" + suffix)
+            shutil.copy2(BINARY, converter)
+            header = struct.pack(
+                "<II8i4IHH3I4i", 1, 88,
+                10, 20, 50, 60, 0, 0, 400, 400,
+                0x464D4520, 0x10000, 132, 3, 1, 0, 0, 0, 0,
+                400, 400, 100, 100)
+            rectangle = struct.pack("<II4i", 43, 24, 10, 20, 50, 60)
+            eof = struct.pack("<II3I", 14, 20, 0, 0, 20)
+            fixture = root / "converted.emf"
+            fixture.write_bytes(header + rectangle + eof)
+            self.run_scenario("pstoedit-import", {
+                "TPX_PSTOEDIT_PATH": str(converter),
+                "TPX_PSTOEDIT_EMF_FIXTURE": str(fixture),
+            })
+
+    def test_tpx_staged_sidecars_and_converter_failures(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-staged-tools-") as directory:
+            root = Path(directory).resolve()
+            unicode_root = root / "Grüß-Καλημέρα"
+            unicode_root.mkdir()
+            suffix = ".exe" if sys.platform == "win32" else ""
+            meta = root / ("mpost-fixture" + suffix)
+            ghostscript = root / ("gs-fixture" + suffix)
+            shutil.copy2(BINARY, meta)
+            shutil.copy2(BINARY, ghostscript)
+            marker = root / "invoked.txt"
+            self.run_scenario("tpx-staged-sidecars", {
+                "TPX_STAGED_META_CONVERTER": str(meta),
+                "TPX_STAGED_GS_CONVERTER": str(ghostscript),
+                "TPX_STAGED_TOOL_MARKER": str(marker),
+                "TPX_STAGED_TEST_ROOT": str(unicode_root),
+            })
+            self.assertEqual(marker.read_text().splitlines(),
+                             ["mpost-fixture" + suffix, "gs-fixture" + suffix])
+
     def test_bitmap_eps_compatibility_and_conversion_failures(self):
         # The fixture converter lives only in this test's temporary directory.
         # It runs the copied native test executable before Application.Initialize.

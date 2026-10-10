@@ -2,11 +2,12 @@ program RuntimeTests;
 {$mode Delphi}
 uses
   {$IFDEF UNIX}{$IFNDEF CPUWASM32}cthreads,{$ENDIF}{$ENDIF}
-  Interfaces, Forms, SysUtils, Classes, Types, Math, Controls, Dialogs, Clipbrd, InterfaceBase, LCLType, LMessages, Process,
+  {$IFDEF UNIX}BaseUnix,{$ENDIF}
+  Interfaces, Forms, SysUtils, Classes, Types, Math, Controls, Dialogs, Clipbrd, InterfaceBase, LCLType, LMessages, Process, LazFileUtils, LazUTF8,
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX;
+  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, Pieces;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -28,7 +29,7 @@ type
 
 var
   Observer: TObserver;
-  PromptCount, ReplyButton: Integer;
+  PromptCount, ReplyButton, SaveErrorPromptCount: Integer;
   ShortcutModifierSimulation: Boolean = False;
   ShortcutModifiers: TShiftState = [];
 
@@ -57,9 +58,18 @@ begin
     Inc(PromptCount);
     Exit(idButtonOK);
   end;
+  if (ParamStr(1) = 'tpx-staged-sidecars') and
+    ((Pos('MPS file not created', Message) > 0) or
+     (Pos('PDF file not created', Message) > 0)) then
+    Exit(idButtonOK);
   if (ParamStr(1) = 'property-dimensions') and
     ((Pos('Line width must', Message) > 0) or (Pos('Text height must', Message) > 0)) then
     Exit(idButtonOK);
+  if (ParamStr(1) = 'exit-save-failure') and
+    (Pos('Can not save', Message) > 0) then begin
+    Inc(SaveErrorPromptCount);
+    Exit(idButtonOK);
+  end;
   Check(Pos('Save current drawing?', Message) > 0, 'Unexpected dialog: ' + Message);
   Inc(PromptCount);
   Result := ReplyButton;
@@ -85,6 +95,8 @@ end;
 
 {$I ViewportScenarios.inc}
 {$I PlaytestScenarios.inc}
+{$I TpXStagedSaveScenarios.inc}
+{$I DocumentIOScenarios.inc}
 
 procedure RunBitmapFixtureConverter;
 var
@@ -98,6 +110,36 @@ begin
     Destination := TFileStream.Create(ParamStr(2), fmCreate);
     try Destination.CopyFrom(Source, 0) finally Destination.Free end;
   finally Source.Free end;
+end;
+
+procedure RunPstoeditFixture;
+var Source, Fixture, Destination: TFileStream; Bytes: RawByteString;
+begin
+  Check((ParamCount >= 4) and (ParamStr(3) = '-f') and
+    (ParamStr(4) = 'emf'),
+    'pstoedit fixture expected input, output, and EMF format arguments');
+  Source := TFileStream.Create(ParamStr(1), fmOpenRead);
+  try
+    SetLength(Bytes, Source.Size);
+    if Source.Size > 0 then Source.ReadBuffer(Bytes[1], Source.Size);
+  finally
+    Source.Free;
+  end;
+  if Pos('TPX_FIXTURE_FAIL', Bytes) > 0 then Halt(7);
+  Fixture := TFileStream.Create(
+    GetEnvironmentVariable('TPX_PSTOEDIT_EMF_FIXTURE'), fmOpenRead);
+  try
+    SetLength(Bytes, Fixture.Size);
+    if Fixture.Size > 0 then Fixture.ReadBuffer(Bytes[1], Fixture.Size);
+  finally
+    Fixture.Free;
+  end;
+  Destination := TFileStream.Create(ParamStr(2), fmCreate);
+  try
+    if Length(Bytes) > 0 then Destination.WriteBuffer(Bytes[1], Length(Bytes));
+  finally
+    Destination.Free;
+  end;
 end;
 
 procedure TestBitmapEps;
@@ -1096,22 +1138,35 @@ var
   Line: TLine2D;
   Saved: TDrawing2D;
   Loader: T_TpX_Loader;
+  Session: TDocumentSession;
   SaveName: string;
   SaveFailed: Boolean;
+  procedure AcceptPendingNativeSource(const FileName: string);
+  begin
+    Session.AcceptSource(FileName, 'tpx', '',
+      ReadDocumentRevision(FileName), True);
+  end;
 begin
   PromptCount := 0;
+  SaveErrorPromptCount := 0;
   ReplyButton := idButtonNo;
   SaveFailed := False;
-  if Scenario <> 'exit-clean' then begin
+  Session := MainForm.EventManager.DocumentSession;
+  Session.Clear;
+  if Scenario = 'exit-empty-cancel' then
+    MainForm.TheDrawing.History.MarkDirty
+  else if Scenario <> 'exit-clean' then begin
     Line := TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(20, 10));
     MainForm.TheDrawing.AddObject(-1, Line);
     MainForm.TheDrawing.History.SetPropertiesChanged;
   end;
-  if Pos('exit-cancel', Scenario) = 1 then ReplyButton := idButtonCancel;
+  if (Pos('exit-cancel', Scenario) = 1) or
+    (Scenario = 'exit-empty-cancel') then ReplyButton := idButtonCancel;
   if Scenario = 'exit-save-failure' then begin
     MainForm.TheDrawing.FileName := IncludeTrailingPathDelimiter(
       SysUtils.GetTempDir(False)) + 'tpx-missing-save-parent-' + IntToStr(GetProcessID) +
       PathDelim + 'drawing.tpx';
+    AcceptPendingNativeSource(MainForm.TheDrawing.FileName);
     ReplyButton := idButtonYes;
   end;
   SaveName := '';
@@ -1120,6 +1175,7 @@ begin
     DeleteFile(SaveName);
     SaveName := SaveName + '.tpx';
     MainForm.TheDrawing.FileName := SaveName;
+    AcceptPendingNativeSource(SaveName);
     ReplyButton := idButtonYes;
   end;
   ModeBefore := MainForm.EventManager.Mode;
@@ -1137,15 +1193,20 @@ begin
     except
       on E: Exception do SaveFailed := True;
     end;
+    if SaveErrorPromptCount = 1 then SaveFailed := True;
   end
   else if Scenario = 'exit-close' then MainForm.Close
   else MainForm.UserEventExecute(MainForm.ExitProgram);
   if Scenario = 'exit-clean' then Check(PromptCount = 0, 'Clean drawing prompted')
   else Check(PromptCount = 1, 'Expected one save prompt, got ' + IntToStr(PromptCount));
-  if Pos('exit-cancel', Scenario) = 1 then begin
+  if (Pos('exit-cancel', Scenario) = 1) or
+    (Scenario = 'exit-empty-cancel') then begin
     Check(Observer.CloseRequests = 0, 'Cancel requested closing');
     Check(MainForm.EventManager.Mode = ModeBefore, 'Cancel discarded the active mode');
-    Check(MainForm.TheDrawing.ObjectsCount = 1, 'Cancel discarded the drawing');
+    Check(MainForm.TheDrawing.ObjectsCount =
+      Ord(Scenario <> 'exit-empty-cancel'), 'Cancel discarded the drawing');
+    Check(MainForm.TheDrawing.History.IsChanged,
+      'Cancel cleared the modified state');
     if Scenario = 'exit-cancel-retry' then begin
       ReplyButton := idButtonNo;
       MainForm.OnClose := Observer.ClosingDefault;
@@ -1159,6 +1220,8 @@ begin
   end
   else if Scenario = 'exit-save-failure' then begin
     Check(SaveFailed, 'Failed save did not block closing');
+    Check(SaveErrorPromptCount = 1,
+      'Failed save did not report its error and await acknowledgment');
     Check(Observer.CloseRequests = 0, 'Failed save requested closing');
     Check(MainForm.TheDrawing.History.IsChanged,
       'Failed save cleared the modified state');
@@ -1204,6 +1267,18 @@ begin
       RunBitmapFixtureConverter;
       Halt(0);
     end;
+    if SameText(ChangeFileExt(ExtractFileName(ParamStr(0)), ''),
+      'pstoedit-fixture') then
+    begin
+      RunPstoeditFixture;
+      Halt(0);
+    end;
+    if SameText(ChangeFileExt(ExtractFileName(ParamStr(0)), ''), 'mpost-fixture')
+      or SameText(ChangeFileExt(ExtractFileName(ParamStr(0)), ''), 'gs-fixture') then
+    begin
+      RunStagedToolFixture;
+      Halt(7);
+    end;
     if (ParamStr(1) <> 'clipboard-format-width') and
       (ParamStr(1) <> 'clipboard-roundtrip') then
       WidgetSet := TTestWidgetSet.Create;
@@ -1227,6 +1302,8 @@ begin
     else if ParamStr(1) = 'editable-shortcut-routing' then TestEditableShortcutRouting
     else if ParamStr(1) = 'canvas-focus-transfer' then TestCanvasFocusTransfer
     else if ParamStr(1) = 'platform-shortcuts' then TestPlatformShortcuts
+    else if ParamStr(1) = 'document-io' then TestDocumentIO
+    else if ParamStr(1) = 'pstoedit-import' then TestPstoeditEmfImport
     else if ParamStr(1) = 'color-box-custom-state' then TestColorBoxCustomState
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
     else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))
@@ -1241,6 +1318,7 @@ begin
     else if ParamStr(1) = 'font-choice' then TestFontChoice
     else if ParamStr(1) = 'conversion-save' then TestConversionSave
     else if ParamStr(1) = 'unsupported-exports' then TestUnsupportedExports
+    else if ParamStr(1) = 'tpx-staged-sidecars' then TestTpXStagedSidecars
     else if ParamStr(1) = 'bitmap-eps' then TestBitmapEps
     else if ParamStr(1) = 'labeled-preview' then TestLabeledPreview
 {$IFDEF DARWIN}

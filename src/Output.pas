@@ -11,6 +11,8 @@ uses SysUtils, Classes, Contnrs, Graphics, Drawings,
 
 type
 
+  TOutputPath = {$IFDEF FPC}UTF8String{$ELSE}string{$ENDIF};
+
   TDrawingSaver = class(TObject)
   protected
     fDrawing2D: TDrawing2D;
@@ -78,8 +80,8 @@ type
     procedure WriteAll; virtual;
     procedure WriteAllToStream; virtual;
     procedure WriteToTpX(Stream: TStream;
-      const FileName: string); virtual;
-    function StoreToFile(const FileName: string): Boolean; virtual;
+      const FileName: TOutputPath); virtual;
+    function StoreToFile(const FileName: TOutputPath): Boolean; virtual;
   end;
 
   TDrawingSaverClass = class of TDrawingSaver;
@@ -105,8 +107,8 @@ type
     procedure WriteFooter; override;
     procedure WriteAllToStream; override;
     procedure WriteToTpX(Stream: TStream;
-      const FileName: string); override;
-    function StoreToFile(const FileName: string): Boolean;
+      const FileName: TOutputPath); override;
+    function StoreToFile(const FileName: TOutputPath): Boolean;
       override;
   end;
 
@@ -160,7 +162,7 @@ type
     destructor Destroy; override;
     procedure WriteHeader; override;
     procedure WriteToTpX(Stream: TStream;
-      const FileName: string); override;
+      const FileName: TOutputPath); override;
   end;
 
   T_PostScript_Light_Export = class(T_PostScript_Export)
@@ -173,7 +175,7 @@ type
   T_EpsToPdf_Export = class(T_PostScript_Export)
   public
     constructor Create(Drawing: TDrawing2D); override;
-    function StoreToFile(const FileName: string): Boolean;
+    function StoreToFile(const FileName: TOutputPath): Boolean;
       override;
   end;
 
@@ -201,7 +203,7 @@ type
     destructor Destroy; override;
     procedure WriteHeader; override;
     procedure WriteToTpX(Stream: TStream;
-      const FileName: string); override;
+      const FileName: TOutputPath); override;
   end;
 
   T_PDF_Export = class(T_Device_Export)
@@ -212,7 +214,7 @@ type
     destructor Destroy; override;
     procedure WriteHeader; override;
     procedure WriteToTpX(Stream: TStream;
-      const FileName: string); override;
+      const FileName: TOutputPath); override;
   end;
 
   T_PDF_Light_Export = class(T_PDF_Export)
@@ -230,20 +232,20 @@ type
     constructor Create(Drawing: TDrawing2D); override;
     destructor Destroy; override;
     procedure WriteHeader; override;
-    function StoreToFile(const FileName: string): Boolean;
+    function StoreToFile(const FileName: TOutputPath): Boolean;
       override;
   end;
 
   T_BMP_Export = class(T_Bitmap0_Export)
     procedure WriteToTpX(Stream: TStream;
-      const FileName: string); override;
+      const FileName: TOutputPath); override;
   end;
 
   T_PNG_Export = class(T_Bitmap0_Export)
   public
     procedure WriteToTpX(Stream: TStream;
-      const FileName: string); override;
-    function StoreToFile(const FileName: string): Boolean;
+      const FileName: TOutputPath); override;
+    function StoreToFile(const FileName: TOutputPath): Boolean;
       override;
   end;
 
@@ -262,8 +264,8 @@ type
   T_EMF_Export = class(TDrawingSaver)
   public
     procedure WriteToTpX(Stream: TStream;
-      const FileName: string); override;
-    function StoreToFile(const FileName: string): Boolean;
+      const FileName: TOutputPath); override;
+    function StoreToFile(const FileName: TOutputPath): Boolean;
       override;
   end;
 {$ENDIF}
@@ -275,34 +277,47 @@ type
 
 function ExportFormatSupported(const Format: ExportFormatKind): Boolean;
 procedure ExportToFile(const Drawing: TDrawing2D;
-  const FileName: string; const ExportFormat: ExportFormatKind);
+  const FileName: TOutputPath; const ExportFormat: ExportFormatKind);
 procedure StoreToFile_Saver(const Drawing: TDrawing2D;
-  const FileName: string; AClass: TDrawingSaverClass);
+  const FileName: TOutputPath; AClass: TDrawingSaverClass);
 // A hack to make dvips use a more correct bounding box
 function DvipsFixBB_RuleStr(const ExtRect: TRect2D;
   const FactorMM: TRealType): string;
 function StoreToFile_TpX0(const Drawing: TDrawing2D;
-  const FileName: string;
+  const FileName: TOutputPath;
   AClass_TeX, AClass_PdfTeX: TDrawingSaverClass;
   const DvipsFixBB: Boolean): Boolean;
 function StoreToFile_TpX(const Drawing: TDrawing2D;
-  const FileName: string;
+  const FileName: TOutputPath;
   const DvipsFixBB: Boolean): Boolean;
+function StoreToStream_TpXDocument(const Drawing: TDrawing2D;
+  const Destination: TStream; const FileName: TOutputPath;
+  const DvipsFixBB: Boolean): Boolean;
+function StoreToStream_TpXDocumentStaged(const Drawing: TDrawing2D;
+  const Destination: TStream; const FileName, StagingFileName: TOutputPath;
+  const DvipsFixBB: Boolean; StagedAssets, FinalAssets: TStrings;
+  AllowExternalTools: Boolean = False): Boolean;
+function CanSerializeTpXDocumentWithoutSidecars(
+  const Drawing: TDrawing2D): Boolean;
+function CanSafelySerializeTpXDocument(
+  const Drawing: TDrawing2D): Boolean;
+function StoreToStream_TpXModel(const Drawing: TDrawing2D;
+  const Destination: TStream; const FileName: TOutputPath): Boolean;
 function StoreToFile_MPS(const Drawing: TDrawing2D;
-  const FileName: string): Boolean;
+  const FileName: TOutputPath): Boolean;
 procedure StoreToFile_LaTeX_EPS(const Drawing: TDrawing2D;
-  const FileName: string);
+  const FileName: TOutputPath);
 procedure StoreToFile_LaTeX_PDF(const Drawing: TDrawing2D;
-  const FileName: string);
+  const FileName: TOutputPath);
 procedure LaTeX_Custom_Parse(var Device, Ext, Ext2: string);
 procedure StoreToFile_LaTeX_Custom(const Drawing: TDrawing2D;
-  const FileName: string);
+  const FileName: TOutputPath);
 procedure SetOutputFormats(const OutputFormats: string;
   ADrawing: TDrawing2D);
 function CheckCommandLine: Boolean;
 procedure ParseParameters(
   out FileName, IncludePath, OutputFormats: string);
-procedure FindPicturePath(const TeXFileName: string;
+procedure FindPicturePath(const TeXFileName: TOutputPath;
   const Line: Integer;
   out PicturePath, IncludePath: string);
 function TeX_Replace_Special(const St: WideString): string;
@@ -327,7 +342,7 @@ procedure ShiftTeXTextPoint(var P: TPoint2D;
 function DrawingAsMetafile(Drawing: TDrawing2D): TMetaFile;
 {$ENDIF}
 procedure StoreToFile_EMF(const Drawing: TDrawing2D;
-  const FileName: string);
+  const FileName: TOutputPath);
 
 var
 {$IFDEF MSWINDOWS}MetaPostPath: string = 'mpost.exe';
@@ -344,7 +359,140 @@ uses Math, StrUtils, ColorEtc, Preview,
   Gr32Add, DevGr32,
 {$ENDIF}
   MiscUtils, DevPGF, DevTeXPc, TpXSaver,
-  DevCanvas, DevSVG, DevTikZ, DevPS, DevPDF, DevPSTr, DevMP;
+  DevCanvas, DevSVG, DevTikZ, DevPS, DevPDF, DevPSTr, DevMP
+{$IFDEF FPC}
+  , LazFileUtils, LazUTF8
+{$ENDIF}
+  ;
+
+{$IFDEF FPC}
+type
+  TOutputFileStream = class(THandleStream)
+  public
+    destructor Destroy; override;
+  end;
+
+destructor TOutputFileStream.Destroy;
+begin
+  FileClose(Handle);
+  inherited Destroy;
+end;
+{$ENDIF}
+
+function OutputPathFromString(const Value: string): TOutputPath;
+{$IFDEF FPC}
+var Raw: RawByteString;
+begin
+  Raw := RawByteString(Value);
+  SetCodePage(Raw, 65001, False);
+  Result := Raw;
+{$ELSE}
+begin
+  Result := Value;
+{$ENDIF}
+end;
+
+function OutputExpandFileName(const FileName: TOutputPath): TOutputPath;
+begin
+{$IFDEF FPC}
+  Result := OutputPathFromString(ExpandFileNameUTF8(FileName));
+{$ELSE}
+  Result := ExpandFileName(FileName);
+{$ENDIF}
+end;
+
+function OutputExtractFileName(const FileName: TOutputPath): TOutputPath;
+begin
+  Result := OutputPathFromString(ExtractFileName(FileName));
+end;
+
+function OutputExtractFilePath(const FileName: TOutputPath): TOutputPath;
+begin
+  Result := OutputPathFromString(ExtractFilePath(FileName));
+end;
+
+function OutputChangeFileExt(const FileName: TOutputPath;
+  const Extension: string): TOutputPath;
+begin
+  Result := OutputPathFromString(ChangeFileExt(FileName, Extension));
+end;
+
+function OutputDirectoryExists(const Directory: TOutputPath): Boolean;
+begin
+{$IFDEF FPC}
+  Result := DirectoryExistsUTF8(Directory);
+{$ELSE}
+  Result := DirectoryExists(Directory);
+{$ENDIF}
+end;
+
+function OutputFileExists(const FileName: TOutputPath): Boolean;
+begin
+{$IFDEF FPC}
+  Result := FileExistsUTF8(FileName);
+{$ELSE}
+  Result := FileExists(FileName);
+{$ENDIF}
+end;
+
+function OutputDeleteFile(const FileName: TOutputPath): Boolean;
+begin
+{$IFDEF FPC}
+  Result := DeleteFileUTF8(FileName);
+{$ELSE}
+  Result := DeleteFile(FileName);
+{$ENDIF}
+end;
+
+function OutputRenameFile(const OldName, NewName: TOutputPath): Boolean;
+begin
+{$IFDEF FPC}
+  Result := RenameFileUTF8(OldName, NewName);
+{$ELSE}
+  Result := RenameFile(OldName, NewName);
+{$ENDIF}
+end;
+
+function OutputTryDeleteFile(const FileName: TOutputPath): Boolean;
+begin
+  Result := not OutputFileExists(FileName) or OutputDeleteFile(FileName);
+end;
+
+function OutputFileSize(const FileName: TOutputPath): Int64;
+{$IFNDEF FPC}
+var Stream: TFileStream;
+{$ENDIF}
+begin
+{$IFDEF FPC}
+  Result := FileSizeUTF8(FileName);
+{$ELSE}
+  if not OutputFileExists(FileName) then Exit(-1);
+  Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
+  try
+    Result := Stream.Size;
+  finally
+    Stream.Free;
+  end;
+{$ENDIF}
+end;
+
+function CreateOutputFileStream(const FileName: TOutputPath): TStream;
+{$IFDEF FPC}
+var FileHandle: THandle;
+begin
+  FileHandle := FileCreateUTF8(FileName);
+  if FileHandle = THandle(-1) then RaiseLastOSError;
+  try
+    Result := TOutputFileStream.Create(FileHandle);
+  except
+    FileClose(FileHandle);
+    raise;
+  end;
+{$ELSE}
+begin
+  Result := TFileStream.Create(FileName, fmCreate);
+{$ENDIF}
+end;
 
 function GetColor(C, Default: TColor): TColor;
 begin
@@ -815,44 +963,36 @@ var
     DottedSize0, DashSize0, ApproximationPrecision0: TRealType;
 begin
   if fDrawing2D = nil then Exit;
-  //DecimalSeparator := '.'; // Ensure that DecimalSeparator is .!
-  //Changing meaning of millimeters for output picture
+  PicScale0 := fDrawing2D.PicScale;
+  Border0 := fDrawing2D.Border;
+  LineWidth0 := fDrawing2D.LineWidthBase;
+  HatchingStep0 := fDrawing2D.HatchingStep;
+  DottedSize0 := fDrawing2D.DottedSize;
+  DashSize0 := fDrawing2D.DashSize;
+  ApproximationPrecision0 := fDrawing2D.ApproximationPrecision;
   Magnif := fDrawing2D.PicMagnif;
-  if Magnif <> 1 then
-  begin
-    PicScale0 := fDrawing2D.PicScale;
-    Border0 := fDrawing2D.Border;
-    LineWidth0 := fDrawing2D.LineWidthBase;
-    HatchingStep0 := fDrawing2D.HatchingStep;
-    DottedSize0 := fDrawing2D.DottedSize;
-    DashSize0 := fDrawing2D.DashSize;
-    ApproximationPrecision0
-      := fDrawing2D.ApproximationPrecision;
-    fDrawing2D.PicScale := fDrawing2D.PicScale * Magnif;
-    if fDrawing2D.PicScale <= 0 then
-      fDrawing2D.PicScale := 1;
-    fDrawing2D.Border := fDrawing2D.Border * Magnif;
-    fDrawing2D.LineWidthBase := fDrawing2D.LineWidthBase *
-      Magnif;
-    fDrawing2D.HatchingStep := fDrawing2D.HatchingStep *
-      Magnif;
-    fDrawing2D.DottedSize := fDrawing2D.DottedSize *
-      Magnif;
-    fDrawing2D.DashSize := fDrawing2D.DashSize * Magnif;
-    fDrawing2D.ApproximationPrecision
-      := fDrawing2D.ApproximationPrecision * Magnif;
-  end;
-  WriteAll0;
-  if Magnif <> 1 then
-  begin
+  try
+    if Magnif <> 1 then
+    begin
+      fDrawing2D.PicScale := fDrawing2D.PicScale * Magnif;
+      if fDrawing2D.PicScale <= 0 then fDrawing2D.PicScale := 1;
+      fDrawing2D.Border := fDrawing2D.Border * Magnif;
+      fDrawing2D.LineWidthBase := fDrawing2D.LineWidthBase * Magnif;
+      fDrawing2D.HatchingStep := fDrawing2D.HatchingStep * Magnif;
+      fDrawing2D.DottedSize := fDrawing2D.DottedSize * Magnif;
+      fDrawing2D.DashSize := fDrawing2D.DashSize * Magnif;
+      fDrawing2D.ApproximationPrecision :=
+        fDrawing2D.ApproximationPrecision * Magnif;
+    end;
+    WriteAll0;
+  finally
     fDrawing2D.PicScale := PicScale0;
     fDrawing2D.Border := Border0;
     fDrawing2D.LineWidthBase := LineWidth0;
     fDrawing2D.HatchingStep := HatchingStep0;
     fDrawing2D.DottedSize := DottedSize0;
     fDrawing2D.DashSize := DashSize0;
-    fDrawing2D.ApproximationPrecision
-      := ApproximationPrecision0;
+    fDrawing2D.ApproximationPrecision := ApproximationPrecision0;
   end;
 end;
 
@@ -863,7 +1003,7 @@ begin
 end;
 
 procedure TDrawingSaver.WriteToTpX(Stream: TStream;
-  const FileName: string);
+  const FileName: TOutputPath);
 var
   Stream0: TStream;
 begin
@@ -873,12 +1013,12 @@ begin
   fStream := Stream0;
 end;
 
-function TDrawingSaver.StoreToFile(const FileName: string):
+function TDrawingSaver.StoreToFile(const FileName: TOutputPath):
   Boolean;
 //var  FileStream : TFileStream;
 begin
   fStream.Free;
-  fStream := TFileStream.Create(FileName, fmCreate);
+  fStream := CreateOutputFileStream(FileName);
   //FileStream := TFileStream.Create(FileName, fmCreate);
   //fStream := TMemoryStream.Create;
   Result := False;
@@ -890,7 +1030,7 @@ begin
     fStream.Free;
     //FileStream.Free;
     fStream := nil;
-    Result := FileExists(FileName);
+    Result := OutputFileExists(FileName);
   end;
 end;
 
@@ -904,7 +1044,7 @@ begin
 end;
 
 procedure ExportToFile(const Drawing: TDrawing2D;
-  const FileName: string; const ExportFormat:
+  const FileName: TOutputPath; const ExportFormat:
   ExportFormatKind);
 begin
   if not ExportFormatSupported(ExportFormat) then
@@ -953,7 +1093,7 @@ begin
 end;
 
 procedure StoreToFile_Saver(const Drawing: TDrawing2D;
-  const FileName: string; AClass: TDrawingSaverClass);
+  const FileName: TOutputPath; AClass: TDrawingSaverClass);
 var
   Saver: TDrawingSaver;
 begin
@@ -975,12 +1115,12 @@ begin
     (ExtRect.Right - ExtRect.Left) / FactorMM]);
 end;
 
-function StoreToFile_TpX0(const Drawing: TDrawing2D;
-  const FileName: string;
+function StoreToStream_TpX0(const Drawing: TDrawing2D;
+  const Destination: TStream; const FileName: TOutputPath;
   AClass_TeX, AClass_PdfTeX: TDrawingSaverClass;
   const DvipsFixBB: Boolean): Boolean;
 var
-  Stream: TMemoryStream;
+  Stream: TStream;
   ARect: TRect2D;
   PicWidth: TRealType;
   procedure WriteAsClass(
@@ -1015,8 +1155,7 @@ begin
       Drawing.PicScale
       + Drawing.Border * 2;
   end;
-  Stream := TMemoryStream.Create;
-  try
+  Stream := Destination;
     WriteAsClass(T_TpX_Saver);
     if //(Drawing.TeXFigure <> fig_none)      and
       (Drawing.TeXFigurePrologue <> '') then
@@ -1097,67 +1236,287 @@ begin
     if //(Drawing.TeXFigure <> fig_none)      and
       (Drawing.TeXFigureEpilogue <> '') then
       WriteLnStream(Drawing.TeXFigureEpilogue);
-    Stream.SaveToFile(FileName);
+  Result := True;
+end;
+
+function StoreToFile_TpX0(const Drawing: TDrawing2D;
+  const FileName: TOutputPath;
+  AClass_TeX, AClass_PdfTeX: TDrawingSaverClass;
+  const DvipsFixBB: Boolean): Boolean;
+var Stream, OutputStream: TStream;
+begin
+  Stream := TMemoryStream.Create;
+  try
+    Result := StoreToStream_TpX0(Drawing, Stream, FileName,
+      AClass_TeX, AClass_PdfTeX, DvipsFixBB);
+    if Result then
+    begin
+      OutputStream := CreateOutputFileStream(FileName);
+      try
+        Stream.Position := 0;
+        OutputStream.CopyFrom(Stream, 0);
+      finally
+        OutputStream.Free;
+      end;
+    end;
+    Result := OutputFileExists(FileName);
   finally
     Stream.Free;
   end;
-  Result := FileExists(FileName);
 end;
 
+procedure SelectTpXSavers(const Drawing: TDrawing2D;
+  const AllowExternalTools: Boolean; out TeXSaver, PdfTeXSaver:
+  TDrawingSaverClass); forward;
+
 function StoreToFile_TpX(const Drawing: TDrawing2D;
-  const FileName: string;
+  const FileName: TOutputPath;
   const DvipsFixBB: Boolean): Boolean;
 var
   AClass_TeX, AClass_PdfTeX: TDrawingSaverClass;
 begin
-  case Drawing.TeXFormat of
-    tex_pgf:
-      AClass_TeX := T_PGF_Export;
-    tex_pstricks:
-      AClass_TeX := T_PSTricks_Export;
-    tex_eps:
-      AClass_TeX := T_PostScript_Light_Export;
-    tex_metapost:
-      AClass_TeX := T_MetaPost_Export;
-    tex_tikz:
-      AClass_TeX := T_TikZ_Export;
-{$IFDEF VER140}
-    tex_bmp:
-      AClass_TeX := T_BMP_Export;
-    tex_png:
-      AClass_TeX := T_PNG_Export;
-    tex_emf:
-      AClass_TeX := T_EMF_Export;
-{$ENDIF}
-    tex_none:
-      AClass_TeX := T_None_Saver;
-  else
-    AClass_TeX := T_TeX_Picture_Export;
-  end;
-  case Drawing.PdfTeXFormat of
-    pdftex_pgf:
-      AClass_PdfTeX := T_PGF_Export;
-    pdftex_pdf:
-      AClass_PdfTeX := T_PDF_Light_Export;
-{$IFDEF VER140}
-    pdftex_png:
-      AClass_PdfTeX := T_PNG_Export;
-{$ENDIF}
-    pdftex_metapost:
-      AClass_PdfTeX := T_MetaPost_Export;
-    pdftex_tikz:
-      AClass_PdfTeX := T_TikZ_Export;
-    pdftex_epstopdf:
-      AClass_PdfTeX := T_EpsToPdf_Light_Export;
-    pdftex_none:
-      AClass_PdfTeX := T_None_Saver;
-  else
-    AClass_PdfTeX := T_TeX_Picture_Export;
-  end;
+  SelectTpXSavers(Drawing, True, AClass_TeX, AClass_PdfTeX);
   Result := StoreToFile_TpX0(Drawing, FileName,
     AClass_TeX, AClass_PdfTeX, DvipsFixBB);
 end;
 
+function IsExternalTpXProfile(const Drawing: TDrawing2D): Boolean;
+begin
+  Result := (Drawing.TeXFormat = tex_metapost) or
+    (Drawing.PdfTeXFormat = pdftex_metapost) or
+    (Drawing.PdfTeXFormat = pdftex_epstopdf);
+end;
+
+function SidecarExtension(const Format: TeXFormatKind): string;
+begin
+  case Format of
+    tex_eps: Result := '.eps';
+    tex_metapost: Result := '.mps';
+  else
+    Result := '';
+  end;
+end;
+
+function PdfSidecarExtension(const Format: PdfTeXFormatKind): string;
+begin
+  case Format of
+    pdftex_pdf, pdftex_epstopdf: Result := '.pdf';
+    pdftex_metapost: Result := '.mps';
+  else
+    Result := '';
+  end;
+end;
+
+procedure SelectTpXSavers(const Drawing: TDrawing2D;
+  const AllowExternalTools: Boolean; out TeXSaver, PdfTeXSaver:
+  TDrawingSaverClass);
+begin
+  if IsExternalTpXProfile(Drawing) and not AllowExternalTools then
+    raise EWriteError.Create(
+      'This TpX output profile requires an explicitly permitted external converter');
+  case Drawing.TeXFormat of
+    tex_tex: TeXSaver := T_TeX_Picture_Export;
+    tex_pgf: TeXSaver := T_PGF_Export;
+    tex_pstricks: TeXSaver := T_PSTricks_Export;
+    tex_eps: TeXSaver := T_PostScript_Light_Export;
+    tex_metapost: TeXSaver := T_MetaPost_Export;
+    tex_tikz: TeXSaver := T_TikZ_Export;
+    tex_none: TeXSaver := T_None_Saver;
+{$IFDEF VER140}
+    tex_bmp: TeXSaver := T_BMP_Export;
+    tex_png: TeXSaver := T_PNG_Export;
+    tex_emf: TeXSaver := T_EMF_Export;
+{$ENDIF}
+  else
+    raise EWriteError.CreateFmt('Unsupported TpX TeX output profile %d',
+      [Ord(Drawing.TeXFormat)]);
+  end;
+  case Drawing.PdfTeXFormat of
+    pdftex_tex: PdfTeXSaver := T_TeX_Picture_Export;
+    pdftex_pgf: PdfTeXSaver := T_PGF_Export;
+    pdftex_pdf: PdfTeXSaver := T_PDF_Light_Export;
+    pdftex_metapost: PdfTeXSaver := T_MetaPost_Export;
+    pdftex_tikz: PdfTeXSaver := T_TikZ_Export;
+    pdftex_epstopdf: PdfTeXSaver := T_EpsToPdf_Light_Export;
+    pdftex_none: PdfTeXSaver := T_None_Saver;
+{$IFDEF VER140}
+    pdftex_png: PdfTeXSaver := T_PNG_Export;
+{$ENDIF}
+  else
+    raise EWriteError.CreateFmt('Unsupported TpX PDF-TeX output profile %d',
+      [Ord(Drawing.PdfTeXFormat)]);
+  end;
+end;
+
+function CanSerializeTpXDocumentWithoutSidecars(
+  const Drawing: TDrawing2D): Boolean;
+var
+  TeXSaver, PdfTeXSaver: TDrawingSaverClass;
+begin
+  Result := False;
+  if (Drawing = nil) or IsExternalTpXProfile(Drawing) or
+    (SidecarExtension(Drawing.TeXFormat) <> '') or
+    (PdfSidecarExtension(Drawing.PdfTeXFormat) <> '') then Exit;
+  try
+    SelectTpXSavers(Drawing, False, TeXSaver, PdfTeXSaver);
+    Result := True;
+  except
+    Result := False;
+  end;
+end;
+
+function CanSafelySerializeTpXDocument(
+  const Drawing: TDrawing2D): Boolean;
+var
+  TeXSaver, PdfTeXSaver: TDrawingSaverClass;
+begin
+  Result := False;
+  if (Drawing = nil) or IsExternalTpXProfile(Drawing) then Exit;
+  try
+    SelectTpXSavers(Drawing, False, TeXSaver, PdfTeXSaver);
+    Result := True;
+  except
+    Result := False;
+  end;
+end;
+
+procedure CopyMemoryStreamTo(const Source: TMemoryStream;
+  const Destination: TStream);
+begin
+  Destination.Size := 0;
+  Destination.Position := 0;
+  Source.Position := 0;
+  Destination.CopyFrom(Source, 0);
+end;
+
+function FileHasBytes(const FileName: TOutputPath): Boolean;
+begin
+  Result := OutputFileSize(FileName) > 0;
+end;
+
+function StoreToStream_TpXDocument(const Drawing: TDrawing2D;
+  const Destination: TStream; const FileName: TOutputPath;
+  const DvipsFixBB: Boolean): Boolean;
+var
+  TeXSaver, PdfTeXSaver: TDrawingSaverClass;
+  Buffer: TMemoryStream;
+begin
+  if (Drawing = nil) or (Destination = nil) then
+    raise EArgumentNilException.Create('Drawing and destination are required');
+  if not CanSerializeTpXDocumentWithoutSidecars(Drawing) then
+    raise EWriteError.Create(
+      'This TpX output profile requires staged sidecar serialization');
+  SelectTpXSavers(Drawing, False, TeXSaver, PdfTeXSaver);
+  Buffer := TMemoryStream.Create;
+  try
+    Result := StoreToStream_TpX0(Drawing, Buffer, FileName,
+      TeXSaver, PdfTeXSaver, DvipsFixBB);
+    if Result then CopyMemoryStreamTo(Buffer, Destination);
+  finally
+    Buffer.Free;
+  end;
+end;
+
+function StoreToStream_TpXModel(const Drawing: TDrawing2D;
+  const Destination: TStream; const FileName: TOutputPath): Boolean;
+var
+  Buffer: TMemoryStream;
+  Saver: TDrawingSaver;
+begin
+  if (Drawing = nil) or (Destination = nil) then
+    raise EArgumentNilException.Create('Drawing and destination are required');
+  Buffer := TMemoryStream.Create;
+  Saver := T_TpX_Saver.Create(Drawing);
+  try
+    Saver.WriteToTpX(Buffer, FileName);
+    CopyMemoryStreamTo(Buffer, Destination);
+    Result := True;
+  finally
+    Saver.Free;
+    Buffer.Free;
+  end;
+end;
+
+function StoreToStream_TpXDocumentStaged(const Drawing: TDrawing2D;
+  const Destination: TStream; const FileName, StagingFileName: TOutputPath;
+  const DvipsFixBB: Boolean; StagedAssets, FinalAssets: TStrings;
+  AllowExternalTools: Boolean): Boolean;
+var
+  TeXSaver, PdfTeXSaver: TDrawingSaverClass;
+  Buffer: TMemoryStream;
+  Extensions, NewStaged, NewFinal: TStringList;
+  I: Integer;
+  StageAsset, FinalAsset: TOutputPath;
+  procedure AddExtension(const Ext: string);
+  begin
+    if (Ext <> '') and (Extensions.IndexOf(Ext) < 0) then
+      Extensions.Add(Ext);
+  end;
+  procedure RemoveStagedOutputs;
+  var J: Integer;
+  begin
+    OutputDeleteFile(StagingFileName);
+    for J := 0 to Extensions.Count - 1 do
+      OutputDeleteFile(OutputChangeFileExt(StagingFileName, Extensions[J]));
+  end;
+begin
+  if (Drawing = nil) or (Destination = nil) or
+    (StagedAssets = nil) or (FinalAssets = nil) then
+    raise EArgumentNilException.Create(
+      'Drawing, destination and asset lists are required');
+  StagedAssets.Clear;
+  FinalAssets.Clear;
+  SelectTpXSavers(Drawing, AllowExternalTools, TeXSaver, PdfTeXSaver);
+  if OutputExtractFileName(FileName) <>
+    OutputExtractFileName(StagingFileName) then
+    raise EArgumentException.Create(
+      'Staged and final TpX filenames must share the document basename');
+  if not OutputDirectoryExists(OutputExtractFilePath(
+    OutputExpandFileName(StagingFileName))) then
+    raise EArgumentException.Create('The private staging directory must exist');
+
+  Extensions := TStringList.Create;
+  NewStaged := TStringList.Create;
+  NewFinal := TStringList.Create;
+  Buffer := TMemoryStream.Create;
+  try
+    try
+      AddExtension(SidecarExtension(Drawing.TeXFormat));
+      AddExtension(PdfSidecarExtension(Drawing.PdfTeXFormat));
+      RemoveStagedOutputs;
+      Result := StoreToStream_TpX0(Drawing, Buffer, StagingFileName,
+        TeXSaver, PdfTeXSaver, DvipsFixBB);
+      if not Result then
+        raise EWriteError.Create('Could not serialize TpX document');
+      for I := 0 to Extensions.Count - 1 do
+      begin
+        StageAsset := OutputExpandFileName(OutputChangeFileExt(
+          StagingFileName, Extensions[I]));
+        FinalAsset := OutputExpandFileName(OutputChangeFileExt(
+          FileName, Extensions[I]));
+        if not FileHasBytes(StageAsset) then
+          raise EWriteError.CreateFmt(
+            'Required TpX sidecar was not generated: %s', [StageAsset]);
+        NewStaged.Add(StageAsset);
+        NewFinal.Add(FinalAsset);
+      end;
+      CopyMemoryStreamTo(Buffer, Destination);
+      StagedAssets.Assign(NewStaged);
+      FinalAssets.Assign(NewFinal);
+      Result := True;
+    except
+      RemoveStagedOutputs;
+      StagedAssets.Clear;
+      FinalAssets.Clear;
+      raise;
+    end;
+  finally
+    Buffer.Free;
+    NewFinal.Free;
+    NewStaged.Free;
+    Extensions.Free;
+  end;
+end;
 { --================ T_Device_Export ==================-- }
 
 constructor T_Device_Export.Create(Drawing: TDrawing2D);
@@ -1266,7 +1625,7 @@ begin
   WritePieces(Obj);
 end;
 
-function T_Device_Export.StoreToFile(const FileName: string):
+function T_Device_Export.StoreToFile(const FileName: TOutputPath):
   Boolean;
 begin
   if fDevice is TFileDevice then
@@ -1279,7 +1638,7 @@ begin
 end;
 
 procedure T_Device_Export.WriteToTpX(Stream: TStream;
-  const FileName: string);
+  const FileName: TOutputPath);
 begin
   if fDevice is TFileDevice then
   begin
@@ -1463,18 +1822,20 @@ begin
 end;
 
 procedure T_PostScript_Export.WriteToTpX(Stream: TStream;
-  const FileName: string);
+  const FileName: TOutputPath);
 var
   I: Integer;
-  EpsFileName: string;
+  EpsFileName: TOutputPath;
 begin
   fStream := nil;
   if (Self is T_EpsToPdf_Export) or
     (Self is T_EpsToPdf_Light_Export) then
-    EpsFileName := ChangeFileExt(FileName, '.pdf')
+    EpsFileName := OutputChangeFileExt(FileName, '.pdf')
   else
-    EpsFileName := ChangeFileExt(FileName, '.eps');
-  if not StoreToFile(EpsFileName) then Exit;
+    EpsFileName := OutputChangeFileExt(FileName, '.eps');
+  if not StoreToFile(EpsFileName) then
+    raise EWriteError.CreateFmt(
+      'Could not create generated TpX sidecar %s', [EpsFileName]);
   fStream := Stream;
   try
     WriteLnStream('  \setlength{\unitlength}{1bp}%');
@@ -1484,7 +1845,7 @@ begin
       '  \put(0,0){\includegraphics{%s%s}}', //[width=%.1fmm,height=%.1fmm]
       [//fDrawing2D.PicWidth, fDrawing2D.PicHeight,
       fDrawing2D.IncludePath,
-        ChangeFileExt(ExtractFileName(FileName), '')]));
+        OutputChangeFileExt(OutputExtractFileName(FileName), '')]));
     for I := 0 to (fDevice as
       TPostScriptDevice).TextLabels.Count -
       1 do
@@ -1508,11 +1869,11 @@ end;
 { --================ T_EpsToPdf_Export ==================-- }
 
 function Run_EpsToPdf(
-  const EpsFileName, PdfFileName: string): Boolean;
+  const EpsFileName, PdfFileName: TOutputPath): Boolean;
 begin
   Result := False;
   try
-    if not TryDeleteFile(PdfFileName) then
+    if not OutputTryDeleteFile(PdfFileName) then
       MessageBoxError('Can not delete PDF file')
     else
     begin
@@ -1522,10 +1883,11 @@ begin
         '%s -dSAFER -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite' +
         ' -dAutoRotatePages=/None -sOutputFile="%s" "%s"',
         [PrepareFilePath(GhostscriptPath),
-        ExpandFileName(PdfFileName), ExpandFileName(EpsFileName)]), '', '',
+        OutputExpandFileName(PdfFileName),
+        OutputExpandFileName(EpsFileName)]), '', '',
           GetTempDir, True, True);
 
-      if not FileExists(PdfFileName) then
+      if not OutputFileExists(PdfFileName) then
       begin
         MessageBoxError('PDF file not created');
         Result := False;
@@ -1542,21 +1904,21 @@ begin
 end;
 
 function T_EpsToPdf_Export.StoreToFile(
-  const FileName: string):
+  const FileName: TOutputPath):
   Boolean;
 var
-  TempEPS: string;
+  TempEPS: TOutputPath;
 begin
-  TempEPS := GetTempDir + '(eps)TpX.eps';
-  TryDeleteFile(TempEPS);
+  TempEPS := OutputPathFromString(GetTempDir) + '(eps)TpX.eps';
+  if not OutputTryDeleteFile(TempEPS) then
+    raise EWriteError.Create('Could not clear the EPS-to-PDF temporary file');
   Result := False;
   try
     Result := inherited StoreToFile(TempEPS);
     if Result then
       Result := Run_EpsToPdf(TempEPS, FileName);
   finally
-    Result := True;
-    if Result then TryDeleteFile(TempEPS);
+    OutputTryDeleteFile(TempEPS);
   end;
 end;
 
@@ -1602,19 +1964,19 @@ end;
 { --================ T_MetaPost_Export2 ==================-- }
 
 function StoreToFile_MPS(const Drawing: TDrawing2D;
-  const FileName: string): Boolean;
+  const FileName: TOutputPath): Boolean;
 var
-  TempDir, TempMP, TempMPS, TempMPLog: string;
+  TempDir, TempMP, TempMPS, TempMPLog: TOutputPath;
 begin
   Result := False;
   if not CheckFilePath(MetaPostPath, 'MetaPost') then Exit;
   TempDir := GetTempDir;
   TempMP := TempDir + '(pic)TpX.mp';
-  TempMPS := ChangeFileExt(TempMP, '.0');
-  TempMPLog := ChangeFileExt(TempMP, '.log');
-  TryDeleteFile(TempMP);
-  TryDeleteFile(TempMPS);
-  TryDeleteFile(TempMPLog);
+  TempMPS := OutputChangeFileExt(TempMP, '.0');
+  TempMPLog := OutputChangeFileExt(TempMP, '.log');
+  OutputDeleteFile(TempMP);
+  OutputDeleteFile(TempMPS);
+  OutputDeleteFile(TempMPLog);
   StoreToFile_Saver(Drawing, TempMP, T_MetaPost_Export);
   try
     //if FileExists(FileName) then DeleteFile(PChar(FileName));
@@ -1626,11 +1988,11 @@ begin
 //    Result := FileExec(MetaPostPath + ' -tex=latex "' + TempMP + '"', '', '',
 //      '', True, True);
 //    MessageBoxError('MPS');
-    if FileExists(TempMPS) then
+    if OutputFileExists(TempMPS) then
     begin
-      TryDeleteFile(FileName);
-      TryDeleteFile(TempMPLog);
-      if not SysBasic.RenameFile(TempMPS, FileName) then
+      OutputDeleteFile(FileName);
+      OutputDeleteFile(TempMPLog);
+      if not OutputRenameFile(TempMPS, FileName) then
       begin
         MessageBoxError('Can not rename. MPS file not created');
         Result := False;
@@ -1638,7 +2000,7 @@ begin
     end
     else
     begin
-      if not FileExists(TempMPLog) then
+      if not OutputFileExists(TempMPLog) then
         MessageBoxError('MPS file not created')
       else if MessageBoxErrorAsk(
         'MPS file not created. Do you want to see log file?')
@@ -1647,9 +2009,9 @@ begin
       Result := False;
     end;
   finally
-    if Result then TryDeleteFile(TempMP);
-    TryDeleteFile(TempMPS);
-    if Result then TryDeleteFile(TempMPLog);
+    if Result then OutputDeleteFile(TempMP);
+    OutputDeleteFile(TempMPS);
+    if Result then OutputDeleteFile(TempMPLog);
   end;
 end;
 
@@ -1680,18 +2042,18 @@ begin
 end;
 
 procedure T_MetaPost_Export.WriteToTpX(Stream: TStream;
-  const FileName: string);
+  const FileName: TOutputPath);
 begin
   fStream := nil;
   if not StoreToFile_MPS(fDrawing2D,
-    ChangeFileExt(FileName,
-    '.mps'))
-    then Exit;
+    OutputChangeFileExt(FileName, '.mps')) then
+    raise EWriteError.Create(
+      'MetaPost conversion failed while saving the TpX document');
   fStream := Stream;
   try
     WriteLnStream(Format('\includegraphics{%s%s.mps}%%',
       [fDrawing2D.IncludePath,
-      ChangeFileExt(ExtractFileName(FileName), '')]));
+      OutputChangeFileExt(OutputExtractFileName(FileName), '')]));
   finally
     fStream := nil;
   end;
@@ -1733,16 +2095,15 @@ begin
 end;
 
 procedure T_PDF_Export.WriteToTpX(Stream: TStream;
-  const FileName: string);
+  const FileName: TOutputPath);
 var
   I: Integer;
 begin
   fStream := nil;
-  if not StoreToFile(ChangeFileExt(FileName, '.pdf')) then
-  begin
-    fStream := Stream;
-    Exit;
-  end;
+  if not StoreToFile(OutputChangeFileExt(FileName, '.pdf')) then
+    raise EWriteError.CreateFmt(
+      'Could not create generated TpX sidecar %s',
+      [OutputChangeFileExt(FileName, '.pdf')]);
   fStream := Stream;
   try
     WriteLnStream('  \setlength{\unitlength}{1bp}%');
@@ -1752,7 +2113,7 @@ begin
       '  \put(0,0){\includegraphics{%s%s.pdf}}', //[width=%.1fcm,height=%.1fcm]
       [//fDrawing2D.PicWidth / 10, fDrawing2D.PicHeight / 10,
       fDrawing2D.IncludePath,
-        ChangeFileExt(ExtractFileName(FileName), '')]));
+        OutputChangeFileExt(OutputExtractFileName(FileName), '')]));
     for I := 0 to (fDevice as TPdfDevice).TextLabels.Count
       - 1 do
       WriteLnStream('  ' + (fDevice as
@@ -1837,7 +2198,7 @@ begin
 end;
 
 procedure T_BMP_Export.WriteToTpX(Stream: TStream;
-  const FileName: string);
+  const FileName: TOutputPath);
 begin
   fStream := nil;
   if not StoreToFile(ChangeFileExt(FileName, '.bmp')) then
@@ -1850,7 +2211,7 @@ begin
     WriteLnStream(Format(
       '  \includegraphics[width=%.2fmm,height=%.2fmm]{%s%s.bmp}',
       [fW_MM, fH_MM, fDrawing2D.IncludePath,
-      ChangeFileExt(ExtractFileName(FileName), '')]));
+      OutputChangeFileExt(OutputExtractFileName(FileName), '')]));
 //\item[natwidth,natheight] Again an alternative to |bb|.
 // |natheight=h,natwidth=w| is equivalent to |bb = 0 0 h w|.
   finally
@@ -1862,7 +2223,7 @@ end;
 { --================ T_PNG_Export ==================-- }
 
 procedure T_PNG_Export.WriteToTpX(Stream: TStream;
-  const FileName: string);
+  const FileName: TOutputPath);
 begin
   fStream := nil;
   if not StoreToFile(ChangeFileExt(FileName, '.png')) then
@@ -1875,17 +2236,17 @@ begin
     WriteLnStream(Format(
 //      '  \includegraphics[bb=%d %d %d %d,width=%.3fcm,height=%.3fcm]{%s.png}',
 //      [0, 0, Ceil(fW_MM * 2.8346), Ceil(fH_MM * 2.8346),fW_MM / 10, fH_MM / 10,
-//      ChangeFileExt(ExtractFileName(FileName), '')]));
+//      OutputChangeFileExt(OutputExtractFileName(FileName), '')]));
       '  \includegraphics[width=%.2fmm,height=%.2fmm]{%s%s.png}',
       [fW_MM, fH_MM, fDrawing2D.IncludePath,
-      ChangeFileExt(ExtractFileName(FileName), '')]));
+      OutputChangeFileExt(OutputExtractFileName(FileName), '')]));
   finally
     fStream := nil;
   end;
   WriteBB(fW_MM, fH_MM, fDrawing2D.Caption, FileName);
 end;
 
-function T_PNG_Export.StoreToFile(const FileName: string):
+function T_PNG_Export.StoreToFile(const FileName: TOutputPath):
   Boolean;
 begin
   WriteAll;
@@ -1978,7 +2339,7 @@ end;
 {$ENDIF}
 
 procedure StoreToFile_EMF(const Drawing: TDrawing2D;
-  const FileName: string);
+  const FileName: TOutputPath);
 {$IFDEF VER140}
 var
   MetaFile: TMetaFile;
@@ -2000,7 +2361,7 @@ end;
 {$IFDEF VER140}
 
 procedure T_EMF_Export.WriteToTpX(Stream: TStream;
-  const FileName: string);
+  const FileName: TOutputPath);
 begin
   fStream := nil;
   //Drawing2D.SaveToFile_EMF(ChangeFileExt(FileName, '.emf'), 1);
@@ -2013,14 +2374,14 @@ begin
     WriteLnStream(Format(
       '  \includegraphics[width=%.3fmm,height=%.3fmm]{%s%s}',
       [fW_MM, fH_MM, fDrawing2D.IncludePath,
-      ChangeFileExt(ExtractFileName(FileName), '.emf')]));
+      OutputChangeFileExt(OutputExtractFileName(FileName), '.emf')]));
   finally
     fStream := nil;
   end;
   WriteBB(fW_MM, fH_MM, fDrawing2D.Caption, FileName);
 end;
 
-function T_EMF_Export.StoreToFile(const FileName: string):
+function T_EMF_Export.StoreToFile(const FileName: TOutputPath):
   Boolean;
 begin
   StoreToFile_EMF(fDrawing2D, FileName);
@@ -2028,7 +2389,7 @@ end;
 {$ENDIF}
 
 function StoreToFile_LaTeX_EPS0(const Drawing: TDrawing2D;
-  out TempEPS: string): Boolean;
+  out TempEPS: TOutputPath): Boolean;
 var
   TempDvi, EKey: string;
 begin
@@ -2037,7 +2398,7 @@ begin
   if not Run_LaTeX_Temp(Drawing, ltxview_Dvi, TempDvi, True,
     True) then Exit;
   TempEPS := ChangeFileExt(TempDvi, '.eps');
-  if not TryDeleteFile(TempEPS) then
+  if not OutputTryDeleteFile(TempEPS) then
   begin
     MessageBoxError('Can not delete EPS file');
     Exit;
@@ -2057,19 +2418,19 @@ begin
 end;
 
 procedure StoreToFile_LaTeX_EPS(const Drawing: TDrawing2D;
-  const FileName: string);
+  const FileName: TOutputPath);
 var
-  TempEPS: string;
+  TempEPS: TOutputPath;
 begin
   if not StoreToFile_LaTeX_EPS0(Drawing, TempEPS) then
     Exit;
-  SysBasic.RenameFile(TempEPS, FileName);
+  OutputRenameFile(TempEPS, FileName);
 end;
 
 procedure StoreToFile_LaTeX_PDF(const Drawing: TDrawing2D;
-  const FileName: string);
+  const FileName: TOutputPath);
 var
-  TempEPS: string;
+  TempEPS: TOutputPath;
   procedure Eps_Prepare(const TempEPS: string);
   var
     Lines: TStringList;
@@ -2165,9 +2526,9 @@ begin
 end;
 
 procedure StoreToFile_LaTeX_Custom(
-  const Drawing: TDrawing2D; const FileName: string);
+  const Drawing: TDrawing2D; const FileName: TOutputPath);
 var
-  TempEPS: string;
+  TempEPS: TOutputPath;
 begin
   if not StoreToFile_LaTeX_EPS0(Drawing, TempEPS) then
     Exit;
@@ -2356,7 +2717,7 @@ begin
     OutputFile, OutputFormats, ExportFormats);
 end;
 
-procedure FindPicturePath(const TeXFileName: string;
+procedure FindPicturePath(const TeXFileName: TOutputPath;
   const Line: Integer;
   out PicturePath, IncludePath: string);
 var
