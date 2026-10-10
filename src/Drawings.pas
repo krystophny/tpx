@@ -121,6 +121,7 @@ type
 
   //TSY:
   TOnChangeDrawing = procedure(Drawing: TDrawing) of object;
+  TBeforeSelectionChangeEvent = function(Sender: TObject): Boolean of object;
 
 {: This type defines the event that is fired when an object is added to
    a <See Class=TDrawing> control.
@@ -219,10 +220,13 @@ type
     //TSY:
     fOnChangeDrawing: TOnChangeDrawing;
     fOnAddObject: TAddObjectEvent;
+    fOnBeforeSelectionChange: TBeforeSelectionChangeEvent;
     fOnLoadProgress: TOnLoadProgress;
     fOnSaveProgress: TOnSaveProgress;
     fSelectedObjs: TGraphicObjList;
     fSelectionFilter: TObject2DClass;
+    fModelGeneration: QWord;
+    fModelGenerationPauseCount: Integer;
 
     procedure SetListOfObjects(Objects: TGraphicObjList);
     procedure SetListOfBlocks(Objects: TGraphicObjList);
@@ -230,6 +234,7 @@ type
     function GetSourceBlocksCount: Integer;
     function GetViewport(IDX: Integer): TBaseViewport;
     function GetViewportsCount: Integer;
+    function AllowSelectionChange: Boolean;
   protected
     {: This method loads the blocks definitions (see <See Class=TSourceBlock2D>)
        from a drawing.
@@ -561,6 +566,9 @@ type
     function GetSelectionExtension: TRect2D;
     function GetSelectionCenter: TPoint2D;
     procedure NotifyChanged;
+    procedure AdvanceModelGeneration;
+    procedure BeginModelGenerationBatch;
+    procedure EndModelGenerationBatch;
     property Layers: TLayers read fLayers;
     {: This property is the current layer on which any object added to the
        drawing resides.
@@ -640,6 +648,9 @@ type
 
     property OnAddObject: TAddObjectEvent read fOnAddObject write
       fOnAddObject;
+    property OnBeforeSelectionChange: TBeforeSelectionChangeEvent
+      read fOnBeforeSelectionChange write fOnBeforeSelectionChange;
+    property ModelGeneration: QWord read fModelGeneration;
   end;
 
 {$IFNDEF FPC}
@@ -1007,6 +1018,8 @@ end;
 constructor TDrawing.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  fModelGeneration := 1;
+  fModelGenerationPauseCount := 0;
 
   fListOfObjects := TGraphicObjList.Create;
   fListOfObjects.FreeOnDelete := True;
@@ -1066,6 +1079,7 @@ procedure TDrawing.DeleteAllObjects;
 var
   OnChangeDrawing0: TOnChangeDrawing;
 begin
+  if (fSelectedObjs.Count > 0) and not AllowSelectionChange then Exit;
   SelectionClear;
   OnChangeDrawing0 := fOnChangeDrawing;
   fOnChangeDrawing := nil;
@@ -1250,6 +1264,7 @@ procedure TDrawing.DeleteObject(const ID: Integer);
 var
   Obj: TGraphicObject;
 begin
+  if not AllowSelectionChange then Exit;
   Obj := GetObject(ID);
   if Obj = nil then
     raise
@@ -1311,10 +1326,17 @@ begin
   Result := SelectedObjects.FirstObj;
 end;
 
+function TDrawing.AllowSelectionChange: Boolean;
+begin
+  Result := not Assigned(fOnBeforeSelectionChange) or
+    fOnBeforeSelectionChange(Self);
+end;
+
 procedure TDrawing.SelectionClear;
 var
   Obj: TGraphicObject;
 begin
+  if (fSelectedObjs.Count > 0) and not AllowSelectionChange then Exit;
   fSelectedObjs.Lock;
   try
     Obj := fSelectedObjs.FirstObj;
@@ -1333,6 +1355,8 @@ end;
 procedure TDrawing.SelectionAdd(const Obj:
   TGraphicObject);
 begin
+  if (Obj = nil) or (fSelectedObjs.Find(Obj.ID) <> nil) then Exit;
+  if not AllowSelectionChange then Exit;
   if Obj is TObject2D then
     (Obj as TObject2D).HasControlPoints := True;
   fSelectedObjs.Add(Obj);
@@ -1341,8 +1365,20 @@ end;
 procedure TDrawing.SelectionAddList(const List:
   TGraphicObjList);
 var
-  Obj: TGraphicObject;
+  Obj: TGraphicObject; HasNewSelection: Boolean;
 begin
+  HasNewSelection := False;
+  Obj := List.FirstObj;
+  while Obj <> nil do
+  begin
+    if fSelectedObjs.Find(Obj.ID) = nil then
+    begin
+      HasNewSelection := True;
+      Break;
+    end;
+    Obj := List.NextObj;
+  end;
+  if HasNewSelection and not AllowSelectionChange then Exit;
   List.Lock;
   try
     Obj := List.FirstObj;
@@ -1368,6 +1404,7 @@ begin
   if not Assigned(Obj) then Exit;
   if fSelectedObjs.Find(Obj.ID) <> nil then
   begin
+    if not AllowSelectionChange then Exit;
     if Obj is TObject2D then
       (Obj as TObject2D).HasControlPoints := False;
     fSelectedObjs.RemoveCurrent;
@@ -1379,6 +1416,8 @@ procedure TDrawing.SelectAll;
 var
   Obj: TGraphicObject;
 begin
+  if (fSelectedObjs.Count <> fListOfObjects.Count) and
+    not AllowSelectionChange then Exit;
   SelectionClear;
   fListOfObjects.Lock;
   try
@@ -1433,6 +1472,7 @@ var
   Obj: TGraphicObject;
   OnChangeDrawing0: TOnChangeDrawing;
 begin
+  if (fSelectedObjs.Count > 0) and not AllowSelectionChange then Exit;
   OnChangeDrawing0 := fOnChangeDrawing;
   fOnChangeDrawing := nil;
   fSelectedObjs.Lock;
@@ -1477,8 +1517,24 @@ end;
 
 procedure TDrawing.NotifyChanged;
 begin
+  AdvanceModelGeneration;
   if Assigned(fOnChangeDrawing) then
     fOnChangeDrawing(Self);
+end;
+
+procedure TDrawing.AdvanceModelGeneration;
+begin
+  if fModelGenerationPauseCount = 0 then Inc(fModelGeneration);
+end;
+
+procedure TDrawing.BeginModelGenerationBatch;
+begin
+  Inc(fModelGenerationPauseCount);
+end;
+
+procedure TDrawing.EndModelGenerationBatch;
+begin
+  if fModelGenerationPauseCount > 0 then Dec(fModelGenerationPauseCount);
 end;
 
 // =====================================================================
@@ -1536,6 +1592,7 @@ begin
   fDrawing.SaveObjectsToStream(AStream);
   fDrawing.OptionsList.SaveToStream(AStream);
   fCheckSum := MD5Stream(AStream);
+  fDrawing.AdvanceModelGeneration;
 end;
 
 procedure TDrawHistory.RestorePosition(Pos: Integer);
@@ -1562,15 +1619,19 @@ end;
 procedure TDrawHistory.Undo;
 begin
   if not GetCanUndo then Exit;
+  if not fDrawing.AllowSelectionChange then Exit;
   Dec(fPosition);
   RestorePosition(fPosition);
+  fDrawing.AdvanceModelGeneration;
 end;
 
 procedure TDrawHistory.Redo;
 begin
   if not GetCanRedo then Exit;
+  if not fDrawing.AllowSelectionChange then Exit;
   Inc(fPosition);
   RestorePosition(fPosition);
+  fDrawing.AdvanceModelGeneration;
 end;
 
 procedure TDrawHistory.Clear;
@@ -1580,6 +1641,7 @@ begin
   fCheckSum := MD5String('');
   fSavedCheckSum := fCheckSum;
   fForcedDirty := False;
+  if fDrawing <> nil then fDrawing.AdvanceModelGeneration;
 end;
 
 procedure TDrawHistory.SaveCheckSum;
@@ -1815,10 +1877,12 @@ end;
 
 procedure TDrawing2D.Clear;
 begin
+  if not AllowSelectionChange then Exit;
   if Assigned(History) then History.Clear;
   DeleteAllObjects;
   DeleteSavedSourceBlocks;
   SetDefaults;
+  AdvanceModelGeneration;
   ClearBitmapRegistry;
 end;
 
@@ -1929,6 +1993,7 @@ begin
     SetOwners(Candidate.fListOfBlocks, Candidate);
     if History <> nil then History.fDrawing := Self;
     if Candidate.History <> nil then Candidate.History.fDrawing := Candidate;
+  AdvanceModelGeneration;
     { Candidate now owns the former live lists, selection, bitmaps, settings,
       and history. Its caller frees it after the stable live drawing is redrawn. }
   finally
