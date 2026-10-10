@@ -436,6 +436,14 @@ def s_export_formats(app):
     app.menu('Insert', 'Insert rectangle')
     app.drag(cx-70, cy-50, cx+70, cy+50)
     app.key('Escape')
+    app.page.evaluate('''() => {
+      window.tpxExportBlobTypes = [];
+      const create = URL.createObjectURL.bind(URL);
+      URL.createObjectURL = blob => {
+        window.tpxExportBlobTypes.push(blob.type);
+        return create(blob);
+      };
+    }''')
     formats = [('SVG', b'<svg'), ('EPS', b'%!PS'), ('PDF', b'%PDF'), ('.mp', b'beginfig')]
     for name, signature in formats:
         app.menu('File', 'Save as...')
@@ -450,6 +458,9 @@ def s_export_formats(app):
         download.save_as(path)
         if signature not in path.read_bytes()[:1000]:
             raise AssertionError(f'{name} export has the wrong content')
+    if app.page.evaluate('window.tpxExportBlobTypes') != [
+            'image/svg+xml', 'application/postscript', 'application/pdf', 'text/plain']:
+        raise AssertionError('export download MIME type did not match its selected format')
     return 'SVG, EPS, PDF and MetaPost downloads contain the selected format'
 
 
@@ -470,6 +481,14 @@ def s_download_status_and_unload(app):
     v, cx, cy = box(app)
     app.menu('Insert', 'Insert rectangle')
     app.drag(cx-60, cy-40, cx+60, cy+40)
+    app.key('Escape')
+    phrase = 'Browser Ω 🐈'
+    app.menu('Insert', 'Insert text')
+    app.page.wait_for_function('document.querySelector("#lcl").width < 500')
+    app.type(phrase)
+    app.key('Enter')
+    app.page.wait_for_function('document.querySelector("#lcl").width > 500')
+    app.click(cx+90, cy-30)
     app.key('Escape')
     status.wait_for(state='visible')
     app.page.wait_for_function('document.querySelector("#document-status").dataset.state === "unsaved"')
@@ -494,27 +513,60 @@ def s_download_status_and_unload(app):
     if saved.name != 'browser-copy.tpx':
         raise AssertionError(f'download used an unexpected filename: {saved.name}')
     objects = drawing_xml(saved)
-    if len(objects) != 1 or objects[0].tag != 'rect':
-        raise AssertionError('download did not contain the current geometry')
-    app.page.wait_for_function('document.querySelector("#document-status").dataset.state === "clean"')
+    if (len(objects) != 2 or objects[0].tag != 'rect' or
+            not any(obj.tag == 'text' and phrase in obj.attrib.get('t', '')
+                    for obj in objects)):
+        raise AssertionError('download did not retain the geometry and Unicode text')
+    app.page.wait_for_function('document.querySelector("#document-status").dataset.state === "unconfirmed"')
     text = status.inner_text().lower()
     if 'started' not in text and 'requested' not in text:
         raise AssertionError(f'download status overstates or omits initiation: {text}')
     if 'original file' not in text or 'cannot confirm it was saved' not in text:
         raise AssertionError(f'download status does not distinguish the original file: {text}')
-    if unload_is_blocked():
-        raise AssertionError('a successfully requested copy left a clean document guarded')
+    if 'suppress' not in text:
+        raise AssertionError('status does not explain that beforeunload is browser-controlled')
+    if not unload_is_blocked():
+        raise AssertionError('an unconfirmed browser download did not retain the unload guard')
     if app.page.evaluate('window.tpxDownloadBlobs') != ['application/xml']:
         raise AssertionError('TpX download used the wrong MIME type')
     app.page.wait_for_function('window.tpxRevokedBlobs.length === 1', timeout=4000)
     if app.page.locator('a[download]').count():
         raise AssertionError('temporary download anchor was left in the page')
 
+    app.menu('File', 'New')
+    if unload_is_blocked():
+        raise AssertionError('starting a new document kept the prior download guard')
+    app.menu('File', 'Open')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('Choose file').set_input_files(saved)
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    reopened = drawing_xml(app.save('browser-reimported.tpx'))
+    if ([obj.tag for obj in reopened] != [obj.tag for obj in objects] or
+            [obj.attrib for obj in reopened] != [obj.attrib for obj in objects]):
+        raise AssertionError('downloaded text and geometry changed after reimport')
+    app.page.wait_for_function('window.tpxDownloadBlobs.length === 2')
+    app.page.wait_for_function('window.tpxRevokedBlobs.length === 2', timeout=4000)
+
+    downloads = []
+    app.page.on('download', lambda item: downloads.append(item.suggested_filename))
+    app.page.evaluate('''() => {
+      window.tpxOriginalAnchorClick = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = () => {};
+    }''')
     app.menu('Insert', 'Insert line')
     app.drag(cx-45, cy-35, cx+45, cy+35)
     app.key('Escape')
+    app.menu('File', 'Save')
+    app.page.wait_for_function('document.querySelector("#document-status").dataset.state === "unconfirmed"')
+    if downloads:
+        raise AssertionError('a browser-suppressed anchor click produced a download event')
+    if not unload_is_blocked() or 'cannot confirm' not in status.inner_text().lower():
+        raise AssertionError('a silently blocked request implied durable persistence')
+
+    app.menu('Insert', 'Insert line')
+    app.drag(cx-30, cy-25, cx+30, cy+25)
+    app.key('Escape')
     app.page.evaluate('''() => {
-      window.tpxOriginalAnchorClick = HTMLAnchorElement.prototype.click;
       HTMLAnchorElement.prototype.click = () => { throw new Error('injected download failure'); };
     }''')
     app.menu('File', 'Save')
@@ -531,12 +583,43 @@ def s_download_status_and_unload(app):
         app.menu('File', 'Save')
     retry_path = app.output / retried.value.suggested_filename
     retried.value.save_as(retry_path)
-    if len(drawing_xml(retry_path)) != 2:
-        raise AssertionError('retry after download failure lost geometry')
-    if unload_is_blocked():
-        raise AssertionError('a successful retry left the clean drawing guarded')
-    return ('dirty-only unload guard; requested TpX copy releases its Blob URL; '
-            'failed output stays dirty and a retry saves both objects')
+    if len(drawing_xml(retry_path)) != 4:
+        raise AssertionError('retry after download failure lost text or geometry')
+    if not unload_is_blocked():
+        raise AssertionError('a successful retry cleared the unconfirmed-download guard')
+    return ('dirty and unconfirmed-request unload guard; silent and thrown download '
+            'failures stay honest; retry preserves text and geometry')
+
+
+def s_download_blocks_raw_inline_draft(app):
+    _, cx, cy = box(app)
+    raw_text = 'Uncommitted browser label λ'
+    app.menu('Insert', 'Insert text')
+    app.click(cx - 60, cy - 20)
+    editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    editor.wait_for()
+    editor.fill(raw_text)
+    downloads = []
+    app.page.on('download', lambda item: downloads.append(item.suggested_filename))
+
+    app.menu('File', 'Save as...')
+    dialog = app.page.get_by_role('dialog')
+    if dialog.count():
+        dialog.get_by_label('File name').fill('blocked-raw-draft.tpx')
+        dialog.get_by_role('button', name='OK', exact=True).click()
+    app.page.wait_for_timeout(300)
+    if downloads:
+        raise AssertionError('TpX downloaded while an inline text draft was unsettled')
+    if editor.input_value() != raw_text:
+        raise AssertionError('blocked download discarded the inline text draft')
+
+    app.page.get_by_role('button', name='Done', exact=True).click()
+    app.page.wait_for_function('''() => !Array.from(document.querySelectorAll('textarea'))
+      .some(element => element.getAttribute('aria-label') === 'Text (canvas)')''')
+    saved = app.save('settled-inline-text.tpx').read_text()
+    if raw_text not in saved:
+        raise AssertionError('settled inline text was missing from the later download')
+    return 'an unresolved inline text draft blocks download, then survives Done and a later copy'
 
 
 def s_bitmap_roundtrip(app):
@@ -592,7 +675,16 @@ def s_bitmap_roundtrip(app):
     if b'colorimage' not in eps.read_bytes():
         raise AssertionError('EPS export omitted the bitmap image data')
 
+    unload_prompts = []
+    def accept_unload_prompt(dialog):
+        if dialog.type == 'beforeunload':
+            unload_prompts.append(True)
+            dialog.accept()
+        else:
+            dialog.dismiss()
+    app.page.on('dialog', accept_unload_prompt)
     app.page.reload()
+    app.page.remove_listener('dialog', accept_unload_prompt)
     app.page.wait_for_selector('#status[data-state=ready]')
     app.menu('File', 'Open')
     dialog = app.page.get_by_role('dialog')
@@ -834,6 +926,7 @@ SCENARIOS = [
     ('clipboard-roundtrip', s_clipboard_roundtrip),
     ('export-formats', s_export_formats),
     ('download-status-unload', s_download_status_and_unload),
+    ('download-blocks-raw-draft', s_download_blocks_raw_inline_draft),
     ('bitmap-roundtrip', s_bitmap_roundtrip),
     ('modal-properties', s_modal_properties),
     ('nested-coordinates', s_nested_coordinates),

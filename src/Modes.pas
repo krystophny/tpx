@@ -981,6 +981,7 @@ begin
     if Result then
     begin
 {$IFDEF CPUWASM32}
+    ResetBrowserDocumentStatus;
     SetBrowserDocumentSource(True);
     SetBrowserDocumentDirty(False);
     MainForm.ResetBrowserRecoveryDocument;
@@ -1067,6 +1068,11 @@ begin
 {$ENDIF}
   try
     try
+{$IFDEF CPUWASM32}
+      if not MainForm.TrySettleEditSession then
+        raise EWriteError.Create(
+          'Finish the current text or property edit before downloading');
+{$ENDIF}
       if not FindDocumentFormatById(FormatId, Format) or
         not Format.CanSaveBack or not IsDocumentCodecRegistered(Format.Id) then
         raise EWriteError.CreateFmt('No save-back codec is available for %s',
@@ -1275,6 +1281,9 @@ begin
   begin
     try
 {$IFDEF CPUWASM32}
+      if not MainForm.TrySettleEditSession then
+        raise EWriteError.Create(
+          'Finish the current text or property edit before downloading');
       if not BeginBrowserDownloadBundle(Path) then
         raise EWriteError.Create('The browser could not prepare this download');
 {$ENDIF}
@@ -1404,6 +1413,7 @@ begin
     TpX_Manager.RecentFiles.Update(FileName);
   Drawing.History.SaveCheckSum;
 {$IFDEF CPUWASM32}
+  ResetBrowserDocumentStatus;
   SetBrowserDocumentSource(False);
   SetBrowserDocumentDirty(False);
   MainForm.ResetBrowserRecoveryDocument;

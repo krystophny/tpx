@@ -9,6 +9,7 @@ uses DocumentFormats;
 procedure SetBrowserDocumentDirty(Value: Boolean);
 procedure SetBrowserDocumentSource(Value: Boolean);
 procedure SetBrowserDocumentError(const MessageText: string);
+procedure ResetBrowserDocumentStatus;
 function BeginBrowserDownloadBundle(const MainPath: TDocumentPath): Boolean;
 function AddBrowserDownloadPath(const Path: TDocumentPath): Boolean;
 function FinishBrowserDownloadBundle(Success: Boolean): Boolean;
@@ -22,6 +23,8 @@ procedure BrowserSetDocumentSource(Value: LongInt);
   external 'tpx' name 'browser_document_source';
 procedure BrowserSetDocumentError(MessageText: PChar; MessageLength: LongInt);
   external 'tpx' name 'browser_document_error';
+procedure BrowserResetDocumentStatus;
+  external 'tpx' name 'browser_document_reset';
 function BrowserBeginDownloadBundle(Path: PChar; PathLength: LongInt): LongInt;
   external 'tpx' name 'browser_download_begin';
 function BrowserAddDownloadPath(Path: PChar; PathLength: LongInt): LongInt;
@@ -50,6 +53,13 @@ procedure SetBrowserDocumentError(const MessageText: string);
 begin
 {$IFDEF CPUWASM32}
   BrowserSetDocumentError(PChar(MessageText), Length(MessageText));
+{$ENDIF}
+end;
+
+procedure ResetBrowserDocumentStatus;
+begin
+{$IFDEF CPUWASM32}
+  BrowserResetDocumentStatus;
 {$ENDIF}
 end;
 
