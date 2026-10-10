@@ -9,6 +9,8 @@ into the next case. Prints one line per scenario and exits non-zero on failure.
 import argparse
 import os
 import json
+import shutil
+import tempfile
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from functools import partial
 from threading import Thread
@@ -48,13 +50,32 @@ Thread(target=srv.serve_forever, daemon=True).start()
 results, failures = [], []
 try:
     with sync_playwright() as p:
+        browser_type = getattr(p, args.browser)
         browser = (p.chromium.launch(executable_path=args.chromium, args=['--no-sandbox'])
-                   if args.browser == 'chromium' else getattr(p, args.browser).launch())
+                   if args.browser == 'chromium' else browser_type.launch())
         for name, fn in SCENARIOS:
             if wanted and name not in wanted:
                 continue
-            page = browser.new_page(viewport={'width': 1280, 'height': 900})
-            app = App(page, name, OUT)
+            restart_page = None
+            profile = None
+            persistent_context = [None]
+            if name == 'recovery-restart-geometry':
+                profile = tempfile.mkdtemp(prefix='tpx-browser-recovery-')
+
+                def restart_page():
+                    options = {'viewport': {'width': 1280, 'height': 900},
+                               'accept_downloads': True}
+                    if args.browser == 'chromium':
+                        options.update(executable_path=args.chromium,
+                                       args=['--no-sandbox'])
+                    persistent_context[0] = browser_type.launch_persistent_context(
+                        profile, **options)
+                    return persistent_context[0].pages[0]
+
+                page = restart_page()
+            else:
+                page = browser.new_page(viewport={'width': 1280, 'height': 900})
+            app = App(page, name, OUT, restart_page, f'http://127.0.0.1:{srv.server_port}/')
             status = 'pass'
             detail = ''
             try:
@@ -81,7 +102,11 @@ try:
             results.append({'scenario': name, 'status': status, 'detail': detail,
                             'frames': app.frames(), 'shots': app.shots})
             print(f'{status:5} {name:24} {detail[:150]}')
-            page.close()
+            if persistent_context[0] is not None:
+                persistent_context[0].close()
+                shutil.rmtree(profile, ignore_errors=True)
+            else:
+                page.close()
         browser.close()
 finally:
     srv.shutdown()
