@@ -84,6 +84,51 @@ This is a syntax eligibility profile, not a promise that every syntactically
 accepted construct has a scene representation. Scene conversion must reject
 constructs outside its own supported semantic subset.
 
+## Editable scene profile
+
+The semantic evaluator converts a supported picture into an ordered list of
+existing TpX drawing primitives. A `.tex` document must contain one supported
+picture; a `.tikz` file may contain a bare fragment. Import rejects a picture
+with no visible editable objects, any unsupported visible construct, and any
+materialization failure. It never accepts a partial scene. A failed open leaves
+the current drawing unchanged.
+
+Coordinates without units use the picture's `x` and `y` basis, which defaults
+to one centimetre per coordinate unit. Picture bases and explicit coordinate,
+size, and stroke dimensions accept `mm`, `cm`, TeX `pt`, PostScript `bp`, `in`,
+and CSS `px`. A coordinate pair must use either two unitless values or two
+dimensioned values. `+` is relative to the previous path point without moving
+the relative base; `++` also updates that base. Supported picture scales and
+numeric scope transforms compose in TikZ source order. Numeric nested scope
+transforms support `shift`, `rotate`, `scale`, `xscale`, and `yscale`; path
+`rotate around` is also supported. Geometry that would require a sheared
+circle, ellipse, or circular arc is rejected rather than approximated.
+
+Editable geometry includes lines, polylines, closed paths, cubic Beziers,
+rectangles, circles, ellipses, circular arcs, sectors, and circular segments.
+The generated zero-width rectangle used only to declare bounds is retained as
+source metadata and does not become a visible object. Text nodes retain their
+complete TeX body, anchor, rotation, font height, and baseline. Plain labels
+use native TpX text; imported TeX labels do not enable or invoke live preview.
+Generated hatching or arrow artwork that the writer emits as ordinary path
+geometry is imported in source order as those paths.
+
+Inline styles support literal RGB/HTML/gray color definitions, the named
+standard colors recognized by the evaluator, `draw`/`fill` enablement, literal
+line widths, and solid, dashed, and dotted strokes. Generated TpX width, text,
+dash, and dot defaults are evaluated and retained as source dependencies.
+Dash patterns are accepted only when they map exactly to the native solid,
+dashed, or dotted line styles. Unsupported option keys, unresolved macros,
+library styles, opacity, clipping, gradients, and pattern fills produce a
+source-located import error. Hand-written TikZ arrow-head options such as
+`->`, `<-`, `arrows=...`, or `>=Stealth` are unsupported; TpX-generated arrow
+artwork is accepted only when it is emitted as ordinary supported geometry.
+
+Images must be existing local PNG, JPEG, or BMP files named by a basename in
+the document's directory. Nested paths, absolute paths, remote references,
+other formats, and missing files are rejected with a source location. Import
+does not run TeX, converters, or network requests to resolve an image.
+
 ### Tier C: unsupported or invalid input
 
 The parser reports source-located diagnostics for unknown root commands,

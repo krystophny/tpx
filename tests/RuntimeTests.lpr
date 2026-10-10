@@ -6,7 +6,7 @@ uses
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX;
+  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentIO, TikZImport, TikZImportDrawing;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -90,6 +90,7 @@ end;
 {$I ViewportScenarios.inc}
 {$I PlaytestScenarios.inc}
 {$I TpXStagedSaveScenarios.inc}
+{$I TikZImportScenarios.inc}
 
 procedure RunBitmapFixtureConverter;
 var
@@ -1253,6 +1254,7 @@ begin
     else if ParamStr(1) = 'conversion-save' then TestConversionSave
     else if ParamStr(1) = 'unsupported-exports' then TestUnsupportedExports
     else if ParamStr(1) = 'tpx-staged-sidecars' then TestTpXStagedSidecars
+    else if ParamStr(1) = 'tikz-import-native' then TestTikZImportNativeScene
     else if ParamStr(1) = 'bitmap-eps' then TestBitmapEps
     else if ParamStr(1) = 'labeled-preview' then TestLabeledPreview
 {$IFDEF DARWIN}
