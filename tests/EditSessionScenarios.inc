@@ -59,11 +59,15 @@ procedure TestEditSessionPreviewCancel;
 var
   Drawing: TDrawing2D;
   First, Second, Provisional, Restored: TText2D;
+  LineOne, LineTwo: TLine2D;
   Session: TObjectEditSession;
   Patch: TObjectPropertyPatch;
+  PropertyValue: TPropertyValue;
   ErrorText, OriginalText: string;
   OriginalStoredText: AnsiString;
   FirstID, SecondID, HistoryCount, ProvisionalID, PromptCountBefore: Integer;
+  LineOneID, LineTwoID: Integer;
+  LineIDs: array[0..1] of Integer;
   Epoch: QWord;
   CanClose: Boolean;
 begin
@@ -216,6 +220,72 @@ begin
   Restored := Drawing.GetObject(FirstID) as TText2D;
   OriginalText := DecodeTpXTextForEdit(Restored.Text);
   Check(OriginalText = 'First', 'unrelated text changed during numeric edit');
+
+  LineOne := TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(2, 1));
+  LineOne.LineWidth := 1.125;
+  LineOne.LineStyle := liDotted;
+  LineOne.LineColor := clRed;
+  LineTwo := TLine2D.CreateSpec(-1, Point2D(3, 0), Point2D(5, 1));
+  LineTwo.LineWidth := 2.25;
+  LineTwo.LineStyle := liDashed;
+  LineTwo.LineColor := clBlue;
+  Drawing.AddObject(-1, LineOne);
+  Drawing.AddObject(-1, LineTwo);
+  LineOneID := LineOne.ID;
+  LineTwoID := LineTwo.ID;
+  LineIDs[0] := LineOneID;
+  LineIDs[1] := LineTwoID;
+  HistoryCount := Drawing.History.Count;
+  PropertyValue := ReadObjectProperty(Drawing, LineIDs, opfLineWidth);
+  Check(PropertyValue.State = pvsMixed,
+    'different supported line widths must read as mixed');
+  Check(Drawing.History.Count = HistoryCount,
+    'reading mixed values must not create a history operation');
+
+  Session := TObjectEditSession.Create(Drawing, Epoch, LineIDs);
+  try
+    Check(MainForm.RegisterEditSession(Session),
+      'multi-line session did not register');
+    Patch.Fields := [opfLineWidth];
+    Patch.LineWidth := 3.5;
+    Check(Session.Preview(Patch, Epoch, ErrorText),
+      'multi-line width preview failed: ' + ErrorText);
+    Check((LineOne.LineColor = clRed) and (LineOne.LineStyle = liDotted) and
+      (LineTwo.LineColor = clBlue) and (LineTwo.LineStyle = liDashed),
+      'editing width must preserve each line color and style');
+    Check(Drawing.History.Count = HistoryCount,
+      'multi-target preview must not create an undo operation');
+    Check(Session.Commit(Epoch, ErrorText),
+      'multi-line width edit did not commit: ' + ErrorText);
+    Check((LineOne.LineWidth = 3.5) and (LineTwo.LineWidth = 3.5) and
+      (Drawing.History.Count = HistoryCount + 1),
+      'one field edit must apply to all supported targets as one operation');
+  finally
+    MainForm.UnregisterEditSession(Session);
+    Session.Free;
+  end;
+
+  Session := TObjectEditSession.Create(Drawing, Epoch,
+    [FirstID, LineOneID]);
+  try
+    Check(MainForm.RegisterEditSession(Session),
+      'invalid multi-target session did not register');
+    Patch.Fields := [opfTextHeight];
+    Patch.TextHeight := 20;
+    PropertyValue := ReadObjectProperty(Drawing, [FirstID, LineOneID],
+      opfTextHeight);
+    Check(PropertyValue.State = pvsUnavailable,
+      'a field unsupported by one target must read as unavailable');
+    Restored := Drawing.GetObject(FirstID) as TText2D;
+    Check(not Session.Preview(Patch, Epoch, ErrorText) and
+      (Restored.Height = 9) and (LineOne.LineWidth = 3.5),
+      'a mixed-capability patch must fail atomically without changing any target');
+    Check(Session.Cancel(Epoch),
+      'invalid multi-target session could not be canceled');
+  finally
+    MainForm.UnregisterEditSession(Session);
+    Session.Free;
+  end;
 end;
 
 procedure TestEditSessionRecoveryPayload;
