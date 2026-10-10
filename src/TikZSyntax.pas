@@ -54,6 +54,7 @@ function ParseTikZ(const Source: TBytes;
 implementation
 
 type
+  TTikZGroupBodyStates = array of Byte;
   TEnvironmentEntry = record
     Name: string;
     BeginToken: SizeInt;
@@ -528,6 +529,74 @@ begin
   Result := False;
 end;
 
+function IsNodeBodyGroup(ResultDoc: TTikZSyntaxResult;
+  GroupIndex: SizeInt): Boolean;
+var
+  Body: TTikZGroup;
+  Item: TTikZToken;
+  Cursor: SizeInt;
+  Name: string;
+begin
+  Result := False;
+  Body := ResultDoc.GroupAt(GroupIndex);
+  if Body.Kind <> tgBrace then Exit;
+  Cursor := Body.OpenToken - 1;
+  while Cursor >= 0 do
+  begin
+    Item := ResultDoc.TokenAt(Cursor);
+    if IsTrivia(Item) then
+    begin
+      Dec(Cursor);
+      Continue;
+    end;
+    if (Item.Kind = ttkCloseBrace) or (Item.Kind = ttkCloseBracket) or
+      (Item.Kind = ttkCloseParen) then
+    begin
+      if Item.MatchingToken < 0 then Exit;
+      Cursor := Item.MatchingToken - 1;
+      Continue;
+    end;
+    if (Item.ParentGroup <> Body.ParentGroup) or
+      (Item.Kind = ttkSemicolon) then Exit;
+    if Item.Kind = ttkControlWord then
+      Name := ControlName(ResultDoc.FSource, Item)
+    else if Item.Kind = ttkWord then
+      Name := TokenText(ResultDoc.FSource, Item)
+    else
+    begin
+      Dec(Cursor);
+      Continue;
+    end;
+    if Name = 'node' then Exit(True);
+    if (Item.Kind = ttkControlWord) and
+      ((Name = 'path') or (Name = 'draw') or (Name = 'fill') or
+       (Name = 'filldraw') or (Name = 'begin') or (Name = 'end')) then Exit;
+    Dec(Cursor);
+  end;
+end;
+
+function IsNodeBodyCommand(ResultDoc: TTikZSyntaxResult;
+  TokenIndex: SizeInt; var BodyStates: TTikZGroupBodyStates): Boolean;
+var
+  Parent: SizeInt;
+  Group: TTikZGroup;
+begin
+  Result := False;
+  Parent := ResultDoc.TokenAt(TokenIndex).ParentGroup;
+  while Parent >= 0 do
+  begin
+    Group := ResultDoc.GroupAt(Parent);
+    if Group.Kind = tgBrace then
+    begin
+      if BodyStates[Parent] = 0 then
+        if IsNodeBodyGroup(ResultDoc, Parent) then BodyStates[Parent] := 2
+        else BodyStates[Parent] := 1;
+      if BodyStates[Parent] = 2 then Exit(True);
+    end;
+    Parent := Group.ParentGroup;
+  end;
+end;
+
 function HasBracketAncestor(ResultDoc: TTikZSyntaxResult;
   TokenIndex: SizeInt): Boolean;
 var
@@ -845,7 +914,9 @@ var
     Item: TTikZToken;
     Cmd: string;
     Allowed, AlreadyReported: Boolean;
+    NodeBodyStates: TTikZGroupBodyStates;
   begin
+    SetLength(NodeBodyStates, Doc.GroupCount);
     for C := 0 to Doc.TokenCount - 1 do
     begin
       if CheckCancellation(C) then Exit;
@@ -853,7 +924,8 @@ var
       if Item.Kind <> ttkControlWord then Continue;
       Cmd := ControlName(Doc.FSource, Item);
       AlreadyReported := False;
-      if IsDangerousCommand(Cmd) then
+      if IsDangerousCommand(Cmd) and
+        not IsNodeBodyCommand(Doc, C, NodeBodyStates) then
       begin
         MarkUnsupported(C, tdcUnsupportedCommand,
           'Dynamic or side-effecting command is unsupported: \' + Cmd);

@@ -234,6 +234,29 @@ begin
     Parsed.Free;
   end;
 
+  Source := BytesOf('\begin{tikzpicture}\node at (0,0)' +
+    '{\input{untrusted-file}};\end{tikzpicture}');
+  Parsed := ParseBytes(Source, tikTexInput);
+  try
+    CheckCore(Parsed.Outcome = tpoAccepted,
+      'raw TeX inside a node body should remain opaque label text');
+    CheckCore(SameBytes(Source, Parsed.CopySource),
+      'opaque node text must preserve its original source bytes');
+  finally
+    Parsed.Free;
+  end;
+
+  Source := BytesOf('\begin{tikzpicture}\node[execute=\input{bad}]' +
+    ' at (0,0){label};\end{tikzpicture}');
+  Parsed := ParseBytes(Source, tikTexInput);
+  try
+    CheckCore((Parsed.Outcome = tpoUnsupported) and
+      HasDiagnostic(Parsed, tdcUnsupportedCommand),
+      'dangerous commands in node options must remain rejected');
+  finally
+    Parsed.Free;
+  end;
+
   Source := BytesOf('\begin{tikzpicture}\DRAW (0,0)--(1,1);' +
     '\end{tikzpicture}');
   Parsed := ParseBytes(Source, tikFragmentInput);
