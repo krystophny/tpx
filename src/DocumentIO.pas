@@ -16,11 +16,15 @@ type
     Destination: TStream; CodecContext: TObject): Boolean;
   TDocumentContextRebinder = procedure(LiveDrawing,
     ParsedDrawing: TDrawing2D; CodecContext: TObject);
+  TDocumentSaveValidationPath = (dsvpFinalDestination, dsvpPrivateStage);
 
 procedure RegisterDocumentCodec(const Format: TDocumentFormat;
   Loader: TDocumentLoader; Saver: TDocumentSaver;
-  ContextRebinder: TDocumentContextRebinder = nil);
+  ContextRebinder: TDocumentContextRebinder = nil;
+  SaveValidationPath: TDocumentSaveValidationPath = dsvpFinalDestination);
 function IsDocumentCodecRegistered(const FormatId: string): Boolean;
+function DocumentCodecUsesStagedValidationPath(
+  const FormatId: string): Boolean;
 procedure RebindDocumentCodecContext(const FormatId: string;
   LiveDrawing, ParsedDrawing: TDrawing2D; CodecContext: TObject);
 function LoadDocumentCandidate(const FormatId: string;
@@ -48,6 +52,7 @@ type
     Loader: TDocumentLoader;
     Saver: TDocumentSaver;
     ContextRebinder: TDocumentContextRebinder;
+    SaveValidationPath: TDocumentSaveValidationPath;
   end;
 
 var
@@ -70,7 +75,8 @@ end;
 
 procedure RegisterDocumentCodec(const Format: TDocumentFormat;
   Loader: TDocumentLoader; Saver: TDocumentSaver;
-  ContextRebinder: TDocumentContextRebinder);
+  ContextRebinder: TDocumentContextRebinder;
+  SaveValidationPath: TDocumentSaveValidationPath);
 var C: TDocumentCodec;
 begin
   if Format.Id = '' then
@@ -85,12 +91,22 @@ begin
   C.Loader := Loader;
   C.Saver := Saver;
   C.ContextRebinder := ContextRebinder;
+  C.SaveValidationPath := SaveValidationPath;
   RegisterDocumentFormat(Format);
 end;
 
 function IsDocumentCodecRegistered(const FormatId: string): Boolean;
 begin
   Result := FindCodec(FormatId) <> nil;
+end;
+
+function DocumentCodecUsesStagedValidationPath(
+  const FormatId: string): Boolean;
+var C: TDocumentCodec;
+begin
+  C := FindCodec(FormatId);
+  Result := (C <> nil) and
+    (C.SaveValidationPath = dsvpPrivateStage);
 end;
 
 procedure RebindDocumentCodecContext(const FormatId: string;

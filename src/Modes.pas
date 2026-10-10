@@ -491,8 +491,9 @@ begin
 end;
 
 procedure StageRelativeBitmapAssets(Drawing: TDrawing2D;
-  const Destination, StageDirectory: TDocumentPath;
-  StagedAssets, FinalAssets: TStrings);
+  const Destination, StageDirectory, StagingFileName: TDocumentPath;
+  StagedAssets, FinalAssets: TStrings; const UseLinkBasenames: Boolean;
+  out HasStagedAssets: Boolean);
 var
   I, J: Integer;
   Entry: TBitmapEntry;
@@ -500,12 +501,23 @@ var
   Snapshot: TDocumentSnapshot;
   Duplicate: Boolean;
 begin
+  HasStagedAssets := False;
   Directory := DocumentPathDirectory(Destination);
   for I := 0 to Drawing.BitmapRegistry.Count - 1 do
   begin
     Entry := Drawing.BitmapRegistry.Objects[I] as TBitmapEntry;
     Link := TDocumentPath(Entry.ImageLink);
-    if (Link = '') or IsAbsoluteDocumentLink(Link) then Continue;
+    if Link = '' then Continue;
+    if UseLinkBasenames then
+    begin
+      if IsAbsoluteDocumentLink(Link) or (Link = '.') or (Link = '..') or
+        (Pos('/', string(Link)) > 0) or (Pos('\', string(Link)) > 0) or
+        (Pos(':', string(Link)) > 0) or (Pos(#0, string(Link)) > 0) then
+        raise EWriteError.CreateFmt(
+          'This format requires bitmap links to be safe file basenames: "%s"',
+          [string(Link)]);
+    end
+    else if IsAbsoluteDocumentLink(Link) then Continue;
     SourcePath := NormalizeDocumentPath(TDocumentPath(Entry.GetFullLink));
     FinalPath := NormalizeDocumentPath(Directory + PathDelim + Link);
     if SameDocumentPath(SourcePath, FinalPath) then Continue;
@@ -518,11 +530,17 @@ begin
       end;
     if Duplicate then Continue;
     Snapshot := ReadDocumentSnapshot(SourcePath);
-    StagePath := IncludeTrailingPathDelimiter(StageDirectory) +
-      'bitmap-' + IntToStr(I) + DocumentPathExtension(Link);
+    if UseLinkBasenames then
+      StagePath := IncludeTrailingPathDelimiter(StageDirectory) + Link
+    else
+      StagePath := IncludeTrailingPathDelimiter(StageDirectory) +
+        'bitmap-' + IntToStr(I) + DocumentPathExtension(Link);
+    if SameDocumentPath(StagePath, StagingFileName) then
+      raise EWriteError.Create('A bitmap asset collides with the staged document');
     WriteDocumentStagingFile(StagePath, Snapshot.SourceBytes);
     StagedAssets.Add(string(StagePath));
     FinalAssets.Add(string(FinalPath));
+    HasStagedAssets := True;
   end;
 end;
 
@@ -991,7 +1009,7 @@ function TTpXMode.SaveDocumentToPath(const FileName: TDocumentPath;
   out ErrorText: string): Boolean;
 var
   Path, StageDirectory, StagingFileName, BackupFileName,
-    PreviousBackup: TDocumentPath;
+    PreviousBackup, CandidateFileName: TDocumentPath;
   Format: TDocumentFormat;
   ExpectedRevision, NewRevision: TDiskRevision;
   Bytes: RawByteString;
@@ -1000,7 +1018,8 @@ var
   Candidate: TDrawing2D;
   CodecContext: TObject;
   SaveCodecContext: TObject;
-  CanSaveBack, SameSource, ExtensionAllowed: Boolean;
+  CanSaveBack, SameSource, ExtensionAllowed, UseStagedValidation,
+    HasStagedAssets: Boolean;
   I, Sep: Integer;
   Ext, Extensions: string;
 begin
@@ -1066,8 +1085,11 @@ begin
         StagingFileName, Stream, SaveCodecContext, StagedAssets, FinalAssets,
         True) then
         raise EWriteError.Create('The document could not be serialized');
-      StageRelativeBitmapAssets(Drawing, Path, StageDirectory, StagedAssets,
-        FinalAssets);
+      UseStagedValidation :=
+        DocumentCodecUsesStagedValidationPath(Format.Id);
+      StageRelativeBitmapAssets(Drawing, Path, StageDirectory,
+        StagingFileName, StagedAssets, FinalAssets, UseStagedValidation,
+        HasStagedAssets);
       if Stream.Size > MaxDocumentBytes then
         raise EWriteError.CreateFmt('Document exceeds the %d byte limit',
           [MaxDocumentBytes]);
@@ -1077,7 +1099,13 @@ begin
         Stream.Position := 0;
         Stream.ReadBuffer(Bytes[1], Stream.Size);
       end;
-      Candidate := LoadDocumentCandidate(Format.Id, Path, Bytes,
+      CandidateFileName := Path;
+      if UseStagedValidation and HasStagedAssets then
+      begin
+        WriteDocumentStagingFile(StagingFileName, Bytes);
+        CandidateFileName := StagingFileName;
+      end;
+      Candidate := LoadDocumentCandidate(Format.Id, CandidateFileName, Bytes,
         CanSaveBack, CodecContext, Diagnostics);
       if not CanSaveBack then
         raise EWriteError.CreateFmt(
