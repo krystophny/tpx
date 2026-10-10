@@ -1180,6 +1180,12 @@ begin
             Graphic.Free;
             raise EReadError.Create('Provisional recovery class mismatch');
           end;
+          if (Graphic as TText2D).Points.Count <> 1 then
+          begin
+            Graphic.Free;
+            raise EReadError.Create(
+              'Recovered provisional text must have one anchor point');
+          end;
           Objects[I] := Graphic as TObject2D;
         finally
           ObjectStream.Free;
