@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24mm" height="18mm" viewBox="0 0 24 18">
+  <path d="M 0.25,16.5 L 4.75,15.75" fill="none" stroke="#336699" stroke-width="0.75" stroke-dasharray="2 1"/>
+  <path d="M 0.25,17.5 C 1.25,15 3.25,18.5 4.75,15.25" fill="none" stroke="#663399" stroke-width="0.5"/>
+  <rect x="10.25" y="8.25" width="8.5" height="4.25" transform="rotate(-17.5 10.25 12.5)" fill="#DDEEFF" stroke="#663399" stroke-width="0.5"/>
+  <text x="1.25" y="7.5" font-size="3.514598mm" text-anchor="start">Label β</text>
+  <text x="10.25" y="4" font-size="3.514598mm" text-anchor="end">$x^2$</text>
+</svg>

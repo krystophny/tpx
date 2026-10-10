@@ -1,0 +1,22 @@
+\documentclass{article}
+\usepackage{tikz}
+\usepackage{graphicx}
+\usepackage[active,tightpage]{preview}
+\PreviewEnvironment{tikzpicture}
+\setlength\PreviewBorder{0pt}
+\providecommand{\tpxTextSize}{10pt}
+\begin{document}
+% The bytes before the source picture belong to the surrounding document.
+\definecolor{L}{rgb}{0.2,0.4,0.6}
+\definecolor{P}{rgb}{0.4,0.2,0.6}
+\definecolor{F}{rgb}{0.867,0.933,1}
+\begin{tikzpicture}[x=1mm,y=1mm,inner xsep=0pt,inner ysep=0pt,outer xsep=0pt,outer ysep=0pt]
+\path[line width=0.75mm,draw=L,dash pattern=on 2mm off 1mm] (0.25,1.5) -- (4.75,2.25);
+\path[line width=0.5mm,draw=P] (0.25,0.5) .. controls (1.25,3) and (3.25,-0.5) .. (4.75,2.75);
+\path[line width=0.5mm,draw=P,fill=F] (10.25,5.5) [rotate around={17.5:(10.25,5.5)}] rectangle +(8.5,4.25);
+\node at (1.25,10.5) [anchor=base west] {Label beta};
+\node at (10.25,14) [anchor=base east] {$x^2$};
+\node at (12,11) [anchor=south west] {\includegraphics[width=4mm,height=3mm]{acceptance-image.png}};
+\end{tikzpicture}
+% The bytes after the source picture belong to the surrounding document.
+\end{document}
