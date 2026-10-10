@@ -15,6 +15,9 @@ type
     fXML: TXmlOutput;
     fPattIDs: TStringList;
     fGlobalFaceName: string;
+    fUseViewportOverride: Boolean;
+    fPageWidthMM, fPageHeightMM: TRealType;
+    fViewBoxLeft, fViewBoxTop, fViewBoxWidth, fViewBoxHeight: TRealType;
     procedure SetStream(AStream: TStream); override;
     procedure RegisterPatt(const Hatching: THatching;
       const HatchColor, FillColor: TColor);
@@ -66,6 +69,8 @@ type
     DevEOL: string;
     constructor Create(Drawing: TDrawing2D);
     destructor Destroy; override;
+    procedure SetViewportOverride(const PageWidthMM, PageHeightMM,
+      ViewBoxLeft, ViewBoxTop, ViewBoxWidth, ViewBoxHeight: TRealType);
     procedure Poly(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
       const LineStyle: TLineStyle; const LineWidth: TRealType;
@@ -78,6 +83,22 @@ type
 implementation
 
 uses ColorEtc, Bitmaps, SysBasic;
+
+function SVGFormat(const FormatString: string;
+  const Args: array of const): string;
+var
+  Settings: TFormatSettings;
+begin
+  Settings := DefaultFormatSettings;
+  Settings.DecimalSeparator := '.';
+  Settings.ThousandSeparator := #0;
+  Result := Format(FormatString, Args, Settings);
+end;
+
+function SVGNum(const Value: TRealType): string;
+begin
+  Result := SVGFormat('%.15g', [Value]);
+end;
 
 function GetPattID(Hatching: THatching;
   HatchColor, FillColor: TColor): string;
@@ -162,40 +183,40 @@ begin
     haHorizontal:
       begin
         Size := HV * 2;
-        PathSt := Format('M 0,%.2f L %.2f,%.2f', [HV, HV * 2, HV]);
+        PathSt := SVGFormat('M 0,%.15g L %.15g,%.15g', [HV, HV * 2, HV]);
       end;
     haVertical:
       begin
         Size := HV * 2;
-        PathSt := Format('M %.2f,0 L %.2f,%.2f', [HV, HV, HV * 2])
+        PathSt := SVGFormat('M %.15g,0 L %.15g,%.15g', [HV, HV, HV * 2])
       end;
     haFDiagonal:
       begin
         Size := D;
-        PathSt := Format('M 0,0 L %.2f,%.2f', [D, D])
+        PathSt := SVGFormat('M 0,0 L %.15g,%.15g', [D, D])
       end;
     haBDiagonal:
       begin
         Size := D;
-        PathSt := Format('M %.2f,0 L 0,%.2f', [D, D])
+        PathSt := SVGFormat('M %.15g,0 L 0,%.15g', [D, D])
       end;
     haCross:
       begin
         Size := HV * 2;
         PathSt :=
-          Format('M 0,%.2f L %.2f,%.2f M %.2f,0 L %.2f,%.2f',
+          SVGFormat('M 0,%.15g L %.15g,%.15g M %.15g,0 L %.15g,%.15g',
           [HV, HV * 2, HV, HV, HV, HV * 2])
       end;
     haDiagCross:
       begin
         Size := D;
-        PathSt := Format('M 0,0 L %.2f,%.2f M %.2f,0 L 0,%.2f',
+        PathSt := SVGFormat('M 0,0 L %.15g,%.15g M %.15g,0 L 0,%.15g',
           [D, D, D, D])
       end;
   else
     begin
       Size := HV * 2;
-      PathSt := Format('M 0,%.2f L %.2f,%.2f', [HV, HV * 2, HV]);
+      PathSt := SVGFormat('M 0,%.15g L %.15g,%.15g', [HV, HV * 2, HV]);
     end;
   end;
   if HatchColor = clDefault then
@@ -204,14 +225,14 @@ begin
     HatchColorSt := ColorToHtml(HatchColor);
   if FillColor <> clDefault then
     FillColorSt := ColorToHtml(FillColor);
-  fXML.AddAttribute('width', FloatToStr(Size));
-  fXML.AddAttribute('height', FloatToStr(Size));
+  fXML.AddAttribute('width', SVGNum(Size));
+  fXML.AddAttribute('height', SVGNum(Size));
   fXML.AddAttribute('patternUnits', 'userSpaceOnUse');
   if FillColor <> clDefault then
   begin
     fXML.OpenTag('path');
     fXML.AddAttribute('d',
-      Format('M 0,0 L 0,%.2f L %.2f,%.2f L %.2f,0 L 0,0 Z',
+      SVGFormat('M 0,0 L 0,%.15g L %.15g,%.15g L %.15g,0 L 0,0 Z',
       [Size, Size, Size, Size]));
     fXML.AddAttribute('fill', FillColorSt);
     fXML.AddAttribute('stroke', 'none');
@@ -224,7 +245,7 @@ begin
     fXML.AddAttribute('fill', 'none');
     fXML.AddAttribute('stroke', HatchColorSt);
     fXML.AddAttribute('stroke-width',
-      Format('%.2f', [fLineWidthBase
+      SVGFormat('%.15g', [fLineWidthBase
       * fHatchingLineWidth * fFactorMM]));
     fXML.CloseTag;
   end;
@@ -266,6 +287,9 @@ begin
 end;
 
 procedure TSvgDevice.WriteHeader(ExtRect: TRect2D);
+var
+  PageWidthMM, PageHeightMM: TRealType;
+  ViewBoxLeft, ViewBoxTop, ViewBoxWidth, ViewBoxHeight: TRealType;
 begin
   {fXML.Doctype := 'svg PUBLIC "-//W3C//DTD SVG 1.1//EN"' + DevEOL
     + ' "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"';}
@@ -276,18 +300,33 @@ begin
   fXML.OpenTag('svg');
   //<!-- svg width="8cm" height="4cm" viewBox="0 0 800 400" -->
   fXML.AddAttribute('version', '1.1');
-  ExtRect := TransformRect2D(ExtRect, fT);
-  fXML.AddAttribute('width', Format('%.2fmm',
-    [(ExtRect.Right - ExtRect.Left) / fFactorMM]));
-  fXML.AddAttribute('height', Format('%.2fmm',
-    [Abs(ExtRect.Top - ExtRect.Bottom) / fFactorMM]));
-  fXML.AddAttribute('viewBox', Format('%.2f %.2f %.2f %.2f',
-    [ExtRect.Left, ExtRect.Top,
-    ExtRect.Right - ExtRect.Left, ExtRect.Bottom - ExtRect.Top]));
+  if fUseViewportOverride then
+  begin
+    PageWidthMM := fPageWidthMM;
+    PageHeightMM := fPageHeightMM;
+    ViewBoxLeft := fViewBoxLeft;
+    ViewBoxTop := fViewBoxTop;
+    ViewBoxWidth := fViewBoxWidth;
+    ViewBoxHeight := fViewBoxHeight;
+  end
+  else
+  begin
+    ExtRect := TransformRect2D(ExtRect, fT);
+    PageWidthMM := (ExtRect.Right - ExtRect.Left) / fFactorMM;
+    PageHeightMM := Abs(ExtRect.Top - ExtRect.Bottom) / fFactorMM;
+    ViewBoxLeft := ExtRect.Left;
+    ViewBoxTop := ExtRect.Top;
+    ViewBoxWidth := ExtRect.Right - ExtRect.Left;
+    ViewBoxHeight := ExtRect.Bottom - ExtRect.Top;
+  end;
+  fXML.AddAttribute('width', SVGFormat('%.15gmm', [PageWidthMM]));
+  fXML.AddAttribute('height', SVGFormat('%.15gmm', [PageHeightMM]));
+  fXML.AddAttribute('viewBox', SVGFormat('%.15g %.15g %.15g %.15g',
+    [ViewBoxLeft, ViewBoxTop, ViewBoxWidth, ViewBoxHeight]));
     //fXML.AddAttribute('fill-rule', 'evenodd';
   fXML.AddAttribute('fill-rule', 'nonzero');
   fXML.AddAttribute('stroke-miterlimit',
-    Format('%.5g', [fMiterLimit]));
+    SVGFormat('%.15g', [fMiterLimit]));
   if fDrawing2D.FontName <> '' then
     fGlobalFaceName := fDrawing2D.FontName
   else if FontName_Default <> '' then
@@ -322,6 +361,21 @@ begin
   end;
 end;
 
+procedure TSvgDevice.SetViewportOverride(const PageWidthMM, PageHeightMM,
+  ViewBoxLeft, ViewBoxTop, ViewBoxWidth, ViewBoxHeight: TRealType);
+begin
+  if (PageWidthMM <= 0) or (PageHeightMM <= 0) or
+    (ViewBoxWidth <= 0) or (ViewBoxHeight <= 0) then
+    raise Exception.Create('Invalid SVG source viewport');
+  fUseViewportOverride := True;
+  fPageWidthMM := PageWidthMM;
+  fPageHeightMM := PageHeightMM;
+  fViewBoxLeft := ViewBoxLeft;
+  fViewBoxTop := ViewBoxTop;
+  fViewBoxWidth := ViewBoxWidth;
+  fViewBoxHeight := ViewBoxHeight;
+end;
+
 procedure TSvgDevice.WriteFooter;
 begin
   fXML.CloseTag;
@@ -329,7 +383,7 @@ end;
 
 function FF2(const X: TRealType): string;
 begin
-  Result := Format('%.2f', [X]);
+  Result := SVGNum(X);
 end;
 
 procedure TSvgDevice.WritePrimitiveAttr0(const LineColor,
@@ -337,7 +391,10 @@ procedure TSvgDevice.WritePrimitiveAttr0(const LineColor,
   const LineStyle: TLineStyle; const LineWidth: TRealType;
   const Hatching: THatching;
   MiterLimit: TRealType);
+var
+  OutputLineWidth: TRealType;
 begin
+  OutputLineWidth := Abs(LineWidth);
   if LineStyle = liNone then
     fXML.AddAttribute('stroke', 'none')
   else
@@ -349,16 +406,16 @@ begin
       fXML.AddAttribute('stroke', ColorToHtml(LineColor));
     if LineStyle <> liNone then
       fXML.AddAttribute('stroke-width',
-        Format('%.2f', [fLineWidthBase
-        * LineWidth * fFactorMM]));
+        SVGFormat('%.15g', [fLineWidthBase
+        * OutputLineWidth * fFactorMM]));
     case LineStyle of
       liDotted:
-        fXML.AddAttribute('stroke-dasharray', Format('%.1f,%.1f',
-          [fLineWidthBase * LineWidth * fFactorMM,
+        fXML.AddAttribute('stroke-dasharray', SVGFormat('%.15g,%.15g',
+          [fLineWidthBase * OutputLineWidth * fFactorMM,
           fDottedSize * fFactorMM]));
       liDashed:
         fXML.AddAttribute('stroke-dasharray',
-          Format('%.1f,%.1f',
+          SVGFormat('%.15g,%.15g',
           [fDashSize * 2 * fFactorMM,
           fDashSize * fFactorMM]));
     end;
@@ -389,7 +446,7 @@ var
   procedure AddPoint(P: TPoint2D);
   begin
     P := TransformPoint2D(P, MultTransf(Transf));
-    AddSt(Format('%.2f,%.2f', [P.X, P.Y]));
+    AddSt(SVGFormat('%.15g,%.15g', [P.X, P.Y]));
   end;
 begin
   if Closed then
@@ -433,7 +490,7 @@ var
   procedure AddPoint(P: TPoint2D);
   begin
     P := TransformPoint2D(P, MultTransf(Transf));
-    AddSt(Format('%.2f,%.2f', [P.X, P.Y]));
+    AddSt(SVGFormat('%.15g,%.15g', [P.X, P.Y]));
   end;
 begin
   fXML.OpenTag('path');
@@ -470,7 +527,7 @@ begin
     //A := Pi / 2 + 2 * Pi - TwoPointsAngle(P1, P0);
   {if ARot <> 0 then
     fXML.AddAttribute('transform',
-      Format('rotate(%.2f %.2f %.2f)',
+      SVGFormat('rotate(%.15g %.15g %.15g)',
       [RadToDeg(ARot), P.X, P.Y]));}
   WritePrimitiveAttr0(LineColor, HatchColor, FillColor,
     LineStyle, LineWidth, Hatching, fMiterLimit);
@@ -519,37 +576,10 @@ var
   D: TVector2D;
   Descent: TRealType;
   procedure WriteFont;
-  var
-    AddFont: string;
   begin
-    //"Times", Times-Roman,'Times Roman','Times New Roman', Georgia, serif
-    //Arial, Helvetica, Geneva, 'Lucida Sans Unicode', sans-serif
-    //'Courier New', Courier, 'Lucida Console', monospace
     if FaceName = ' ' then Exit;
-    if AnsiContainsText(FaceName, 'arial')
-      or AnsiContainsText(FaceName, 'helv')
-      or AnsiContainsText(FaceName, 'geneva')
-      or AnsiContainsText(FaceName, 'sans')
-      or AnsiContainsText(FaceName, 'tahoma')
-      or AnsiContainsText(FaceName, 'verdana')
-      then
-      AddFont := ', sans-serif'
-    else if AnsiContainsText(FaceName, 'times')
-      or AnsiContainsText(FaceName, 'georgia')
-      or AnsiContainsText(FaceName, 'garamond')
-      or AnsiContainsText(FaceName, 'bookman')
-      or AnsiContainsText(FaceName, 'palatino')
-      or AnsiContainsText(FaceName, 'serif')
-      then
-      AddFont := ', serif'
-    else if AnsiContainsText(FaceName, 'courier')
-      or AnsiContainsText(FaceName, 'console')
-      or AnsiContainsText(FaceName, 'tipew')
-      or AnsiContainsText(FaceName, 'mono')
-      then
-      AddFont := ', monospace';
     if FaceName <> 'Symbol' then
-      fXML.AddAttribute('font-family', FaceName + AddFont);
+      fXML.AddAttribute('font-family', FaceName);
     if fsBold in Style then
       fXML.AddAttribute('font-weight', 'bold');
     if fsItalic in Style then
@@ -587,7 +617,7 @@ begin
   fXML.AddAttribute('font-size', FF2(H));
   if ARot <> 0 then
     fXML.AddAttribute('transform',
-      Format('rotate(%.2f %.2f %.2f)',
+      SVGFormat('rotate(%.15g %.15g %.15g)',
       [RadToDeg(-ARot), P.X, P.Y]));
   fXML.AddAttribute('xml:space', 'preserve');
   case HAlignment of
@@ -621,7 +651,7 @@ begin
   fXML.AddAttribute('ry', FF2(RY));
   if ARot <> 0 then
     fXML.AddAttribute('transform',
-      Format('rotate(%.2f %.2f %.2f)',
+      SVGFormat('rotate(%.15g %.15g %.15g)',
       [RadToDeg(-ARot), CP.X, CP.Y]));
   WritePrimitiveAttr0(LineColor, HatchColor, FillColor,
     LineStyle, LineWidth, Hatching, fMiterLimit);
@@ -656,7 +686,7 @@ var
   end;
   procedure AddPoint(P: TPoint2D);
   begin
-    AddSt(Format('%.2f,%.2f', [P.X, P.Y]));
+    AddSt(SVGFormat('%.15g,%.15g', [P.X, P.Y]));
   end;
 begin
   SA := SA - Floor(SA / (2 * Pi)) * 2 * Pi;
@@ -757,7 +787,7 @@ var
   procedure AddPoint(P: TPoint2D);
   begin
     P := TransformPoint2D(P, MultTransf(Transf));
-    AddSt(Format(' %.2f,%.2f', [P.X, P.Y]));
+    AddSt(SVGFormat(' %.15g,%.15g', [P.X, P.Y]));
   end;
 begin
   fXML.OpenTag('path');
