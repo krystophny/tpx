@@ -45,6 +45,14 @@ begin
   for I := 0 to High(Value) do Result[I + 1] := AnsiChar(Value[I]);
 end;
 
+function BytesHex(const Value: TBytes): string;
+var
+  I: SizeInt;
+begin
+  Result := '';
+  for I := 0 to High(Value) do Result := Result + IntToHex(Value[I], 2);
+end;
+
 function SameBytes(const A, B: TBytes): Boolean;
 var
   I: SizeInt;
@@ -120,6 +128,38 @@ begin
   Result := State;
 end;
 
+function MutateOneByte(const Source: TBytes;
+  var State: LongWord): TBytes;
+var
+  At, I: SizeInt;
+  Operation: LongWord;
+begin
+  Result := Copy(Source);
+  Operation := NextRandom(State) mod 3;
+  if (Operation = 1) and (Length(Result) > 1) then
+  begin
+    At := NextRandom(State) mod Length(Result);
+    for I := At to High(Result) - 1 do Result[I] := Result[I + 1];
+    SetLength(Result, Length(Result) - 1);
+  end
+  else if (Operation = 2) then
+  begin
+    At := NextRandom(State) mod (Length(Result) + 1);
+    SetLength(Result, Length(Result) + 1);
+    for I := High(Result) downto At + 1 do Result[I] := Result[I - 1];
+    Result[At] := Byte(NextRandom(State) mod 256);
+  end
+  else if Length(Result) > 0 then
+  begin
+    At := NextRandom(State) mod Length(Result);
+    Result[At] := Byte(NextRandom(State) mod 256);
+  end;
+end;
+
+function HasSourceInvariantFailure(const Source: TBytes;
+  out Problem: string): Boolean; forward;
+function ShrinkSourceInvariantFailure(const Source: TBytes): TBytes; forward;
+
 function ShrinkFailure(const Source: TBytes): TBytes; forward;
 
 function FuzzFailureDescription(Seed, CaseNumber: LongWord;
@@ -136,13 +176,15 @@ end;
 procedure TestEveryDocumentTokenBoundaryAndSeededGrammar;
 const
   Seed: LongWord = $68C0FFEE;
+  MutationSeed: LongWord = $72B17E5D;
   Coordinates: array[0..5] of string =
     ('0', '1', '-2', '.5', '1e-3', '2.25');
 var
-  Source, Prefix: TBytes;
+  Source, Prefix, MutationBase, Mutated, Minimized: TBytes;
   Parsed, Truncated: TTikZSyntaxResult;
   I, CutAt, DocumentEnd: SizeInt;
-  State, CaseNumber, R1, R2, R3, R4: LongWord;
+  State, MutationState, CaseNumber, MutationCase, R1, R2, R3, R4: LongWord;
+  MutationProblem: string;
   TextSource: RawByteString;
 begin
   Source := LoadFixture('handwritten.tex');
@@ -193,6 +235,24 @@ begin
         'seeded grammar source was not retained unchanged');
     finally
       Parsed.Free;
+    end;
+  end;
+
+  MutationBase := BytesOf('\begin{tikzpicture}[x=1mm,y=1mm]' +
+    '\draw (0.25,1.5) -- (4.75,2.25);' +
+    '\end{tikzpicture}');
+  MutationState := MutationSeed;
+  for MutationCase := 0 to 127 do
+  begin
+    Mutated := MutateOneByte(MutationBase, MutationState);
+    if HasSourceInvariantFailure(Mutated, MutationProblem) then
+    begin
+      Minimized := ShrinkSourceInvariantFailure(Mutated);
+      HasSourceInvariantFailure(Minimized, MutationProblem);
+      CheckCore(False, 'TikZ byte fuzz invariant failed; seed=' +
+        IntToHex(MutationSeed, 8) + ' case=' + IntToStr(MutationCase) +
+        ' problem=' + MutationProblem + ' bytes=' + BytesHex(Mutated) +
+        ' minimized=' + BytesHex(Minimized));
     end;
   end;
 end;
@@ -356,6 +416,112 @@ begin
     Result := Parsed.Outcome = tpoAccepted;
   finally
     Parsed.Free;
+  end;
+end;
+
+function HasSourceInvariantFailure(const Source: TBytes;
+  out Problem: string): Boolean;
+var
+  Parsed: TTikZSyntaxResult;
+  I: SizeInt;
+  Token: TTikZToken;
+  Diagnostic: TTikZDiagnostic;
+  Span: TTikZSourceSpan;
+begin
+  Result := False;
+  Problem := '';
+  Parsed := nil;
+  try
+    Parsed := ParseBytes(Source, tikFragmentInput);
+    try
+      if not SameBytes(Source, Parsed.CopySource) then
+      begin
+        Problem := 'bounded parser did not preserve its input bytes';
+        Exit(True);
+      end;
+      if (Parsed.Outcome = tpoAccepted) and not Parsed.Region.Found then
+      begin
+        Problem := 'accepted parse has no selected picture region';
+        Exit(True);
+      end;
+      if (Parsed.Outcome <> tpoAccepted) and
+        (Parsed.DiagnosticCount = 0) then
+      begin
+        Problem := 'rejected parse has no source diagnostic';
+        Exit(True);
+      end;
+      if Parsed.Region.Found then
+      begin
+        Span := Parsed.Region.Span;
+        if (Span.StartByte < 0) or (Span.EndByte < Span.StartByte) or
+          (Span.EndByte > Length(Source)) then
+        begin
+          Problem := 'picture region span is outside the mutated source';
+          Exit(True);
+        end;
+      end;
+      for I := 0 to Parsed.TokenCount - 1 do
+      begin
+        Token := Parsed.TokenAt(I);
+        Span := Token.Span;
+        if (Span.StartByte < 0) or (Span.EndByte < Span.StartByte) or
+          (Span.EndByte > Length(Source)) then
+        begin
+          Problem := 'token span is outside the mutated source';
+          Exit(True);
+        end;
+      end;
+      for I := 0 to Parsed.DiagnosticCount - 1 do
+      begin
+        Diagnostic := Parsed.DiagnosticAt(I);
+        Span := Diagnostic.Span;
+        if (Span.StartByte < 0) or (Span.EndByte < Span.StartByte) or
+          (Span.EndByte > Length(Source)) then
+        begin
+          Problem := 'diagnostic span is outside the mutated source';
+          Exit(True);
+        end;
+      end;
+    except
+      on E: Exception do
+      begin
+        Problem := 'parser raised ' + E.ClassName + ': ' + E.Message;
+        Exit(True);
+      end;
+    end;
+  finally
+    Parsed.Free;
+  end;
+end;
+
+function ShrinkSourceInvariantFailure(const Source: TBytes): TBytes;
+var
+  Candidate: TBytes;
+  Chunk, StartAt, Count: SizeInt;
+  Changed: Boolean;
+  Problem: string;
+begin
+  Result := Copy(Source);
+  Chunk := Length(Result) div 2;
+  while Chunk > 0 do
+  begin
+    Changed := False;
+    StartAt := 0;
+    while StartAt < Length(Result) do
+    begin
+      Count := Chunk;
+      if Count > Length(Result) - StartAt then
+        Count := Length(Result) - StartAt;
+      Candidate := RemoveBytes(Result, StartAt, Count);
+      if HasSourceInvariantFailure(Candidate, Problem) then
+      begin
+        Result := Candidate;
+        Changed := True;
+        Break;
+      end;
+      Inc(StartAt, Chunk);
+    end;
+    if not Changed then Chunk := Chunk div 2;
   end;
 end;
 

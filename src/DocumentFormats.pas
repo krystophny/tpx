@@ -10,6 +10,13 @@ type
   { All file paths crossing the document service boundary are UTF-8. }
   TDocumentPath = {$IFDEF FPC}UTF8String{$ELSE}string{$ENDIF};
 
+  { Nil in application use; runtime acceptance can observe and fail one
+    production file-I/O phase without replacing the filesystem implementation. }
+  TDocumentIOPhase = (dipPathExists, dipMetadataRead, dipSnapshotRead,
+    dipPrimaryFlush, dipAssetFlush, dipPrimaryReplace, dipAssetReplace);
+  TDocumentIOPhaseObserver = procedure(const Phase: TDocumentIOPhase;
+    const Path: TDocumentPath);
+
   TDiskRevision = record
     ContentDigest: string;
     Size: Int64;
@@ -90,6 +97,9 @@ type
   end;
 
   EDocumentConflict = class(Exception);
+
+var
+  DocumentIOPhaseObserver: TDocumentIOPhaseObserver;
 
 const
   MaxDocumentBytes = 268435456;
@@ -211,6 +221,8 @@ var Info: TByHandleFileInformation;
 {$ENDIF}
 {$ENDIF}
 begin
+  if Assigned(DocumentIOPhaseObserver) then
+    DocumentIOPhaseObserver(dipMetadataRead, FileName);
   Result.Identity := FileIdentityUnavailable + ':' +
     string(NormalizeDocumentPath(FileName));
   { WASI's VFS does not expose stable inode or timestamp metadata through the
@@ -444,6 +456,8 @@ function DocumentFileExists(const FileName: TDocumentPath): Boolean;
 var Name: UnicodeString; Attr, ErrorCode: DWORD;
 {$ENDIF}{$ENDIF}
 begin
+  if Assigned(DocumentIOPhaseObserver) then
+    DocumentIOPhaseObserver(dipPathExists, FileName);
 {$IFDEF FPC}{$IFDEF WINDOWS}
   Name := ExtendedWidePath(FileName);
   Attr := Windows.GetFileAttributesW(PWideChar(Name));
@@ -682,6 +696,8 @@ begin
   Path := NormalizeDocumentPath(FileName);
   if IsSymbolicLink(Path) then
     raise EReadError.Create('Symbolic-link document paths are not supported');
+  if Assigned(DocumentIOPhaseObserver) then
+    DocumentIOPhaseObserver(dipSnapshotRead, Path);
   Result.SourceBytes := '';
   Result.Revision.Exists := False;
   Result.Revision.Size := 0;
@@ -1125,6 +1141,8 @@ begin
   ReplaceSucceeded := False;
   BackupFileName := '';
   try
+    if Assigned(DocumentIOPhaseObserver) then
+      DocumentIOPhaseObserver(dipPrimaryFlush, Dest);
     WriteSynchronizedFile(StageFile, Bytes);
     HasExisting := DocumentFileExists(Dest);
     if HasExisting then Existing := ReadDocumentSnapshot(Dest)
@@ -1161,6 +1179,8 @@ begin
     end
     else if DocumentFileExists(Dest) then
       raise EDocumentConflict.Create('The destination appeared before replace');
+    if Assigned(DocumentIOPhaseObserver) then
+      DocumentIOPhaseObserver(dipPrimaryReplace, Dest);
     if not ReplaceFileAtomically(StageFile, Dest) then
       raise EWriteError.CreateFmt('Could not replace %s', [Dest]);
     ReplaceSucceeded := True;
@@ -1248,6 +1268,8 @@ begin
     if IsSymbolicLink(Assets[I].StagePath) or
       IsSymbolicLink(Assets[I].FinalPath) then
       raise EWriteError.Create('Symbolic-link assets are not supported');
+    if Assigned(DocumentIOPhaseObserver) then
+      DocumentIOPhaseObserver(dipAssetFlush, Assets[I].FinalPath);
     SynchronizeExistingFile(Assets[I].StagePath);
     Assets[I].HadOriginal := DocumentFileExists(Assets[I].FinalPath);
     if Assets[I].HadOriginal then
@@ -1292,6 +1314,8 @@ begin
         else if DocumentFileExists(Assets[I].FinalPath) then
           raise EDocumentConflict.CreateFmt('Asset appeared on disk: %s',
             [Assets[I].FinalPath]);
+        if Assigned(DocumentIOPhaseObserver) then
+          DocumentIOPhaseObserver(dipAssetReplace, Assets[I].FinalPath);
         if not ReplaceFileAtomically(Assets[I].StagePath,
           Assets[I].FinalPath) then
           raise EWriteError.CreateFmt('Could not publish asset %s',
