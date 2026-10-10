@@ -935,34 +935,41 @@ var
   Cont: Integer;
   TmpPt: TPoint2D;
   TmpBoolean: Boolean;
+  Remaining: Int64;
 begin
   { Load the standard properties }
   inherited CreateFromStream(Stream);
   WhenCreated;
-  Stream.Read(TmpN, SizeOf(TmpN));
+  if Stream.Read(TmpN, SizeOf(TmpN)) <> SizeOf(TmpN) then
+    raise EReadError.Create('Incomplete primitive point count');
+  if TmpN < 0 then
+    raise EReadError.Create('Invalid primitive point count');
+  Remaining := Stream.Size - Stream.Position;
+  if Int64(TmpN) > Remaining div SizeOf(TPoint2D) then
+    raise EReadError.Create('Primitive point data is incomplete');
   if not Assigned(fPoints) then
     fPoints := CreateVect(TmpN)
   else fPoints.Expand(TmpN);
      { Read all the points. }
   for Cont := 0 to TmpN - 1 do
   begin
-    Stream.Read(TmpPt, SizeOf(TmpPt));
+    Stream.ReadBuffer(TmpPt, SizeOf(TmpPt));
     fPoints.Points[Cont] := TmpPt;
   end;
-  Stream.Read(TmpBoolean, SizeOf(TmpBoolean));
+  Stream.ReadBuffer(TmpBoolean, SizeOf(TmpBoolean));
   fPoints.GrowingEnabled := TmpBoolean;
-  Stream.Read(fHatching, SizeOf(fHatching));
-  Stream.Read(fLineStyle, SizeOf(fLineStyle));
-  Stream.Read(fLineWidth, SizeOf(fLineWidth));
-  Stream.Read(fLineColor, SizeOf(fLineColor));
-  Stream.Read(fHatchColor, SizeOf(fHatchColor));
-  Stream.Read(fFillColor, SizeOf(fFillColor));
-  Stream.Read(fCanDeletePoints, SizeOf(fCanDeletePoints));
-  Stream.Read(fDrawPathBezier, SizeOf(fDrawPathBezier));
-  Stream.Read(fOwnsInterior, SizeOf(fOwnsInterior));
-  Stream.Read(fBeginArrowKind, SizeOf(fBeginArrowKind));
-  Stream.Read(fEndArrowKind, SizeOf(fEndArrowKind));
-  Stream.Read(fArrowSizeFactor, SizeOf(fArrowSizeFactor));
+  Stream.ReadBuffer(fHatching, SizeOf(fHatching));
+  Stream.ReadBuffer(fLineStyle, SizeOf(fLineStyle));
+  Stream.ReadBuffer(fLineWidth, SizeOf(fLineWidth));
+  Stream.ReadBuffer(fLineColor, SizeOf(fLineColor));
+  Stream.ReadBuffer(fHatchColor, SizeOf(fHatchColor));
+  Stream.ReadBuffer(fFillColor, SizeOf(fFillColor));
+  Stream.ReadBuffer(fCanDeletePoints, SizeOf(fCanDeletePoints));
+  Stream.ReadBuffer(fDrawPathBezier, SizeOf(fDrawPathBezier));
+  Stream.ReadBuffer(fOwnsInterior, SizeOf(fOwnsInterior));
+  Stream.ReadBuffer(fBeginArrowKind, SizeOf(fBeginArrowKind));
+  Stream.ReadBuffer(fEndArrowKind, SizeOf(fEndArrowKind));
+  Stream.ReadBuffer(fArrowSizeFactor, SizeOf(fArrowSizeFactor));
   fPoints.OnChange := UpdateExtension;
 end;
 
