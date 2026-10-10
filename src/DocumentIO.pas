@@ -40,6 +40,7 @@ type
     destructor Destroy; override;
     procedure Publish(out NewRevision: TDiskRevision;
       out BackupFileName: TDocumentPath);
+    procedure AppendBrowserDownloadAssets(Paths: TStrings);
     procedure Accept(Session: TDocumentSession);
     procedure Commit(Session: TDocumentSession;
       out NewRevision: TDiskRevision; out BackupFileName: TDocumentPath);
@@ -280,6 +281,41 @@ begin
   FNewRevision := NewRevision;
   FBackupFileName := BackupFileName;
   FPublished := True;
+end;
+
+procedure TDocumentSaveTransaction.AppendBrowserDownloadAssets(
+  Paths: TStrings);
+var
+  I: Integer;
+  Entry: TBitmapEntry;
+  Link, Path: TDocumentPath;
+  procedure AddUnique(const Value: TDocumentPath);
+  var J: Integer;
+  begin
+    for J := 0 to Paths.Count - 1 do
+      if SameDocumentPath(TDocumentPath(Paths[J]), Value) then Exit;
+    Paths.Add(string(Value));
+  end;
+begin
+  if Paths = nil then
+    raise EArgumentNilException.Create('A browser download path list is required');
+  for I := 0 to FFinalAssets.Count - 1 do
+    AddUnique(TDocumentPath(FFinalAssets[I]));
+  for I := 0 to FDrawing.BitmapRegistry.Count - 1 do
+  begin
+    Entry := FDrawing.BitmapRegistry.Objects[I] as TBitmapEntry;
+    Link := TDocumentPath(Entry.ImageLink);
+    if Link = '' then Continue;
+    if IsAbsoluteDocumentLink(Link) or (Link = '.') or (Link = '..') or
+      (Pos('/', string(Link)) > 0) or (Pos('\', string(Link)) > 0) or
+      (Pos(':', string(Link)) > 0) or (Pos(#0, string(Link)) > 0) then
+      raise EWriteError.CreateFmt(
+        'This browser cannot download linked bitmap paths safely: "%s"',
+        [string(Link)]);
+    Path := NormalizeDocumentPath(DocumentPathDirectory(FPath) +
+      PathDelim + Link);
+    AddUnique(Path);
+  end;
 end;
 
 procedure TDocumentSaveTransaction.Accept(Session: TDocumentSession);
