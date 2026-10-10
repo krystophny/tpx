@@ -938,6 +938,9 @@ begin
     Stream.Position := 0;
     Parser := TStitchSAX.Create(StartElement, EndElement, Text, Comment);
     try
+      // The strict profile validator has already checked the byte stream as
+      // UTF-8. XML defaults to UTF-8 when no declaration is present.
+      Parser.DefaultEncoding := enUTF8;
       Parser.OnCDATA := CDATA;
       Parser.OnDOCTYPE := Doctype;
       Parser.ParseStream(Stream);
