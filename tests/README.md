@@ -13,13 +13,15 @@ expectation and a failing scenario each produce a useful failure report and a
 nonzero process exit. The machine-readable result is retained at
 `obj/<cpu>-<os>/core-tests/core-report.json`.
 
-The initial core cases exercise the production TpX comment-envelope extractor
-and XML DOM codec against independently authored source fixtures. They check
-document metadata, nested object order, line geometry and style attributes,
-Unicode and TeX text attributes, image links, and the empty-document form.
-These tests do not exercise the LCL scene loader or drawing dirty state; those
-remain in the application runtime layer until their production seams are
-available.
+The core cases exercise the production TpX comment-envelope extractor and XML
+DOM codec against independently authored source fixtures. They check document
+metadata, nested object order, line geometry and style attributes, Unicode and
+TeX text attributes, image links, and the empty-document form. The LCL-free
+TikZ writer case checks exact no-op bytes, local source patches, shared-default
+overrides, structural operation limits, candidate rejection, and repeated
+numeric precision. These core tests do not exercise the LCL scene adapter,
+document save workflow, or drawing dirty state; those remain in the application
+runtime layer.
 
 `tests/core/suite.json` records the expected suite and case counts. Every core
 test unit registers its cases with `CoreTestSupport.RegisterCoreTest`; update
