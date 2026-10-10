@@ -292,6 +292,7 @@ end;
 
 function TAutoSaveRuntime.CanPublishSource(Session: TDocumentSession;
   Drawing: TDrawing2D; out Reason: string): Boolean;
+var Format: TDocumentFormat;
 begin
   Result := False;
   Reason := '';
@@ -311,14 +312,30 @@ begin
     Reason := 'Save this recovered drawing once to relocate its bitmap assets';
     Exit;
   end;
-  if not SameText(Session.SourceFormatId, 'tpx') then
+  if not (SameText(Session.SourceFormatId, 'tpx') or
+    SameText(Session.SourceFormatId, 'svg') or
+    SameText(Session.SourceFormatId, 'tikz')) then
   begin
-    Reason := 'AutoSave is not yet available for this source format';
+    Reason := 'AutoSave is unavailable for this source format';
     Exit;
   end;
-  if not CanSerializeTpXDocumentWithoutSidecars(Drawing) then
+  if not FindDocumentFormatById(Session.SourceFormatId, Format) or
+    not Format.CanSaveBack or
+    not IsDocumentCodecRegistered(Session.SourceFormatId) then
+  begin
+    Reason := 'This source format has no safe save-back writer';
+    Exit;
+  end;
+  if SameText(Session.SourceFormatId, 'tpx') and
+    not CanSerializeTpXDocumentWithoutSidecars(Drawing) then
   begin
     Reason := 'AutoSave is unavailable for this output profile';
+    Exit;
+  end;
+  if SameText(Session.SourceFormatId, 'tikz') and
+    (Session.CodecContext = nil) then
+  begin
+    Reason := 'AutoSave needs an accepted TikZ source context';
     Exit;
   end;
   Result := True;
@@ -627,11 +644,12 @@ function TAutoSaveRuntime.SaveSource(Session: TDocumentSession;
   Drawing: TDrawing2D; const Ticket: TAutoSaveTicket): Boolean;
 var CurrentRevision, NewRevision: TDiskRevision;
   PriorFile, BackupFile: TDocumentPath;
-  SourceBytes: RawByteString;
   Reason: string;
+  Transaction: TDocumentSaveTransaction;
 begin
   Result := False;
   FLastStatus := '';
+  Transaction := nil;
   if not CanPublishSource(Session, Drawing, Reason) then
   begin
     FAvailabilityReason := Reason;
@@ -644,33 +662,36 @@ begin
   CurrentRevision := ReadDocumentRevision(Session.SourcePath);
   if not SameDiskRevision(CurrentRevision, Session.AcceptedRevision) then
     raise EDocumentConflict.Create('The destination changed on disk');
-  SourceBytes := SerializeDocumentToBytes(Session.SourceFormatId, Drawing,
-    Session.SourcePath, Session.CodecContext);
-  if not FCoordinator.IsTicketCurrent(Ticket) then Exit;
-  PriorFile := FStore.SavePriorVersion(FDocumentKey,
-    Session.SourcePath, Session.SourceFormatId,
-    Session.AcceptedRevision, Session.LocalRevision,
-    Session.OriginalSourceBytes);
-  if PriorFile = '' then
-    raise EWriteError.Create('The prior source version was not retained');
-  WriteDocumentAtomically(Session.SourcePath, SourceBytes,
-    Session.AcceptedRevision, True, NewRevision, BackupFile);
-  Session.AcceptSavedRevision(SourceBytes, NewRevision,
-    Session.CodecContext, '');
-  Drawing.History.SaveCheckSum;
-  if BackupFile <> '' then
-    if not DeleteDocumentFile(BackupFile) then
-      FLastStatus := 'AutoSave completed; a source backup could not be removed';
+  Transaction := TDocumentSaveTransaction.Create(Session.SourceFormatId,
+    Drawing, Session.SourcePath, Session.AcceptedRevision,
+    Session.CodecContext, False);
   try
-    FStore.DeleteDraft(FDocumentKey);
-    FRecoveryWarning := '';
-  except
-    on E: Exception do
-      FLastStatus := 'AutoSave completed; the older recovery draft remains: ' +
-        E.Message;
+    if not FCoordinator.IsTicketCurrent(Ticket) then Exit;
+    PriorFile := FStore.SavePriorVersion(FDocumentKey,
+      Session.SourcePath, Session.SourceFormatId,
+      Session.AcceptedRevision, Session.LocalRevision,
+      Session.OriginalSourceBytes);
+    if PriorFile = '' then
+      raise EWriteError.Create('The prior source version was not retained');
+    if not FCoordinator.IsTicketCurrent(Ticket) then Exit;
+    Transaction.Commit(Session, NewRevision, BackupFile);
+    Drawing.History.SaveCheckSum;
+    if BackupFile <> '' then
+      if not DeleteDocumentFile(BackupFile) then
+        FLastStatus := 'AutoSave completed; a source backup could not be removed';
+    try
+      FStore.DeleteDraft(FDocumentKey);
+      FRecoveryWarning := '';
+    except
+      on E: Exception do
+        FLastStatus := 'AutoSave completed; the older recovery draft remains: ' +
+          E.Message;
+    end;
+    FCoordinator.SourceSaveSucceeded(Ticket, Session.WatchGeneration);
+    Result := not FCoordinator.Dirty;
+  finally
+    Transaction.Free;
   end;
-  FCoordinator.SourceSaveSucceeded(Ticket, Session.WatchGeneration);
-  Result := not FCoordinator.Dirty;
 end;
 
 function TAutoSaveRuntime.ProcessDue(Session: TDocumentSession;

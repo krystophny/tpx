@@ -557,6 +557,8 @@ type
     { Private declarations }
 {$IFDEF FPC}
     InitialViewQueued: Boolean;
+    FSourceStatusPanel: TStatusPanel;
+    FSourceStatusHint: string;
 {$IFNDEF CPUWASM32}
     FFileChangeSource: TFileChangeSource;
     FWatchDispatcher: TThread;
@@ -677,6 +679,7 @@ type
     procedure LocalViewKeyUp(Sender: TObject; var Key: Word;
       Shift: TShiftState);
     procedure ShowTpXHelp;
+    procedure RefreshSourceStatus;
     procedure PressModeButton(Btn: TObject; Pressed: Boolean);
     procedure RecentChanged(Sender: TObject);
     procedure ShowMouseCoordinates(const St: string);
@@ -971,6 +974,7 @@ begin
   File1.Add(InfoMenu);
 {$ENDIF}
 {$ENDIF}
+  RefreshSourceStatus;
   LocalView.OnDblClick := LocalViewDblClick;
   LocalView.OnKeyDown := LocalViewKeyDown;
   LocalView.OnKeyUp := LocalViewKeyUp;
@@ -1192,14 +1196,69 @@ var
 begin
 {$IFDEF FPC}
   TrustTeXPreview.Checked := LiveTeXDocumentTrusted;
-  StatusBar1.Panels[1].Text := LiveTeXStatus;
-  StatusBar1.Hint := LiveTeXStatus;
-  StatusBar1.ShowHint := True;
+  RefreshSourceStatus;
   if TakeLiveTeXDamage(Damage) then LocalView.RepaintScreenRect(Damage)
 {$IFDEF CPUWASM32}
   else LocalView.Repaint
 {$ENDIF}
   ;
+{$ENDIF}
+end;
+
+procedure TMainForm.RefreshSourceStatus;
+var Format: TDocumentFormat; LabelText, HintText: string;
+  Details: TStringList; I: Integer;
+begin
+{$IFDEF FPC}
+  if FSourceStatusPanel = nil then
+  begin
+    FSourceStatusPanel := StatusBar1.Panels.Add;
+    FSourceStatusPanel.Width := 180;
+  end;
+  Details := TStringList.Create;
+  try
+    with EventManager.DocumentSession do
+      if SourceFormatId = '' then
+      begin
+        LabelText := 'TpX | native drawing';
+        Details.Add('New native TpX drawing');
+      end
+      else if FindDocumentFormatById(SourceFormatId, Format) then
+      begin
+        if SameText(SourceFormatId, 'tpx') then
+          LabelText := 'TpX | native source'
+        else if CanSaveBack then
+          LabelText := Format.DisplayName + ' | source editing'
+        else
+          LabelText := Format.DisplayName + ' | import only';
+        Details.Add(Format.DisplayName);
+        if Format.RoundTripProfile <> '' then
+          Details.Add(Format.RoundTripProfile);
+        if Format.RuntimeRequirements <> '' then
+          Details.Add('Requirements: ' + Format.RuntimeRequirements);
+        for I := 0 to Diagnostics.Count - 1 do
+          Details.Add(Diagnostics[I]);
+      end
+      else
+      begin
+        LabelText := SourceFormatId + ' | import only';
+        Details.Add('Import only');
+      end;
+    if not LiveTeXDocumentTrusted then Details.Add(LiveTeXStatus);
+    FSourceStatusPanel.Text := LabelText;
+    HintText := Trim(Details.Text);
+    FSourceStatusHint := HintText;
+{$IFNDEF CPUWASM32}
+    if (FReloadStatusPanel <> nil) and (FReloadStatusPanel.Text <> '') then
+      Exit;
+{$ENDIF}
+    StatusBar1.Hint := HintText;
+{$IFNDEF CPUWASM32}
+    StatusBar1.ShowHint := HintText <> '';
+{$ENDIF}
+  finally
+    Details.Free;
+  end;
 {$ENDIF}
 end;
 
@@ -2394,6 +2453,7 @@ begin
 end;
 
 procedure TMainForm.UpdateReloadStatus(const Text: string);
+var HintText: string;
 begin
   if FReloadStatusPanel = nil then Exit;
   FReloadStatusPanel.Text := Text;
@@ -2407,8 +2467,10 @@ begin
   else
   begin
     FReloadDiskMenu.Hint := Text;
-    StatusBar1.Hint := Text;
-    StatusBar1.ShowHint := Text <> '';
+    HintText := Text;
+    if HintText = '' then HintText := FSourceStatusHint;
+    StatusBar1.Hint := HintText;
+    StatusBar1.ShowHint := HintText <> '';
   end;
 end;
 
