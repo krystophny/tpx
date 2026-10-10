@@ -618,13 +618,6 @@ type
     FBrowserRecoveryEnabled: Boolean;
     FBrowserRecoveryDocumentID: string;
     FBrowserRecoveryRevision: QWord;
-    procedure ProcessBrowserRecoveryDeadline(Sender: TObject);
-    procedure SetBrowserRecoveryEnabled(Value: Boolean);
-    procedure ResetBrowserRecoveryDocument;
-    procedure BrowserRecoveryDocumentEdited;
-    procedure BrowserRecoveryDownloadRequested;
-    procedure RestoreBrowserRecoverySelection(PayloadLength,
-      MetadataLength: LongInt);
 {$ENDIF}
 {$ENDIF}
     ScrollPos0: Integer;             
@@ -645,6 +638,13 @@ type
     procedure InitializeBrowserRecovery;
     procedure BrowserRecoveryCheckpoint;
     procedure UpdateBrowserDocumentDirty;
+    procedure ProcessBrowserRecoveryDeadline(Sender: TObject);
+    procedure SetBrowserRecoveryEnabled(Value: Boolean);
+    procedure ResetBrowserRecoveryDocument;
+    procedure BrowserRecoveryDocumentEdited;
+    procedure BrowserRecoveryDownloadRequested;
+    procedure RestoreBrowserRecoverySelection(PayloadLength,
+      MetadataLength: LongInt);
 {$ENDIF}
 {$IFNDEF CPUWASM32}
     procedure InitializeAutoReload;
