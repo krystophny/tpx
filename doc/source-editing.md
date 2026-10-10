@@ -44,8 +44,8 @@ or durable source path, so use upload, edit, and download to move source files.
 
 Imported TeX starts with preview trust disabled. The user can grant trust for
 the current document from the View menu; replacing the document revokes that
-grant. Parsing and source editing never run TeX. Trusted rendering is performed
-only on authored fixtures in the acceptance suite.
+grant. Parsing and source editing never run TeX. The acceptance suite compiles
+only its authored fixtures; parser fuzz inputs are never sent to TeX.
 
 ## Reproducing the acceptance checks
 
@@ -73,6 +73,8 @@ TikZ save/reload cycles. It compares independently authored scenes and renders
 trusted TikZ with LaTeX and SVG with librsvg. The driver writes case counts and
 results to `obj/source-acceptance/report.json`; on failure it retains that
 case's temporary sources and render artifacts under `obj/source-acceptance/retained/`.
+The native TikZ cycle check bounds each reloaded coordinate to 0.0003 mm; the
+independent TeX-render comparison uses a 0.002 mm coordinate tolerance.
 
 Build and run the headless browser scenarios with `make web` followed by:
 
