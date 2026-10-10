@@ -761,7 +761,6 @@ var
   B1, B2, B3, B4: Byte;
   CodePoint: Cardinal;
   ReferenceText: string;
-  J: SizeInt;
 
   procedure AppendChar(const Ch: Char);
   begin
@@ -776,6 +775,8 @@ var
   end;
 
   procedure AppendReference(const CodeUnit: Cardinal);
+  var
+    J: SizeInt;
   begin
     ReferenceText := '&#' + IntToStr(CodeUnit) + ';';
     for J := 1 to Length(ReferenceText) do AppendChar(ReferenceText[J]);
