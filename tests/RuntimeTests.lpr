@@ -136,10 +136,14 @@ end;
 procedure RunBitmapFixtureConverter;
 var
   Source, Destination: TFileStream;
+  ExpectedExtension: string;
 begin
   if GetEnvironmentVariable('TPX_EPS_FIXTURE_MODE') = 'nonzero' then Halt(7);
   if GetEnvironmentVariable('TPX_EPS_FIXTURE_MODE') = 'no-output' then Halt(0);
   Check(ParamCount = 2, 'Fixture converter expected input and output paths');
+  ExpectedExtension := GetEnvironmentVariable('TPX_EPS_EXPECT_INPUT_EXT');
+  if (ExpectedExtension <> '') and
+    (LowerCase(ExtractFileExt(ParamStr(1))) <> ExpectedExtension) then Halt(8);
   Source := TFileStream.Create(GetEnvironmentVariable('TPX_EPS_FIXTURE'), fmOpenRead);
   try
     Destination := TFileStream.Create(ParamStr(2), fmCreate);

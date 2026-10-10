@@ -361,6 +361,10 @@ begin
   Application.ProcessMessages;
   MainForm.TheDrawing.Clear;
   MainForm.TheDrawing.History.Clear;
+  { Recovery serialization is the subject here; it must not require an
+    optional bitmap-to-EPS converter installed on the test machine. }
+  MainForm.TheDrawing.TeXFormat := tex_none;
+  MainForm.TheDrawing.PdfTeXFormat := pdftex_none;
   ImageFile := IncludeTrailingPathDelimiter(GetTempDir) +
     'autosave-pasted-image.bmp';
   Bitmap := TBitmap.Create;
@@ -536,6 +540,8 @@ begin
       'Startup did not offer an explicit recovery draft choice');
     Check(MainForm.TheDrawing.History.IsChanged and
       (MainForm.TheDrawing.ObjectsCount = 1) and
+      (MainForm.TheDrawing.TeXFormat = tex_none) and
+      (MainForm.TheDrawing.PdfTeXFormat = pdftex_none) and
       (MainForm.EventManager.DocumentSession.SourcePath = '') and
       (MainForm.EventManager.DocumentSession.LocalRevision > 0),
       'Restart recovery did not restore the untitled bitmap drawing');

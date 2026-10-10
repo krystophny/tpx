@@ -106,7 +106,10 @@ function DocumentPathWithExtension(const FileName: TDocumentPath;
 function EnsureDocumentDirectoryExists(
   const Directory: TDocumentPath): Boolean;
 function DocumentFileExists(const FileName: TDocumentPath): Boolean;
+function DocumentFileIsSymbolicLink(const FileName: TDocumentPath): Boolean;
 function DeleteDocumentFile(const FileName: TDocumentPath): Boolean;
+function ReplaceDocumentFile(const SourceFile,
+  DestinationFile: TDocumentPath): Boolean;
 function CreateDocumentStagingDirectory(
   const DestinationDirectory: TDocumentPath): TDocumentPath;
 function RemoveDocumentStagingDirectory(
@@ -150,6 +153,10 @@ uses md5
   {$IFDEF UNIX}, BaseUnix{$ENDIF}
   {$IFDEF WINDOWS}, Windows{$ENDIF}
 {$ENDIF};
+
+function ReplaceFileAtomically(const SourceFile,
+  DestFile: TDocumentPath): Boolean; forward;
+function IsSymbolicLink(const FileName: TDocumentPath): Boolean; forward;
 
 type
   TFileInfo = record
@@ -537,6 +544,17 @@ begin
 {$ENDIF}
 end;
 
+function ReplaceDocumentFile(const SourceFile,
+  DestinationFile: TDocumentPath): Boolean;
+var Source, Destination: TDocumentPath;
+begin
+  Source := NormalizeDocumentPath(SourceFile);
+  Destination := NormalizeDocumentPath(DestinationFile);
+  if not DocumentFileExists(Source) or IsSymbolicLink(Source) or
+    IsSymbolicLink(Destination) then Exit(False);
+  Result := ReplaceFileAtomically(Source, Destination);
+end;
+
 function CreateDocumentStagingDirectory(
   const DestinationDirectory: TDocumentPath): TDocumentPath;
 var Candidate: TDocumentPath; Attempt: Integer;
@@ -641,6 +659,11 @@ begin
   Result := (Attributes <> INVALID_FILE_ATTRIBUTES) and
     ((Attributes and FILE_ATTRIBUTE_REPARSE_POINT) <> 0);
 {$ENDIF}{$ENDIF}
+end;
+
+function DocumentFileIsSymbolicLink(const FileName: TDocumentPath): Boolean;
+begin
+  Result := IsSymbolicLink(NormalizeDocumentPath(FileName));
 end;
 
 function ReadDocumentSnapshot(const FileName: TDocumentPath): TDocumentSnapshot;
