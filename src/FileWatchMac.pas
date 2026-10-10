@@ -160,11 +160,12 @@ begin
   Request := Change;
   Request.Flags := Request.Flags or EV_RECEIPT;
   FillChar(Receipt, SizeOf(Receipt), 0);
-  Count := kevent(KQueueFD, @Request, 1, @Receipt, 1, nil);
-  if Count < 0 then begin
-    ErrorCode := LibcErrorCode;
-    Exit(False);
-  end;
+  ErrorCode := 0;
+  repeat
+    Count := kevent(KQueueFD, @Request, 1, @Receipt, 1, nil);
+    if Count < 0 then ErrorCode := LibcErrorCode;
+  until (Count >= 0) or (ErrorCode <> ESysEINTR);
+  if Count < 0 then Exit(False);
   if (Count <> 1) or ((Receipt.Flags and EV_ERROR) = 0) then begin
     ErrorCode := ESysEIO;
     Exit(False);
@@ -196,18 +197,28 @@ end;
 function TriggerWorker(KQueueFD: LongInt): Boolean;
 var
   Change: TKernelEvent;
+  ErrorCode: LongInt;
 begin
   FillKernelEvent(Change, 1, EVFILT_USER, 0, NOTE_TRIGGER, 0,
     CONTROL_TOKEN);
-  Result := kevent(KQueueFD, @Change, 1, nil, 0, nil) >= 0;
+  ErrorCode := 0;
+  repeat
+    Result := kevent(KQueueFD, @Change, 1, nil, 0, nil) >= 0;
+    if not Result then ErrorCode := LibcErrorCode;
+  until Result or (ErrorCode <> ESysEINTR);
 end;
 
 function FileIdentity(FD: LongInt; out Device, Inode: QWord): Boolean;
 var
   Info: Stat;
+  ErrorCode: LongInt;
 begin
-  FillChar(Info, SizeOf(Info), 0);
-  Result := fpFStat(FD, Info) = 0;
+  ErrorCode := 0;
+  repeat
+    FillChar(Info, SizeOf(Info), 0);
+    Result := fpFStat(FD, Info) = 0;
+    if not Result then ErrorCode := GetLastOSError;
+  until Result or (ErrorCode <> ESysEINTR);
   if Result then begin
     Device := QWord(Info.st_dev);
     Inode := QWord(Info.st_ino);
@@ -217,10 +228,15 @@ end;
 function OpenForEvents(const Path: string; Directory: Boolean): LongInt;
 var
   Flags: LongInt;
+  ErrorCode: LongInt;
 begin
+  ErrorCode := 0;
   Flags := O_EVTONLY or O_CLOEXEC;
   if Directory then Flags := Flags or O_DIRECTORY;
-  Result := fpOpen(PChar(Path), Flags);
+  repeat
+    Result := fpOpen(PChar(Path), Flags);
+    if Result < 0 then ErrorCode := GetLastOSError;
+  until (Result >= 0) or (ErrorCode <> ESysEINTR);
 end;
 
 function ErrorDescription(ErrorCode: LongInt): string;
@@ -342,12 +358,16 @@ begin
     if (FQueueFD >= 0) or FBackendFailed then Exit;
     SetStatus(fwsStarting);
     FStopping := False;
-    FQueueFD := kqueue;
+    ErrorCode := 0;
+    repeat
+      FQueueFD := kqueue;
+      if FQueueFD < 0 then ErrorCode := LibcErrorCode;
+    until (FQueueFD >= 0) or (ErrorCode <> ESysEINTR);
     if FQueueFD < 0 then begin
       FBackendFailed := True;
       SetStatus(fwsError);
       PublishEvent(MakeEvent(0, 0, '', fckBackendError, fwsError,
-        ErrorDescription(LibcErrorCode)));
+        ErrorDescription(ErrorCode)));
       Exit;
     end;
     FillKernelEvent(Change, 1, EVFILT_USER, EV_ADD or EV_CLEAR, 0, 0,

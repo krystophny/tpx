@@ -91,9 +91,12 @@ class MacFileWatchTests(unittest.TestCase):
         cls.build = Path(tempfile.mkdtemp(prefix="tpx-filewatch-mac-build-"))
         fpc = os.environ.get("FPC") or shutil.which("fpc")
         if not fpc:
+            if sys.platform == "darwin":
+                raise AssertionError("Free Pascal compiler is required on macOS")
             raise unittest.SkipTest("Free Pascal compiler is required")
         api_dir = Path(os.environ.get("TPX_FILEWATCH_API_DIR", ROOT / "src"))
-        command = [fpc, "-dTPX_FILEWATCH_TESTS", "-Fu" + str(api_dir),
+        command = [fpc, "-B", "-gl", "-Crtoi", "-Sa",
+                   "-dTPX_FILEWATCH_TESTS", "-Fu" + str(api_dir),
                    "-Fu" + str(ROOT / "src"), "-FU" + str(cls.build),
                    "-FE" + str(cls.build), str(ROOT / "tests" / "FileWatchMacTests.lpr")]
         result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
