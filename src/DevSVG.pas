@@ -305,7 +305,7 @@ begin
     PageWidthMM := fPageWidthMM;
     PageHeightMM := fPageHeightMM;
     ViewBoxLeft := fViewBoxLeft;
-  ViewBoxTop := fViewBoxTop;
+    ViewBoxTop := fViewBoxTop;
     ViewBoxWidth := fViewBoxWidth;
     ViewBoxHeight := fViewBoxHeight;
   end
