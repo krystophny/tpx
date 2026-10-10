@@ -1032,6 +1032,8 @@ begin
   InitializeAutoReload;
   InitializeAutoSave;
 {$ELSE}
+  SaveDoc.Caption := 'Download a copy';
+  SaveAs.Caption := 'Download a copy as...';
   InitializeBrowserRecovery;
 {$ENDIF}
 {$ENDIF}
