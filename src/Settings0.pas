@@ -89,8 +89,12 @@ begin
       end;
     except
       on E: Exception do
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
         StoragePathDiagnostic := 'Could not read preferences from ' +
           FileToLoad + ': ' + E.Message;
+{$ENDIF}
+{$ENDIF}
     end;
   finally
     Strings.Free;
