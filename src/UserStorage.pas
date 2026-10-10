@@ -183,8 +183,31 @@ begin
 end;
 
 function EnvironmentValue(const Name: string): string;
+{$IFDEF MSWINDOWS}
+var
+  WideName, WideValue: UnicodeString;
+  Capacity, Count: DWORD;
+{$ENDIF}
 begin
+{$IFDEF MSWINDOWS}
+  WideName := UTF8Decode(Name);
+  Capacity := Windows.GetEnvironmentVariableW(PWideChar(WideName), nil, 0);
+  if Capacity = 0 then Exit('');
+  repeat
+    SetLength(WideValue, Capacity);
+    Count := Windows.GetEnvironmentVariableW(PWideChar(WideName),
+      PWideChar(WideValue), Capacity);
+    if Count < Capacity then
+    begin
+      SetLength(WideValue, Count);
+      Exit(UTF8Encode(WideValue));
+    end;
+    Capacity := Count + 1;
+  until Capacity > 32768;
+  raise Exception.Create('Windows environment value is too long: ' + Name);
+{$ELSE}
   Result := GetEnvironmentVariable(Name);
+{$ENDIF}
 end;
 
 function HasPortableArgument: Boolean;
@@ -231,6 +254,30 @@ begin
     {$IFDEF MSWINDOWS}spWindows{$ELSE}spUnix{$ENDIF});
 end;
 
+function StorageFileExists(const FileName: string): Boolean; forward;
+
+{$IFDEF MSWINDOWS}
+function WindowsExecutablePath: string;
+var
+  WidePath: UnicodeString;
+  Capacity, Count: DWORD;
+begin
+  Capacity := 512;
+  repeat
+    SetLength(WidePath, Capacity);
+    Count := Windows.GetModuleFileNameW(0, PWideChar(WidePath), Capacity);
+    if Count = 0 then RaiseLastOSError;
+    if Count < Capacity then
+    begin
+      SetLength(WidePath, Count);
+      Exit(UTF8Encode(WidePath));
+    end;
+    Capacity := Capacity * 2;
+  until Capacity > 32768;
+  raise Exception.Create('Windows executable path is too long');
+end;
+{$ENDIF}
+
 function BuildStorageEnvironment: TStorageEnvironment;
 begin
   Result.Home := '';
@@ -259,9 +306,13 @@ begin
 {$ENDIF}
 {$ENDIF}
   Result.Home := EnvironmentValue('HOME');
+{$IFDEF MSWINDOWS}
+  Result.ExecutablePath := WindowsExecutablePath;
+{$ELSE}
   Result.ExecutablePath := ExpandFileName(ParamStr(0));
+{$ENDIF}
   Result.PortableRequested := HasPortableArgument or
-    FileExists(PortableSentinelPath(Result.ExecutablePath));
+    StorageFileExists(PortableSentinelPath(Result.ExecutablePath));
   if Result.PortableRequested then
     Result.PortableBase := PortableDataBase(Result.ExecutablePath);
 end;
@@ -334,6 +385,92 @@ begin
 {$ENDIF}
 end;
 
+function StorageFileExists(const FileName: string): Boolean;
+{$IFDEF MSWINDOWS}
+var Attributes: DWORD; WideName: UnicodeString;
+{$ENDIF}
+begin
+{$IFDEF MSWINDOWS}
+  WideName := UTF8Decode(FileName);
+  Attributes := Windows.GetFileAttributesW(PWideChar(WideName));
+  Result := (Attributes <> INVALID_FILE_ATTRIBUTES) and
+    ((Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0);
+{$ELSE}
+  Result := FileExists(FileName);
+{$ENDIF}
+end;
+
+function StorageDirectoryExists(const DirectoryName: string): Boolean;
+{$IFDEF MSWINDOWS}
+var Attributes: DWORD; WideName: UnicodeString;
+{$ENDIF}
+begin
+{$IFDEF MSWINDOWS}
+  WideName := UTF8Decode(DirectoryName);
+  Attributes := Windows.GetFileAttributesW(PWideChar(WideName));
+  Result := (Attributes <> INVALID_FILE_ATTRIBUTES) and
+    ((Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0);
+{$ELSE}
+  Result := DirectoryExists(DirectoryName);
+{$ENDIF}
+end;
+
+function EnsureStorageDirectories(const DirectoryName: string): Boolean;
+{$IFDEF MSWINDOWS}
+var
+  ParentDirectory: string;
+  WideName: UnicodeString;
+  ErrorCode: DWORD;
+{$ENDIF}
+begin
+{$IFDEF MSWINDOWS}
+  if StorageDirectoryExists(DirectoryName) then Exit(True);
+  ParentDirectory := ExcludeTrailingPathDelimiter(ExtractFileDir(
+    ExcludeTrailingPathDelimiter(DirectoryName)));
+  if (ParentDirectory = '') or SameText(ParentDirectory, DirectoryName) then
+    Exit(False);
+  if not EnsureStorageDirectories(ParentDirectory) then Exit(False);
+  WideName := UTF8Decode(DirectoryName);
+  if Windows.CreateDirectoryW(PWideChar(WideName), nil) then Exit(True);
+  ErrorCode := Windows.GetLastError;
+  Result := (ErrorCode = ERROR_ALREADY_EXISTS) and
+    StorageDirectoryExists(DirectoryName);
+  if not Result then Windows.SetLastError(ErrorCode);
+{$ELSE}
+  Result := StorageDirectoryExists(DirectoryName) or
+    ForceDirectories(DirectoryName);
+{$ENDIF}
+end;
+
+function DeleteStorageFile(const FileName: string): Boolean;
+{$IFDEF MSWINDOWS}
+var WideName: UnicodeString;
+{$ENDIF}
+begin
+{$IFDEF MSWINDOWS}
+  WideName := UTF8Decode(FileName);
+  Result := Windows.DeleteFileW(PWideChar(WideName));
+{$ELSE}
+  Result := DeleteFile(FileName);
+{$ENDIF}
+end;
+
+function OpenStorageReadFile(const FileName: string): TStream;
+{$IFDEF MSWINDOWS}
+var Handle: THandle; WideName: UnicodeString;
+{$ENDIF}
+begin
+{$IFDEF MSWINDOWS}
+  WideName := UTF8Decode(FileName);
+  Handle := Windows.CreateFileW(PWideChar(WideName), GENERIC_READ,
+    FILE_SHARE_READ, nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+  if Handle = INVALID_HANDLE_VALUE then RaiseLastOSError;
+  Result := TOwnedHandleStream.Create(Handle);
+{$ELSE}
+  Result := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+{$ENDIF}
+end;
+
 function EnsureUserStorageDirectory(Area: TUserStorageArea;
   out ErrorText: string): Boolean;
 var DirectoryName: string;
@@ -352,12 +489,13 @@ begin
     Exit;
   end;
   try
-    if not DirectoryExists(DirectoryName) and not ForceDirectories(DirectoryName) then
+    if not StorageDirectoryExists(DirectoryName) and
+      not EnsureStorageDirectories(DirectoryName) then
     begin
       ErrorText := 'Could not create storage directory: ' + DirectoryName;
       Exit;
     end;
-    if not DirectoryExists(DirectoryName) then
+    if not StorageDirectoryExists(DirectoryName) then
     begin
       ErrorText := 'Storage directory is not accessible: ' + DirectoryName;
       Exit;
@@ -495,7 +633,7 @@ begin
     FileToLoad := CurrentFile;
     Exit(True);
   end;
-  if FileExists(CurrentFile) or DirectoryExists(CurrentFile) then
+  if StorageFileExists(CurrentFile) or StorageDirectoryExists(CurrentFile) then
   begin
     Diagnostic := 'Preferences path is not a regular file: ' + CurrentFile;
     Exit;
@@ -518,15 +656,14 @@ begin
 
   TemporaryFile := '';
   try
-    if not ForceDirectories(ExtractFileDir(CurrentFile)) then
+    if not EnsureStorageDirectories(ExtractFileDir(CurrentFile)) then
       raise Exception.Create('Could not create ' +
         ExtractFileDir(CurrentFile));
     if CreateGUID(ID) <> 0 then
       raise Exception.Create('Could not generate a temporary file name');
     TemporaryFile := CurrentFile + '.migrate-' +
       StringReplace(StringReplace(GUIDToString(ID), '{', '', []), '}', '', []);
-    InputStream := TFileStream.Create(LegacyFile,
-      fmOpenRead or fmShareDenyWrite);
+    InputStream := OpenStorageReadFile(LegacyFile);
     try
       OutputStream := CreateExclusiveFile(TemporaryFile);
       try
@@ -542,7 +679,7 @@ begin
     end;
     if not PublishWithoutReplacing(TemporaryFile, CurrentFile) then
     begin
-      DeleteFile(TemporaryFile);
+      DeleteStorageFile(TemporaryFile);
       if IsSymbolicLink(CurrentFile) then
         raise Exception.Create('Destination became a symbolic link')
       else if IsRegularNonLinkFile(CurrentFile) then
@@ -556,7 +693,7 @@ begin
   except
     on E: Exception do
     begin
-      if TemporaryFile <> '' then DeleteFile(TemporaryFile);
+      if TemporaryFile <> '' then DeleteStorageFile(TemporaryFile);
       if IsRegularNonLinkFile(LegacyFile) then FileToLoad := LegacyFile;
       Diagnostic := 'Could not migrate legacy preferences to ' + CurrentFile +
         ': ' + E.Message + LineEnding + 'The original was kept; settings were ' +
@@ -582,9 +719,9 @@ begin
       raise Exception.Create('Preferences directory is a symbolic link');
     if IsSymbolicLink(FileName) then
       raise Exception.Create('Preferences file is a symbolic link');
-    if FileExists(FileName) and not IsRegularNonLinkFile(FileName) then
+    if StorageFileExists(FileName) and not IsRegularNonLinkFile(FileName) then
       raise Exception.Create('Preferences path is not a regular file');
-    if not ForceDirectories(ExtractFileDir(FileName)) then
+    if not EnsureStorageDirectories(ExtractFileDir(FileName)) then
       raise Exception.Create('Could not create ' + ExtractFileDir(FileName));
     if CreateGUID(ID) <> 0 then
       raise Exception.Create('Could not generate a temporary file name');
@@ -605,7 +742,7 @@ begin
     on E: Exception do ErrorText := 'Could not save preferences to ' +
       FileName + ': ' + E.Message;
   end;
-  if (not Result) and (TemporaryFile <> '') then DeleteFile(TemporaryFile);
+  if (not Result) and (TemporaryFile <> '') then DeleteStorageFile(TemporaryFile);
 end;
 
 function InstallUserFileIfMissing(const SourceFile, DestinationFile: string;
@@ -628,19 +765,19 @@ begin
     if IsSymbolicLink(DestinationFile) then
       raise Exception.Create('User file is a symbolic link');
     if IsRegularNonLinkFile(DestinationFile) then Exit(True);
-    if FileExists(DestinationFile) or DirectoryExists(DestinationFile) then
+    if StorageFileExists(DestinationFile) or
+      StorageDirectoryExists(DestinationFile) then
       raise Exception.Create('User path is not a regular file');
     if not IsRegularNonLinkFile(SourceFile) then
       raise Exception.Create('Packaged source is missing or not a regular file');
-    if not ForceDirectories(ExtractFileDir(DestinationFile)) then
+    if not EnsureStorageDirectories(ExtractFileDir(DestinationFile)) then
       raise Exception.Create('Could not create ' +
         ExtractFileDir(DestinationFile));
     if CreateGUID(ID) <> 0 then
       raise Exception.Create('Could not generate a temporary file name');
     TemporaryFile := DestinationFile + '.copy-' +
       StringReplace(StringReplace(GUIDToString(ID), '{', '', []), '}', '', []);
-    InputStream := TFileStream.Create(SourceFile,
-      fmOpenRead or fmShareDenyWrite);
+    InputStream := OpenStorageReadFile(SourceFile);
     try
       OutputStream := CreateExclusiveFile(TemporaryFile);
       try
@@ -656,7 +793,7 @@ begin
     end;
     if not PublishWithoutReplacing(TemporaryFile, DestinationFile) then
     begin
-      DeleteFile(TemporaryFile);
+      DeleteStorageFile(TemporaryFile);
       if IsSymbolicLink(DestinationFile) then
         raise Exception.Create('User path became a symbolic link')
       else if IsRegularNonLinkFile(DestinationFile) then
@@ -669,7 +806,7 @@ begin
     on E: Exception do ErrorText := 'Could not initialize ' + DestinationFile +
       ' from ' + SourceFile + ': ' + E.Message;
   end;
-  if (not Result) and (TemporaryFile <> '') then DeleteFile(TemporaryFile);
+  if (not Result) and (TemporaryFile <> '') then DeleteStorageFile(TemporaryFile);
 end;
 
 end.

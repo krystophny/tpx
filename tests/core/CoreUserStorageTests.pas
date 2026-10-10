@@ -11,13 +11,12 @@ uses SysUtils, Classes, UserStorage, CoreTestSupport
 {$IFDEF UNIX}, BaseUnix{$ENDIF};
 
 function NewScratchDirectory: string;
-var ID: TGUID; Token: string; UnicodePart: UnicodeString;
+var ID: TGUID; Token: string;
 begin
   CheckCore(CreateGUID(ID) = 0, 'could not create scratch directory id');
   Token := StringReplace(StringReplace(GUIDToString(ID), '{', '', []), '}', '', []);
-  UnicodePart := 'TpX storage ' + WideChar($00FC) + WideChar($00DF);
   Result := IncludeTrailingPathDelimiter(GetTempDir(False)) +
-    UTF8Encode(UnicodePart) + ' ' + Token;
+    'TpX storage ' + Token;
   CheckCore(ForceDirectories(Result), 'could not create scratch directory');
 end;
 

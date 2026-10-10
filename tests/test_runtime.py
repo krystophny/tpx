@@ -298,8 +298,8 @@ class RuntimeTests(unittest.TestCase):
             temp.mkdir()
             env = storage_environment(home, config, state, cache)
             env.update(TMPDIR=str(temp), TMP=str(temp), TEMP=str(temp))
-            first_runtime_dir = root / "runtime-before-move"
-            moved_runtime_dir = root / "runtime-after-move"
+            first_runtime_dir = root / "runtime-before-move-Καλημέρα-ß"
+            moved_runtime_dir = root / "runtime-after-move-Καλημέρα-ß"
             self.run_scenario("autosave-recovery-create", env,
                               runtime_directory=first_runtime_dir)
             self.run_scenario("autosave-recovery-restore", env,
@@ -317,8 +317,8 @@ class RuntimeTests(unittest.TestCase):
             state.mkdir()
             cache.mkdir()
             env = storage_environment(home, config, state, cache)
-            first_runtime_dir = root / "runtime-before-replacement"
-            replacement_runtime_dir = root / "runtime-after-replacement"
+            first_runtime_dir = root / "runtime-before-replacement-Καλημέρα-ß"
+            replacement_runtime_dir = root / "runtime-after-replacement-Καλημέρα-ß"
             self.run_scenario("user-preferences-write", env,
                               runtime_directory=first_runtime_dir)
             self.run_scenario("user-preferences-read", env,
