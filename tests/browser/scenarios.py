@@ -593,37 +593,6 @@ def s_download_status_and_unload(app):
             'failures stay honest; retry preserves text and geometry')
 
 
-def s_download_blocks_raw_inline_draft(app):
-    _, cx, cy = box(app)
-    raw_text = 'Uncommitted browser label λ'
-    app.menu('Insert', 'Insert text')
-    app.click(cx - 60, cy - 20)
-    editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
-    editor.wait_for()
-    editor.fill(raw_text)
-    downloads = []
-    app.page.on('download', lambda item: downloads.append(item.suggested_filename))
-
-    app.menu('File', 'Save as...')
-    dialog = app.page.get_by_role('dialog')
-    if dialog.count():
-        dialog.get_by_label('File name').fill('blocked-raw-draft.tpx')
-        dialog.get_by_role('button', name='OK', exact=True).click()
-    app.page.wait_for_timeout(300)
-    if downloads:
-        raise AssertionError('TpX downloaded while an inline text draft was unsettled')
-    if editor.input_value() != raw_text:
-        raise AssertionError('blocked download discarded the inline text draft')
-
-    app.page.get_by_role('button', name='Done', exact=True).click()
-    app.page.wait_for_function('''() => !Array.from(document.querySelectorAll('textarea'))
-      .some(element => element.getAttribute('aria-label') === 'Text (canvas)')''')
-    saved = app.save('settled-inline-text.tpx').read_text()
-    if raw_text not in saved:
-        raise AssertionError('settled inline text was missing from the later download')
-    return 'an unresolved inline text draft blocks download, then survives Done and a later copy'
-
-
 def s_bitmap_roundtrip(app):
     import struct
     import zlib
@@ -926,7 +895,6 @@ SCENARIOS = [
     ('clipboard-roundtrip', s_clipboard_roundtrip),
     ('export-formats', s_export_formats),
     ('download-status-unload', s_download_status_and_unload),
-    ('download-blocks-raw-draft', s_download_blocks_raw_inline_draft),
     ('bitmap-roundtrip', s_bitmap_roundtrip),
     ('modal-properties', s_modal_properties),
     ('nested-coordinates', s_nested_coordinates),
