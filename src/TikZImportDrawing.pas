@@ -77,6 +77,15 @@ end;
 procedure ApplyStyle(Primitive: TPrimitive2D; const Obj: TTikZSceneObject;
   Drawing: TDrawing2D);
 begin
+  if Obj.Kind = tsoText then
+  begin
+    { TText2D.LineColor controls glyphs; node draw/fill is rejected by the
+      semantic importer because native text has no matching frame primitive. }
+    Primitive.LineColor := SceneColor(Obj.StrokeRGB);
+    Primitive.LineStyle := liNone;
+    Primitive.FillColor := clDefault;
+    Exit;
+  end;
   if Obj.StrokeEnabled then
   begin
     case Obj.LineKind of

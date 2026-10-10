@@ -14,6 +14,7 @@ var
   OriginalObjectID: Integer;
   RejectedSource: RawByteString;
   RejectedStream: TFileStream;
+  CompilationsBefore: Integer;
   procedure Near(Actual, Expected: Double; const Description: string);
   begin
     Check(Abs(Actual - Expected) < 0.0001,
@@ -152,4 +153,27 @@ begin
   Primitive := MainForm.TheDrawing.GetObject(0) as TPrimitive2D;
   Near(Primitive.Points[1].X, 20, 'bare-fragment end x (mm)');
   Near(Primitive.Points[1].Y, 10, 'bare-fragment end y (mm)');
+  RejectedFileName := ChangeFileExt(FragmentFileName, '.text-color.tex');
+  RejectedSource := '\begin{tikzpicture}' +
+    '\node[text=red,anchor=base] at (1,2) {Red};' +
+    '\end{tikzpicture}';
+  RejectedStream := TFileStream.Create(RejectedFileName, fmCreate);
+  try
+    RejectedStream.WriteBuffer(RejectedSource[1], Length(RejectedSource));
+  finally
+    RejectedStream.Free;
+  end;
+  CompilationsBefore := LiveTeXCompilationCount;
+  Check(Mode.OpenDocumentFromPath(RejectedFileName, ErrorText),
+    'Registered red-text source failed to open: ' + ErrorText);
+  Check((MainForm.TheDrawing.ObjectsCount = 1) and
+    (MainForm.TheDrawing.GetObject(0) is TText2D),
+    'Registered red-text source did not materialize one native text object');
+  TextObject := MainForm.TheDrawing.GetObject(0) as TText2D;
+  Check((TextObject.Text = 'Red') and (TextObject.TeXText = '') and
+    (TextObject.LineColor = RGBToColor(255, 0, 0)) and
+    (TextObject.LineStyle = liNone),
+    'Node text color must color native glyphs without creating a frame');
+  Check(LiveTeXCompilationCount = CompilationsBefore,
+    'Opening an imported colored text node must not launch TeX preview');
 end;

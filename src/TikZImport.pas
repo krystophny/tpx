@@ -14,7 +14,7 @@ type
   TTikZPathCommandKind = (tpcMove, tpcLine, tpcCubic, tpcClose);
   TTikZLineKind = (tlSolid, tlDashed, tlDotted);
   TTikZDependencyKind = (tdLineWidth, tdTextSize, tdTextBaseline, tdDashSize,
-    tdDotSize, tdStrokeColor, tdFillColor, tdTextBody,
+    tdDotSize, tdStrokeColor, tdFillColor, tdTextColor, tdTextBody,
     tdCoordinateX, tdCoordinateY, tdWidth, tdHeight, tdRadius,
     tdRotation, tdStartAngle, tdEndAngle, tdTextAnchor, tdTextRotation);
   TTikZDependencySource = (tdepLocalLiteral, tdepSharedDefaultMacro,
@@ -1818,6 +1818,7 @@ var
     OptSpan, KeySpan, DefSpan: TTikZSourceSpan;
     CName, S, Pattern, PatternSearch, OnText, OffText, DefText: string;
     RGB: LongWord;
+    ColorKind: TTikZDependencyKind;
     MacroIndex: SizeInt;
     OnMM, OffMM: Double;
     OnDependency, OffDependency: string;
@@ -1840,10 +1841,29 @@ var
     begin
       Item := StyleOptions[K];
       CName := Item.Value;
+      if IsNodeStyle and ((Item.Key = 'draw') or (Item.Key = 'fill')) then
+      begin
+        if not (Item.HasValue and (Item.Value = 'none')) then
+          Unsupported(Item.OptionSpan,
+            'TikZ node frames and fills are not represented by native text');
+        Continue;
+      end;
+      if (not IsNodeStyle) and (Item.Key = 'text') then
+      begin
+        Unsupported(Item.OptionSpan,
+          'TikZ text color must be specified on the node');
+        Continue;
+      end;
       if (Item.Key = 'draw') or (Item.Key = 'fill') or (Item.Key = 'text') then
       begin
         if Item.Key = 'draw' then AObj.StrokeEnabled := not SameText(CName, 'none')
         else if Item.Key = 'fill' then AObj.FillEnabled := not SameText(CName, 'none');
+        if (Item.Key = 'text') and (CName = 'none') then
+        begin
+          Unsupported(Item.OptionSpan,
+            'TikZ text color none is not represented by native text');
+          Continue;
+        end;
         if SameText(CName, 'none') then Continue;
         if CName = '' then CName := 'black';
         if not ParseRGB(CName, RGB) then
@@ -1866,14 +1886,13 @@ var
             DefSpan.EndByte := StrToIntDef(Copy(DefText, SepAt + 1, MaxInt), 0);
           end;
         end;
-        if Item.Key = 'fill' then
-          AddDependency(AObj, tdFillColor, ColorSource, CName,
-            Item.ValueSpan, Item.KeySpan, OptSpan, DefSpan,
-            ColorSource = tdepLocalLiteral, -1, -1, 1, '', False)
-        else
-          AddDependency(AObj, tdStrokeColor, ColorSource, CName,
-            Item.ValueSpan, Item.KeySpan, OptSpan, DefSpan,
-            ColorSource = tdepLocalLiteral, -1, -1, 1, '', False);
+        if Item.Key = 'fill' then ColorKind := tdFillColor
+        else if Item.Key = 'text' then ColorKind := tdTextColor
+        else ColorKind := tdStrokeColor;
+        AddDependency(AObj, ColorKind, ColorSource, CName,
+          Item.ValueSpan, Item.KeySpan, OptSpan, DefSpan,
+          (ColorSource = tdepLocalLiteral) or (Item.Key = 'text'),
+          -1, -1, 1, '', False);
       end
       else if not Item.HasValue then
       begin
@@ -1911,8 +1930,10 @@ var
             DefSpan.StartByte := StrToIntDef(Copy(DefText, 1, SepAt - 1), 0);
             DefSpan.EndByte := StrToIntDef(Copy(DefText, SepAt + 1, MaxInt), 0);
           end;
-          AddDependency(AObj, tdStrokeColor, tdepNamedColor, CName,
-            Item.OptionSpan, SpanAtZero, OptSpan, DefSpan, False,
+          if IsNodeStyle then ColorKind := tdTextColor
+          else ColorKind := tdStrokeColor;
+          AddDependency(AObj, ColorKind, tdepNamedColor, CName,
+            Item.OptionSpan, SpanAtZero, OptSpan, DefSpan, IsNodeStyle,
             -1, -1, 1, '', False);
         end
         else Unsupported(Item.OptionSpan,
@@ -2207,11 +2228,8 @@ var
     FontSizeMM, BaselineMM: Double;
     FontSizeSpan, BaselineSpan: TTikZSourceSpan;
     FontDependency, BaselineDependency: string;
-    ParentStrokeRGB: LongWord;
-    ParentStrokeEnabled: Boolean;
-    ParentDependencies: TTikZPropertyDependencies;
-    ParentDep: TTikZPropertyDependency;
-    ParentIndex, DepIndex: SizeInt;
+    ParentStrokeRGB, ParsedColor: LongWord;
+    BareColorName: string;
     ResumeObj: TTikZSceneObject;
     procedure ReadTextFontMetrics(BodyGroupIndex: SizeInt);
     var
@@ -2374,48 +2392,39 @@ var
     begin
       ResumeObj := Obj;
       ParentStrokeRGB := Obj.StrokeRGB;
-      ParentStrokeEnabled := Obj.StrokeEnabled;
-      ParentDependencies := Copy(Obj.Dependencies);
     end
     else
     begin
       ResumeObj := nil;
       ParentStrokeRGB := 0;
-      ParentStrokeEnabled := True;
-      ParentDependencies := nil;
     end;
     Obj := TTikZSceneObject.Create;
     Obj.TextAnchor := 'center';
     ParseStyle(Obj, NodeStyle, 'node', True);
+    Obj.StrokeEnabled := False;
+    Obj.FillEnabled := False;
     HasTextColor := False;
     if NodeStyle >= 0 then
     begin
       Opts := ParseOptionGroup(NodeStyle);
       for OptIndex := 0 to High(Opts) do
-        if (Opts[OptIndex].Key = 'text') or
-          (Opts[OptIndex].Key = 'draw') or not Opts[OptIndex].HasValue then
+      begin
+        if Opts[OptIndex].Key = 'text' then
           HasTextColor := True;
+        if not Opts[OptIndex].HasValue then
+        begin
+          BareColorName := TrimASCII(string(SourceText(
+            Opts[OptIndex].OptionSpan)));
+          if ParseRGB(BareColorName, ParsedColor) then
+            HasTextColor := True;
+        end;
+      end;
     end;
     if IsAttached then
     begin
-      Obj.StrokeRGB := 0;
-      Obj.StrokeEnabled := True;
       if not HasTextColor then
-      begin
         Obj.StrokeRGB := ParentStrokeRGB;
-        Obj.StrokeEnabled := ParentStrokeEnabled;
-        for ParentIndex := 0 to High(ParentDependencies) do
-        begin
-          ParentDep := ParentDependencies[ParentIndex];
-          if ParentDep.Kind <> tdStrokeColor then Continue;
-          DepIndex := Length(Obj.Dependencies);
-          SetLength(Obj.Dependencies, DepIndex + 1);
-          Obj.Dependencies[DepIndex] := ParentDep;
-        end;
-      end;
-    end
-    else if not HasTextColor then
-      Obj.StrokeEnabled := True;
+    end;
     Obj.Center := NodePoint;
     Obj.SourceFirst := NodePoint;
     Obj.SourceRotation := Obj.Rotation;

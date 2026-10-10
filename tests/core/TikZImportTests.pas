@@ -112,8 +112,8 @@ begin
       'move-only path scaffolding must not become an extra native object');
     Obj := Evaluated.Scene.ObjectAt(0);
     CheckCore(Obj.Kind = tsoText, 'attached node did not become editable text');
-    CheckCore((Obj.TextAnchor = 'base west') and (Obj.StrokeEnabled),
-      'attached label anchor or inherited named color was lost');
+    CheckCore((Obj.TextAnchor = 'base west') and not Obj.StrokeEnabled,
+      'attached label anchor or native text-frame profile changed');
     CheckCore(Obj.StrokeRGB = $3366CC,
       'attached label did not inherit the source color');
     CheckNearCore(Obj.Center.X, 2, 0.00001, 'attached label x (mm)');
@@ -137,6 +137,84 @@ begin
       'baseline binding did not retain its local expression span');
     CheckNearCore(Obj.TextBaselineMM, 1.5 * 10 * 25.4 / 72.27, 0.00001,
       'exported TeX baseline size (mm)');
+  finally
+    Evaluated.Free;
+    Syntax.Free;
+  end;
+end;
+
+procedure TestNodeTextColorAndFrameProfile;
+const
+  Source = '\definecolor{brand}{rgb}{0.8,0.1,0.1}' +
+    '\begin{tikzpicture}[x=1mm,y=1mm]' +
+    '\draw[blue] (0,0)--(1,0) node[anchor=base,text=red]{attached};' +
+    '\node[text=red,anchor=base] at (2,0) {standalone};' +
+    '\node[text=brand] at (3,0) {named};' +
+    '\end{tikzpicture}';
+  UnsupportedSource = '\begin{tikzpicture}' +
+    '\node[draw=red] at (0,0) {framed};' +
+    '\node[fill=blue] at (1,0) {filled};' +
+    '\end{tikzpicture}';
+var
+  Syntax: TTikZSyntaxResult;
+  Evaluated: TTikZSemanticResult;
+  Obj: TTikZSceneObject;
+  Dependency: TTikZPropertyDependency;
+  I: SizeInt;
+  FoundDraw, FoundFill: Boolean;
+begin
+  Evaluated := ParseAndEvaluate(Source, Syntax);
+  try
+    CheckCore((Syntax.Outcome = tpoAccepted) and
+      (Evaluated.Outcome = tsoAccepted),
+      'local node text colors should remain in the editable profile');
+    CheckCore(Evaluated.Scene.ObjectCount = 4,
+      'colored path and its text nodes changed visible-object order');
+    Obj := Evaluated.Scene.ObjectAt(1);
+    CheckCore((Obj.Kind = tsoText) and not Obj.StrokeEnabled and
+      (Obj.StrokeRGB = $FF0000),
+      'attached text color must override path stroke without adding a frame');
+    CheckCore(FindDependency(Obj, tdTextColor, Dependency) and
+      (RawStringOf(Syntax.SourceSlice(Dependency.ValueSpan)) = 'red') and
+      (RawStringOf(Syntax.SourceSlice(Dependency.PropertyKeySpan)) = 'text'),
+      'attached text color must retain its local source binding');
+    CheckCore(not FindDependency(Obj, tdStrokeColor, Dependency),
+      'text-color binding must not point at the parent path stroke');
+    Obj := Evaluated.Scene.ObjectAt(2);
+    CheckCore((Obj.Kind = tsoText) and not Obj.StrokeEnabled and
+      (Obj.StrokeRGB = $FF0000) and
+      FindDependency(Obj, tdTextColor, Dependency),
+      'standalone text color should set glyph RGB without a node frame');
+    Obj := Evaluated.Scene.ObjectAt(3);
+    CheckCore((Obj.Kind = tsoText) and
+      FindDependency(Obj, tdTextColor, Dependency) and
+      (Dependency.DependencySource = tdepNamedColor) and
+      Dependency.HasLocalOverride and
+      (RawStringOf(Syntax.SourceSlice(Dependency.PropertyKeySpan)) = 'text'),
+      'named node color must retain a local text override site');
+  finally
+    Evaluated.Free;
+    Syntax.Free;
+  end;
+
+  Evaluated := ParseAndEvaluate(UnsupportedSource, Syntax);
+  try
+    CheckCore((Syntax.Outcome = tpoAccepted) and
+      (Evaluated.Outcome = tsoUnsupported),
+      'native text import must reject unrepresented node frames and fills');
+    FoundDraw := False;
+    FoundFill := False;
+    for I := 0 to High(Evaluated.Diagnostics) do
+    begin
+      if Pos('frames and fills', Evaluated.Diagnostics[I].Message) = 0 then
+        Continue;
+      if RawStringOf(Syntax.SourceSlice(Evaluated.Diagnostics[I].Span)) =
+        'draw=red' then FoundDraw := True;
+      if RawStringOf(Syntax.SourceSlice(Evaluated.Diagnostics[I].Span)) =
+        'fill=blue' then FoundFill := True;
+    end;
+    CheckCore(FoundDraw and FoundFill,
+      'unsupported node frame/fill diagnostics need exact source spans');
   finally
     Evaluated.Free;
     Syntax.Free;
@@ -425,6 +503,8 @@ initialization
     TestPGFScopeTransformOrder);
   RegisterCoreTest('tikz-attached-devtikz-label-font',
     TestAttachedDevTikZLabelAndFont);
+  RegisterCoreTest('tikz-node-text-color-profile',
+    TestNodeTextColorAndFrameProfile);
   RegisterCoreTest('tikz-arc-sector-circle-semantics',
     TestArcSectorAndCircleMaterializationProfile);
   RegisterCoreTest('tikz-bare-drawing-style-flags',

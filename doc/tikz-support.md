@@ -108,14 +108,17 @@ Editable geometry includes lines, polylines, closed paths, cubic Beziers,
 rectangles, circles, ellipses, circular arcs, sectors, and circular segments.
 The generated zero-width rectangle used only to declare bounds is retained as
 source metadata and does not become a visible object. Text nodes retain their
-complete TeX body, anchor, rotation, font height, and baseline. Plain labels
+complete TeX body, anchor, rotation, font height, baseline, and node-local
+`text=<color>` glyph color. Plain labels
 use native TpX text; imported TeX labels do not enable or invoke live preview.
 Generated hatching or arrow artwork that the writer emits as ordinary path
 geometry is imported in source order as those paths.
 
 Inline styles support literal RGB/HTML/gray color definitions, the named
-standard colors recognized by the evaluator, `draw`/`fill` enablement, literal
-line widths, and solid, dashed, and dotted strokes. Generated TpX width, text,
+standard colors recognized by the evaluator, path `draw`/`fill` enablement,
+node `text=<color>`, literal line widths, and solid, dashed, and dotted strokes.
+Colored node frames and fills are rejected because native text has no matching
+frame or fill primitive. Generated TpX width, text,
 dash, and dot defaults are evaluated and retained as source dependencies.
 Dash patterns are accepted only when they map exactly to the native solid,
 dashed, or dotted line styles. Unsupported option keys, unresolved macros,
