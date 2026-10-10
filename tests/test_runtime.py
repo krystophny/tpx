@@ -23,7 +23,7 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "property-dimensions", "font-choice", "conversion-save",
              "unsupported-exports", "live-tex-missing-tool", "clipboard-format-width",
              "clipboard-roundtrip", "color-box-custom-state",
-             "platform-shortcuts")
+             "platform-shortcuts", "svg-linked-image-copy", "svg-codec")
 
 
 class RuntimeTests(unittest.TestCase):
