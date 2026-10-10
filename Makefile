@@ -11,7 +11,7 @@ BUILD_OPTIONS = --pcp="$(LAZARUS_CONFIG)" $(if $(LAZARUS_DIR),--lazarusdir="$(LA
 
 WEB_PORT ?= 8791
 
-.PHONY: all build run test test-core test-gui test-tex test-watch web web-check web-serve
+.PHONY: all build run test test-core test-gui test-tex test-watch test-source-acceptance web web-check web-serve
 
 all: build
 
@@ -39,6 +39,10 @@ test-tex: build
 # zero-match result is a failure instead of a green empty watcher job.
 test-watch:
 	python3 tests/test_core.py --compiler "$(FPC)" --build-dir "$(CORE_BUILD_DIR)" --filter=watch
+
+test-source-acceptance: build
+	$(LAZBUILD) $(BUILD_OPTIONS) tests/RuntimeTests.lpi
+	TPX_BINARY="$(CURDIR)/$(TPX_BINARY)" RUNTIME_BINARY="$(CURDIR)/$(RUNTIME_BINARY)" python3 tests/test_source_acceptance.py
 
 # Browser (WASI) target. Toolchain pins and locations: web/pins.env, web/README.md.
 web:

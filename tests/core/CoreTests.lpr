@@ -4,7 +4,8 @@ program CoreTests;
 
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
-  SysUtils, CoreTestSupport, CoreXmlFixtureTests;
+  SysUtils, CoreTestSupport, CoreXmlFixtureTests,
+  TikZSemanticAcceptanceTests;
 
 var
   ExitStatus: Integer;
