@@ -24,6 +24,23 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_tpx_staged_sidecars_and_converter_failures(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-staged-tools-") as directory:
+            root = Path(directory).resolve()
+            suffix = ".exe" if sys.platform == "win32" else ""
+            meta = root / ("mpost-fixture" + suffix)
+            ghostscript = root / ("gs-fixture" + suffix)
+            shutil.copy2(BINARY, meta)
+            shutil.copy2(BINARY, ghostscript)
+            marker = root / "invoked.txt"
+            self.run_scenario("tpx-staged-sidecars", {
+                "TPX_STAGED_META_CONVERTER": str(meta),
+                "TPX_STAGED_GS_CONVERTER": str(ghostscript),
+                "TPX_STAGED_TOOL_MARKER": str(marker),
+            })
+            self.assertEqual(marker.read_text().splitlines(),
+                             ["mpost-fixture" + suffix, "gs-fixture" + suffix])
+
     def test_bitmap_eps_compatibility_and_conversion_failures(self):
         # The fixture converter lives only in this test's temporary directory.
         # It runs the copied native test executable before Application.Initialize.

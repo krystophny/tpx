@@ -26,6 +26,7 @@ type
     destructor Destroy; override;
     procedure RefreshParentFileName(
       const NewFileName: string);
+    procedure RebindParentFileName(const NewFileName: string);
     function GetFullLink: string;
     function GetOnlyName: string;
     function ImageFileExists(const FileName: string): Boolean;
@@ -326,6 +327,11 @@ begin
   if not ImageFileExists(NewLink) then
     CopyImage(GetFullLink, NewLink);
   SetImageKind('');
+  fParentFileName := NewFileName;
+end;
+
+procedure TBitmapEntry.RebindParentFileName(const NewFileName: string);
+begin
   fParentFileName := NewFileName;
 end;
 
