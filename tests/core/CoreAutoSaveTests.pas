@@ -6,7 +6,15 @@ interface
 
 implementation
 
-uses SysUtils, Classes, AutoSaveCore, AutoSavePreferences, CoreTestSupport;
+uses SysUtils, Classes, DocumentFormats, AutoSaveCore, AutoSavePreferences,
+  CoreTestSupport;
+
+function Utf8Bytes(First, Second: Byte): TDocumentPath;
+begin
+  SetLength(Result, 2);
+  Result[1] := AnsiChar(First);
+  Result[2] := AnsiChar(Second);
+end;
 
 procedure TestDefaultsAndCapability;
 var
@@ -231,7 +239,7 @@ procedure TestPerDocumentPreference;
 var
   Values: TStringList;
   Enabled: Boolean;
-  FileName: string;
+  FileName, UpperGreekPath, LowerGreekPath: TDocumentPath;
 begin
   Values := TStringList.Create;
   try
@@ -250,6 +258,26 @@ begin
       not Enabled, 'a per-document preference should be independently disableable');
     CheckCore(not ReadDocumentAutoSavePreference(Values, '', Enabled) and
       not Enabled, 'untitled documents use the default without a path key');
+    UpperGreekPath := TDocumentPath(GetTempDir(False)) + 'drawing-' +
+      Utf8Bytes($CE, $91) + '.tpx';
+    LowerGreekPath := TDocumentPath(GetTempDir(False)) + 'drawing-' +
+      Utf8Bytes($CE, $B1) + '.tpx';
+    {$IFDEF MSWINDOWS}
+    CheckCore(SameDocumentPath(UpperGreekPath, LowerGreekPath),
+      'Windows document path identity should fold Unicode case');
+    {$ENDIF}
+    CheckCore(DocumentPreferenceKey(UpperGreekPath) <>
+      DocumentPreferenceKey(TDocumentPath(GetTempDir(False)) +
+        'drawing-?.tpx'),
+      'preference keys must hash Unicode path codepoints instead of ACP replacement');
+    WriteDocumentAutoSavePreference(Values, UpperGreekPath, True);
+    {$IFDEF MSWINDOWS}
+    CheckCore(ReadDocumentAutoSavePreference(Values, LowerGreekPath, Enabled) and
+      Enabled, 'Windows document preferences should compare Unicode paths case-insensitively');
+    {$ELSE}
+    CheckCore(not ReadDocumentAutoSavePreference(Values, LowerGreekPath, Enabled),
+      'case-sensitive platforms should keep distinct Unicode path preferences');
+    {$ENDIF}
   finally
     Values.Free;
   end;
