@@ -422,6 +422,104 @@ begin
   end;
 end;
 
+procedure TestSaveAsPreservesRelativeBitmapAsset;
+var Directory, SourceDirectory, TargetDirectory, SourceFileName,
+  TargetFileName, SourceImageFileName, TargetImageFileName, ErrorText: string;
+  Drawing: TDrawing2D;
+  Session: TDocumentSession;
+  Image: Graphics.TBitmap;
+  BitmapEntry: TBitmapEntry;
+  BitmapObject: TBitmap2D;
+  SourceImageBytes: RawByteString;
+  Saved: Boolean;
+begin
+  PrepareDocumentTestDirectory('issue62-saveas-bitmap', Directory,
+    SourceFileName);
+  SourceDirectory := IncludeTrailingPathDelimiter(Directory) + 'source';
+  TargetDirectory := IncludeTrailingPathDelimiter(Directory) + 'target';
+  Check(ForceDirectories(SourceDirectory) and
+    ForceDirectories(TargetDirectory),
+    'Could not create Save As bitmap test directories');
+  SourceFileName := IncludeTrailingPathDelimiter(SourceDirectory) + 'drawing.tpx';
+  TargetFileName := IncludeTrailingPathDelimiter(TargetDirectory) + 'copy.tpx';
+  SourceImageFileName := IncludeTrailingPathDelimiter(SourceDirectory) +
+    'image.bmp';
+  TargetImageFileName := IncludeTrailingPathDelimiter(TargetDirectory) +
+    'image.bmp';
+  Image := Graphics.TBitmap.Create;
+  try
+    Image.SetSize(3, 2);
+    Image.Canvas.Brush.Color := clBlue;
+    Image.Canvas.FillRect(Rect(0, 0, 3, 2));
+    Image.SaveToFile(SourceImageFileName);
+  finally
+    Image.Free;
+  end;
+  SourceImageBytes := ReadDocumentTestBytes(SourceImageFileName);
+  Drawing := MainForm.TheDrawing;
+  Session := MainForm.EventManager.DocumentSession;
+  try
+    Drawing.Clear;
+    Session.Clear;
+    if Drawing.History = nil then
+      Drawing.History := TDrawHistory.Create(Drawing);
+    Drawing.History.Clear;
+    Drawing.History.Save;
+    Drawing.History.SaveCheckSum;
+    Drawing.FileName := SourceFileName;
+    Drawing.TeXFormat := tex_none;
+    Drawing.PdfTeXFormat := pdftex_none;
+    BitmapEntry := Drawing.RegisterBitmap(SourceImageFileName);
+    Check(BitmapEntry.ImageLink = 'image.bmp',
+      'The source drawing did not retain a relative bitmap reference');
+    Drawing.AddObject(-1, TBitmap2D.CreateSpec(-1,
+      Point2D(0, 0), Point2D(6, 4), BitmapEntry));
+    Check(Drawing.History.IsChanged,
+      'The Save As bitmap drawing was not dirty before saving');
+
+    Saved := BaseMode.SaveDocumentToPath(TargetFileName, 'tpx', True,
+      False, ErrorText);
+    Check(Saved, 'Save As failed for a relative bitmap resource: ' + ErrorText);
+    Check(FileExists(TargetFileName) and FileExists(TargetImageFileName),
+      'Save As did not publish both the document and its bitmap resource');
+    Check(ReadDocumentTestBytes(TargetImageFileName) = SourceImageBytes,
+      'Save As changed the bytes of the relative bitmap resource');
+    Check((Drawing.FileName = TargetFileName) and
+      (Session.SourcePath = TargetFileName) and
+      (Session.SourceFormatId = 'tpx') and
+      (Drawing.BitmapRegistry.Count = 1),
+      'Save As did not rebind the drawing and source to the target folder');
+    BitmapEntry := Drawing.BitmapRegistry.Objects[0] as TBitmapEntry;
+    Check((BitmapEntry.ImageLink = 'image.bmp') and
+      (ExpandFileName(BitmapEntry.GetFullLink) =
+       ExpandFileName(TargetImageFileName)),
+      'Save As did not preserve the relative bitmap link at the new location');
+
+    Check(BaseMode.OpenDocumentFromPath(TargetFileName, ErrorText),
+      'The Save As document could not reopen with its relative resource: ' +
+      ErrorText);
+    Check((Drawing.ObjectsCount = 1) and
+      (Drawing.GetObject(0) is TBitmap2D),
+      'Reopening the Save As document lost its bitmap object');
+    BitmapObject := Drawing.GetObject(0) as TBitmap2D;
+    Check((BitmapObject.BitmapEntry.ImageLink = 'image.bmp') and
+      BitmapObject.BitmapEntry.ImageFileExists(TargetImageFileName) and
+      (BitmapObject.Bitmap.Width = 3) and (BitmapObject.Bitmap.Height = 2),
+      'Reopening the Save As document did not load the published image bytes');
+    Check(not Drawing.History.IsChanged,
+      'Reopening the saved bitmap document marked it modified');
+  finally
+    Drawing.Clear;
+    Session.Clear;
+    if FileExists(TargetFileName) then DeleteFile(TargetFileName);
+    if FileExists(TargetImageFileName) then DeleteFile(TargetImageFileName);
+    if FileExists(SourceImageFileName) then DeleteFile(SourceImageFileName);
+    RemoveDir(TargetDirectory);
+    RemoveDir(SourceDirectory);
+    RemoveDir(Directory);
+  end;
+end;
+
 procedure TestDocumentBundleRollbackOnPrimaryConflict;
 const InitialBytes: RawByteString = '<picture>(0,0)' + LineEnding +
   '%<TpX v="5" PicScale="1" FontName="Original Font">' + LineEnding +
@@ -727,6 +825,7 @@ begin
   TestDocumentUnixPermissions;
   TestMalformedDocumentCandidatePreservesLiveDrawing;
   TestDocumentCandidateCommitUsesCandidateOptions;
+  TestSaveAsPreservesRelativeBitmapAsset;
   TestDocumentBundleRollbackOnPrimaryConflict;
   TestDocumentModeSaveRoutes;
 end;
