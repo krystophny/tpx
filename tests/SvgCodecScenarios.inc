@@ -198,6 +198,7 @@ const
     '<text x="20" y="30" font-family="Arial" font-size="12px" ' +
     'text-anchor="middle" xml:space="preserve">A &amp; B ' +
     #$CE + #$B2 + ' ' + #$F0 + #$9F + #$98 + #$80 +
+    ' &#946; &#x1F600;' +
     '</text></svg>';
   Unsupported: RawByteString =
     '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" ' +
@@ -214,6 +215,10 @@ const
     '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" ' +
     'height="10mm" viewBox="0 0 10 10"><text x="1" y="2" ' +
     'font-family="Font ' + #$CE + #$B2 + '" font-size="1">plain</text></svg>';
+  UnicodeFontEntityAttribute: RawByteString =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" ' +
+    'height="10mm" viewBox="0 0 10 10"><text x="1" y="2" ' +
+    'font-family="Font &#946;" font-size="1">plain</text></svg>';
   UnknownPrefixAttribute: RawByteString =
     '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" ' +
     'height="10mm" viewBox="0 0 10 10"><line x1="1" y1="1" ' +
@@ -763,6 +768,7 @@ begin
     Check(ColorToHtml(Path.LineColor) = '#ABCDEF',
       'cubic path stroke color changed');
     ExpectedTextUtf8 := 'A & B ' + #$CE + #$B2 + ' ' +
+      #$F0 + #$9F + #$98 + #$80 + ' ' + #$CE + #$B2 + ' ' +
       #$F0 + #$9F + #$98 + #$80;
     Check((UTF8Encode(Text.WideText) = ExpectedTextUtf8) and
       (Text.HAlignment = ahCenter),
@@ -911,6 +917,19 @@ begin
         'non-ASCII font-family attribute was marked save-back capable');
       Check(Pos('non-ASCII attribute value font-family', Diagnostics.Text) > 0,
         'lossy font-family attribute was not diagnosed');
+    finally
+      FreeAndNil(AuxContext);
+      FreeAndNil(AuxDrawing);
+    end;
+
+    Diagnostics.Clear;
+    AuxDrawing := LoadDocumentCandidate('svg', 'unicode-font-entity.svg',
+      UnicodeFontEntityAttribute, AuxCanSave, AuxContext, Diagnostics);
+    try
+      Check(not AuxCanSave,
+        'numeric Unicode font-family attribute was marked save-back capable');
+      Check(Pos('non-ASCII attribute value font-family', Diagnostics.Text) > 0,
+        'numeric Unicode font-family attribute was not diagnosed');
     finally
       FreeAndNil(AuxContext);
       FreeAndNil(AuxDrawing);
