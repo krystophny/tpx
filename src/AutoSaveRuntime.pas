@@ -56,7 +56,7 @@ type
     class function BuildTpXRecoveryPayload(Drawing: TDrawing2D;
       const SourcePath: TDocumentPath; out UnresolvedLinks: LongWord;
       EditSession: TObjectEditSession = nil;
-      MaxPayloadBytes: Int64 = AutoSaveMaxPayloadBytes): RawByteString; static;
+      MaxPayloadBytes: Int64 = AutoSaveDefaultMaxPayloadBytes): RawByteString; static;
     procedure BindDocument(Session: TDocumentSession;
       Drawing: TDrawing2D; AutoSaveEnabled, RecoveryEnabled,
       Dirty: Boolean; NowMS: QWord; const RecoveryKey: string = '');
@@ -83,13 +83,13 @@ type
       const TempRoot: TDocumentPath; out ModelBytes: RawByteString;
       out AssetContext: TRecoveryAssetContext;
       out UnresolvedLinks: LongWord;
-      MaxPayloadBytes: Int64 = AutoSaveMaxPayloadBytes); overload; static;
+      MaxPayloadBytes: Int64 = AutoSaveDefaultMaxPayloadBytes); overload; static;
     class procedure UnpackTpXRecoveryPayload(const Payload: RawByteString;
       const TempRoot: TDocumentPath; out ModelBytes: RawByteString;
       out AuxiliaryState: RawByteString;
       out AssetContext: TRecoveryAssetContext;
       out UnresolvedLinks: LongWord;
-      MaxPayloadBytes: Int64 = AutoSaveMaxPayloadBytes); overload; static;
+      MaxPayloadBytes: Int64 = AutoSaveDefaultMaxPayloadBytes); overload; static;
     property Coordinator: TAutoSaveCoordinator read FCoordinator;
     property Store: TAutoSaveStore read FStore;
     property DocumentKey: string read FDocumentKey;
