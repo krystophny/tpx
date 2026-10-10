@@ -4,7 +4,7 @@ program WatchWindowsTests;
 
 uses
   Classes, SysUtils, SyncObjs, Process, FileWatch, FileWatchWindows,
-  DocumentFormats;
+  FileWatchNative;
 
 type
   TTestNotifyHeader = packed record
@@ -13,9 +13,30 @@ type
     FileNameLength: Cardinal;
   end;
   TByteBuffer = array of Byte;
+  TTestFileTime = packed record
+    LowDateTime: Cardinal;
+    HighDateTime: Cardinal;
+  end;
+  PTestFileTime = ^TTestFileTime;
 
 const
   WaitLimitMS = 10000;
+
+function TestCreateFileW(FileName: PWideChar; DesiredAccess, ShareMode: Cardinal;
+  SecurityAttributes: Pointer; CreationDisposition, FlagsAndAttributes: Cardinal;
+  TemplateFile: PtrUInt): PtrUInt; stdcall; external 'kernel32' name 'CreateFileW';
+function TestGetFileSizeEx(Handle: PtrUInt; var FileSize: Int64): LongBool;
+  stdcall; external 'kernel32' name 'GetFileSizeEx';
+function TestReadFile(Handle: PtrUInt; Buffer: Pointer; BytesToRead: Cardinal;
+  var BytesRead: Cardinal; Overlapped: Pointer): LongBool; stdcall;
+  external 'kernel32' name 'ReadFile';
+function TestGetFileTime(Handle: PtrUInt; CreationTime, LastAccessTime,
+  LastWriteTime: PTestFileTime): LongBool; stdcall;
+  external 'kernel32' name 'GetFileTime';
+function TestGetFileAttributesW(FileName: PWideChar): Cardinal; stdcall;
+  external 'kernel32' name 'GetFileAttributesW';
+function TestCloseHandle(Handle: PtrUInt): LongBool; stdcall;
+  external 'kernel32' name 'CloseHandle';
 
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
@@ -167,18 +188,61 @@ begin
     raise Exception.Create('The filesystem change produced no watcher event');
 end;
 
-procedure AssertRevision(const Path: string; ExpectedExists: Boolean;
+function ReadFileBytes(const Path: UTF8String;
+  out ModifiedFileTime: QWord): RawByteString;
+var
+  Handle: PtrUInt;
+  WidePath: UnicodeString;
+  FileSize: Int64;
+  Offset, BytesRead: Cardinal;
+  ModifiedTime: TTestFileTime;
+begin
+  ModifiedFileTime := 0;
+  WidePath := UTF8Decode(Path);
+  Handle := TestCreateFileW(PWideChar(WidePath), $80000000,
+    $00000001 or $00000002 or $00000004, nil, 3, 0, 0);
+  if Handle = PtrUInt(-1) then RaiseLastOSError;
+  try
+    if not TestGetFileSizeEx(Handle, FileSize) then RaiseLastOSError;
+    if (FileSize < 0) or (FileSize > High(Integer)) then
+      raise EReadError.Create('Watcher test source has an invalid size');
+    SetLength(Result, Integer(FileSize));
+    Offset := 0;
+    while Offset < Cardinal(FileSize) do
+    begin
+      if not TestReadFile(Handle, @Result[Offset + 1],
+        Cardinal(FileSize) - Offset, BytesRead, nil) then RaiseLastOSError;
+      if BytesRead = 0 then
+        raise EReadError.Create('Watcher test source ended while reading');
+      Inc(Offset, BytesRead);
+    end;
+    if not TestGetFileTime(Handle, nil, nil, @ModifiedTime) then
+      RaiseLastOSError;
+    ModifiedFileTime := (QWord(ModifiedTime.HighDateTime) shl 32) or
+      ModifiedTime.LowDateTime;
+  finally
+    TestCloseHandle(Handle);
+  end;
+end;
+
+function PathExists(const Path: UTF8String): Boolean;
+var
+  WidePath: UnicodeString;
+begin
+  WidePath := UTF8Decode(Path);
+  Result := TestGetFileAttributesW(PWideChar(WidePath)) <> Cardinal(-1);
+end;
+
+procedure AssertFileBytes(const Path: UTF8String; ExpectedExists: Boolean;
   const ExpectedBytes: RawByteString);
 var
-  Revision: TDiskRevision;
-  Snapshot: TDocumentSnapshot;
+  ModifiedFileTime: QWord;
+  ActualBytes: RawByteString;
 begin
-  Revision := ReadDocumentRevision(Path);
-  Check(Revision.Exists = ExpectedExists, 'Snapshot revision existence mismatch');
+  Check(PathExists(Path) = ExpectedExists, 'Source existence mismatch');
   if not ExpectedExists then Exit;
-  Snapshot := ReadDocumentSnapshot(Path);
-  Check(Snapshot.SourceBytes = ExpectedBytes,
-    'Production snapshot returned unexpected source bytes');
+  ActualBytes := ReadFileBytes(Path, ModifiedFileTime);
+  Check(ActualBytes = ExpectedBytes, 'Unexpected source file bytes');
 end;
 
 function MakeEvent(Name: string): TEvent;
@@ -237,8 +301,8 @@ var
   Header: TTestNotifyHeader;
   I, BeforeProbes, BeforeCompletions: Integer;
   CancelRequests, CancelCompletions: Integer;
-  PreviousRevision, CurrentRevision: TDiskRevision;
-  Snapshot: TDocumentSnapshot;
+  PreviousModifiedFileTime, CurrentModifiedFileTime: QWord;
+  PreviousBytes, CurrentBytes: RawByteString;
   CaseRenameObserved: Boolean;
   SubscribeStatus: TFileWatchStatus;
   StartedAt: QWord;
@@ -338,7 +402,7 @@ begin
       begin
         if I = 0 then
         begin
-          Snapshot := ReadDocumentSnapshot(Path);
+          PreviousBytes := ReadFileBytes(Path, PreviousModifiedFileTime);
         end;
         if I = 4 then
           WaitForSubscriptionEvent(Source, SubscriptionID, NormalizedPath,
@@ -365,22 +429,19 @@ begin
       end;
       if I = 0 then
       begin
-        Snapshot := ReadDocumentSnapshot(Path);
-        PreviousRevision := Snapshot.Revision;
-        Check((PreviousRevision.Size = Length('in-place-one')) and
-          (PreviousRevision.ContentDigest <> ''),
-          'Initial source revision was not recorded');
+        Check((Length(PreviousBytes) = Length('in-place-one')) and
+          (PreviousBytes = 'in-place-one'),
+          'Initial source bytes were not recorded');
       end
       else if I = 1 then
       begin
-        Snapshot := ReadDocumentSnapshot(Path);
-        CurrentRevision := Snapshot.Revision;
-        Check((CurrentRevision.Size = PreviousRevision.Size) and
-          (CurrentRevision.ModifiedUTC = PreviousRevision.ModifiedUTC) and
-          (CurrentRevision.ContentDigest <> PreviousRevision.ContentDigest),
+        CurrentBytes := ReadFileBytes(Path, CurrentModifiedFileTime);
+        Check((Length(CurrentBytes) = Length(PreviousBytes)) and
+          (CurrentModifiedFileTime = PreviousModifiedFileTime) and
+          (CurrentBytes <> PreviousBytes),
           'Restored-mtime same-size content change was not detected');
       end;
-      AssertRevision(Path, StepExists, StepBytes);
+      AssertFileBytes(Path, StepExists, StepBytes);
       Events[3].SetEvent;
     end;
     if CaseRenameObserved then
@@ -390,7 +451,7 @@ begin
 
     Check(Events[4].WaitFor(WaitLimitMS) = wrSignaled,
       'The external writer did not finish its scenario');
-    AssertRevision(Path, True, 'final-source-bytes');
+    AssertFileBytes(Path, True, 'final-source-bytes');
 
     DrainEvents(Source);
     Check(Source.Subscribe(Path, 18, TemporaryID) = fwsReady,
@@ -447,6 +508,52 @@ begin
   end;
 end;
 
+procedure TestCompletionPortFailure;
+var
+  Source: TFileChangeSource;
+  Event: TFileChangeEvent;
+  Path: UTF8String;
+  SubscriptionID: QWord;
+  BackendErrors, CancelRequests, CancelCompletions: Integer;
+  StartedAt: QWord;
+begin
+  Source := CreateFileChangeSource;
+  try
+    Source.Start;
+    Check(Source.WaitUntilReady(WaitLimitMS) = fwsReady,
+      'The Windows source did not start for completion-port failure coverage');
+    Path := UTF8String(IncludeTrailingPathDelimiter(GetTempDir(False))) +
+      UTF8String('tpx-watch-fatal-completion-target.tpx');
+    Check(Source.Subscribe(Path, 44, SubscriptionID) = fwsReady,
+      'Could not arm an overlapped read for completion-port failure coverage');
+    DrainEvents(Source);
+
+    InjectWindowsCompletionPortFailureForTest(Source, 6);
+    Check(Source.WaitForEvent(WaitLimitMS),
+      'The terminal completion-port error was not reported');
+    BackendErrors := 0;
+    while Source.TryDequeue(Event) do
+      if Event.Kind = fckBackendError then Inc(BackendErrors);
+    Check((BackendErrors = 1) and (Source.Status = fwsDegraded) and
+      (WindowsWatchCompletionPortFailureCountForTest(Source) = 1),
+      'A fatal completion-port error did not terminate with one bounded report');
+    Check(not Source.WaitForEvent(200) and
+      (WindowsWatchCompletionPortFailureCountForTest(Source) = 1),
+      'The fatal completion-port path continued reporting in a loop');
+
+    StartedAt := GetTickCount64;
+    Source.Stop;
+    Check(GetTickCount64 - StartedAt < 3000,
+      'Stop did not finish after a terminal completion-port error');
+    Check(WindowsWatchCancellationCountsForTest(Source, CancelRequests,
+      CancelCompletions) and (CancelRequests > 0) and
+      (CancelCompletions > 0),
+      'Stop did not cancel and drain the pending read after port failure');
+  finally
+    Source.Free;
+  end;
+end;
+
 var
   HelperPath: string;
 begin
@@ -456,6 +563,7 @@ begin
     else HelperPath := ExpandFileName('tests/watch_windows_helper.ps1');
     Check(FileExists(HelperPath), 'Missing external Windows watcher helper');
     TestNativeWatcher(HelperPath);
+    TestCompletionPortFailure;
     WriteLn('Windows file watcher tests passed');
   except
     on E: Exception do

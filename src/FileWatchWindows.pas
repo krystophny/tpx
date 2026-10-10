@@ -26,6 +26,10 @@ function WindowsWatchPathProbeCountForTest(Source: TFileChangeSource): Integer;
 function WindowsWatchCompletionCountForTest(Source: TFileChangeSource): Integer;
 function WindowsWatchCancellationCountsForTest(Source: TFileChangeSource;
   out Requests, Completions: Integer): Boolean;
+procedure InjectWindowsCompletionPortFailureForTest(Source: TFileChangeSource;
+  ErrorCode: Cardinal);
+function WindowsWatchCompletionPortFailureCountForTest(
+  Source: TFileChangeSource): Integer;
 {$ENDIF}
 
 implementation
@@ -67,6 +71,7 @@ type
   public
     Directory: UTF8String;
     Handle: TWinHandle;
+    CancelEvent: TWinHandle;
     Buffer: array[0..NotifyBufferSize - 1] of Byte;
     Overlapped: TWinOverlapped;
     Subscriptions: TList;
@@ -88,11 +93,14 @@ type
     FStopping: Boolean;
     FStopPacketSeen: Boolean;
     FStarted: Boolean;
+    FCompletionPortFailed: Boolean;
     {$IFDEF FILEWATCH_TESTS}
     FPathProbeCount: Integer;
     FCompletionCount: Integer;
     FCancelRequestCount: Integer;
     FCancelledCompletionCount: Integer;
+    FCompletionPortFailureCount: Integer;
+    FInjectedCompletionPortError: Cardinal;
     {$ENDIF}
     function FindWatcher(const Directory: UTF8String): TWindowsDirectoryWatch;
     function FindSubscription(ID: QWord): TWindowsSubscription;
@@ -115,6 +123,7 @@ type
     procedure RetireWatcher(Watch: TWindowsDirectoryWatch;
       ReportError: Cardinal = 0);
     procedure FreeWatcher(Watch: TWindowsDirectoryWatch);
+    procedure DrainFailedCompletionPort;
     procedure MarkDegraded(const ErrorText: string);
     function IsPathPresent(const Path: UTF8String): Boolean;
   public
@@ -154,6 +163,7 @@ const
   ErrorNotifyEnumDir = 1022;
   ErrorNotFound = 1168;
   WaitInfinite = $FFFFFFFF;
+  WaitObject0 = 0;
   ErrorIoPending = 997;
   ErrorOperationAborted = 995;
   ErrorAbandonedWait0 = 735;
@@ -164,6 +174,7 @@ const
   FileActionModified = 3;
   FileActionRenamedOldName = 4;
   FileActionRenamedNewName = 5;
+  CompletionPortFailurePacketKey = High(PtrUInt);
   CompareStringEqual = 2;
 
 type
@@ -182,6 +193,14 @@ function WinGetQueuedCompletionStatus(CompletionPort: TWinHandle;
   var BytesTransferred: Cardinal; var CompletionKey: PtrUInt;
   var Overlapped: PWinOverlapped; Milliseconds: Cardinal): TWinBool;
   stdcall; external 'kernel32' name 'GetQueuedCompletionStatus';
+function WinWaitForSingleObject(Handle: TWinHandle;
+  Milliseconds: Cardinal): Cardinal; stdcall;
+  external 'kernel32' name 'WaitForSingleObject';
+function WinCreateEventW(SecurityAttributes: Pointer; ManualReset,
+  InitialState: LongInt; Name: PWideChar): TWinHandle; stdcall;
+  external 'kernel32' name 'CreateEventW';
+function WinResetEvent(Handle: TWinHandle): TWinBool; stdcall;
+  external 'kernel32' name 'ResetEvent';
 function WinPostQueuedCompletionStatus(CompletionPort: TWinHandle;
   BytesTransferred: Cardinal; CompletionKey: PtrUInt;
   Overlapped: PWinOverlapped): TWinBool; stdcall;
@@ -268,11 +287,13 @@ constructor TWindowsDirectoryWatch.Create;
 begin
   inherited Create;
   Handle := InvalidHandle;
+  CancelEvent := 0;
   Subscriptions := TList.Create;
 end;
 
 destructor TWindowsDirectoryWatch.Destroy;
 begin
+  if CancelEvent <> 0 then WinCloseHandle(CancelEvent);
   Subscriptions.Free;
   inherited Destroy;
 end;
@@ -375,6 +396,7 @@ begin
     if FStarted then Exit;
     FStopping := False;
     FStopPacketSeen := False;
+    FCompletionPortFailed := False;
     FPendingReads := 0;
     SetStatus(fwsStarting);
     FPort := WinCreateIoCompletionPort(InvalidHandle, 0, 0, 1);
@@ -452,6 +474,15 @@ begin
   WideDirectory := Utf8ToWide(Directory);
   Result := TWindowsDirectoryWatch.Create;
   Result.Directory := Directory;
+  Result.CancelEvent := WinCreateEventW(nil, 1, 0, nil);
+  if Result.CancelEvent = 0 then
+  begin
+    ErrorCode := WinGetLastError;
+    FreeAndNil(Result);
+    MarkDegraded('Could not create a directory-watch event: ' +
+      WindowsErrorText(ErrorCode));
+    Exit;
+  end;
   Result.Handle := WinCreateFileW(PWideChar(WideDirectory), FileListDirectory,
     FileShareRead or FileShareWrite or FileShareDelete, nil, OpenExisting,
     FileFlagBackupSemantics or FileFlagOverlapped, 0);
@@ -485,8 +516,15 @@ var
   ErrorCode: Cardinal;
 begin
   Result := False;
-  if FStopping or Watch.Retired or Watch.Pending then Exit;
+  if FStopping or FCompletionPortFailed or Watch.Retired or Watch.Pending then
+    Exit;
+  if not WinResetEvent(Watch.CancelEvent) then
+  begin
+    RetireWatcher(Watch, WinGetLastError);
+    Exit;
+  end;
   FillChar(Watch.Overlapped, SizeOf(Watch.Overlapped), 0);
+  Watch.Overlapped.EventHandle := Watch.CancelEvent;
   Watch.Pending := True;
   Inc(FPendingReads);
   if WinReadDirectoryChangesW(Watch.Handle, @Watch.Buffer[0],
@@ -675,6 +713,44 @@ begin
   Watch.Free;
 end;
 
+procedure TWindowsFileChangeSource.DrainFailedCompletionPort;
+var
+  I: Integer;
+  Watch: TWindowsDirectoryWatch;
+  WaitResult, ErrorCode: Cardinal;
+begin
+  { The worker has exited, so no thread can dequeue these completions. Wait for
+    the OVERLAPPED event, which signals independently of the completion packet. }
+  FLock.Acquire;
+  try
+    for I := FWatchers.Count - 1 downto 0 do
+    begin
+      Watch := TWindowsDirectoryWatch(FWatchers[I]);
+      if Watch.Pending then
+      begin
+        WaitResult := WinWaitForSingleObject(Watch.CancelEvent, WaitInfinite);
+        if WaitResult <> WaitObject0 then
+        begin
+          ErrorCode := WinGetLastError;
+          PublishEvent(MakeEvent(0, 0, '', fckBackendError, fwsDegraded,
+            'Could not drain a failed Windows completion port: ' +
+            WindowsErrorText(ErrorCode)));
+          { Keep the OVERLAPPED storage alive if the kernel did not signal it. }
+          Continue;
+        end;
+        {$IFDEF FILEWATCH_TESTS}
+        Inc(FCancelledCompletionCount);
+        {$ENDIF}
+        Watch.Pending := False;
+        Dec(FPendingReads);
+      end;
+      FreeWatcher(Watch);
+    end;
+  finally
+    FLock.Release;
+  end;
+end;
+
 procedure TWindowsFileChangeSource.RetireWatcher(
   Watch: TWindowsDirectoryWatch; ReportError: Cardinal);
 var
@@ -732,6 +808,7 @@ begin
   FLock.Acquire;
   try
     if not FStarted or FStopping then Exit(fwsStopped);
+    if FCompletionPortFailed then Exit(Status);
     NormalizedPath := NormalizeFileWatchPath(Path);
     Directory := Utf8DirectoryName(NormalizedPath);
     if (Directory = '') or (Utf8FileName(NormalizedPath) = '') then
@@ -835,7 +912,9 @@ begin
       else
         FreeWatcher(Watch);
     end;
-    if not WinPostQueuedCompletionStatus(FPort, 0, 0, nil) then
+    if FCompletionPortFailed then
+      FStopPacketSeen := True
+    else if not WinPostQueuedCompletionStatus(FPort, 0, 0, nil) then
     begin
       ErrorCode := WinGetLastError;
       FStopPacketSeen := True;
@@ -856,6 +935,7 @@ begin
   if Worker <> nil then
   begin
     Worker.WaitFor;
+    if FCompletionPortFailed then DrainFailedCompletionPort;
     FLock.Acquire;
     try
       FreeAndNil(FWorker);
@@ -889,6 +969,19 @@ begin
       BytesTransferred, CompletionKey, Overlapped, WaitInfinite);
     ErrorCode := 0;
     if not Success then ErrorCode := WinGetLastError;
+    {$IFDEF FILEWATCH_TESTS}
+    if Success and (Overlapped = nil) and
+       (CompletionKey = CompletionPortFailurePacketKey) then
+    begin
+      FOwner.FLock.Acquire;
+      try
+        ErrorCode := FOwner.FInjectedCompletionPortError;
+      finally
+        FOwner.FLock.Release;
+      end;
+      Success := False;
+    end;
+    {$ENDIF}
     if Overlapped = nil then
     begin
       FOwner.FLock.Acquire;
@@ -897,18 +990,26 @@ begin
           FOwner.FStopPacketSeen := True
         else if not Success then
         begin
-          FOwner.SetStatus(fwsDegraded);
-          FOwner.PublishEvent(FOwner.MakeEvent(0, 0, '', fckBackendError,
-            fwsDegraded, 'Windows completion port failed: ' +
-            WindowsErrorText(ErrorCode)));
-          if (ErrorCode = ErrorAbandonedWait0) and FOwner.FStopping then
-            FOwner.FStopPacketSeen := True;
+          FOwner.FCompletionPortFailed := True;
+          {$IFDEF FILEWATCH_TESTS}
+          Inc(FOwner.FCompletionPortFailureCount);
+          {$ENDIF}
+          if not (FOwner.FStopping and
+            (ErrorCode = ErrorAbandonedWait0)) then
+          begin
+            FOwner.SetStatus(fwsDegraded);
+            FOwner.PublishEvent(FOwner.MakeEvent(0, 0, '', fckBackendError,
+              fwsDegraded, 'Windows completion port failed: ' +
+              WindowsErrorText(ErrorCode)));
+          end;
+          FOwner.FStopPacketSeen := FOwner.FStopping;
         end;
         ShouldExit := FOwner.FStopping and FOwner.FStopPacketSeen and
           (FOwner.FPendingReads = 0);
       finally
         FOwner.FLock.Release;
       end;
+      if not Success then Break;
       if ShouldExit then Break;
       Continue;
     end;
@@ -959,6 +1060,40 @@ begin
        not Subscription.Watch.Retired then
       WindowsSource.ProcessNotificationPayload(Subscription.Watch, Success,
         BytesTransferred, ErrorCode, Buffer);
+  finally
+    WindowsSource.FLock.Release;
+  end;
+end;
+
+procedure InjectWindowsCompletionPortFailureForTest(Source: TFileChangeSource;
+  ErrorCode: Cardinal);
+var
+  WindowsSource: TWindowsFileChangeSource;
+begin
+  if not (Source is TWindowsFileChangeSource) then Exit;
+  WindowsSource := TWindowsFileChangeSource(Source);
+  WindowsSource.FLock.Acquire;
+  try
+    WindowsSource.FInjectedCompletionPortError := ErrorCode;
+    if not WinPostQueuedCompletionStatus(WindowsSource.FPort, 0,
+      CompletionPortFailurePacketKey, nil) then
+      raise Exception.Create('Could not inject completion-port failure');
+  finally
+    WindowsSource.FLock.Release;
+  end;
+end;
+
+function WindowsWatchCompletionPortFailureCountForTest(
+  Source: TFileChangeSource): Integer;
+var
+  WindowsSource: TWindowsFileChangeSource;
+begin
+  Result := 0;
+  if not (Source is TWindowsFileChangeSource) then Exit;
+  WindowsSource := TWindowsFileChangeSource(Source);
+  WindowsSource.FLock.Acquire;
+  try
+    Result := WindowsSource.FCompletionPortFailureCount;
   finally
     WindowsSource.FLock.Release;
   end;
