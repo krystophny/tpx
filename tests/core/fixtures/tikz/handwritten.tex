@@ -1,0 +1,13 @@
+\documentclass{article}
+\usepackage{tikz}
+% A fake environment in a comment must not become a candidate:
+% \begin{tikzpicture} \end{tikzpicture}
+\begin{document}
+% Before picture; retained outside the selected region.
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \draw (1e-3,.5) -- (2.5e+2,3);
+  \node at (0,0) {fraction \frac{1}{2}; escaped \% \{brace\}; café λ
+    fake \begin{tikzpicture} text \end{tikzpicture}};
+\end{tikzpicture}
+% After picture; retained outside the selected region.
+\end{document}
