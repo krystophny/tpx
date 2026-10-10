@@ -558,6 +558,7 @@ type
 {$IFDEF FPC}
     InitialViewQueued: Boolean;
     FSourceStatusPanel: TStatusPanel;
+    FSourceStatusHint: string;
 {$IFNDEF CPUWASM32}
     FFileChangeSource: TFileChangeSource;
     FWatchDispatcher: TThread;
@@ -1246,10 +1247,9 @@ begin
     if not LiveTeXDocumentTrusted then Details.Add(LiveTeXStatus);
     FSourceStatusPanel.Text := LabelText;
     HintText := Trim(Details.Text);
+    FSourceStatusHint := HintText;
 {$IFNDEF CPUWASM32}
-    if (FReloadStatusPanel <> nil) and (FReloadStatusPanel.Text <> '') and
-      ((FReloadCoordinator = nil) or FReloadCoordinator.Conflict or
-       FReloadCoordinator.InvalidExternal or FReloadCoordinator.Missing) then
+    if (FReloadStatusPanel <> nil) and (FReloadStatusPanel.Text <> '') then
       Exit;
 {$ENDIF}
     StatusBar1.Hint := HintText;
@@ -2453,6 +2453,7 @@ begin
 end;
 
 procedure TMainForm.UpdateReloadStatus(const Text: string);
+var HintText: string;
 begin
   if FReloadStatusPanel = nil then Exit;
   FReloadStatusPanel.Text := Text;
@@ -2466,8 +2467,10 @@ begin
   else
   begin
     FReloadDiskMenu.Hint := Text;
-    StatusBar1.Hint := Text;
-    StatusBar1.ShowHint := Text <> '';
+    HintText := Text;
+    if HintText = '' then HintText := FSourceStatusHint;
+    StatusBar1.Hint := HintText;
+    StatusBar1.ShowHint := HintText <> '';
   end;
 end;
 

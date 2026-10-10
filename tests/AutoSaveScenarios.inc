@@ -199,6 +199,8 @@ begin
       FormatId + ' production open failed: ' + ErrorText);
     Check(not MainForm.AutoReloadState.WatchUnavailable,
       FormatId + ' production open route did not bind a native source watch');
+    Check(Pos(LiveTeXTrustStatus, MainForm.StatusBar1.Hint) > 0,
+      FormatId + ' source hint lost the TeX preview trust notice after open');
     Check((MainForm.EventManager.DocumentSession.SourceFormatId = FormatId) and
       MainForm.EventManager.DocumentSession.CanSaveBack,
       FormatId + ' source session is not safely writable');
