@@ -775,3 +775,30 @@ begin
     DeleteFile(FileName);
   end;
 end;
+
+procedure TestEditSessionFormDestroy;
+var
+  Session: TObjectEditSession;
+  TextObject: TText2D;
+begin
+  MainForm.Show;
+  Application.ProcessMessages;
+  TextObject := TText2D.CreateSpec(-1, Point2D(2, 3), 7, 'Draft');
+  MainForm.TheDrawing.AddObject(-1, TextObject);
+  Session := TObjectEditSession.Create(MainForm.TheDrawing,
+    MainForm.CurrentDocumentEpoch, [TextObject.ID]);
+  Check(MainForm.RegisterEditSession(Session),
+    'teardown edit session did not register');
+  Session.SetRawDraft(opfText, LCLTextToUTF8Bytes('unfinished text'));
+  Check(Session.HasUncommittedWork and Assigned(Session.OnInteractionChanged),
+    'teardown fixture must have an observed active raw draft');
+
+  { Free bypasses CloseQuery and exercises forced application teardown. }
+  MainForm.Free;
+  MainForm := nil;
+  Check(not Session.IsActive,
+    'form teardown did not cancel its registered edit session');
+  Check(not Assigned(Session.OnInteractionChanged),
+    'form teardown left its edit-session observer attached');
+  Session.Free;
+end;
