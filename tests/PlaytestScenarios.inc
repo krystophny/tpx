@@ -159,39 +159,77 @@ const
   InvalidToolbarHeights: array[0..3] of string = ('-1', '0', 'NaN', 'bad');
 var
   TextObj: TText2D;
-  CanClose: Boolean;
   Bad: string;
+  ErrorText: string;
+  HistoryCount: Integer;
+  HeightEditor, WidthEditor: TEdit;
+  ErrorLabel: TLabel;
 begin
+  MainForm.Show;
+  Application.ProcessMessages;
   TextObj := TText2D.CreateSpec(-1, Point2D(10, 20), 7, 'Original');
   MainForm.TheDrawing.AddObject(-1, TextObj);
+  MainForm.TheDrawing.SelectionClear;
   MainForm.TheDrawing.SelectionAdd(TextObj);
-  PropertiesForm.PObject := TextObj;
+  MainForm.RefreshInspectorSelection;
+  HeightEditor := MainForm.Inspector.EditorFor(opfTextHeight) as TEdit;
+  WidthEditor := MainForm.Inspector.EditorFor(opfLineWidth) as TEdit;
+  ErrorLabel := MainForm.Inspector.FindComponent(
+    'InspectorTextHeightError') as TLabel;
   for Bad in InvalidHeights do begin
-    PropertiesForm.FormShow(nil);
-    PropertiesForm.LabeledEdit1.Text := 'Changed';
-    PropertiesForm.LabeledEdit2.Text := Bad;
-    PropertiesForm.ModalResult := mrOK;
-    CanClose := True;
-    PropertiesForm.FormCloseQuery(nil, CanClose);
-    Check(not CanClose, 'Invalid text height was accepted: ' + Bad);
-    Check((TextObj.Height = 7) and (TextObj.Text = 'Original'), 'Invalid edit mutated text');
+    MainForm.Inspector.FocusField(opfTextHeight);
+    HeightEditor.Text := Bad;
+    Check(not MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+      'Invalid text height was accepted: ' + Bad);
+    Check((TextObj.Height = 7) and (TextObj.Text = 'Original') and
+      ErrorLabel.Visible, 'Invalid height preview changed the object');
+    MainForm.Inspector.CancelActiveEdit;
   end;
   for Bad in InvalidWidths do begin
-    PropertiesForm.FormShow(nil);
-    PropertiesForm.ComboBox6.Text := Bad;
-    PropertiesForm.ComboBox1.ItemIndex := Ord(liNone);
-    PropertiesForm.ModalResult := mrOK; CanClose := True;
-    PropertiesForm.FormCloseQuery(nil, CanClose);
-    Check(not CanClose, 'Invalid stroke width was accepted: ' + Bad);
-    Check((TextObj.LineWidth = 1) and (TextObj.LineStyle = liSolid), 'Invalid width mutated style');
+    MainForm.Inspector.FocusField(opfLineWidth);
+    WidthEditor.Text := Bad;
+    Check(not MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+      'Invalid stroke width was accepted: ' + Bad);
+    Check((TextObj.LineWidth = 1) and (TextObj.LineStyle = liSolid),
+      'Invalid width preview changed stroke properties');
+    MainForm.Inspector.CancelActiveEdit;
   end;
-  PropertiesForm.FormShow(nil);
-  PropertiesForm.LabeledEdit2.Text := '0.5';
-  PropertiesForm.ComboBox6.Text := '0';
-  PropertiesForm.ModalResult := mrOK; CanClose := True;
-  PropertiesForm.FormCloseQuery(nil, CanClose);
-  Check(CanClose and (TextObj.Height = 0.5) and (TextObj.LineWidth = 0),
-    'Fractional height or zero hairline was rejected');
+  HistoryCount := MainForm.TheDrawing.History.Count;
+  MainForm.Inspector.FocusField(opfTextHeight);
+  HeightEditor.Text := '0.5';
+  Check(TextObj.Height = 0.5, 'Valid height was not previewed');
+  Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+    'Fractional height did not commit: ' + ErrorText);
+  Check((TextObj.Height = 0.5) and
+    (MainForm.TheDrawing.History.Count = HistoryCount + 1),
+    'Fractional height did not create exactly one history entry');
+  MainForm.TheDrawing.History.Undo;
+  TextObj := MainForm.TheDrawing.GetObject(0) as TText2D;
+  Check(TextObj.Height = 7, 'One undo did not restore the original height');
+  MainForm.TheDrawing.History.Redo;
+  TextObj := MainForm.TheDrawing.GetObject(0) as TText2D;
+  Check(TextObj.Height = 0.5, 'Redo did not restore the committed height');
+  MainForm.TheDrawing.SelectionAdd(TextObj);
+  MainForm.RefreshInspectorSelection;
+  HistoryCount := MainForm.TheDrawing.History.Count;
+  MainForm.Inspector.FocusField(opfTextHeight);
+  HeightEditor.Text := '1.75';
+  Check(TextObj.Height = 1.75, 'Valid preview did not update the object');
+  MainForm.Inspector.CancelActiveEdit;
+  Check((TextObj.Height = 0.5) and
+    (MainForm.TheDrawing.History.Count = HistoryCount),
+    'Cancel did not restore the exact value without adding history');
+  MainForm.Inspector.FocusField(opfTextHeight);
+  HeightEditor.Text := '0.5';
+  Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+    'No-op field commit failed');
+  Check(MainForm.TheDrawing.History.Count = HistoryCount,
+    'Focusing and recommitting the same value added history');
+  MainForm.Inspector.FocusField(opfLineWidth);
+  WidthEditor.Text := '0';
+  Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+    'Zero hairline width did not commit');
+  Check(TextObj.LineWidth = 0, 'Zero hairline width was not applied');
   MainForm.TheDrawing.New_FontHeight := 0.5;
   MainForm.TheDrawing.New_LineWidth := 0;
   for Bad in InvalidToolbarHeights do begin
@@ -211,28 +249,36 @@ procedure TestFontChoice;
 var
   TextObj: TText2D;
   Points: Integer;
-  CanClose: Boolean;
+  ErrorText: string;
+  FontNameEditor: TEdit;
+  FontStyleEditor: TComboBox;
+  HeightEditor: TEdit;
 begin
   TextObj := TText2D.CreateSpec(-1, Point2D(10, 20), 7, 'Size');
   MainForm.TheDrawing.AddObject(-1, TextObj);
-  PropertiesForm.PObject := TextObj;
+  MainForm.TheDrawing.SelectionClear;
+  MainForm.TheDrawing.SelectionAdd(TextObj);
+  MainForm.RefreshInspectorSelection;
+  FontNameEditor := MainForm.Inspector.EditorFor(opfFontName) as TEdit;
+  FontStyleEditor := MainForm.Inspector.EditorFor(opfFontStyle) as TComboBox;
+  HeightEditor := MainForm.Inspector.EditorFor(opfTextHeight) as TEdit;
   for Points in [6, 36] do begin
-    PropertiesForm.FormShow(nil);
-    PropertiesForm.FontCheckBox.Checked := True;
-    PropertiesForm.FontDialog1.Font.Name := 'Serif';
-    PropertiesForm.FontDialog1.Font.Style := [fsBold];
-    PropertiesForm.FontDialog1.Font.Size := Points;
-    PropertiesForm.ApplyFontChoice;
-    Check(TextObj.Height = 7, 'Chooser mutated the object before OK');
-    PropertiesForm.ModalResult := mrCancel; CanClose := True;
-    PropertiesForm.FormCloseQuery(nil, CanClose);
-    Check(TextObj.Height = 7, 'Cancel changed semantic height');
-    PropertiesForm.ModalResult := mrOK;
-    PropertiesForm.FormCloseQuery(nil, CanClose);
-    Check(CanClose and (Abs(TextObj.Height - Points*25.4/72) < 0.0001),
-      'Font point size did not update semantic height');
+    MainForm.Inspector.FocusField(opfFontName);
+    FontNameEditor.Text := 'Serif';
+    Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+      'Font family did not commit: ' + ErrorText);
+    MainForm.Inspector.FocusField(opfFontStyle);
+    FontStyleEditor.ItemIndex := 1;
+    Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+      'Font style did not commit: ' + ErrorText);
+    MainForm.Inspector.FocusField(opfTextHeight);
+    HeightEditor.Text := RealTypeToStr(Points * 25.4 / 72);
+    Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+      'Text height did not commit: ' + ErrorText);
+    Check(Abs(TextObj.Height - Points*25.4/72) < 0.0001,
+      'Inspector did not preserve semantic text height');
+    Check(TextObj.Font.Name = 'Serif', 'Inspector did not preserve font family');
     Check(fsBold in TextObj.Font.Style, 'Font style was lost');
-    TextObj.Height := 7;
   end;
 end;
 

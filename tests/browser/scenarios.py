@@ -513,34 +513,49 @@ def s_bitmap_roundtrip(app):
     return 'bitmap save has no converter dialog; EPS contains pixels; related PNG reopens'
 
 
-def s_modal_properties(app):
+def s_object_inspector(app):
     v, cx, cy = box(app)
     app.menu('Insert', 'Insert rectangle')
     app.drag(cx-70, cy-50, cx+70, cy+50)
     app.key('Escape')
     app.menu('Edit', 'Select all')
     app.menu('Edit', 'Object properties')
-    app.click(335, 17)  # Line color combo's dropdown arrow in the Properties LFM
-    choices = app.page.get_by_role('dialog').get_by_role('listbox')
-    choices.press('Escape')
-    app.page.get_by_role('dialog').wait_for(state='hidden')
-    app.click(335, 17)
-    choices = app.page.get_by_role('dialog').get_by_role('listbox')
-    choices.select_option('1')  # Custom, after Default; preserves Pascal item order
-    choices.press('Enter')
-    color = app.page.get_by_role('dialog').get_by_label('Color', exact=True)
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('opening Object properties created a modal dialog')
+    width = app.page.get_by_role('textbox', name='Width multiplier', exact=True)
+    width.fill('2.5')
+    width.press('Enter')
+    color = app.page.get_by_role('combobox', name='Line color', exact=True)
     color.fill('#1278b5')
-    app.page.get_by_role('dialog').get_by_role('button', name='OK', exact=True).click()
-    app.page.get_by_role('textbox', name='RX', exact=True).fill('2.5')
-    app.page.get_by_role('textbox', name='RY', exact=True).fill('3.5')
-    app.page.get_by_role('button', name='OK', exact=True).click()
-    objects = drawing_xml(app.save('properties.tpx'))
-    if len(objects) != 1 or float(objects[0].get('rx', '0')) != 2.5 or float(objects[0].get('ry', '0')) != 3.5 or objects[0].get('lc') != '#1278B5':
-        raise AssertionError(f'edited corner radii did not survive save: {[o.attrib for o in objects]}')
+    color.press('Enter')
+    app.page.get_by_role('textbox', name='Horizontal radius (mm)', exact=True).fill('2.5')
+    app.page.get_by_role('textbox', name='Vertical radius (mm)', exact=True).fill('3.5')
+    app.page.get_by_role('textbox', name='Vertical radius (mm)', exact=True).press('Enter')
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('routine inspector edits opened a modal dialog')
+    width.fill('3.5')
+    # Leaving the field for another canvas selection commits the pending edit.
+    app.click(cx+210, cy+160)
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('committing the inspector edit opened a modal dialog')
+    app.menu('Edit', 'Select all')
     app.menu('Edit', 'Object properties')
-    if app.page.get_by_role('textbox', name='RX', exact=True).input_value() != '2.5':
-        raise AssertionError('reopened properties lost the edited value')
-    app.page.get_by_role('button', name='Cancel', exact=True).click()
+    if width.input_value() != '3.5':
+        raise AssertionError('selection refresh lost the last committed width')
+    before = app.viewport()
+    app.menu('View', 'Object inspector')
+    hidden = app.viewport()
+    if hidden['w'] <= before['w']:
+        raise AssertionError('collapsing the inspector did not restore canvas width')
+    app.menu('View', 'Object inspector')
+    if width.input_value() != '3.5':
+        raise AssertionError('reopening the inspector lost the selection values')
+    objects = drawing_xml(app.save('properties.tpx'))
+    if (len(objects) != 1 or float(objects[0].get('lw', '0')) != 3.5 or
+            float(objects[0].get('rx', '0')) != 2.5 or
+            float(objects[0].get('ry', '0')) != 3.5 or
+            objects[0].get('lc', '').upper() != '#1278B5'):
+        raise AssertionError(f'inspector edits did not survive save: {[o.attrib for o in objects]}')
     app.menu('Help', 'About')
     app.page.get_by_role('button', name='Acknowledgements').click()
     memo = app.page.locator('textarea:visible')
@@ -549,7 +564,7 @@ def s_modal_properties(app):
     app.page.get_by_role('button', name='Acknowledgements').focus()
     app.key('Escape')
     app.page.wait_for_function('document.querySelector("#lcl").width > 500')
-    return 'custom color and property edits survive save; read-only memo and modal Escape work'
+    return 'width, custom color and radii commit without a modal; inspector collapse and save preserve values'
 
 
 def s_clipboard_roundtrip(app):
@@ -581,15 +596,13 @@ def s_nested_coordinates(app):
     app.key('Escape')
     app.menu('Edit', 'Select all')
     app.menu('Edit', 'Object properties')
-    app.page.get_by_role('button', name='Points', exact=True).click()
-    app.page.wait_for_function('document.querySelector("#lcl").width === 530')
+    app.page.get_by_role('button', name='Point coordinates…', exact=True).click()
+    app.page.wait_for_function('document.querySelector("#lcl").width === 460')
     app.click(155, 55)  # First x-coordinate cell in the fixed-size Table LFM
     app.key('F2')
     editor = app.page.get_by_role('textbox').last
     editor.fill('125.5')
     app.key('Enter')
-    app.page.get_by_role('button', name='OK', exact=True).click()
-    app.page.wait_for_function('document.querySelector("#lcl").width === 460')
     app.page.get_by_role('button', name='OK', exact=True).click()
     app.page.wait_for_function('document.querySelector("#lcl").width > 600')
     objects = drawing_xml(app.save('coordinates.tpx'))
@@ -726,7 +739,7 @@ SCENARIOS = [
     ('clipboard-roundtrip', s_clipboard_roundtrip),
     ('export-formats', s_export_formats),
     ('bitmap-roundtrip', s_bitmap_roundtrip),
-    ('modal-properties', s_modal_properties),
+    ('object-inspector', s_object_inspector),
     ('nested-coordinates', s_nested_coordinates),
     ('unsaved-confirmation', s_unsaved_confirmation),
     ('tex-preview', s_tex_preview),
