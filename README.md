@@ -115,6 +115,16 @@ Preview** toggles this behavior; it is enabled by default. Without the tools,
 the canvas shows editable text. Explicit LaTeX previews and exports still work
 as before.
 
+On native desktop builds, **File → Automatic refresh → Auto refresh** is on by
+default for source formats TpX can safely edit and save back. Pause refresh for
+the current drawing or choose **Reload from disk…** to reload explicitly. If
+external changes arrive while the drawing has unsaved edits, TpX keeps the
+local scene and offers **Keep local edits** or **Save local copy…**; malformed
+external files leave the current scene unchanged. Imported or refreshed TeX
+content stays inert until **View → Trust TeX preview for this document** is
+chosen. Browser builds do not watch local files; reopen or import the source to
+refresh it.
+
 TikZ output supplies drawing defaults for `\tpxLineWidth`, `\tpxTextSize`,
 `\tpxDashSize`, and `\tpxDotSize`. Define these before including the drawing
 to override them, for example:

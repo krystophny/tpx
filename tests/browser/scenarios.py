@@ -641,6 +641,9 @@ def s_tex_preview(app):
     if app.page.evaluate("performance.getEntriesByType('resource').some(e=>e.name.endsWith('/tex-svg.bundle.js'))"):
         raise AssertionError('MathJax loaded for a drawing without TeX')
     open_drawing('tex-preview-input.tpx')
+    if app.page.evaluate("performance.getEntriesByType('resource').some(e=>e.name.endsWith('/tex-svg.bundle.js'))"):
+        raise AssertionError('Imported TeX was previewed before document trust')
+    app.menu('View', 'Trust TeX preview for this document')
     app.page.wait_for_function("performance.getEntriesByType('resource').some(e=>e.name.endsWith('/tex-svg.bundle.js'))")
     v = app.viewport()
     area = [v['x'], v['y'], v['w'], v['h']]
@@ -692,6 +695,7 @@ def s_tex_preview(app):
         raise AssertionError('preview changed the saved text sources')
     root[0].set('tex', r'$\undefinedPreviewCommand$')
     open_drawing('tex-preview-invalid.tpx')
+    app.menu('View', 'Trust TeX preview for this document')
     app.page.locator('#notice:not([hidden])').wait_for()
     park(app, v)
     capture('invalid')

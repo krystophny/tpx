@@ -247,6 +247,41 @@ begin
       Source.Start;
       CheckCore(Source.WaitUntilReady(0) = fwsReady,
         'readiness must be re-armed after restart');
+
+      Event := Default(TFileChangeEvent);
+      Event.SubscriptionID := SubscriptionID;
+      Event.Generation := 41;
+      Event.Path := '/tmp/source.tpx';
+      Event.Kind := fckRescanRequired;
+      CheckCore(IsFileWatchEventRelevant(Event, SubscriptionID, 41,
+        '/tmp/source.tpx'),
+        'current subscription rescan hint was discarded');
+      Event.Generation := 40;
+      CheckCore(not IsFileWatchEventRelevant(Event, SubscriptionID, 41,
+        '/tmp/source.tpx'),
+        'stale subscription rescan hint reached the active document');
+      Event := Default(TFileChangeEvent);
+      Event.Kind := fckRescanRequired;
+      CheckCore(IsFileWatchEventRelevant(Event, SubscriptionID, 41,
+        '/tmp/source.tpx'), 'global overflow rescan hint was discarded');
+
+      Event := Default(TFileChangeEvent);
+      Event.SubscriptionID := SubscriptionID;
+      Event.Generation := 41;
+      Event.Path := '/tmp/source.tpx';
+      Event.Kind := fckBackendError;
+      Event.Status := fwsDegraded;
+      CheckCore(IsFileWatchEventRelevant(Event, SubscriptionID, 41,
+        '/tmp/source.tpx'), 'current subscription error was discarded');
+      Event.Generation := 40;
+      CheckCore(not IsFileWatchEventRelevant(Event, SubscriptionID, 41,
+        '/tmp/source.tpx'),
+        'stale subscription error changed the active watcher state');
+      Event := Default(TFileChangeEvent);
+      Event.Kind := fckBackendError;
+      Event.Status := fwsError;
+      CheckCore(IsFileWatchEventRelevant(Event, SubscriptionID, 41,
+        '/tmp/source.tpx'), 'global backend error was discarded');
     finally
       Finished.Free;
       Entered.Free;

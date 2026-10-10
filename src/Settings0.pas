@@ -12,6 +12,11 @@ procedure SaveSettings;
 
 var
   SettingsList: TOptionsList;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  AutoRefreshEnabled: Boolean = True;
+{$ENDIF}
+{$ENDIF}
 
 implementation
 
@@ -140,6 +145,10 @@ begin
 {$IFDEF FPC}
   SettingsList.AddBoolean('LiveTeXPreview', @LiveTeXEnabled,
     'Live LaTeX text preview');
+{$IFNDEF CPUWASM32}
+  SettingsList.AddBoolean('AutoRefreshEnabled', @AutoRefreshEnabled,
+    'Automatically reload changed source documents');
+{$ENDIF}
 {$ENDIF}
 
   SettingsList.AddRealType('PicScale_Default',
