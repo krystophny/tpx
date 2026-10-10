@@ -32,7 +32,7 @@ def build(compiler, build_dir):
     unit_dir = build_dir / "units"
     unit_dir.mkdir(parents=True, exist_ok=True)
     binary = build_dir / ("CoreTests.exe" if os.name == "nt" else "CoreTests")
-    command = [compiler, "-Mdelphi", "-gl", "-Crtoi", "-Sa",
+    command = [compiler, "-B", "-Mdelphi", "-gl", "-Crtoi", "-Sa",
                f"-Fu{ROOT / 'src'}", f"-Fu{ROOT / 'src' / 'lib' / 'XML'}",
                f"-Fu{ROOT / 'tests' / 'core'}", f"-FU{unit_dir}",
                f"-FE{build_dir}", f"-o{binary}", str(CORE_SOURCE)]
