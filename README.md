@@ -139,6 +139,12 @@ Object-specific widths and text heights remain proportional to these defaults.
 Unset defaults belong to the drawing's local group and do not affect later
 figures. Disable `FontSizeInTeX` to inherit the document's font size instead.
 
+Opened TikZ source saves back by patching supported edits into the original
+source, preserving untouched text, comments, and whitespace. TpX rejects edits
+whose meaning cannot be represented safely in the source. Native `.tpx` files
+retain TpX editor data; TikZ save-back preserves supported drawing semantics
+and source text, not TpX-only grouping or other editor metadata.
+
 ### Cropped LaTeX export
 
 Export **PdfLaTeX source** and run `pdflatex` on the generated `.tex` file to
