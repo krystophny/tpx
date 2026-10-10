@@ -17,6 +17,14 @@ begin
   for I := 1 to Length(Value) do Result[I - 1] := Ord(Value[I]);
 end;
 
+function RawStringOf(const Value: TBytes): RawByteString;
+var
+  I: SizeInt;
+begin
+  SetLength(Result, Length(Value));
+  for I := 0 to High(Value) do Result[I + 1] := AnsiChar(Value[I]);
+end;
+
 function ParseAndEvaluate(const Value: RawByteString;
   out Syntax: TTikZSyntaxResult): TTikZSemanticResult;
 begin
@@ -218,6 +226,39 @@ begin
   end;
 end;
 
+procedure TestOwnedStatementBindingSpans;
+const
+  Source = '\begin{tikzpicture}' +
+    '\node at (0,0){label};' +
+    '\draw (0,0)--(1,0);' +
+    '\end{tikzpicture}';
+var
+  Syntax: TTikZSyntaxResult;
+  Evaluated: TTikZSemanticResult;
+  Binding: TTikZSourceBinding;
+begin
+  Evaluated := ParseAndEvaluate(Source, Syntax);
+  try
+    CheckCore((Syntax.Outcome = tpoAccepted) and
+      (Evaluated.Outcome = tsoAccepted) and
+      (Evaluated.Scene.ObjectCount = 2),
+      'standalone node and path statements should remain editable');
+    CheckCore(Evaluated.Scene.BindingCount = 2,
+      'each visible object should retain one source binding');
+    Binding := Evaluated.Scene.BindingAt(0);
+    CheckCore(RawStringOf(Syntax.SourceSlice(Binding.StatementSpan)) =
+      '\node at (0,0){label};',
+      'standalone node binding must own its terminating semicolon');
+    Binding := Evaluated.Scene.BindingAt(1);
+    CheckCore(RawStringOf(Syntax.SourceSlice(Binding.StatementSpan)) =
+      '\draw (0,0)--(1,0);',
+      'path binding must own its terminating semicolon');
+  finally
+    Evaluated.Free;
+    Syntax.Free;
+  end;
+end;
+
 procedure TestRelativeCoordinateBases;
 const
   Source = '\begin{tikzpicture}[x=1mm,y=1mm]' +
@@ -349,6 +390,8 @@ initialization
     TestArcSectorAndCircleMaterializationProfile);
   RegisterCoreTest('tikz-bare-drawing-style-flags',
     TestBareDrawingStyleFlags);
+  RegisterCoreTest('tikz-owned-statement-binding-spans',
+    TestOwnedStatementBindingSpans);
   RegisterCoreTest('tikz-relative-coordinate-bases',
     TestRelativeCoordinateBases);
   RegisterCoreTest('tikz-devtikz-arrow-hatching-geometry',
