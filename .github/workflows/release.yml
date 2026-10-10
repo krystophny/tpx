@@ -77,15 +77,11 @@ jobs:
             -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA"
           git fetch --no-tags origin "refs/tags/$tag:refs/tags/$tag"
           test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"
-          notes=()
-          if [[ "${{ needs.preflight.outputs.prerelease }}" == true ]]; then
-            notes+=(--prerelease --latest=false --notes "Pre-release of TpX $RELEASE_VERSION. This build is for evaluation and is not a stable release.")
-          else
-            notes+=(--latest=${{ steps.release_mode.outputs.latest }})
-          fi
-          gh release create "$tag" release-assets/* \
-            --repo "$GITHUB_REPOSITORY" --verify-tag --target "$GITHUB_SHA" \
-            --title "TpX $RELEASE_VERSION" --generate-notes --draft "${notes[@]}"
+          python3 ci/publish_release.py create "$tag" "$GITHUB_REPOSITORY" \
+            "$GITHUB_SHA" "$RELEASE_VERSION" \
+            "${{ needs.preflight.outputs.prerelease }}" \
+            "${{ steps.release_mode.outputs.latest }}" \
+            ci/RELEASE_NOTES.md release-assets
           gh release view "v$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --json assets > release-assets/uploaded.json
           python3 - <<'PY'
           import json
@@ -95,8 +91,6 @@ jobs:
           uploaded = {a['name'] for a in json.loads((folder / 'uploaded.json').read_text())['assets']}
           assert uploaded == expected, (uploaded, expected)
           PY
-          if [[ "${{ needs.preflight.outputs.prerelease }}" == true ]]; then
-            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
-          else
-            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false
-          fi
+          python3 ci/publish_release.py publish "$tag" "$GITHUB_REPOSITORY" \
+            "${{ needs.preflight.outputs.prerelease }}" \
+            "${{ steps.release_mode.outputs.latest }}"

@@ -54,13 +54,15 @@ hashes, filenames, binary/help version metadata and platform manifests before
 uploading. Only the final publish job has `contents: write`; it first creates a
 draft and checks that every expected asset uploaded.
 
-Release notes are generated from the tagged history. A beta or RC is explicitly
-marked as a pre-release and is always created with Latest disabled. Stable
-releases use the highest published stable version for Latest, so a later 1.6.x
-hotfix cannot displace a published 2.0.0 release. Package names retain the full
-beta/RC suffix. The macOS bundle version remains the numeric `2.0.0` value
-required by macOS, while the executable, help metadata, manifest and archive
-name retain the complete prerelease version.
+Release notes retain the reviewed `ci/RELEASE_NOTES.md` text, followed by
+GitHub-generated notes from tagged history. Beta and RC notes start with an
+explicit pre-release notice; each prerelease is marked as a pre-release and
+Latest is explicitly disabled both when creating its draft and when publishing
+it. Stable releases explicitly set Latest from the highest published stable
+version, so a later 1.6.x hotfix cannot displace a published 2.0.0 release.
+Package names retain the full beta/RC suffix. The macOS bundle version remains
+the numeric `2.0.0` value required by macOS, while the executable, help
+metadata, manifest and archive name retain the complete prerelease version.
 
 If a run fails before tag creation, fix the cause and rerun the same version.
 After tag creation, never move or delete the tag; it reserves that version. If

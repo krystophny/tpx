@@ -14,7 +14,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from ci import build_candidate, release_policy, verify_release
+from ci import build_candidate, publish_release, release_policy, verify_release
 
 
 class ReleasePolicyTests(unittest.TestCase):
@@ -132,6 +132,61 @@ class PackageMetadataTests(unittest.TestCase):
             build_candidate.stage_runtime(package, binary, "linux-x86_64", "2.0.0-beta.1")
             help_file = package / "help/tpx_tpxabout_tpx_drawing_tool.htm"
             self.assertIn(b'content="2.0.0-beta.1"', help_file.read_bytes())
+
+
+class ReleaseCommandTests(unittest.TestCase):
+    def test_stable_draft_keeps_reviewed_release_notes(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-release-command-") as temporary:
+            root = Path(temporary)
+            notes = root / "RELEASE_NOTES.md"
+            notes.write_text("Reviewed stable notes.\n")
+            assets = root / "assets"
+            assets.mkdir()
+            (assets / "package.zip").write_bytes(b"package")
+            args = publish_release.create_command(
+                "v1.6.1", "owner/repo", "b" * 40, "1.6.1",
+                False, False, notes, assets)
+            self.assertIn("--generate-notes", args)
+            self.assertEqual(args[args.index("--notes") + 1], "Reviewed stable notes.")
+            self.assertIn("--latest=false", args)
+            self.assertNotIn("--prerelease", args)
+
+    def test_prerelease_draft_keeps_reviewed_and_generated_notes(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-release-command-") as temporary:
+            root = Path(temporary)
+            notes = root / "RELEASE_NOTES.md"
+            notes.write_text("Reviewed release notes.\n")
+            assets = root / "assets"
+            assets.mkdir()
+            (assets / "package.zip").write_bytes(b"package")
+            calls = []
+            command = publish_release.create_command(
+                "v2.0.0-beta.1", "owner/repo", "a" * 40, "2.0.0-beta.1",
+                "true", "true", notes, assets)
+            publish_release.run(command, runner=lambda args, **kwargs: calls.append((args, kwargs)))
+            args, kwargs = calls[0]
+            self.assertEqual(kwargs, {"check": True})
+            self.assertIn("--generate-notes", args)
+            self.assertEqual(args[args.index("--notes") + 1],
+                             "Pre-release of TpX 2.0.0-beta.1. This build is for evaluation "
+                             "and is not a stable release.\n\nReviewed release notes.")
+            self.assertIn("--latest=false", args)
+            self.assertIn("--prerelease", args)
+
+    def test_final_publication_explicitly_sets_latest_and_prerelease(self):
+        cases = ((False, True, "--latest=true", False),
+                 (False, False, "--latest=false", False),
+                 (True, True, "--latest=false", True))
+        for prerelease, latest, expected_latest, expected_prerelease in cases:
+            with self.subTest(prerelease=prerelease, latest=latest):
+                calls = []
+                command = publish_release.publish_command(
+                    "v2.0.0", "owner/repo", prerelease, latest)
+                publish_release.run(command, runner=lambda args, **kwargs: calls.append((args, kwargs)))
+                args, kwargs = calls[0]
+                self.assertEqual(kwargs, {"check": True})
+                self.assertIn(expected_latest, args)
+                self.assertEqual("--prerelease" in args, expected_prerelease)
 
 
 class ReleaseArtifactTests(unittest.TestCase):
