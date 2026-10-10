@@ -2,24 +2,30 @@
 export function documentStatusImports(runtime) {
   const status = document.querySelector('#document-status');
   const decoder = new TextDecoder();
-  let hasSource = false, dirty = false, downloadState = '', errorMessage = '';
+  let hasSource = false, dirty = false, downloadUnconfirmed = false;
+  let downloadState = '', errorMessage = '';
   const read = (pointer, length) => decoder.decode(
     new Uint8Array(runtime.memory().buffer, pointer, length));
 
   function refresh() {
-    status.dataset.state = dirty ? 'unsaved' : downloadState === 'failed' ? 'error' : 'clean';
+    status.dataset.state = dirty ? 'unsaved' : downloadUnconfirmed ? 'unconfirmed' :
+      downloadState === 'failed' ? 'error' : 'clean';
     if (dirty) {
       status.textContent = errorMessage
-        ? `${errorMessage} Your changes remain unsaved.`
+        ? `${errorMessage} Your changes remain unsaved. The browser may suppress leave-page warnings.`
         : downloadState === 'failed'
-        ? 'The download could not be started. Your changes remain unsaved; try Download a copy again.'
+        ? 'The download could not be started. Your changes remain unsaved; try Download a copy again. The browser may suppress leave-page warnings.'
         : downloadState === 'started'
-        ? 'A copy download was requested, but this browser document still has unsaved changes.'
-        : 'Unsaved changes in this browser document. Download a copy to keep them; the original file is unchanged.';
+        ? 'A copy download was requested, but this browser document still has unsaved changes. The browser may suppress leave-page warnings.'
+        : 'Unsaved changes in this browser document. Download a copy to keep them; the original file is unchanged. The browser may suppress leave-page warnings.';
+    } else if (downloadUnconfirmed && errorMessage) {
+      status.textContent = `${errorMessage} An earlier download request is unconfirmed; the browser cannot confirm it was saved.`;
+    } else if (downloadUnconfirmed && downloadState === 'failed') {
+      status.textContent = 'A later download could not be started. An earlier copy request is still unconfirmed; the browser cannot confirm it was saved, and the original file is unchanged.';
+    } else if (downloadUnconfirmed) {
+      status.textContent = 'Download requested. The browser cannot confirm it was saved, and the original file is unchanged. The browser may suppress leave-page warnings.';
     } else if (downloadState === 'failed') {
       status.textContent = errorMessage || 'The download could not be started. Your browser document remains available; try Download a copy again.';
-    } else if (downloadState === 'started') {
-      status.textContent = 'Download requested. The browser cannot confirm it was saved, and the original file is unchanged.';
     } else if (hasSource) {
       status.textContent = 'This browser copy is not synchronized with the original file. Download a copy to keep it outside this browser.';
     } else {
@@ -28,7 +34,7 @@ export function documentStatusImports(runtime) {
   }
 
   window.addEventListener('beforeunload', event => {
-    if (!dirty) return;
+    if (!dirty && !downloadUnconfirmed) return;
     event.preventDefault();
     event.returnValue = '';
   });
@@ -41,6 +47,10 @@ export function documentStatusImports(runtime) {
     },
     browser_document_source: value => {
       hasSource = Boolean(value);
+      refresh();
+    },
+    browser_document_reset: () => {
+      downloadUnconfirmed = false;
       errorMessage = '';
       downloadState = '';
       refresh();
@@ -59,6 +69,7 @@ export function documentStatusImports(runtime) {
     browser_download_finish: success => {
       const started = runtime.downloads.finish(Boolean(success));
       downloadState = started ? 'started' : 'failed';
+      if (started) downloadUnconfirmed = true;
       errorMessage = '';
       refresh();
       return Number(started);
