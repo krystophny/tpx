@@ -82,6 +82,8 @@ type
     procedure Entities_Proc(const DOCTYPE: string;
       const Attributes: TAttributes);
     function ReplaceEntities(const St: string): string;
+    function TextContent(const E: TPrimElement;
+      const PreserveWhitespace: Boolean): string;
     procedure SVGProc(var E: TPrimElement);
     procedure DescProc(var E: TPrimElement);
     procedure TitleProc(var E: TPrimElement);
@@ -251,6 +253,8 @@ begin
     StartElement, nil, SAX_Comment);
   // SVG XML defaults to UTF-8 when it has no encoding declaration.
   fSAX.DefaultEncoding := enUTF8;
+  // Keep UTF-8 text as XML character references for the legacy ANSI model.
+  fSAX.TextUTF8AsCharReferences := True;
   AddProc('svg', SVGProc, nil);
   AddProc('defs', DefsStartProc, DefsEndProc);
   AddProc('use', nil, UseProc);
@@ -540,6 +544,16 @@ begin
   finally
     fParser.Free;
   end;
+end;
+
+function T_SVG_Import.TextContent(const E: TPrimElement;
+  const PreserveWhitespace: Boolean): string;
+begin
+  if E.HasUTF8CharReferences then
+    Result := E.Text
+  else
+    Result := ReplaceEntities(E.Text);
+  if not PreserveWhitespace then Result := Trim(Result);
 end;
 
 procedure T_SVG_Import.SVGProc(var E: TPrimElement);
@@ -911,10 +925,8 @@ end;
 
 procedure T_SVG_Import.TextEndProc(var E: TPrimElement);
 begin
-  if fCurrState.TextPreserve then
-    fCurrState.Text := fCurrState.Text + ReplaceEntities(E.Text)
-  else
-    fCurrState.Text := fCurrState.Text + ReplaceEntities(Trim(E.Text));
+  fCurrState.Text := fCurrState.Text +
+    TextContent(E, fCurrState.TextPreserve);
   if fCurrState.Text = '' then
   begin
     EndStateProc(E);
@@ -954,10 +966,8 @@ end;
 
 procedure T_SVG_Import.TSpanEndProc(var E: TPrimElement);
 begin
-  if fCurrState.TextPreserve then
-    fCurrState.Text := fCurrState.Text + ReplaceEntities(E.Text)
-  else
-    fCurrState.Text := fCurrState.Text + ReplaceEntities(Trim(E.Text));
+  fCurrState.Text := fCurrState.Text +
+    TextContent(E, fCurrState.TextPreserve);
   if fCurrState.Text = '' then
   begin
     EndStateProc(E);
@@ -986,8 +996,7 @@ end;
 
 procedure T_SVG_Import.textPathEndProc(var E: TPrimElement);
 begin
-  fCurrState.Text :=
-    fCurrState.Text + ReplaceEntities(Trim(E.Text));
+  fCurrState.Text := fCurrState.Text + TextContent(E, False);
   EndStateProc(E);
 end;
 

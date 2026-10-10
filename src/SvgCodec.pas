@@ -941,6 +941,7 @@ begin
       // The strict profile validator has already checked the byte stream as
       // UTF-8. XML defaults to UTF-8 when no declaration is present.
       Parser.DefaultEncoding := enUTF8;
+      Parser.TextUTF8AsCharReferences := True;
       Parser.OnCDATA := CDATA;
       Parser.OnDOCTYPE := Doctype;
       Parser.ParseStream(Stream);
@@ -1602,12 +1603,20 @@ end;
 procedure TSvgProfileScan.Text(const Value: string);
 var
   Tag: string;
+  I: Integer;
 begin
   if (fDepth = 0) and (Trim(Value) <> '') then
     raise ESvgCodec.Create('Text appears outside the SVG root element');
   if fDepth > 0 then
   begin
     Tag := LocalSvgName(fNames[fNames.Count - 1]);
+    if ValueIn(Tag, ['title', 'desc']) then
+      for I := 1 to Length(Value) do
+        if Ord(Value[I]) > $7F then
+        begin
+          AddIssue('non-ASCII title/desc metadata is not retained');
+          Break;
+        end;
     if (Tag = 'text') and not fTextPreserve and
       (Trim(Value) <> Value) then
       AddIssue('leading or trailing text whitespace is not retained');
