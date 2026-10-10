@@ -15,6 +15,8 @@ var
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
   AutoRefreshEnabled: Boolean = True;
+  CrashRecoveryEnabled: Boolean = True;
+  DocumentAutoSavePreferences: TStringList;
 {$ENDIF}
 {$ENDIF}
 
@@ -148,6 +150,12 @@ begin
 {$IFNDEF CPUWASM32}
   SettingsList.AddBoolean('AutoRefreshEnabled', @AutoRefreshEnabled,
     'Automatically reload changed source documents');
+  SettingsList.AddBoolean('CrashRecoveryEnabled', @CrashRecoveryEnabled,
+    'Keep local recovery drafts independently of source AutoSave');
+  DocumentAutoSavePreferences := TStringList.Create;
+  SettingsList.AddStringList('DocumentAutoSavePreferences',
+    DocumentAutoSavePreferences,
+    'Per-document source AutoSave preferences, keyed by canonical path');
 {$ENDIF}
 {$ENDIF}
 
@@ -345,5 +353,10 @@ initialization
   Settings0.Initialize;
 finalization
   SettingsList.Free;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  DocumentAutoSavePreferences.Free;
+{$ENDIF}
+{$ENDIF}
 end.
 
