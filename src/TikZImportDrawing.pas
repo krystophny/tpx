@@ -448,9 +448,6 @@ begin
         'TikZ source is invalid, unsupported, or cancelled'));
     end;
     Scene := Semantic.DetachScene;
-    if Scene.ObjectCount = 0 then
-      raise EReadError.Create(
-        'TikZ picture contains no editable visible drawing objects');
     Context := TTikZImportContext.Create(Syntax, Scene);
     Syntax := nil;
     Scene := nil;

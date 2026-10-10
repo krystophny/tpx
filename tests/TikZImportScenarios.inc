@@ -1,7 +1,7 @@
 procedure TestTikZImportNativeScene;
 var
   FileName, FragmentFileName, RejectedFileName, UntrustedFileName,
-    ErrorText: string;
+    EmptyFileName, NoPictureFileName, ErrorText: string;
   Mode: TTpXMode;
   Context: TTikZImportContext;
   Binding: TTikZSourceBinding;
@@ -13,8 +13,8 @@ var
   Angle: Double;
   I: Integer;
   OriginalObjectID: Integer;
-  RejectedSource, UntrustedSource: RawByteString;
-  RejectedStream, UntrustedStream: TFileStream;
+  RejectedSource, UntrustedSource, EmptySource, NoPictureSource: RawByteString;
+  RejectedStream, UntrustedStream, EmptyStream, NoPictureStream: TFileStream;
   CompilationsBefore: Integer;
   procedure Near(Actual, Expected: Double; const Description: string);
   begin
@@ -215,5 +215,36 @@ begin
     'Untrusted imported TeX queued preview work after the event loop ran');
   Check(LiveTeXCompilationCount = CompilationsBefore,
     'Untrusted imported TeX started a compile after the event loop ran');
+
+  EmptyFileName := ChangeFileExt(FragmentFileName, '.empty.tex');
+  EmptySource := '\begin{tikzpicture}\end{tikzpicture}';
+  EmptyStream := TFileStream.Create(EmptyFileName, fmCreate);
+  try
+    EmptyStream.WriteBuffer(EmptySource[1], Length(EmptySource));
+  finally
+    EmptyStream.Free;
+  end;
+  CompilationsBefore := LiveTeXCompilationCount;
+  Check(Mode.OpenDocumentFromPath(EmptyFileName, ErrorText),
+    'A valid empty TikZ picture failed to open: ' + ErrorText);
+  Check(MainForm.TheDrawing.ObjectsCount = 0,
+    'An empty TikZ picture should materialize as an empty native drawing');
+  Check(not LiveTeXDocumentTrusted and not LiveTeXPending and
+    (LiveTeXCompilationCount = CompilationsBefore),
+    'Opening an empty TikZ picture must remain untrusted and launch no TeX');
+
+  NoPictureFileName := ChangeFileExt(FragmentFileName, '.no-picture.tex');
+  NoPictureSource := '\documentclass{article}\begin{document}plain' +
+    '\end{document}';
+  NoPictureStream := TFileStream.Create(NoPictureFileName, fmCreate);
+  try
+    NoPictureStream.WriteBuffer(NoPictureSource[1], Length(NoPictureSource));
+  finally
+    NoPictureStream.Free;
+  end;
+  Check(not Mode.OpenDocumentFromPath(NoPictureFileName, ErrorText),
+    'A TeX document without a TikZ picture must remain unsupported');
+  Check(MainForm.TheDrawing.ObjectsCount = 0,
+    'Rejecting a TeX document without a picture changed the open empty drawing');
 
 end;
