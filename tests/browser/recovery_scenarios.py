@@ -32,7 +32,7 @@ def records(page):
           get.onerror = () => reject(get.error);
         });
         return Promise.all(rows.map(async row => ({id: row.id, byteLength: row.byteLength,
-          updatedAt: row.updatedAt, title: row.metadata?.title || '',
+          updatedAt: row.updatedAt, sequence: row.sequence, title: row.metadata?.title || '',
           payloadHash: Array.from(new Uint8Array(await crypto.subtle.digest(
             'SHA-256', row.payload))).map(value => value.toString(16).padStart(2, '0')).join('')})));
       } finally { db.close(); }
@@ -154,6 +154,33 @@ def s_recovery_survives_application_restart(app):
     return f'IndexedDB draft survived app reload and restored {ink} geometry pixels as a new drawing'
 
 
+def hold_recovery_checkpoint_timer(page, record_id):
+    page.evaluate('''(recordId) => {
+      const originalSetInterval = window.setInterval.bind(window);
+      window.tpxRecoveryTimerCallback = null;
+      window.setInterval = (callback, delay, ...args) => {
+        if (delay === 750) {
+          window.tpxRecoveryTimerCallback = callback;
+          return originalSetInterval(() => {}, delay, ...args);
+        }
+        return originalSetInterval(callback, delay, ...args);
+      };
+      const originalPut = IDBObjectStore.prototype.put;
+      window.tpxRecoveryCheckpointCommitted = false;
+      window.tpxRecoveryCheckpointSequence = 0;
+      IDBObjectStore.prototype.put = function(value, ...args) {
+        if (this.name === 'drafts' && value?.id === recordId) {
+          const sequence = value.sequence;
+          this.transaction.addEventListener('complete', () => {
+            window.tpxRecoveryCheckpointCommitted = true;
+            window.tpxRecoveryCheckpointSequence = sequence;
+          }, {once: true});
+        }
+        return originalPut.call(this, value, ...args);
+      };
+    }''', record_id)
+
+
 def s_recovery_noop_download_keeps_previous_draft(app):
     opt_in(app.page)
     draw_line(app)
@@ -162,6 +189,9 @@ def s_recovery_noop_download_keeps_previous_draft(app):
     if len(before) != 1:
         raise AssertionError(f'expected one existing draft before download, got {before}')
 
+    hold_recovery_checkpoint_timer(app.page, before[0]['id'])
+    draw_line(app)
+    app.page.wait_for_function('window.tpxRecoveryTimerCallback !== null')
     app.page.evaluate('''() => {
       window.tpxNoopDownloadClicks = 0;
       HTMLAnchorElement.prototype.click = function() { window.tpxNoopDownloadClicks++; };
@@ -172,24 +202,42 @@ def s_recovery_noop_download_keeps_previous_draft(app):
     dialog.get_by_role('button', name='OK', exact=True).click()
     app.page.wait_for_function('window.tpxNoopDownloadClicks === 1')
     app.page.wait_for_function('document.querySelector("#document-status").dataset.state === "unconfirmed"')
+    app.page.wait_for_function('window.tpxRecoveryCheckpointCommitted === true')
     status = app.page.locator('#document-status').inner_text()
     if 'cannot confirm' not in status:
         raise AssertionError(f'no-op anchor was represented as a durable copy: {status}')
     after_request = records(app.page)
     if (len(after_request) != 1 or after_request[0]['id'] != before[0]['id'] or
-            after_request[0]['payloadHash'] != before[0]['payloadHash']):
-        raise AssertionError('an unconfirmed download retired or changed the prior draft')
+            after_request[0]['payloadHash'] == before[0]['payloadHash'] or
+            app.page.evaluate('window.tpxRecoveryCheckpointSequence') <= before[0]['sequence']):
+        raise AssertionError('the pre-download edit was not checkpointed under the prior recovery identity')
 
     draw_line(app)
-    wait_saved(app.page)
+    app.page.wait_for_function('window.tpxRecoveryTimerCallback !== null')
+    app.page.evaluate('window.tpxRecoveryTimerCallback()')
+    app.page.wait_for_function('''async (oldId) => {
+      const request = indexedDB.open('tpx-browser-local-recovery');
+      const db = await new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      try {
+        const tx = db.transaction('drafts', 'readonly');
+        const rows = await new Promise((resolve, reject) => {
+          const get = tx.objectStore('drafts').getAll();
+          get.onsuccess = () => resolve(get.result || []);
+          get.onerror = () => reject(get.error);
+        });
+        return rows.length === 2 && rows.some(row => row.id !== oldId);
+      } finally { db.close(); }
+    }''', arg=before[0]['id'], timeout=10000)
     after_edit = records(app.page)
-    if (len(after_edit) != 2 or before[0]['id'] not in {row['id'] for row in after_edit} or
-            not any(row['id'] != before[0]['id'] for row in after_edit)):
+    if before[0]['id'] not in {row['id'] for row in after_edit} or len(after_edit) != 2:
         raise AssertionError(f'new edit did not rotate recovery identity while retaining prior draft: {after_edit}')
     retained = next(row for row in after_edit if row['id'] == before[0]['id'])
-    if retained['payloadHash'] != before[0]['payloadHash']:
-        raise AssertionError('the prior durable draft changed after identity rotation')
-    return 'a no-op download request remains explicitly unconfirmed and keeps its earlier recovery draft'
+    if retained['payloadHash'] != after_request[0]['payloadHash']:
+        raise AssertionError('the older recovery identity changed after rotation')
+    return 'an unconfirmed no-op download checkpoints the latest scene under the old ID, then later edits use a new ID'
 
 
 def s_recovery_restores_raw_inline_label_after_restart(app):
