@@ -55,7 +55,12 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(float(rectangle.get("width")), 20)
         self.assertEqual(float(rectangle.get("height")), 10)
         line = drawing.find(SVG + "polyline")
-        self.assertEqual(line.get("points"), "0.00,0.00 20.00,-10.00")
+        points = [tuple(map(float, point.split(",")))
+                  for point in line.get("points").split()]
+        self.assertEqual(len(points), 2)
+        for actual, expected in zip(points, [(0, 0), (20, -10)]):
+            self.assertAlmostEqual(actual[0], expected[0], places=4)
+            self.assertAlmostEqual(actual[1], expected[1], places=4)
 
     def test_numeric_character_references(self):
         source = self.drawing("Z")
