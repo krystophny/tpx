@@ -191,9 +191,14 @@ procedure TLinuxFileChangeSource.WakeWorker;
 var
   WakeByte: Byte;
 begin
-  if FWakeWriteFD < 0 then Exit;
-  WakeByte := 1;
-  c_write(FWakeWriteFD, @WakeByte, 1);
+  EnterCriticalSection(FLock);
+  try
+    if FWakeWriteFD < 0 then Exit;
+    WakeByte := 1;
+    c_write(FWakeWriteFD, @WakeByte, 1);
+  finally
+    LeaveCriticalSection(FLock);
+  end;
 end;
 
 function TLinuxFileChangeSource.AddDirectoryWatch(const Directory: UTF8String;
