@@ -656,7 +656,7 @@ end;
 
 procedure TestAutoSaveUnresolvedImageWarning;
 var BitmapEntry: TBitmapEntry; BitmapObject: TBitmap2D;
-  Deadline: QWord; WarningText: string;
+  Deadline: QWord; WarningText: string; I: Integer;
 begin
   MainForm.Show;
   Application.ProcessMessages;
@@ -673,9 +673,9 @@ begin
   Deadline := GetTickCount64 + 6000;
   repeat
     Application.ProcessMessages;
-    if MainForm.StatusBar1.Panels.Count > 0 then
-      WarningText := MainForm.StatusBar1.Panels[
-        MainForm.StatusBar1.Panels.Count - 1].Text;
+    WarningText := '';
+    for I := 0 to MainForm.StatusBar1.Panels.Count - 1 do
+      WarningText := WarningText + ' ' + MainForm.StatusBar1.Panels[I].Text;
     if Pos('omits 1 linked image', LowerCase(WarningText)) > 0 then Break;
     Sleep(10);
   until GetTickCount64 >= Deadline;
