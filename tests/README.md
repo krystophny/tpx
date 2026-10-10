@@ -28,10 +28,11 @@ the manifest count when adding cases. A missing or zero-match suite fails.
 subset while still checking the complete discovered count.
 
 `make test-gui` builds TpX and runs the existing export and LCL runtime suites.
-On Linux, run it under `xvfb-run -a` as the CI workflow does. `make test-tex`
-requires `pdflatex`, so the TeX suite cannot pass with every case skipped.
-Existing Ghostscript, dvips, and sam2p cases retain their explicit
-dependency-based skips when those optional paths are unavailable.
+`make test-tex` also launches the LCL application for export. On Linux, run both
+targets under `xvfb-run -a` as the CI workflow does. The TeX target requires
+`pdflatex`, so the suite cannot pass with every case skipped. Existing
+Ghostscript, dvips, and sam2p cases retain their explicit dependency-based
+skips when those optional paths are unavailable.
 
 `make test-watch` filters the core suite for watcher cases. It intentionally
 fails while no watcher case is registered; the watcher backend issue adds the
