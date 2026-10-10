@@ -75,8 +75,12 @@ implementation
 
 uses
 //WinBasic,
-  MainUnit, Math{$IFDEF FPC}, Classes, {$IFDEF WINDOWS}Windows,{$ENDIF}
-  {$IFNDEF WASI}Process,{$ENDIF} ExtCtrls{$ENDIF};
+  MainUnit, Math{$IFDEF FPC}, Classes,
+{$IFNDEF WASI}
+  Process{$IFDEF MSWINDOWS}, ProcessUnicode{$ENDIF},
+{$ENDIF}
+  {$IFDEF WINDOWS}Windows,{$ENDIF} ExtCtrls
+{$ENDIF};
 
 {$IF DEFINED(FPC) AND DEFINED(MSWINDOWS)}
 function c_GetTempPathW(BufferLength: Cardinal; Buffer: PWideChar): Cardinal;
@@ -85,17 +89,23 @@ function c_GetTempPathW(BufferLength: Cardinal; Buffer: PWideChar): Cardinal;
 
 {$IF DEFINED(FPC) AND NOT DEFINED(WASI)}
 type
+{$IFDEF MSWINDOWS}
+  TFileExecProcess = ProcessUnicode.TProcess;
+{$ELSE}
+  TFileExecProcess = TProcess;
+{$ENDIF}
+
   TBackgroundTool = class(TComponent)
   private
-    Child: TProcess;
+    Child: TFileExecProcess;
     Timer: TTimer;
     procedure Poll(Sender: TObject);
   public
-    constructor Create(AChild: TProcess); reintroduce;
+    constructor Create(AChild: TFileExecProcess); reintroduce;
     destructor Destroy; override;
   end;
 
-constructor TBackgroundTool.Create(AChild: TProcess);
+constructor TBackgroundTool.Create(AChild: TFileExecProcess);
 begin
   inherited Create(Application);
   Timer := TTimer.Create(Self);
@@ -268,8 +278,10 @@ var
 {$ELSE}
   {$IFNDEF WASI}
 var
-  Child: TProcess;
+  Child: TFileExecProcess;
+{$IFDEF UNIX}
   Command: string;
+{$ENDIF}
   {$ENDIF}
 {$ENDIF}
 begin
@@ -359,9 +371,13 @@ begin
     [ExtractFileName(aCmdLine)]));
   {$ELSE}
   Result := False;
-  Child := TProcess.Create(nil);
+  Child := TFileExecProcess.Create(nil);
   try
+{$IFDEF MSWINDOWS}
+    Child.CurrentDirectory := UTF8Decode(Directory);
+{$ELSE}
     Child.CurrentDirectory := Directory;
+{$ENDIF}
 {$IFDEF UNIX}
     Command := aCmdLine;
     if InFile <> '' then Command := Command + ' < ' + QuoteShellArg(InFile);
@@ -370,10 +386,15 @@ begin
     Child.Parameters.Add('-c');
     Child.Parameters.Add(Command);
 {$ELSE}
+{$IFDEF MSWINDOWS}
+    Child.CommandLine := UTF8Decode(aCmdLine);
+    if aHide then Child.Options := Child.Options + [Process.poNoConsole];
+{$ELSE}
     Child.CommandLine := aCmdLine;
-    if aHide then Child.Options := Child.Options + [poNoConsole];
+    if aHide then Child.Options := Child.Options + [Process.poNoConsole];
 {$ENDIF}
-    if aWait then Child.Options := Child.Options + [poWaitOnExit];
+{$ENDIF}
+    if aWait then Child.Options := Child.Options + [Process.poWaitOnExit];
     try
       Child.Execute;
       Result := not aWait or (Child.ExitStatus = 0);
