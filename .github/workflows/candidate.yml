@@ -50,6 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -69,6 +70,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./ci/bootstrap-windows.ps1
+      - name: Run release policy and artifact regressions on Unix
+        if: runner.os != 'Windows'
+        run: python3 tests/test_release.py
+      - name: Run release policy and artifact regressions on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python tests/test_release.py
       - name: Build and run strict core tests on Unix
         if: runner.os != 'Windows'
         run: python3 tests/test_core.py --compiler "$FPC" --build-dir "$RUNNER_TEMP/tpx-core-tests"

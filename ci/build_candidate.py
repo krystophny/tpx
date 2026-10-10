@@ -14,6 +14,13 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def write_checksum(archive):
+    checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
+    (archive.parent / (archive.name + ".sha256")).write_bytes(
+        f"{checksum}  {archive.name}\n".encode("ascii"))
+    return checksum
+
+
 def command(*args, **kwargs):
     return subprocess.run(list(map(str, args)), check=True, cwd=ROOT, **kwargs)
 
@@ -66,8 +73,12 @@ def stage_runtime(package, binary, platform, version):
         shutil.copy2(ROOT / "ci" / filename, resource_dir / filename)
     help_dir = resource_dir / "help"
     help_dir.mkdir()
-    shutil.copy2(ROOT / "ci" / "help.html",
-                 help_dir / "tpx_tpxabout_tpx_drawing_tool.htm")
+    help_html = (ROOT / "ci" / "help.html").read_text(encoding="utf-8")
+    marker = 'content="{{TPX_VERSION}}"'
+    if marker not in help_html:
+        raise RuntimeError("offline help is missing its version marker")
+    (help_dir / "tpx_tpxabout_tpx_drawing_tool.htm").write_text(
+        help_html.replace(marker, f'content="{version}"'), encoding="utf-8")
     if platform.startswith("macos-"):
         # Seal the complete bundle, including the editable TeX templates.
         command("codesign", "--force", "--sign", "-", package / "TpX.app")
@@ -77,16 +88,17 @@ def stage_runtime(package, binary, platform, version):
 
 def build_and_package():
     version = os.environ["CANDIDATE_VERSION"]
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?", version):
-        raise ValueError("version must be a numeric major.minor.patch with optional suffix")
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-(?:beta|rc)\.[1-9][0-9]*)?", version):
+        raise ValueError("version must be X.Y.Z with an optional beta.N or rc.N suffix")
     kind = os.environ.get("PACKAGE_KIND", "candidate")
     if kind not in {"candidate", "release"}:
         raise ValueError("PACKAGE_KIND must be candidate or release")
-    if kind == "release":
-        source_version = re.search(r"About_Version = 'Version ([^']+)'",
-                                   (ROOT / "src/tpx.inc").read_text()).group(1)
-        if source_version != version:
-            raise ValueError(f"About version {source_version!r} != release {version!r}")
+    source_version_match = re.search(
+        r"^\s*About_Version\s*=\s*'Version ([^']+)'",
+        (ROOT / "src/tpx.inc").read_text(), re.MULTILINE)
+    source_version = source_version_match.group(1) if source_version_match else None
+    if source_version != version:
+        raise ValueError(f"About version {source_version!r} != package version {version!r}")
     platform = os.environ["CANDIDATE_PLATFORM"]
     widgetset = os.environ["WIDGETSET"]
     if (platform, widgetset) not in {
@@ -115,6 +127,8 @@ def build_and_package():
     binary_dir = ROOT / "obj" / f"{cpu}-{operating_system}"
     binary = binary_dir / ("TpX" + suffix)
     runtime = binary_dir / ("RuntimeTests" + suffix)
+    if f"Version {version}".encode() not in binary.read_bytes():
+        raise RuntimeError(f"built binary does not report Version {version}")
     check_exports(binary)
     command(sys.executable, "tests/test_runtime.py",
             env=dict(os.environ, RUNTIME_BINARY=str(runtime)))
@@ -147,6 +161,7 @@ def build_and_package():
         manifest = {
             "status": ("release" if kind == "release" else
                        "candidate; manual playtest required before release"),
+            "release_status": "prerelease" if "-" in version else "stable",
             "proposed_version": version, "commit": commit, "platform": platform,
             "executable": packaged_binary.relative_to(package).as_posix(),
             "macos_signing": "ad hoc" if platform.startswith("macos-") else None,
@@ -205,8 +220,7 @@ def build_and_package():
         check_exports(extracted / name / packaged_binary.relative_to(package))
         if platform.startswith("macos-"):
             command("codesign", "--verify", "--deep", "--strict", app)
-    checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
-    (dist / (archive.name + ".sha256")).write_text(f"{checksum}  {archive.name}\n")
+    checksum = write_checksum(archive)
     print(f"Checked {kind} package: {archive.name}\nSHA256: {checksum}", flush=True)
 
 
