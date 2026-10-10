@@ -462,6 +462,23 @@ begin
   until GetTickCount64 >= Deadline;
   Check(MainForm.AutoReloadState.SettlePending,
     'No native callback was pending before close cancellation test');
+  MainForm.EndSceneInteraction;
+  MainForm.EventManager.SendMessage(Msg_New, MainForm);
+  Check((MainForm.EventManager.DocumentSession.SourcePath = '') and
+    not MainForm.AutoReloadState.Open and
+    not MainForm.AutoReloadState.SettlePending and
+    not MainForm.AutoReloadState.Conflict,
+    'New drawing retained an old source binding, conflict, or queued reload');
+  Deadline := GetTickCount64 + 250;
+  repeat
+    Application.ProcessMessages;
+    MainForm.ProcessPendingReload(GetTickCount64 + 1000);
+    Sleep(10);
+  until GetTickCount64 >= Deadline;
+  Check((MainForm.TheDrawing.ObjectsCount = 0) and
+    not MainForm.AutoReloadState.SettlePending and
+    not MainForm.AutoReloadState.Conflict,
+    'Queued event from the prior source affected the new drawing');
   MainForm.Free;
   MainForm := nil;
   DeleteFile(FileName);

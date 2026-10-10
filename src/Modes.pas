@@ -1412,6 +1412,11 @@ end;
 
 procedure TTpXMode.NewDrawing(const FileName: string);
 begin
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  MainForm.ClearDocumentWatchBinding;
+{$ENDIF}
+{$ENDIF}
   Drawing.Clear;
   TpX_Manager.DocumentSession.Clear;
 {$IFDEF FPC}
