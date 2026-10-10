@@ -26,7 +26,7 @@ procedure RegisterSvgDocumentCodec;
 
 implementation
 
-uses Math, PrimSAX, MprtSVG, Output, gzio, DocumentIO;
+uses Math, StrUtils, PrimSAX, MprtSVG, Output, gzio, DocumentIO;
 
 const
   MaxSvgInputBytes = 4 * 1024 * 1024;
@@ -1068,27 +1068,27 @@ begin
   begin
     if Copy(Source, I, 4) = '<!--' then
     begin
-      J := Pos('-->', Copy(Source, I + 4, MaxInt));
+      J := PosEx('-->', Source, I + 4);
       if J = 0 then Exit;
-      Inc(I, 4 + J + 2);
+      I := J + 3;
       Continue;
     end;
     if Copy(Source, I, 9) = '<![CDATA[' then
     begin
-      J := Pos(']]>', Copy(Source, I + 9, MaxInt));
+      J := PosEx(']]>', Source, I + 9);
       if J = 0 then Exit;
-      Inc(I, 9 + J + 2);
+      I := J + 3;
       Continue;
     end;
     if Copy(Source, I, 2) = '<?' then
     begin
-      J := Pos('?>', Copy(Source, I + 2, MaxInt));
+      J := PosEx('?>', Source, I + 2);
       if J = 0 then Exit;
       if ((I = 1) or ((I = 4) and
         (Copy(Source, 1, 3) = #$EF#$BB#$BF))) and
         (Copy(Source, I, 5) = '<?xml') then
       begin
-        XmlDecl := Copy(Source, I, J + 3);
+        XmlDecl := Copy(Source, I, J - I + 2);
         EncodingPos := Pos('encoding', LowerCase(XmlDecl));
         if EncodingPos > 0 then
         begin
@@ -1115,7 +1115,7 @@ begin
           end;
         end;
       end;
-      Inc(I, 2 + J + 1);
+      I := J + 2;
       Continue;
     end;
     if Copy(Source, I, 9) = '<!DOCTYPE' then
@@ -1152,8 +1152,10 @@ begin
         if not TryStrToInt(Copy(Entity, 2, MaxInt), Code) then
           raise ESvgCodec.Create('Malformed numeric XML entity reference');
       end;
-      if not ((Code in [9, 10, 13]) or ((Code >= 32) and
-        (Code <= $10FFFF) and not ((Code >= $D800) and (Code <= $DFFF)))) then
+      if not ((Code in [9, 10, 13]) or
+        ((Code >= $20) and (Code <= $D7FF)) or
+        ((Code >= $E000) and (Code <= $FFFD)) or
+        ((Code >= $10000) and (Code <= $10FFFF))) then
         raise ESvgCodec.Create('Invalid Unicode code point in XML entity reference');
     end;
     I := EndRef + 1;
