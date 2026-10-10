@@ -8,6 +8,50 @@ begin
   Check(Obj = Second, Description + ': second object changed');
 end;
 
+procedure TestEditSessionTextWhitespaceSaveRoundTrip;
+var
+  Drawing, Candidate: TDrawing2D;
+  TextObject, RestoredText: TText2D;
+  DisplayText, DecodedText: TEditUtf8Text;
+  StoredText, DocumentBytes: RawByteString;
+  CodecContext: TObject;
+  Diagnostics: TStringList;
+  CanSaveBack: Boolean;
+begin
+  Drawing := TDrawing2D.CreateDetached;
+  Candidate := nil;
+  CodecContext := nil;
+  Diagnostics := TStringList.Create;
+  try
+    DisplayText := LCLTextToUTF8Bytes(
+      'before'#9'column'#10'line'#13'return'#10);
+    StoredText := EncodeEditTextForTpX(DisplayText);
+    Check(StoredText = 'before&#9;column&#10;line&#13;return&#10;',
+      'TpX attribute whitespace must be encoded as numeric references');
+    TextObject := TText2D.CreateSpec(-1, Point2D(1, 1), 5, '');
+    TextObject.Text := StoredText;
+    Drawing.AddObject(-1, TextObject);
+
+    DocumentBytes := SerializeDocumentToBytes('tpx', Drawing,
+      TDocumentPath(UTF8String('edit-text-whitespace.tpx')));
+    Candidate := LoadDocumentCandidate('tpx',
+      TDocumentPath(UTF8String('edit-text-whitespace.tpx')), DocumentBytes,
+      CanSaveBack, CodecContext, Diagnostics);
+    Check(CanSaveBack and (Candidate.ObjectsCount = 1),
+      'TpX must reopen a text attribute containing line whitespace');
+    RestoredText := Candidate.ObjectList.FirstObj as TText2D;
+    DecodedText := DecodeTpXTextForEdit(RestoredText.Text);
+    Check((Length(DecodedText) = Length(DisplayText)) and
+      CompareMem(@DecodedText[1], @DisplayText[1], Length(DisplayText)),
+      'TpX save/reopen must preserve tab, LF, CR, and trailing LF exactly');
+  finally
+    Candidate.Free;
+    CodecContext.Free;
+    Diagnostics.Free;
+    Drawing.Free;
+  end;
+end;
+
 procedure SetFirstProvisionalPointCount(var State: RawByteString;
   PointCount: Longint);
 var

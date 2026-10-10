@@ -243,8 +243,7 @@ begin
     if B1 < $80 then
     begin
       if B1 = Ord('&') then AppendReference(B1)
-      else if (B1 < 32) and not (B1 in [9, 10, 13]) then
-        AppendReference(B1)
+      else if B1 < 32 then AppendReference(B1)
       else Result := Result + AnsiChar(B1);
       Inc(I);
       Continue;
