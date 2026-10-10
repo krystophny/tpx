@@ -248,6 +248,67 @@ var
     end;
   end;
 
+  procedure CheckInvalidXmlCodepoint(const Reference: string);
+  begin
+    BadInput.Clear;
+    Deep := '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" ' +
+      'height="10mm" viewBox="0 0 10 10"><text>&#' + Reference +
+      ';</text></svg>';
+    BadInput.WriteBuffer(Deep[1], Length(Deep));
+    BadInput.Position := 0;
+    Failed := False;
+    try
+      LoadSvgFromStream(BadInput, Drawing, False, Profile, Detail);
+    except
+      on E: ESvgCodec do Failed := True;
+    end;
+    Check(Failed, 'forbidden numeric XML code point ' + Reference +
+      ' was accepted');
+    Check(Drawing.ObjectsCount = BeforeCount,
+      'forbidden numeric XML code point changed the candidate drawing');
+  end;
+
+  procedure CheckManySmallComments;
+  const
+    FixtureSize = 256 * 1024;
+    CommentText: RawByteString = '<!--x-->';
+    Suffix: RawByteString = '<line x1="1" y1="1" x2="9" y2="9" ' +
+      'stroke="black"/></svg>';
+  var
+    Prefix: RawByteString;
+    CommentCount, CommentIndex, Position: Integer;
+  begin
+    Prefix := '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" ' +
+      'height="10mm" viewBox="0 0 10 10">';
+    CommentCount := (FixtureSize - Length(Prefix) - Length(Suffix)) div
+      Length(CommentText);
+    SetLength(Deep, Length(Prefix) + CommentCount * Length(CommentText) +
+      Length(Suffix));
+    Move(Prefix[1], Deep[1], Length(Prefix));
+    Position := Length(Prefix) + 1;
+    for CommentIndex := 1 to CommentCount do
+    begin
+      Move(CommentText[1], Deep[Position], Length(CommentText));
+      Inc(Position, Length(CommentText));
+    end;
+    Move(Suffix[1], Deep[Position], Length(Suffix));
+    Check(Length(Deep) <= 4 * 1024 * 1024,
+      'adversarial XML comment fixture exceeded the codec input bound');
+    BadInput.Clear;
+    BadInput.WriteBuffer(Deep[1], Length(Deep));
+    BadInput.Position := 0;
+    AuxDrawing := TDrawing2D.Create(nil);
+    try
+      LoadSvgFromStream(BadInput, AuxDrawing, False, Profile, Detail);
+      Check(Profile = sdpImportOnly,
+        'comment-bearing SVG was incorrectly marked editable');
+      Check(AuxDrawing.ObjectsCount = 1,
+        'bounded small-comment SVG lost its line geometry');
+    finally
+      FreeAndNil(AuxDrawing);
+    end;
+  end;
+
   procedure CheckDashRoundTrip;
   const
     ScaledDashSource: RawByteString =
@@ -797,6 +858,10 @@ begin
     Check(Failed, 'invalid UTF-8 SVG text was not rejected');
     Check(Drawing.ObjectsCount = BeforeCount,
       'invalid UTF-8 changed the caller drawing');
+
+    CheckInvalidXmlCodepoint('xFFFE');
+    CheckInvalidXmlCodepoint('xFFFF');
+    CheckManySmallComments;
 
     TempName := GetTempFileName(GetTempDir, 'tpx-svgz-');
     TempStream := TFileStream.Create(TempName, fmCreate);
