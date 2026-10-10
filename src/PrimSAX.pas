@@ -70,8 +70,12 @@ type
     Attributes: TAttributes;
     XMLStack: TStringStack;
     Encoding: TEncoding;
+    fDefaultEncoding: TEncoding;
+    fTextUTF8AsCharReferences: Boolean;
+    fPreserveUTF8Attributes: Boolean;
     function NextTag: TStitchSAXTag;
     function CharsetDecode(const Value: string): string;
+    function UTF8ToCharReferences(const Value: string): string;
   public
     OnStartElement: TSAXStartElementMethod;
     OnEndElement: TSAXEndElementMethod;
@@ -94,6 +98,12 @@ type
     procedure BeginOfParsing;
     procedure ParseBlock(const Data: string);
     procedure EndOfParsing;
+    property DefaultEncoding: TEncoding read fDefaultEncoding
+      write fDefaultEncoding;
+    property TextUTF8AsCharReferences: Boolean
+      read fTextUTF8AsCharReferences write fTextUTF8AsCharReferences;
+    property PreserveUTF8Attributes: Boolean
+      read fPreserveUTF8Attributes write fPreserveUTF8Attributes;
   end; // TStitchSAX
 
 //TSY: Some variant of SAX which collects info automatically
@@ -108,6 +118,7 @@ type
     Tag: string;
     Attributes: TAttributes;
     Text: string;
+    HasUTF8CharReferences: Boolean;
     OnEndElement: TPrimElementMethod;
     constructor Create;
     destructor Destroy; override;
@@ -196,6 +207,9 @@ begin
 
   Attributes := TAttributes.Create;
   XMLStack := TStringStack.Create;
+  fDefaultEncoding := enUnknown;
+  fTextUTF8AsCharReferences := False;
+  fPreserveUTF8Attributes := False;
   OnCDATA := nil;
   OnDOCTYPE := nil;
 end; // Create
@@ -268,7 +282,9 @@ var
 
     if X <= L then
     begin
-      Result := CharsetDecode(DecodeHtmlString({StrHtmlDecode(} Result));
+      Result := DecodeHtmlString(Result);
+      if not (fTextUTF8AsCharReferences and (Encoding = enUTF8)) then
+        Result := CharsetDecode(Result);
       Dec(X);
     end;
   end; // GetText
@@ -418,7 +434,9 @@ var
         Inc(X);
       end; // while
 
-      Result := CharsetDecode(DecodeHtmlString({StrHtmlDecode(} Result));
+      Result := DecodeHtmlString(Result);
+      if not (fPreserveUTF8Attributes and (Encoding = enUTF8)) then
+        Result := CharsetDecode(Result);
     end; // GetAttributeValue
 
   var
@@ -671,7 +689,7 @@ procedure TStitchSAX.BeginOfParsing;
 begin
   XML := '';
   XMLStack.Clear;
-  Encoding := enUnknown;
+  Encoding := fDefaultEncoding;
 end; // BeginOfParsing
 
 procedure TStitchSAX.ParseBlock(const Data: string);
@@ -743,6 +761,107 @@ begin
   else Result := Value;
 end; // CharsetDecode
 
+function TStitchSAX.UTF8ToCharReferences(const Value: string): string;
+var
+  I, Count, Capacity, Used: SizeInt;
+  B1, B2, B3, B4: Byte;
+  CodePoint: Cardinal;
+  ReferenceText: string;
+
+  procedure AppendChar(const Ch: Char);
+  begin
+    if Used = Capacity then
+    begin
+      Capacity := Capacity * 2;
+      if Capacity = 0 then Capacity := 16;
+      SetLength(Result, Capacity);
+    end;
+    Inc(Used);
+    Result[Used] := Ch;
+  end;
+
+  procedure AppendReference(const CodeUnit: Cardinal);
+  var
+    J: SizeInt;
+  begin
+    ReferenceText := '&#' + IntToStr(CodeUnit) + ';';
+    J := 1;
+    while J <= Length(ReferenceText) do
+    begin
+      AppendChar(ReferenceText[J]);
+      Inc(J);
+    end;
+  end;
+
+  function ContinuationByte(const Index: SizeInt): Byte;
+  begin
+    if Index > Length(Value) then
+      raise EStitchSAX.Create(Value, Index, 'Bad UTF-8:');
+    Result := Ord(Value[Index]);
+    if (Result and $C0) <> $80 then
+      raise EStitchSAX.Create(Value, Index, 'Bad UTF-8:');
+  end;
+begin
+  Capacity := Length(Value);
+  Used := 0;
+  SetLength(Result, Capacity);
+  I := 1;
+  while I <= Length(Value) do
+  begin
+    B1 := Ord(Value[I]);
+    if B1 < $80 then
+    begin
+      if B1 = Ord('&') then AppendReference(B1)
+      else AppendChar(Value[I]);
+      Inc(I);
+      Continue;
+    end;
+    if (B1 >= $C2) and (B1 <= $DF) then
+    begin
+      Count := 2;
+      B2 := ContinuationByte(I + 1);
+      CodePoint := (Cardinal(B1 and $1F) shl 6) or (B2 and $3F);
+    end
+    else if (B1 >= $E0) and (B1 <= $EF) then
+    begin
+      Count := 3;
+      B2 := ContinuationByte(I + 1);
+      B3 := ContinuationByte(I + 2);
+      if ((B1 = $E0) and (B2 < $A0)) or
+        ((B1 = $ED) and (B2 >= $A0)) then
+        raise EStitchSAX.Create(Value, I, 'Bad UTF-8:');
+      CodePoint := (Cardinal(B1 and $0F) shl 12) or
+        (Cardinal(B2 and $3F) shl 6) or (B3 and $3F);
+    end
+    else if (B1 >= $F0) and (B1 <= $F4) then
+    begin
+      Count := 4;
+      B2 := ContinuationByte(I + 1);
+      B3 := ContinuationByte(I + 2);
+      B4 := ContinuationByte(I + 3);
+      if ((B1 = $F0) and (B2 < $90)) or
+        ((B1 = $F4) and (B2 > $8F)) then
+        raise EStitchSAX.Create(Value, I, 'Bad UTF-8:');
+      CodePoint := (Cardinal(B1 and $07) shl 18) or
+        (Cardinal(B2 and $3F) shl 12) or
+        (Cardinal(B3 and $3F) shl 6) or (B4 and $3F);
+    end
+    else
+      raise EStitchSAX.Create(Value, I, 'Bad UTF-8:');
+
+    if CodePoint <= $FFFF then
+      AppendReference(CodePoint)
+    else
+    begin
+      Dec(CodePoint, $10000);
+      AppendReference($D800 + (CodePoint shr 10));
+      AppendReference($DC00 + (CodePoint and $3FF));
+    end;
+    Inc(I, Count);
+  end;
+  SetLength(Result, Used);
+end;
+
      {*---- TPrimElement ----*}
 
 constructor TPrimElement.Create;
@@ -750,6 +869,7 @@ begin
   inherited Create;
   Attributes := TAttributes.Create;
   Text := '';
+  HasUTF8CharReferences := False;
   OnEndElement := nil;
 end;
 
@@ -816,9 +936,26 @@ end;
 procedure TPrimSAX.SAX_Text(const Text: string);
 var
   E: TPrimElement;
+  TagName: string;
+  ColonPos: Integer;
 begin
   E := fStack.Peek as TPrimElement;
-  E.Text := E.Text + Text;
+  if fTextUTF8AsCharReferences and (Encoding = enUTF8) then
+  begin
+    TagName := E.Tag;
+    ColonPos := Pos(':', TagName);
+    if ColonPos > 0 then Delete(TagName, 1, ColonPos);
+    if (TagName = 'text') or (TagName = 'tspan') or
+      (TagName = 'textPath') then
+      begin
+        E.HasUTF8CharReferences := True;
+        E.Text := E.Text + UTF8ToCharReferences(Text);
+      end
+    else
+      E.Text := E.Text + CharsetDecode(Text);
+  end
+  else
+    E.Text := E.Text + Text;
 end;
 
 procedure TPrimSAX.AddProc(const Tag: string;
