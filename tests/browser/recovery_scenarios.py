@@ -1,0 +1,430 @@
+"""Browser-local recovery behavior in real browser storage and WASM sessions."""
+
+from harness import App
+from scenarios import box, diff, park, region
+
+
+DB_NAME = 'tpx-browser-local-recovery'
+
+
+def wait_ready(page):
+    page.wait_for_selector('#status[data-state=ready]', timeout=30000)
+    page.wait_for_function('Number(document.querySelector("#lcl").dataset.frames)>0')
+
+
+def opt_in(page):
+    page.locator('#tpx-recovery-enabled').check()
+    page.wait_for_function('document.querySelector("#tpx-recovery-enabled").checked')
+
+
+def records(page):
+    return page.evaluate('''async (name) => {
+      const request = indexedDB.open(name);
+      const db = await new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      try {
+        const tx = db.transaction('drafts', 'readonly');
+        const rows = await new Promise((resolve, reject) => {
+          const get = tx.objectStore('drafts').getAll();
+          get.onsuccess = () => resolve(get.result || []);
+          get.onerror = () => reject(get.error);
+        });
+        return Promise.all(rows.map(async row => ({id: row.id, byteLength: row.byteLength,
+          updatedAt: row.updatedAt, title: row.metadata?.title || '',
+          payloadHash: Array.from(new Uint8Array(await crypto.subtle.digest(
+            'SHA-256', row.payload))).map(value => value.toString(16).padStart(2, '0')).join('')})));
+      } finally { db.close(); }
+    }''', DB_NAME)
+
+
+def stored_record_details(page, record_id):
+    return page.evaluate('''async ({name, id}) => {
+      const open = indexedDB.open(name);
+      const db = await new Promise((resolve, reject) => {
+        open.onsuccess = () => resolve(open.result);
+        open.onerror = () => reject(open.error);
+      });
+      try {
+        const tx = db.transaction('drafts', 'readonly');
+        const row = await new Promise((resolve, reject) => {
+          const get = tx.objectStore('drafts').get(id);
+          get.onsuccess = () => resolve(get.result);
+          get.onerror = () => reject(get.error);
+        });
+        if (!row) return null;
+        const bytes = new Uint8Array(row.payload), view = new DataView(row.payload);
+        let at = 8;
+        const u32 = () => { const value = view.getUint32(at, true); at += 4; return value; };
+        const u64 = () => { const value = Number(view.getBigUint64(at, true)); at += 8; return value; };
+        const str = () => { const size = view.getInt32(at, true); at += 4;
+          const value = new TextDecoder().decode(bytes.subarray(at, at + size)); at += size; return value; };
+        const magic = new TextDecoder().decode(bytes.subarray(0, 8));
+        if (magic !== 'TPXREC03') throw new Error('recovery record signature changed');
+        const kind = bytes[at++];
+        const storedId = str(), sourcePath = str(), sourceFormat = str(), format = str();
+        const digest = str(); view.getBigInt64(at, true); at += 8;
+        view.getBigInt64(at, true); at += 8; str(); at++;
+        view.getBigUint64(at, true); at += 8;
+        const sourceLength = u64(), source = bytes.subarray(at, at + sourceLength); at += sourceLength;
+        const payloadLength = u64(), payload = bytes.subarray(at, at + payloadLength);
+        const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', source)))
+          .map(value => value.toString(16).padStart(2, '0')).join('');
+        const payloadMagic = new TextDecoder().decode(payload.subarray(0, 8));
+        const payloadView = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+        return {kind, storedId, sourcePath, sourceFormat, format, digest, sourceHash: hash,
+          payloadMagic, unresolved: payloadView.getUint32(12, true),
+          assets: payloadView.getUint32(16, true)};
+      } finally { db.close(); }
+    }''', {'name': DB_NAME, 'id': record_id})
+
+
+def add_records(page, rows):
+    page.evaluate('''async ({name, rows}) => {
+      const request = indexedDB.open(name);
+      const db = await new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      try {
+        const tx = db.transaction('drafts', 'readwrite');
+        for (const row of rows) {
+          row.payload = new Uint8Array(row.payload).buffer;
+          tx.objectStore('drafts').put(row);
+        }
+        await new Promise((resolve, reject) => {
+          tx.oncomplete = resolve; tx.onabort = tx.onerror = () => reject(tx.error);
+        });
+      } finally { db.close(); }
+    }''', {'name': DB_NAME, 'rows': rows})
+
+
+def draw_line(app):
+    _, cx, cy = box(app)
+    area = region(cx, cy, 320, 240)
+    app.menu('Insert', 'Insert line')
+    clean = app.pixels(area)
+    app.drag(cx - 90, cy - 60, cx + 90, cy + 60)
+    park(app, box(app)[0])
+    return area, clean
+
+
+def wait_saved(page):
+    page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Draft saved in this browser")',
+                           timeout=10000)
+
+
+def s_recovery_disabled_by_default(app):
+    if app.page.locator('#tpx-recovery-enabled').is_checked():
+        raise AssertionError('browser-local recovery unexpectedly started opted in')
+    draw_line(app)
+    app.page.wait_for_timeout(1100)
+    if records(app.page):
+        raise AssertionError('a drawing was stored before explicit opt-in')
+    return 'recovery remains off and stores no drawing until opted in'
+
+
+def s_recovery_survives_application_restart(app):
+    opt_in(app.page)
+    area, clean = draw_line(app)
+    wait_saved(app.page)
+    before = records(app.page)
+    if len(before) != 1 or before[0]['byteLength'] <= 0:
+        raise AssertionError(f'expected one durable draft, got {before}')
+
+    app.restart()
+    wait_ready(app.page)
+    app.page.wait_for_function('document.querySelector("#tpx-recovery-enabled").checked')
+    button = app.page.get_by_role('button', name='Recover as new drawing', exact=True)
+    button.wait_for()
+    blank = app.pixels(area)
+    button.click()
+    app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Draft recovered as a new TpX drawing")',
+                               timeout=10000)
+    app.page.wait_for_timeout(200)
+    ink = diff(blank, app.pixels(area))
+    if ink < 100:
+        raise AssertionError(f'recovered geometry painted only {ink} changed pixels')
+    after = records(app.page)
+    if len(after) != 1 or after[0]['id'] != before[0]['id']:
+        raise AssertionError('recovery silently removed or replaced its durable source draft')
+    if app.page.get_by_role('button', name='Recover as new drawing', exact=True).is_enabled():
+        raise AssertionError('a dirty recovered drawing still allowed another restore')
+    return f'IndexedDB draft survived app reload and restored {ink} geometry pixels as a new drawing'
+
+
+def s_recovery_noop_download_keeps_previous_draft(app):
+    opt_in(app.page)
+    draw_line(app)
+    wait_saved(app.page)
+    before = records(app.page)
+    if len(before) != 1:
+        raise AssertionError(f'expected one existing draft before download, got {before}')
+
+    app.page.evaluate('''() => {
+      window.tpxNoopDownloadClicks = 0;
+      HTMLAnchorElement.prototype.click = function() { window.tpxNoopDownloadClicks++; };
+    }''')
+    app.menu('File', 'Save as...')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('File name').fill('browser-noop-download.tpx')
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    app.page.wait_for_function('window.tpxNoopDownloadClicks === 1')
+    app.page.wait_for_function('document.querySelector("#document-status").dataset.state === "unconfirmed"')
+    status = app.page.locator('#document-status').inner_text()
+    if 'cannot confirm' not in status:
+        raise AssertionError(f'no-op anchor was represented as a durable copy: {status}')
+    after_request = records(app.page)
+    if (len(after_request) != 1 or after_request[0]['id'] != before[0]['id'] or
+            after_request[0]['payloadHash'] != before[0]['payloadHash']):
+        raise AssertionError('an unconfirmed download retired or changed the prior draft')
+
+    draw_line(app)
+    wait_saved(app.page)
+    after_edit = records(app.page)
+    if (len(after_edit) != 2 or before[0]['id'] not in {row['id'] for row in after_edit} or
+            not any(row['id'] != before[0]['id'] for row in after_edit)):
+        raise AssertionError(f'new edit did not rotate recovery identity while retaining prior draft: {after_edit}')
+    retained = next(row for row in after_edit if row['id'] == before[0]['id'])
+    if retained['payloadHash'] != before[0]['payloadHash']:
+        raise AssertionError('the prior durable draft changed after identity rotation')
+    return 'a no-op download request remains explicitly unconfirmed and keeps its earlier recovery draft'
+
+
+def s_recovery_restores_raw_inline_label_after_restart(app):
+    import html
+    import re
+
+    opt_in(app.page)
+    _, cx, cy = box(app)
+    raw_label = 'Uncommitted λ label: \\input{must-not-run}'
+    app.menu('Insert', 'Insert text')
+    app.click(cx - 60, cy - 20)
+    editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    editor.wait_for()
+    editor.fill(raw_label)
+    wait_saved(app.page)
+
+    page = app.restart()
+    wait_ready(page)
+    page.get_by_role('button', name='Recover as new drawing', exact=True).click()
+    page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Draft recovered as a new TpX drawing")',
+                           timeout=10000)
+    editor = page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    editor.wait_for(timeout=10000)
+    if editor.input_value() != raw_label:
+        raise AssertionError(f'recovered inline editor lost raw label text: {editor.input_value()!r}')
+    page.get_by_role('button', name='Done', exact=True).click()
+    saved = app.save('recovered-raw-label.tpx').read_text()
+    match = re.search(r'<text\b[^>]*>', saved)
+    attrs = dict(re.findall(r'([A-Za-z][A-Za-z0-9]*)="([^"]*)"', match.group(0))) if match else {}
+    if html.unescape(attrs.get('t', '')) != raw_label:
+        raise AssertionError('committed recovered label is missing from the downloaded TpX source')
+    return 'a browser process restart restores the exact uncommitted Unicode label and its later TpX source'
+
+
+def s_recovery_retains_source_and_linked_asset(app):
+    import hashlib
+    import re
+    import struct
+    import zlib
+
+    def chunk(kind, data):
+        return (struct.pack('>I', len(data)) + kind + data +
+                struct.pack('>I', zlib.crc32(kind + data)))
+
+    asset = app.output / 'recovery-linked-image.png'
+    asset.write_bytes(b'\x89PNG\r\n\x1a\n' +
+        chunk(b'IHDR', struct.pack('>IIBBBBB', 32, 32, 8, 2, 0, 0, 0)) +
+        chunk(b'IDAT', zlib.compress((b'\x00' + b'\xff\x00\xff' * 32) * 32)) +
+        chunk(b'IEND', b''))
+    _, cx, cy = box(app)
+    app.menu('Insert', 'Insert bitmap')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('Choose file', exact=True).set_input_files(asset)
+    before = app.frames()
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    app.painted(before)
+    app.drag(cx - 70, cy - 50, cx + 70, cy + 50)
+    app.key('Escape')
+    app.menu('Insert', 'Insert text')
+    app.click(cx - 40, cy + 65)
+    label = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    label.fill('Uploaded source label')
+    app.page.get_by_role('button', name='Done', exact=True).click()
+
+    related_downloads = []
+    app.page.on('download', lambda download: related_downloads.append(download))
+    source = app.save('recovery-source.tpx')
+    app.page.wait_for_timeout(150)
+    asset_download = next((item for item in related_downloads
+                           if item.suggested_filename == asset.name), None)
+    if asset_download is None:
+        raise AssertionError('source fixture download omitted the linked image')
+    asset_copy = app.output / asset_download.suggested_filename
+    asset_download.save_as(asset_copy)
+
+    source_text = source.read_text()
+    match = re.search(r'<text\b[^>]*>', source_text)
+    if match:
+        tag = match.group(0)
+        updated = tag[:-1] + ' tex="\\input{browser-recovery-must-not-compile}">'
+        source_text = source_text[:match.start()] + updated + source_text[match.end():]
+        source.write_text(source_text)
+    original_source = source.read_bytes()
+    original_asset = asset_copy.read_bytes()
+
+    app.menu('File', 'New')
+    opt_in(app.page)
+    app.menu('File', 'Open')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('Choose file', exact=True).set_input_files(source)
+    related = dialog.get_by_label('Related files (optional)', exact=True)
+    related.set_input_files(asset_copy)
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    app.page.wait_for_function('document.querySelector("#source-snapshot-status") && !document.querySelector("#source-snapshot-status").hidden')
+    draw_line(app)
+    wait_saved(app.page)
+    saved = records(app.page)
+    if len(saved) != 1:
+        raise AssertionError(f'expected one source-backed browser draft, got {saved}')
+    details = stored_record_details(app.page, saved[0]['id'])
+    expected_hash = hashlib.sha256(original_source).hexdigest()
+    if (details is None or details['sourceHash'] != expected_hash or
+            details['sourceFormat'] != 'tpx' or details['format'] != 'tpx-assets' or
+            details['payloadMagic'] != 'TPXRA001' or details['unresolved'] != 0 or
+            details['assets'] < 1):
+        raise AssertionError(f'recovery did not retain the exact source and linked asset: {details}')
+
+    app.restart()
+    wait_ready(app.page)
+    app.page.get_by_role('button', name='Recover as new drawing', exact=True).click()
+    app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Draft recovered as a new TpX drawing")',
+                               timeout=10000)
+    app.page.wait_for_function('''() => {
+      const c = document.querySelector('#lcl');
+      const pixels = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      let magenta = 0;
+      for (let i = 0; i < pixels.length; i += 4)
+        if (pixels[i] > 245 && pixels[i+1] < 10 && pixels[i+2] > 245) magenta++;
+      return magenta > 500;
+    }''', timeout=10000)
+    if app.page.evaluate("performance.getEntriesByType('resource').some(e=>e.name.endsWith('/tex-svg.bundle.js'))"):
+        raise AssertionError('recovery granted preview trust to the uploaded TeX source')
+    recovered_copy = app.save('recovered-source-copy.tpx')
+    if source.read_bytes() != original_source or asset_copy.read_bytes() != original_asset:
+        raise AssertionError('recovery or Download changed the uploaded source or linked asset')
+    if recovered_copy.read_bytes() == original_source:
+        raise AssertionError('Download did not produce a distinct recovered copy')
+    return 'restart recovery retained exact source bytes and linked-image pixels; preview stayed untrusted and Download left uploaded files unchanged'
+
+
+def s_recovery_quota_failure_keeps_previous_record(app):
+    opt_in(app.page)
+    add_records(app.page, [{'id': 'quota-baseline', 'metadata': {'title': 'kept'},
+                            'payload': [1, 2, 3], 'byteLength': 3,
+                            'updatedAt': 1, 'sequence': 1}])
+    app.page.evaluate('''() => {
+      const put = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function(value, key) {
+        if (this.name === 'drafts') throw new DOMException('Injected quota failure', 'QuotaExceededError');
+        return put.call(this, value, key);
+      };
+    }''')
+    draw_line(app)
+    app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("quota prevented")',
+                               timeout=10000)
+    saved = records(app.page)
+    if [row['id'] for row in saved] != ['quota-baseline']:
+        raise AssertionError(f'quota failure replaced or discarded an existing record: {saved}')
+    return 'quota failure is reported and leaves the prior durable record unchanged'
+
+
+def s_recovery_capacity_does_not_evict(app):
+    opt_in(app.page)
+    rows = [{'id': f'retained-{i}', 'metadata': {'title': f'Existing {i}', 'format': 'TpX'},
+             'payload': [i], 'byteLength': 1, 'updatedAt': i, 'sequence': 1}
+            for i in range(5)]
+    add_records(app.page, rows)
+    app.page.reload()
+    wait_ready(app.page)
+    app.page.wait_for_function('document.querySelectorAll("#tpx-recovery-drafts [data-restore]").length === 5')
+    draw_line(app)
+    app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("storage is full")',
+                               timeout=10000)
+    saved = records(app.page)
+    if {row['id'] for row in saved} != {f'retained-{i}' for i in range(5)}:
+        raise AssertionError(f'capacity failure evicted or replaced an existing draft: {saved}')
+    return 'the sixth draft is rejected with a full-store status and all five prior records remain'
+
+
+def s_recovery_corrupt_record_is_retained_until_deleted(app):
+    opt_in(app.page)
+    add_records(app.page, [{'id': 'corrupt-test', 'metadata': {'title': 'Corrupt fixture', 'format': 'TpX'},
+                            'payload': [88, 88, 88], 'byteLength': 3,
+                            'updatedAt': 1, 'sequence': 1}])
+    app.page.reload()
+    wait_ready(app.page)
+    app.page.get_by_role('button', name='Recover as new drawing', exact=True).click()
+    app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("corrupt")',
+                               timeout=10000)
+    if len(records(app.page)) != 1:
+        raise AssertionError('a corrupt draft was deleted without user action')
+    app.page.get_by_role('button', name='Delete draft', exact=True).click()
+    app.page.get_by_role('button', name='Confirm delete', exact=True).click()
+    app.page.wait_for_function('document.querySelectorAll("#tpx-recovery-drafts .draft").length === 0')
+    if records(app.page):
+        raise AssertionError('explicitly confirmed corrupt-draft deletion did not commit')
+    return 'a corrupt record is rejected, retained for review, and deleted only after confirmation'
+
+
+def s_recovery_opt_in_is_origin_scoped(app):
+    opt_in(app.page)
+    alternate = app.page.context.new_page()
+    try:
+        alternate.goto(app.page.url.replace('127.0.0.1', 'localhost'))
+        wait_ready(alternate)
+        if alternate.locator('#tpx-recovery-enabled').is_checked():
+            raise AssertionError('opt-in from 127.0.0.1 leaked to the localhost origin')
+    finally:
+        alternate.close()
+    return 'consent is isolated by browser origin'
+
+
+def s_recovery_tabs_get_distinct_records(app):
+    second = app.page.context.new_page()
+    try:
+        second.goto(app.page.url)
+        wait_ready(second)
+        opt_in(app.page)
+        second.wait_for_function('document.querySelector("#tpx-recovery-enabled").checked')
+        draw_line(app)
+        wait_saved(app.page)
+        second_app = App(second, 'two-tab', app.output)
+        draw_line(second_app)
+        second.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Draft saved in this browser")',
+                                 timeout=10000)
+        saved = records(app.page)
+        ids = [row['id'] for row in saved]
+        if len(ids) != 2 or len(set(ids)) != 2:
+            raise AssertionError(f'two tabs did not keep separate draft identities: {ids}')
+        if second_app.errors:
+            raise AssertionError(f'second tab reported a browser error: {second_app.errors[0]}')
+    finally:
+        second.close()
+    return 'simultaneous tabs retain two independent records without stale overwrites'
+
+
+SCENARIOS = [
+    ('recovery-disabled', s_recovery_disabled_by_default),
+    ('recovery-restart-geometry', s_recovery_survives_application_restart),
+    ('recovery-noop-download', s_recovery_noop_download_keeps_previous_draft),
+    ('recovery-restart-raw-label', s_recovery_restores_raw_inline_label_after_restart),
+    ('recovery-source-assets', s_recovery_retains_source_and_linked_asset),
+    ('recovery-quota', s_recovery_quota_failure_keeps_previous_record),
+    ('recovery-capacity', s_recovery_capacity_does_not_evict),
+    ('recovery-corrupt', s_recovery_corrupt_record_is_retained_until_deleted),
+    ('recovery-origin', s_recovery_opt_in_is_origin_scoped),
+    ('recovery-two-tabs', s_recovery_tabs_get_distinct_records),
+]
