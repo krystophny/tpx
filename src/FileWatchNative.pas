@@ -14,4 +14,9 @@ uses
   FileWatchLinux;
 {$ENDIF}
 
+{$IFDEF DARWIN}
+uses
+  FileWatchMac;
+{$ENDIF}
+
 end.
