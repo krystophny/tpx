@@ -112,6 +112,36 @@ begin
   finally Source.Free end;
 end;
 
+procedure RunPstoeditFixture;
+var Source, Fixture, Destination: TFileStream; Bytes: RawByteString;
+begin
+  Check((ParamCount >= 4) and (ParamStr(3) = '-f') and
+    (ParamStr(4) = 'emf'),
+    'pstoedit fixture expected input, output, and EMF format arguments');
+  Source := TFileStream.Create(ParamStr(1), fmOpenRead);
+  try
+    SetLength(Bytes, Source.Size);
+    if Source.Size > 0 then Source.ReadBuffer(Bytes[1], Source.Size);
+  finally
+    Source.Free;
+  end;
+  if Pos('TPX_FIXTURE_FAIL', Bytes) > 0 then Halt(7);
+  Fixture := TFileStream.Create(
+    GetEnvironmentVariable('TPX_PSTOEDIT_EMF_FIXTURE'), fmOpenRead);
+  try
+    SetLength(Bytes, Fixture.Size);
+    if Fixture.Size > 0 then Fixture.ReadBuffer(Bytes[1], Fixture.Size);
+  finally
+    Fixture.Free;
+  end;
+  Destination := TFileStream.Create(ParamStr(2), fmCreate);
+  try
+    if Length(Bytes) > 0 then Destination.WriteBuffer(Bytes[1], Length(Bytes));
+  finally
+    Destination.Free;
+  end;
+end;
+
 procedure TestBitmapEps;
 var
   Converted, Expected: Boolean;
@@ -1237,6 +1267,12 @@ begin
       RunBitmapFixtureConverter;
       Halt(0);
     end;
+    if SameText(ChangeFileExt(ExtractFileName(ParamStr(0)), ''),
+      'pstoedit-fixture') then
+    begin
+      RunPstoeditFixture;
+      Halt(0);
+    end;
     if SameText(ChangeFileExt(ExtractFileName(ParamStr(0)), ''), 'mpost-fixture')
       or SameText(ChangeFileExt(ExtractFileName(ParamStr(0)), ''), 'gs-fixture') then
     begin
@@ -1267,6 +1303,7 @@ begin
     else if ParamStr(1) = 'canvas-focus-transfer' then TestCanvasFocusTransfer
     else if ParamStr(1) = 'platform-shortcuts' then TestPlatformShortcuts
     else if ParamStr(1) = 'document-io' then TestDocumentIO
+    else if ParamStr(1) = 'pstoedit-import' then TestPstoeditEmfImport
     else if ParamStr(1) = 'color-box-custom-state' then TestColorBoxCustomState
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
     else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))

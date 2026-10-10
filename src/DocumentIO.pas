@@ -23,6 +23,7 @@ procedure RegisterDocumentCodec(const Format: TDocumentFormat;
   ContextRebinder: TDocumentContextRebinder = nil;
   SaveValidationPath: TDocumentSaveValidationPath = dsvpFinalDestination);
 function IsDocumentCodecRegistered(const FormatId: string): Boolean;
+function PstoeditEmfImportAvailable: Boolean;
 function DocumentCodecUsesStagedValidationPath(
   const FormatId: string): Boolean;
 procedure RebindDocumentCodecContext(const FormatId: string;
@@ -44,7 +45,7 @@ function SerializeTpXRecoveryBytes(Drawing: TDrawing2D;
 
 implementation
 
-uses Contnrs, Input, Output;
+uses Contnrs, Input, Output, SysBasic;
 
 type
   TDocumentCodec = class
@@ -98,6 +99,17 @@ end;
 function IsDocumentCodecRegistered(const FormatId: string): Boolean;
 begin
   Result := FindCodec(FormatId) <> nil;
+end;
+
+function PstoeditEmfImportAvailable: Boolean;
+begin
+{$IFDEF WASI}
+  Result := False;
+{$ELSE}
+  Result := (Trim(PsToEditPath) <> '') and
+    (Pos('emf', LowerCase(PsToEditFormat)) > 0) and
+    (Pos('svg', LowerCase(PsToEditFormat)) = 0);
+{$ENDIF}
 end;
 
 function DocumentCodecUsesStagedValidationPath(
@@ -272,6 +284,65 @@ begin
   Result := False;
 end;
 
+function LoadPstoeditEmf(Candidate: TDrawing2D;
+  const FileName: TDocumentPath; const SourceBytes: RawByteString;
+  Diagnostics: TStrings; out CodecContext: TObject): Boolean;
+var StageDirectory, InputFileName, OutputFileName: TDocumentPath;
+  Extension, Command: string; Snapshot: TDocumentSnapshot;
+  Stream: TMemoryStream;
+begin
+  CodecContext := nil;
+{$IFDEF WASI}
+  raise EReadError.Create(
+    'EPS, PS, and PDF conversion is unavailable in the browser');
+{$ELSE}
+  if Trim(PsToEditPath) = '' then
+    raise EReadError.Create('Configure a pstoedit executable to import EPS, PS, or PDF');
+  if (Pos('emf', LowerCase(PsToEditFormat)) = 0) or
+    (Pos('svg', LowerCase(PsToEditFormat)) > 0) then
+    raise EReadError.CreateFmt(
+      'The configured pstoedit format "%s" does not produce an importable EMF; choose an EMF output format',
+      [PsToEditFormat]);
+  Extension := DocumentPathExtension(FileName);
+  if Extension = '' then Extension := '.ps';
+  StageDirectory := CreateDocumentStagingDirectory(
+    TDocumentPath(GetTempDir));
+  if StageDirectory = '' then
+    raise EReadError.Create('Could not create a private pstoedit staging directory');
+  InputFileName := IncludeTrailingPathDelimiter(StageDirectory) +
+    'source' + Extension;
+  OutputFileName := IncludeTrailingPathDelimiter(StageDirectory) + 'converted.emf';
+  try
+    WriteDocumentStagingFile(InputFileName, SourceBytes);
+    Command := PrepareFilePath(PsToEditPath) + ' ' +
+      QuoteShellArg(string(InputFileName)) + ' ' +
+      QuoteShellArg(string(OutputFileName)) + ' -f ' +
+      QuoteShellArg(PsToEditFormat);
+    if not FileExec(Command, '', '', string(StageDirectory), True, True) then
+      raise EReadError.Create('The configured pstoedit conversion failed');
+    if not DocumentFileExists(OutputFileName) then
+      raise EReadError.Create('pstoedit completed without creating an EMF file');
+    Snapshot := ReadDocumentSnapshot(OutputFileName);
+    Stream := TMemoryStream.Create;
+    try
+      if Length(Snapshot.SourceBytes) > 0 then
+        Stream.WriteBuffer(Snapshot.SourceBytes[1], Length(Snapshot.SourceBytes));
+      Stream.Position := 0;
+      Import_MetafileFromStream(Candidate, Stream, False);
+    finally
+      Stream.Free;
+    end;
+    Candidate.Comment := Format('Imported from %s via pstoedit %s',
+      [DocumentPathFileName(FileName), DateTimeToStr(Now)]);
+    Result := False;
+  finally
+    DeleteDocumentFile(InputFileName);
+    DeleteDocumentFile(OutputFileName);
+    RemoveDocumentStagingDirectory(StageDirectory);
+  end;
+{$ENDIF}
+end;
+
 function SaveTpX(Drawing: TDrawing2D; const FileName: TDocumentPath;
   Destination: TStream; CodecContext: TObject): Boolean;
 begin
@@ -287,6 +358,8 @@ begin
   RegisterDocumentCodec(F, @LoadMetafile, nil);
   FindDocumentFormatById('wmf', F);
   RegisterDocumentCodec(F, @LoadMetafile, nil);
+  FindDocumentFormatById('pstoedit-emf', F);
+  RegisterDocumentCodec(F, @LoadPstoeditEmf, nil);
 end;
 
 initialization

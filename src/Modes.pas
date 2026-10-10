@@ -922,7 +922,7 @@ begin
   OpenDialog := TOpenAnyPictureDialog.Create(MainForm);
   try
     OpenDialog.FilterIndex := OpenDialog_FilterIndex;
-    OpenDialog.Filter := BuildOpenFileFilter(PsToEditPath <> '');
+    OpenDialog.Filter := BuildOpenFileFilter(PstoeditEmfImportAvailable);
     if not OpenDialog.Execute then Exit;
     if AskSaveCurrentDrawing = mrCancel then Exit;
     FileName := TDocumentPath(OpenDialog.FileName);

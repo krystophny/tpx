@@ -178,7 +178,7 @@ function c_fsync(const FileDescriptor: LongInt): LongInt; cdecl;
 {$ENDIF}{$ENDIF}
 
 function FileInfoFromHandle(const Handle: THandle;
-  const FileName: TDocumentPath): TFileInfo;
+  const FileName: TDocumentPath; const FallbackSize: Int64): TFileInfo;
 {$IFDEF FPC}
 {$IFDEF UNIX}
 var Info: BaseUnix.Stat;
@@ -190,7 +190,10 @@ var Info: TByHandleFileInformation;
 begin
   Result.Identity := FileIdentityUnavailable + ':' +
     string(NormalizeDocumentPath(FileName));
-  Result.Size := -1;
+  { WASI's VFS does not expose stable inode or timestamp metadata through the
+    current FPC RTL. Callers supply the open stream's observed size there;
+    identity remains explicitly path-based and ModifiedUTC remains zero. }
+  Result.Size := FallbackSize;
   Result.ModifiedUTC := 0;
 {$IFDEF FPC}
 {$IFDEF UNIX}
@@ -430,21 +433,21 @@ begin
   Handle := OpenDocumentHandle(FileName, FILE_READ_ATTRIBUTES);
   if Handle = INVALID_HANDLE_VALUE then RaiseLastOSError;
   try
-    Result := FileInfoFromHandle(Handle, FileName);
+    Result := FileInfoFromHandle(Handle, FileName, -1);
   finally
     Windows.CloseHandle(Handle);
   end;
 {$ELSE}
   Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
   try
-    Result := FileInfoFromHandle(Stream.Handle, FileName);
+    Result := FileInfoFromHandle(Stream.Handle, FileName, Stream.Size);
   finally
     Stream.Free;
   end;
 {$ENDIF}{$ELSE}
   Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
   try
-    Result := FileInfoFromHandle(Stream.Handle, FileName);
+    Result := FileInfoFromHandle(Stream.Handle, FileName, Stream.Size);
   finally
     Stream.Free;
   end;
@@ -634,7 +637,7 @@ begin
   Handle := OpenDocumentHandle(Path, GENERIC_READ);
   if Handle = INVALID_HANDLE_VALUE then RaiseLastOSError;
   try
-    BeforeInfo := FileInfoFromHandle(Handle, Path);
+    BeforeInfo := FileInfoFromHandle(Handle, Path, -1);
     SetLastError(0);
     SizeLow := Windows.GetFileSize(Handle, @SizeHigh);
     ErrorCode := GetLastError;
@@ -655,14 +658,14 @@ begin
         raise EReadError.Create('Document ended while it was being read');
       Inc(Offset, BytesRead);
     end;
-    AfterInfo := FileInfoFromHandle(Handle, Path);
+    AfterInfo := FileInfoFromHandle(Handle, Path, -1);
   finally
     Windows.CloseHandle(Handle);
   end;
 {$ELSE}
   Stream := TFileStream.Create(Path, fmOpenRead or fmShareDenyNone);
   try
-    BeforeInfo := FileInfoFromHandle(Stream.Handle, Path);
+    BeforeInfo := FileInfoFromHandle(Stream.Handle, Path, Stream.Size);
     ReadSize := Stream.Size;
     if (ReadSize < 0) or (ReadSize > MaxDocumentBytes) then
       raise EReadError.CreateFmt('Document exceeds the %d byte limit',
@@ -670,14 +673,14 @@ begin
     SetLength(Result.SourceBytes, ReadSize);
     Stream.Position := 0;
     if ReadSize > 0 then Stream.ReadBuffer(Result.SourceBytes[1], ReadSize);
-    AfterInfo := FileInfoFromHandle(Stream.Handle, Path);
+    AfterInfo := FileInfoFromHandle(Stream.Handle, Path, Stream.Size);
   finally
     Stream.Free;
   end;
 {$ENDIF}{$ELSE}
   Stream := TFileStream.Create(Path, fmOpenRead or fmShareDenyNone);
   try
-    BeforeInfo := FileInfoFromHandle(Stream.Handle, Path);
+    BeforeInfo := FileInfoFromHandle(Stream.Handle, Path, Stream.Size);
     ReadSize := Stream.Size;
     if (ReadSize < 0) or (ReadSize > MaxDocumentBytes) then
       raise EReadError.CreateFmt('Document exceeds the %d byte limit',
@@ -685,7 +688,7 @@ begin
     SetLength(Result.SourceBytes, ReadSize);
     Stream.Position := 0;
     if ReadSize > 0 then Stream.ReadBuffer(Result.SourceBytes[1], ReadSize);
-    AfterInfo := FileInfoFromHandle(Stream.Handle, Path);
+    AfterInfo := FileInfoFromHandle(Stream.Handle, Path, Stream.Size);
   finally
     Stream.Free;
   end;
@@ -957,6 +960,46 @@ begin
 {$ENDIF}
 end;
 
+procedure SynchronizeExistingFile(const FileName: TDocumentPath);
+{$IFDEF FPC}
+{$IFDEF WINDOWS}
+var Handle: THandle;
+{$ENDIF}
+{$IFDEF UNIX}
+var FileDescriptor: LongInt;
+{$ENDIF}
+{$ENDIF}
+{$IFNDEF FPC}
+var Stream: TFileStream;
+{$ENDIF}
+begin
+{$IFDEF FPC}{$IFDEF WINDOWS}
+  Handle := OpenDocumentHandle(FileName, GENERIC_WRITE);
+  if Handle = INVALID_HANDLE_VALUE then RaiseLastOSError;
+  try
+    if not Windows.FlushFileBuffers(Handle) then RaiseLastOSError;
+  finally
+    Windows.CloseHandle(Handle);
+  end;
+{$ELSE}{$IFDEF UNIX}
+  FileDescriptor := fpOpen(PChar(FileName), O_WRONLY, 0);
+  if FileDescriptor < 0 then RaiseLastOSError;
+  try
+    if c_fsync(FileDescriptor) <> 0 then
+      raise EWriteError.Create('Could not flush staged asset to disk');
+  finally
+    fpClose(FileDescriptor);
+  end;
+{$ELSE}
+  { The non-POSIX VFS has no file durability primitive; opening and closing
+    verifies the completed file before it is published. }
+  with TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone) do Free;
+{$ENDIF}{$ENDIF}{$ELSE}
+  Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
+  Stream.Free;
+{$ENDIF}
+end;
+
 procedure WriteDocumentStagingFile(const FileName: TDocumentPath;
   const Bytes: RawByteString);
 var Path: TDocumentPath;
@@ -1148,6 +1191,7 @@ begin
     if IsSymbolicLink(Assets[I].StagePath) or
       IsSymbolicLink(Assets[I].FinalPath) then
       raise EWriteError.Create('Symbolic-link assets are not supported');
+    SynchronizeExistingFile(Assets[I].StagePath);
     Assets[I].HadOriginal := DocumentFileExists(Assets[I].FinalPath);
     if Assets[I].HadOriginal then
       PreserveExistingPermissions(Assets[I].FinalPath, Assets[I].StagePath);
@@ -1497,6 +1541,14 @@ begin
   F.Id := 'wmf';
   F.DisplayName := 'Windows Metafile';
   F.Extensions := '.wmf';
+  RegisterDocumentFormat(F);
+  F.Id := 'pstoedit-emf';
+  F.DisplayName := 'EPS, PS, or PDF via pstoedit (EMF import)';
+  F.Extensions := '.eps;.ps;.pdf';
+  F.CanOpen := True;
+  F.CanSaveBack := False;
+  F.RoundTripProfile := 'Converted to EMF; import only';
+  F.RuntimeRequirements := 'pstoedit-emf';
   RegisterDocumentFormat(F);
 end;
 

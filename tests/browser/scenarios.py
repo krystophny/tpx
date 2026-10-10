@@ -392,7 +392,22 @@ def s_open_roundtrip(app):
     after = drawing_xml(app.save('reopened.tpx'))
     if len(after) != len(before) or [c.attrib for c in after] != [c.attrib for c in before]:
         raise AssertionError('open/save changed the drawing geometry')
-    return 'downloaded drawing reopens with identical geometry'
+
+    invalid = app.output / 'open-invalid.tpx'
+    invalid.write_text('%<TpX v="5">\n%<line x1="0"')
+    app.menu('File', 'Open')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('Choose file').set_input_files(invalid)
+    with app.page.expect_event('dialog') as error_event:
+        dialog.get_by_role('button', name='OK', exact=True).click()
+    error_dialog = error_event.value
+    if 'Can not open' not in error_dialog.message:
+        raise AssertionError('malformed upload did not report an open error')
+    error_dialog.accept()
+    after_failure = drawing_xml(app.save('open-invalid-preserved.tpx'))
+    if [c.attrib for c in after_failure] != [c.attrib for c in before]:
+        raise AssertionError('failed document open changed the current drawing')
+    return 'uploaded drawing reopens unchanged; malformed upload preserves the accepted scene'
 
 
 def s_export_formats(app):

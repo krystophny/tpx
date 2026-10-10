@@ -818,6 +818,118 @@ begin
   end;
 end;
 
+procedure TestPstoeditEmfImport;
+var Directory, UnusedName, NativeFileName, EpsFileName, PdfFileName: string;
+  Drawing: TDrawing2D;
+  Session: TDocumentSession;
+  NativeLine: TLine2D;
+  ImportedObject: TObject2D;
+  ImportedBounds, BoundsAfterFailure: TRect2D;
+  NativeBytes, ImportedBytes: RawByteString;
+  ImportedFileName: string;
+  NativeRevision, ImportedRevision: TDiskRevision;
+  SavedPstoeditPath, SavedPstoeditFormat, ErrorText, Filter: string;
+begin
+  PrepareDocumentTestDirectory('issue62-pstoedit', Directory, UnusedName);
+  NativeFileName := IncludeTrailingPathDelimiter(Directory) + 'native.tpx';
+  EpsFileName := IncludeTrailingPathDelimiter(Directory) + 'source.eps';
+  PdfFileName := IncludeTrailingPathDelimiter(Directory) + 'failing.pdf';
+  Drawing := MainForm.TheDrawing;
+  Session := MainForm.EventManager.DocumentSession;
+  SavedPstoeditPath := PsToEditPath;
+  SavedPstoeditFormat := PsToEditFormat;
+  try
+    PsToEditPath := GetEnvironmentVariable('TPX_PSTOEDIT_PATH');
+    PsToEditFormat := 'plot-svg';
+    NativeBytes := 'accepted native source';
+    WriteDocumentTestBytes(NativeFileName, NativeBytes);
+    NativeRevision := ReadDocumentRevision(NativeFileName);
+    Drawing.Clear;
+    Session.Clear;
+    Drawing.FileName := NativeFileName;
+    NativeLine := TLine2D.CreateSpec(-1, Point2D(1, 2), Point2D(8, 9));
+    Drawing.AddObject(-1, NativeLine);
+    Session.AcceptSource(NativeFileName, 'tpx', NativeBytes,
+      NativeRevision, True);
+    Filter := BuildOpenFileFilter(PstoeditEmfImportAvailable);
+    Check(Pos('.eps', Filter) = 0,
+      'The inert legacy SVG converter was advertised as an EPS importer');
+    WriteDocumentTestBytes(EpsFileName, '%!PS-Adobe-3.0 EPSF-3.0');
+    Check(not BaseMode.OpenDocumentFromPath(EpsFileName, ErrorText) and
+      (Pos('does not produce an importable EMF', ErrorText) > 0),
+      'A configured SVG pstoedit route did not report unsupported EPS import');
+    Check((Drawing.ObjectsCount = 1) and
+      (Drawing.ObjectList.FirstObj = NativeLine) and
+      (Drawing.FileName = NativeFileName) and
+      (Session.SourcePath = NativeFileName) and
+      (Session.SourceFormatId = 'tpx') and
+      SameDiskRevision(Session.AcceptedRevision, NativeRevision),
+      'An unsupported pstoedit route changed the accepted live document');
+
+    PsToEditFormat := 'emf';
+    Check(PstoeditEmfImportAvailable,
+      'The configured EMF pstoedit route was not made available');
+    Filter := BuildOpenFileFilter(PstoeditEmfImportAvailable);
+    Check(Pos('.eps;.ps;.pdf', Filter) > 0,
+      'The configured EMF import formats were not advertised');
+    Check(BaseMode.OpenDocumentFromPath(EpsFileName, ErrorText),
+      'The configured pstoedit EMF import failed: ' + ErrorText);
+    Check((Drawing.ObjectsCount = 1) and
+      (Drawing.GetObject(0) is TRectangle2D),
+      'The converted EMF rectangle was not imported as editable geometry');
+    ImportedObject := Drawing.GetObject(0);
+    ImportedFileName := Drawing.FileName;
+    ImportedBounds := ImportedObject.BoundingBox;
+    Check((ImportedBounds.Right > ImportedBounds.Left) and
+      (ImportedBounds.Top > ImportedBounds.Bottom),
+      'The converted EMF geometry has invalid bounds');
+    ImportedBytes := Session.OriginalSourceBytes;
+    ImportedRevision := Session.AcceptedRevision;
+    Check((Session.SourcePath = EpsFileName) and
+      (Session.SourceFormatId = 'pstoedit-emf') and not Session.CanSaveBack and
+      (ImportedBytes = '%!PS-Adobe-3.0 EPSF-3.0') and
+      SameDiskRevision(ImportedRevision, ReadDocumentRevision(EpsFileName)),
+      'The EMF import did not retain its import-only source identity');
+    Check(CountDirectoryEntries(GetCurrentDir) = 1,
+      'A successful pstoedit import left its private staging directory');
+
+    WriteDocumentTestBytes(PdfFileName, 'TPX_FIXTURE_FAIL');
+    Check(not BaseMode.OpenDocumentFromPath(PdfFileName, ErrorText) and
+      (Pos('pstoedit conversion failed', ErrorText) > 0),
+      'A failed pstoedit process did not report a conversion error');
+    BoundsAfterFailure := Drawing.GetObject(0).BoundingBox;
+    Check((Drawing.ObjectsCount = 1) and
+      (Drawing.GetObject(0) = ImportedObject) and
+      (BoundsAfterFailure.Left = ImportedBounds.Left) and
+      (BoundsAfterFailure.Bottom = ImportedBounds.Bottom) and
+      (BoundsAfterFailure.Right = ImportedBounds.Right) and
+      (BoundsAfterFailure.Top = ImportedBounds.Top),
+      'A failed pstoedit conversion changed the live scene');
+    Check(Drawing.FileName = ImportedFileName,
+      'A failed pstoedit conversion changed the drawing filename');
+    Check((Session.SourcePath = EpsFileName) and
+      (Session.SourceFormatId = 'pstoedit-emf'),
+      'A failed pstoedit conversion changed the accepted source path or format');
+    Check(Session.OriginalSourceBytes = ImportedBytes,
+      'A failed pstoedit conversion changed the accepted source bytes');
+    Check(SameDiskRevision(Session.AcceptedRevision, ImportedRevision),
+      'A failed pstoedit conversion changed the accepted disk revision');
+    Check(not Session.CanSaveBack,
+      'A failed pstoedit conversion changed save-back capability');
+    Check(CountDirectoryEntries(GetCurrentDir) = 1,
+      'A failed pstoedit conversion left its private staging directory');
+  finally
+    PsToEditPath := SavedPstoeditPath;
+    PsToEditFormat := SavedPstoeditFormat;
+    Drawing.Clear;
+    Session.Clear;
+    if FileExists(NativeFileName) then DeleteFile(NativeFileName);
+    if FileExists(EpsFileName) then DeleteFile(EpsFileName);
+    if FileExists(PdfFileName) then DeleteFile(PdfFileName);
+    RemoveDir(Directory);
+  end;
+end;
+
 procedure TestDocumentIO;
 begin
   TestDocumentRevisionConflict;

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import shutil
+import struct
 import sys
 import tempfile
 import uuid
@@ -25,6 +26,26 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_transactional_pstoedit_emf_import(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-pstoedit-") as directory:
+            root = Path(directory).resolve()
+            suffix = ".exe" if sys.platform == "win32" else ""
+            converter = root / ("pstoedit-fixture" + suffix)
+            shutil.copy2(BINARY, converter)
+            header = struct.pack(
+                "<II8i4IHH3I4i", 1, 88,
+                10, 20, 50, 60, 0, 0, 400, 400,
+                0x464D4520, 0x10000, 132, 3, 1, 0, 0, 0, 0,
+                400, 400, 100, 100)
+            rectangle = struct.pack("<II4i", 43, 24, 10, 20, 50, 60)
+            eof = struct.pack("<II3I", 14, 20, 0, 0, 20)
+            fixture = root / "converted.emf"
+            fixture.write_bytes(header + rectangle + eof)
+            self.run_scenario("pstoedit-import", {
+                "TPX_PSTOEDIT_PATH": str(converter),
+                "TPX_PSTOEDIT_EMF_FIXTURE": str(fixture),
+            })
+
     def test_tpx_staged_sidecars_and_converter_failures(self):
         with tempfile.TemporaryDirectory(prefix="tpx-staged-tools-") as directory:
             root = Path(directory).resolve()
