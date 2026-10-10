@@ -7,7 +7,7 @@ uses
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Options, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, SvgCodec, DocumentFormats, DocumentIO, AutoSaveStore, Pieces, TikZImport, TikZImportDrawing, gzio;
+  Settings0, MainUnit, Propert, Options, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, SvgCodec, DocumentFormats, DocumentIO, AutoSaveStore, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, gzio;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -128,6 +128,7 @@ end;
 {$I AutoSaveScenarios.inc}
 {$I TikZImportScenarios.inc}
 {$I SvgCodecScenarios.inc}
+{$I TikZSaveScenarios.inc}
 
 procedure RunBitmapFixtureConverter;
 var
@@ -1452,6 +1453,7 @@ begin
     else if ParamStr(1) = 'unsupported-exports' then TestUnsupportedExports
     else if ParamStr(1) = 'tpx-staged-sidecars' then TestTpXStagedSidecars
     else if ParamStr(1) = 'tikz-import-native' then TestTikZImportNativeScene
+    else if ParamStr(1) = 'tikz-source-save' then TestTikZSourceSave
     else if ParamStr(1) = 'bitmap-eps' then TestBitmapEps
     else if ParamStr(1) = 'svg-linked-image-copy' then TestSvgLinkedImageCopy
     else if ParamStr(1) = 'svg-codec' then TestSvgCodec
