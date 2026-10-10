@@ -1355,8 +1355,8 @@ begin
   FBrowserRecoveryTimer.Enabled := False;
   FBrowserRecoveryTimer.Interval := 750;
   FBrowserRecoveryTimer.OnTimer := ProcessBrowserRecoveryDeadline;
-  SetBrowserDocumentLifecycleCallbacks(@BrowserRecoveryDocumentEdited,
-    @ResetBrowserRecoveryDocument, @BrowserRecoveryDownloadRequested);
+  SetBrowserDocumentLifecycleCallbacks(BrowserRecoveryDocumentEdited,
+    ResetBrowserRecoveryDocument, BrowserRecoveryDownloadRequested);
   ResetBrowserRecoveryDocument;
   BrowserRecoveryDocumentState(0, 0);
   BrowserRecoveryInitialized;
@@ -1565,7 +1565,7 @@ begin
   EditorRestoreFailed := False;
   try
     TAutoSaveRuntime.UnpackTpXRecoveryPayload(Entry.Payload,
-      TDocumentPath(GetTempDir(False)), ModelBytes, AuxiliaryState,
+      TDocumentPath(GetTempDir), ModelBytes, AuxiliaryState,
       RecoveryAssets, UnresolvedLinks, AutoSaveMaxBrowserPayloadBytes);
     if UnresolvedLinks > 0 then
       raise EReadError.Create('Recovery payload has unresolved linked images');
@@ -1647,9 +1647,9 @@ begin
   RecoveryAssets.Free;
   Diagnostics.Free;
 end;
-{$ENDIF}
-{$ENDIF}
-{$IFNDEF CPUWASM32}
+{$ENDIF}{$ENDIF}
+
+{$IFDEF FPC}{$IFNDEF CPUWASM32}
 procedure TMainForm.RefreshRecoveryAfterEditSessionEnd;
 begin
   if FSaveRuntime = nil then Exit;
@@ -1658,8 +1658,7 @@ begin
   ArmAutoSaveTimer;
   UpdateAutoSaveUi;
 end;
-{$ENDIF}
-{$ENDIF}
+{$ENDIF}{$ENDIF}
 
 function TMainForm.SendSettledMessage(Msg: TEventMessage;
   Sender: TObject): Boolean;
