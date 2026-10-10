@@ -453,6 +453,92 @@ def s_export_formats(app):
     return 'SVG, EPS, PDF and MetaPost downloads contain the selected format'
 
 
+def s_download_status_and_unload(app):
+    status = app.page.locator('#document-status')
+    if 'original file' not in status.inner_text().lower():
+        raise AssertionError('the initial status does not explain browser persistence')
+
+    def unload_is_blocked():
+        return app.page.evaluate('''() => {
+          const event = new Event('beforeunload', {cancelable: true});
+          window.dispatchEvent(event);
+          return event.defaultPrevented;
+        }''')
+
+    if unload_is_blocked():
+        raise AssertionError('a clean document installed an unload warning')
+    v, cx, cy = box(app)
+    app.menu('Insert', 'Insert rectangle')
+    app.drag(cx-60, cy-40, cx+60, cy+40)
+    app.key('Escape')
+    status.wait_for(state='visible')
+    app.page.wait_for_function('document.querySelector("#document-status").dataset.state === "unsaved"')
+    if not unload_is_blocked():
+        raise AssertionError('real unsaved geometry did not guard beforeunload')
+
+    app.page.evaluate('''() => {
+      window.tpxDownloadBlobs = [];
+      window.tpxRevokedBlobs = [];
+      const create = URL.createObjectURL.bind(URL);
+      const revoke = URL.revokeObjectURL.bind(URL);
+      URL.createObjectURL = blob => {
+        window.tpxDownloadBlobs.push(blob.type);
+        return create(blob);
+      };
+      URL.revokeObjectURL = url => {
+        window.tpxRevokedBlobs.push(url);
+        return revoke(url);
+      };
+    }''')
+    saved = app.save('browser-copy.tpx')
+    if saved.name != 'browser-copy.tpx':
+        raise AssertionError(f'download used an unexpected filename: {saved.name}')
+    objects = drawing_xml(saved)
+    if len(objects) != 1 or objects[0].tag != 'rect':
+        raise AssertionError('download did not contain the current geometry')
+    app.page.wait_for_function('document.querySelector("#document-status").dataset.state === "clean"')
+    text = status.inner_text().lower()
+    if 'started' not in text and 'requested' not in text:
+        raise AssertionError(f'download status overstates or omits initiation: {text}')
+    if 'original file' not in text or 'cannot confirm it was saved' not in text:
+        raise AssertionError(f'download status does not distinguish the original file: {text}')
+    if unload_is_blocked():
+        raise AssertionError('a successfully requested copy left a clean document guarded')
+    if app.page.evaluate('window.tpxDownloadBlobs') != ['application/xml']:
+        raise AssertionError('TpX download used the wrong MIME type')
+    app.page.wait_for_function('window.tpxRevokedBlobs.length === 1', timeout=4000)
+    if app.page.locator('a[download]').count():
+        raise AssertionError('temporary download anchor was left in the page')
+
+    app.menu('Insert', 'Insert line')
+    app.drag(cx-45, cy-35, cx+45, cy+35)
+    app.key('Escape')
+    app.page.evaluate('''() => {
+      window.tpxOriginalAnchorClick = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = () => { throw new Error('injected download failure'); };
+    }''')
+    app.menu('File', 'Save')
+    app.page.wait_for_function('''() => {
+      const status = document.querySelector('#document-status');
+      return status.dataset.state === 'unsaved' && status.textContent.includes('could not start');
+    }''')
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('a failed browser download opened a modal dialog')
+    if not unload_is_blocked():
+        raise AssertionError('failed download incorrectly marked the drawing clean')
+    app.page.evaluate('HTMLAnchorElement.prototype.click = window.tpxOriginalAnchorClick')
+    with app.page.expect_download() as retried:
+        app.menu('File', 'Save')
+    retry_path = app.output / retried.value.suggested_filename
+    retried.value.save_as(retry_path)
+    if len(drawing_xml(retry_path)) != 2:
+        raise AssertionError('retry after download failure lost geometry')
+    if unload_is_blocked():
+        raise AssertionError('a successful retry left the clean drawing guarded')
+    return ('dirty-only unload guard; requested TpX copy releases its Blob URL; '
+            'failed output stays dirty and a retry saves both objects')
+
+
 def s_bitmap_roundtrip(app):
     import struct
     import zlib
@@ -475,13 +561,24 @@ def s_bitmap_roundtrip(app):
     app.painted(before)  # Wait for Pascal to arm the bitmap tool after the file dialog.
     app.drag(cx-70, cy-50, cx+70, cy+50)
     app.key('Escape')
+    related_downloads = []
+    app.page.on('download', lambda download: related_downloads.append(download))
     saved = app.save('bitmap-roundtrip.tpx')
+    app.page.wait_for_timeout(100)
     objects = drawing_xml(saved)
     link = objects[0].get('link', '') if len(objects) == 1 else ''
     if not link or link.replace('\\', '/').rsplit('/', 1)[-1] != fixture.name:
         raise AssertionError('saved drawing lost the bitmap reference')
     if app.page.get_by_role('dialog').count():
         raise AssertionError('saving a bitmap displayed an unexpected dialog')
+    asset_download = next((item for item in related_downloads
+                           if item.suggested_filename == fixture.name), None)
+    if asset_download is None:
+        raise AssertionError('TpX download omitted its linked bitmap asset')
+    downloaded_asset = app.output / asset_download.suggested_filename
+    asset_download.save_as(downloaded_asset)
+    if downloaded_asset.read_bytes() != fixture.read_bytes():
+        raise AssertionError('linked bitmap download changed the asset bytes')
 
     app.menu('File', 'Save as...')
     dialog = app.page.get_by_role('dialog')
@@ -736,6 +833,7 @@ SCENARIOS = [
     ('open-roundtrip', s_open_roundtrip),
     ('clipboard-roundtrip', s_clipboard_roundtrip),
     ('export-formats', s_export_formats),
+    ('download-status-unload', s_download_status_and_unload),
     ('bitmap-roundtrip', s_bitmap_roundtrip),
     ('modal-properties', s_modal_properties),
     ('nested-coordinates', s_nested_coordinates),
