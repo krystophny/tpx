@@ -3887,7 +3887,7 @@ end;
 function TText2D.GetWideText: WideString;
 var
   St, StCode: string;
-  I: Integer;
+  I, Semi, Code: Integer;
 begin
   St := fText;
   Result := '';
@@ -3896,13 +3896,22 @@ begin
   begin
     Result := Result + Copy(St, 1, I - 1);
     Delete(St, 1, I + 1);
-    I := Pos(';', St);
-    if I = 0 then I := Length(St) + 1;
-    StCode := Copy(St, 1, I - 1);
-    if (StCode <> '') and (StCode[1] = 'x') then
-      StCode[1] := '$';
-    Result := Result + Widechar(StrToInt(StCode));
-    Delete(St, 1, I);
+    Semi := Pos(';', St);
+    if Semi = 0 then
+      Result := Result + '&#'
+    else
+    begin
+      StCode := Copy(St, 1, Semi - 1);
+      if (StCode <> '') and (StCode[1] = 'x') then
+        StCode[1] := '$';
+      if TryStrToInt(StCode, Code) then
+      begin
+        Result := Result + WideChar(Code);
+        Delete(St, 1, Semi);
+      end
+      else
+        Result := Result + '&#';
+    end;
     I := Pos('&#', St);
   end;
   Result := Result + St;

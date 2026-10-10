@@ -211,6 +211,7 @@ begin
     while (Semi <= Length(RawStorage)) and
       not ((RawStorage[Semi] = '&') and (Semi < Length(RawStorage)) and
         (RawStorage[Semi + 1] = '#')) do Inc(Semi);
+    if Semi = I then Inc(Semi);
     AppendUtf8(TEditUtf8Text(Copy(RawStorage, I, Semi - I)));
     I := Semi;
   end;

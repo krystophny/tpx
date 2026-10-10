@@ -52,6 +52,44 @@ begin
   end;
 end;
 
+procedure TestEditSessionMalformedLiteralReference;
+const
+  SourceBytes: RawByteString = '<picture>(0,0)' + LineEnding +
+    '%<TpX v="5">' + LineEnding +
+    '%<text x="0" y="0" h="5" ' +
+      't="before &amp;# after &amp;#nope; &amp;#xZZ;"/>' + LineEnding +
+    '%</TpX>' + LineEnding + '</picture>' + LineEnding;
+var
+  Candidate: TDrawing2D;
+  TextObject: TText2D;
+  CodecContext: TObject;
+  Diagnostics: TStringList;
+  DisplayText: TEditUtf8Text;
+  CanSaveBack: Boolean;
+begin
+  Candidate := nil;
+  CodecContext := nil;
+  Diagnostics := TStringList.Create;
+  try
+    Candidate := LoadDocumentCandidate('tpx',
+      TDocumentPath(UTF8String('malformed-literal-reference.tpx')),
+      SourceBytes, CanSaveBack, CodecContext, Diagnostics);
+    Check(CanSaveBack and (Candidate.ObjectsCount = 1),
+      'TpX must open a text attribute containing literal numeric-reference syntax');
+    TextObject := Candidate.ObjectList.FirstObj as TText2D;
+    Check(TextObject.WideText = 'before &# after &#nope; &#xZZ;',
+      'unrecognized numeric-reference text must remain literal in the scene');
+    DisplayText := DecodeTpXTextForEdit(TextObject.Text);
+    Check(DisplayText =
+      'before &# after &#nope; &#xZZ;',
+      'unrecognized numeric-reference text must remain literal in the editor');
+  finally
+    Candidate.Free;
+    CodecContext.Free;
+    Diagnostics.Free;
+  end;
+end;
+
 procedure SetFirstProvisionalPointCount(var State: RawByteString;
   PointCount: Longint);
 var
