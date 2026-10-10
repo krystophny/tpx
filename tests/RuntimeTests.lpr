@@ -373,8 +373,6 @@ begin
   Check(EnsureUserStorageDirectory(usaConfig, ErrorText), ErrorText);
   Check(EnsureUserStorageDirectory(usaState, ErrorText), ErrorText);
   Check(EnsureUserStorageDirectory(usaCache, ErrorText), ErrorText);
-  Check(DirectoryExists(IncludeTrailingPathDelimiter(Paths.State) +
-    'AutoSaveRecovery'), 'Recovery store is not under the user state directory');
   if Paths.Portable then WriteLn('STORAGE_MODE=portable')
   else WriteLn('STORAGE_MODE=installed');
   WriteLn('STORAGE_CONFIG=', Paths.Config);

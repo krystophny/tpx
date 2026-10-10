@@ -219,6 +219,9 @@ class RuntimeTests(unittest.TestCase):
                                 "STORAGE_CACHE": cache / "TpX"}
                 for key, path in expected.items():
                     self.assertEqual(Path(values[key]).resolve(), path.resolve(), key)
+                self.assertTrue((Path(values["STORAGE_STATE"]) /
+                                 "AutoSaveRecovery").is_dir(),
+                                "recovery store is not under the user state directory")
                 expected_after = expected_entries | ({"TpX-portable-data"}
                                                       if portable else set())
                 self.assertEqual({path.name for path in runtime_dir.iterdir()},
