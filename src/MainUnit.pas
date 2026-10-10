@@ -17,6 +17,8 @@ uses
   , LazFileUtils, DocumentFormats, FileWatch, AutoReload
 {$IFNDEF CPUWASM32}
   , SyncObjs, AutoSaveRuntime, AutoSaveStore, AutoSavePreferences
+{$ELSE}
+  , AutoSaveRuntime, AutoSaveStore
 {$ENDIF}
 {$ENDIF}
   ;
@@ -561,6 +563,7 @@ type
     InitialViewQueued: Boolean;
     FSourceStatusPanel: TStatusPanel;
     FSourceStatusHint: string;
+    FOnRecoveryEditSessionRestored: TRecoveryEditSessionRestoredEvent;
 {$IFNDEF CPUWASM32}
     FFileChangeSource: TFileChangeSource;
     FWatchDispatcher: TThread;
@@ -599,7 +602,6 @@ type
     FOnExternalReloadKeepLocal: TExternalReloadKeepLocalEvent;
     FOnLocalEditCommitted: TLocalEditCommittedEvent;
     FOnRecoveryRestoreCommitted: TRecoveryRestoreCommittedEvent;
-    FOnRecoveryEditSessionRestored: TRecoveryEditSessionRestoredEvent;
     FSaveRuntime: TAutoSaveRuntime;
     FAutoSaveTimer: TTimer;
     FAutoSaveMenu: TMenuItem;
@@ -610,6 +612,16 @@ type
     FRecoveryOfferQueued: Boolean;
     FRecoveryKey: string;
     FAutoSavePreferenceEnabled: Boolean;
+{$ENDIF}
+{$IFDEF CPUWASM32}
+    FBrowserRecoveryTimer: TTimer;
+    FBrowserRecoveryEnabled: Boolean;
+    FBrowserRecoveryDocumentID: string;
+    FBrowserRecoveryRevision: QWord;
+    procedure ProcessBrowserRecoveryDeadline(Sender: TObject);
+    procedure SetBrowserRecoveryEnabled(Value: Boolean);
+    procedure RestoreBrowserRecoverySelection(PayloadLength,
+      MetadataLength: LongInt);
 {$ENDIF}
 {$ENDIF}
     ScrollPos0: Integer;             
@@ -626,6 +638,11 @@ type
       Change: TEditSessionChange);
 {$IFDEF FPC}
     procedure InitializeEmptyView(Data: PtrInt);
+{$IFDEF CPUWASM32}
+    procedure InitializeBrowserRecovery;
+    procedure BrowserRecoveryCheckpoint;
+    procedure UpdateBrowserDocumentDirty;
+{$ENDIF}
 {$IFNDEF CPUWASM32}
     procedure InitializeAutoReload;
     procedure ShutdownAutoReload;
@@ -708,6 +725,10 @@ type
     property CurrentDocumentEpoch: QWord read GetCurrentDocumentEpoch;
     property HasActiveEditSession: Boolean read GetHasActiveEditSession;
 {$IFDEF FPC}
+{$IFDEF CPUWASM32}
+    procedure NotifyBrowserDocumentEdited;
+    procedure ResetBrowserRecoveryDocument;
+{$ENDIF}
 {$IFNDEF CPUWASM32}
     function BeginDocumentWatchBinding(const Path: TDocumentPath;
       out WatchGeneration, SubscriptionID: QWord): TFileWatchStatus;
@@ -740,13 +761,13 @@ type
       read FOnLocalEditCommitted write FOnLocalEditCommitted;
     property OnRecoveryRestoreCommitted: TRecoveryRestoreCommittedEvent
       read FOnRecoveryRestoreCommitted write FOnRecoveryRestoreCommitted;
+{$ENDIF}
+{$ENDIF}
+{$IFDEF FPC}
     property OnRecoveryEditSessionRestored:
       TRecoveryEditSessionRestoredEvent
       read FOnRecoveryEditSessionRestored
       write FOnRecoveryEditSessionRestored;
-{$ENDIF}
-{$ENDIF}
-{$IFDEF FPC}
     function IsShortcut(var Message: TLMKey): Boolean; override;
 {$ENDIF}
   end;
@@ -772,9 +793,30 @@ uses Output, Input, Settings0, ColorEtc, Geometry, Options,
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
   , DocumentIO, FileWatchNative
+{$ELSE}
+  , BrowserDocumentStatus, DocumentIO
 {$ENDIF}
 {$ENDIF}
   ;
+
+{$IFDEF FPC}{$IFDEF CPUWASM32}
+function BrowserRecoveryNewID(Destination, Capacity: LongInt): LongInt;
+  external 'tpx' name 'recovery_new_id';
+function BrowserRecoveryPut(IDPointer, IDLength, MetadataPointer,
+  MetadataLength, PayloadPointer, PayloadLength: LongInt): LongInt;
+  external 'tpx' name 'recovery_put';
+function BrowserRecoveryCopy(PayloadPointer, PayloadCapacity,
+  MetadataPointer, MetadataCapacity: LongInt): LongInt;
+  external 'tpx' name 'recovery_copy';
+procedure BrowserRecoveryDocumentState(Source, Dirty: LongInt);
+  external 'tpx' name 'recovery_document_state';
+procedure BrowserRecoveryShowStatus(Code: LongInt);
+  external 'tpx' name 'recovery_show_status';
+procedure BrowserRecoveryRestored(Success, Code: LongInt);
+  external 'tpx' name 'recovery_restored';
+procedure BrowserRecoveryInitialized;
+  external 'tpx' name 'recovery_initialized';
+{$ENDIF}{$ENDIF}
 
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
@@ -958,9 +1000,6 @@ end;
 
 
 procedure TMainForm.FormCreate(Sender: TObject);
-{$IFDEF FPC}{$IFDEF CPUWASM32}
-var InfoMenu: TMenuItem;
-{$ENDIF}{$ENDIF}
 begin
   FormPos_Left := MainForm.Left;
   FormPos_Top := MainForm.Top;
@@ -994,11 +1033,7 @@ begin
   InitializeAutoReload;
   InitializeAutoSave;
 {$ELSE}
-  InfoMenu := TMenuItem.Create(Self);
-  InfoMenu.Caption := 'Persistent AutoSave and recovery unavailable in browser builds';
-  InfoMenu.Enabled := False;
-  InfoMenu.Hint := 'Browser downloads are temporary snapshots and do not track desktop files';
-  File1.Add(InfoMenu);
+  InitializeBrowserRecovery;
 {$ENDIF}
 {$ENDIF}
   RefreshSourceStatus;
@@ -1277,8 +1312,322 @@ begin
   if not Session.IsActive and FDeferredReload then
     Application.QueueAsyncCall(TryApplyDeferredReload, 0);
 {$ENDIF}
+{$IFDEF CPUWASM32}
+  if Change = escDraftChanged then NotifyBrowserDocumentEdited
+  else if not Session.IsActive then UpdateBrowserDocumentDirty;
+{$ENDIF}
 {$ENDIF}
 end;
+
+{$IFDEF FPC}{$IFDEF CPUWASM32}
+function RecoveryJsonString(const Value: string): RawByteString;
+var I: Integer; C: Char;
+begin
+  Result := '"';
+  for I := 1 to Length(Value) do
+  begin
+    C := Value[I];
+    case C of
+      '"': Result := Result + '\"';
+      '\': Result := Result + '\\';
+      #8: Result := Result + '\b';
+      #9: Result := Result + '\t';
+      #10: Result := Result + '\n';
+      #12: Result := Result + '\f';
+      #13: Result := Result + '\r';
+    else
+      if Ord(C) < 32 then
+        Result := Result + '\u00' + IntToHex(Ord(C), 2)
+      else
+        Result := Result + C;
+    end;
+  end;
+  Result := Result + '"';
+end;
+
+procedure TMainForm.InitializeBrowserRecovery;
+begin
+  FBrowserRecoveryEnabled := False;
+  FBrowserRecoveryTimer := TTimer.Create(Self);
+  FBrowserRecoveryTimer.Enabled := False;
+  FBrowserRecoveryTimer.Interval := 750;
+  FBrowserRecoveryTimer.OnTimer := ProcessBrowserRecoveryDeadline;
+  SaveDoc.Caption := 'Download a copy';
+  SaveAs.Caption := 'Download a copy as...';
+  ResetBrowserRecoveryDocument;
+  SetBrowserDocumentSource(False);
+  SetBrowserDocumentDirty(False);
+  BrowserRecoveryDocumentState(0, 0);
+  BrowserRecoveryInitialized;
+end;
+
+procedure TMainForm.ResetBrowserRecoveryDocument;
+var NewID: array[0..35] of Char; Count: LongInt;
+begin
+  if FBrowserRecoveryTimer <> nil then FBrowserRecoveryTimer.Enabled := False;
+  FBrowserRecoveryDocumentID := '';
+  FBrowserRecoveryRevision := 0;
+  Count := BrowserRecoveryNewID(LongInt(PtrUInt(@NewID[0])), SizeOf(NewID));
+  if Count = SizeOf(NewID) then
+    SetString(FBrowserRecoveryDocumentID, NewID, Count)
+  else
+    BrowserRecoveryShowStatus(9);
+end;
+
+procedure TMainForm.SetBrowserRecoveryEnabled(Value: Boolean);
+begin
+  FBrowserRecoveryEnabled := Value;
+  if not Value then
+  begin
+    if FBrowserRecoveryTimer <> nil then FBrowserRecoveryTimer.Enabled := False;
+  end
+  else if (TheDrawing <> nil) and TheDrawing.History.IsChanged then
+    NotifyBrowserDocumentEdited;
+end;
+
+procedure TMainForm.UpdateBrowserDocumentDirty;
+var IsDirty, HasSource: Boolean;
+begin
+  IsDirty := (TheDrawing <> nil) and TheDrawing.History.IsChanged;
+  if (FEditSession <> nil) and FEditSession.IsActive and
+    FEditSession.HasUncommittedWork then IsDirty := True;
+  HasSource := (EventManager <> nil) and
+    (EventManager.DocumentSession.SourcePath <> '');
+  SetBrowserDocumentSource(HasSource);
+  SetBrowserDocumentDirty(IsDirty);
+  BrowserRecoveryDocumentState(Ord(HasSource), Ord(IsDirty));
+end;
+
+procedure TMainForm.NotifyBrowserDocumentEdited;
+begin
+  if FBrowserRecoveryRevision < High(QWord) then
+    Inc(FBrowserRecoveryRevision);
+  UpdateBrowserDocumentDirty;
+  if FBrowserRecoveryEnabled and (FBrowserRecoveryTimer <> nil) then
+  begin
+    FBrowserRecoveryTimer.Enabled := False;
+    FBrowserRecoveryTimer.Enabled := True;
+  end;
+end;
+
+procedure TMainForm.ProcessBrowserRecoveryDeadline(Sender: TObject);
+begin
+  if FBrowserRecoveryTimer <> nil then FBrowserRecoveryTimer.Enabled := False;
+  BrowserRecoveryCheckpoint;
+end;
+
+procedure TMainForm.BrowserRecoveryCheckpoint;
+var Entry: TAutoSaveStoredRecord; Document: TDocumentSession;
+  Payload, Encoded, EmptyEncoded, IDBytes, MetadataBytes: RawByteString;
+  MaxPayloadBytes: Int64; UnresolvedLinks: LongWord;
+  DisplayName, FormatName: string;
+begin
+  if not FBrowserRecoveryEnabled then Exit;
+  if (FBrowserRecoveryDocumentID = '') or (TheDrawing = nil) or
+    (EventManager = nil) then
+  begin
+    BrowserRecoveryShowStatus(9);
+    Exit;
+  end;
+  if (FEditSession <> nil) and FEditSession.IsActive and
+    FEditSession.CompositionPending then
+  begin
+    BrowserRecoveryShowStatus(10);
+    Exit;
+  end;
+  Document := EventManager.DocumentSession;
+  try
+    Entry.Kind := asrDraft;
+    Entry.DocumentKey := FBrowserRecoveryDocumentID;
+    Entry.SourcePath := string(Document.SourcePath);
+    Entry.SourceFormatId := Document.SourceFormatId;
+    Entry.PayloadFormatId := 'tpx-assets';
+    Entry.BaseRevision := Document.AcceptedRevision;
+    Entry.BaseSourceBytes := Document.OriginalSourceBytes;
+    Entry.LocalRevision := FBrowserRecoveryRevision;
+    Entry.Payload := '';
+    IDBytes := UTF8String(FBrowserRecoveryDocumentID);
+    if Document.SourcePath = '' then DisplayName := 'Untitled drawing'
+    else DisplayName := string(DocumentPathFileName(Document.SourcePath));
+    FormatName := Document.SourceFormatId;
+    if FormatName = '' then FormatName := 'TpX';
+    MetadataBytes := '{"title":' + RecoveryJsonString(DisplayName) +
+      ',"format":' + RecoveryJsonString(FormatName) + '}';
+    if Length(Entry.BaseSourceBytes) > AutoSaveMaxBrowserPayloadBytes then
+    begin
+      BrowserRecoveryShowStatus(4);
+      Exit;
+    end;
+    EmptyEncoded := EncodeAutoSaveStoredRecord(Entry);
+    MaxPayloadBytes := AutoSaveMaxBrowserPayloadBytes -
+      Length(EmptyEncoded) - Length(MetadataBytes) - Length(IDBytes) - 64;
+    if MaxPayloadBytes <= 0 then
+    begin
+      BrowserRecoveryShowStatus(4);
+      Exit;
+    end;
+    Payload := TAutoSaveRuntime.BuildTpXRecoveryPayload(TheDrawing,
+      Document.SourcePath, UnresolvedLinks, FEditSession, MaxPayloadBytes);
+    if UnresolvedLinks > 0 then
+    begin
+      BrowserRecoveryShowStatus(14);
+      Exit;
+    end;
+    Entry.Payload := Payload;
+    Encoded := EncodeAutoSaveStoredRecord(Entry);
+    if Length(Encoded) + Length(MetadataBytes) + Length(IDBytes) + 64 >
+      AutoSaveMaxBrowserPayloadBytes then
+    begin
+      BrowserRecoveryShowStatus(4);
+      Exit;
+    end;
+    if BrowserRecoveryPut(LongInt(PtrUInt(@IDBytes[1])), Length(IDBytes),
+      LongInt(PtrUInt(@MetadataBytes[1])), Length(MetadataBytes),
+      LongInt(PtrUInt(@Encoded[1])), Length(Encoded)) = 0 then
+      BrowserRecoveryShowStatus(5);
+  except
+    on E: Exception do
+    begin
+      if Pos('payload limit', LowerCase(E.Message)) > 0 then
+        BrowserRecoveryShowStatus(4)
+      else
+        BrowserRecoveryShowStatus(5);
+    end;
+  end;
+end;
+
+procedure TMainForm.RestoreBrowserRecoverySelection(PayloadLength,
+  MetadataLength: LongInt);
+var Encoded, IDBytes, ModelBytes, AuxiliaryState: RawByteString;
+  Entry: TAutoSaveStoredRecord; RecoveryAssets: TRecoveryAssetContext;
+  Candidate: TDrawing2D; CandidateContext: TObject;
+  Diagnostics: TStringList; RestoredEditSession, ProbeSession: TObjectEditSession;
+  CanSaveBack: Boolean; UnresolvedLinks: LongWord;
+  FormatId, CandidatePath, ErrorText: string; EditorRestoreFailed: Boolean;
+begin
+  if (PayloadLength <= 0) or
+    (PayloadLength > AutoSaveMaxBrowserPayloadBytes) or
+    (MetadataLength <= 0) or (MetadataLength > 80) then
+  begin
+    BrowserRecoveryRestored(0, 6);
+    Exit;
+  end;
+  if (EventManager.DocumentSession.SourcePath <> '') or
+    TheDrawing.History.IsChanged or HasActiveEditSession then
+  begin
+    BrowserRecoveryRestored(0, 7);
+    Exit;
+  end;
+  SetLength(Encoded, PayloadLength);
+  SetLength(IDBytes, MetadataLength);
+  if BrowserRecoveryCopy(LongInt(PtrUInt(@Encoded[1])), PayloadLength,
+    LongInt(PtrUInt(@IDBytes[1])), MetadataLength) = 0 then
+  begin
+    BrowserRecoveryRestored(0, 6);
+    Exit;
+  end;
+  if not DecodeAutoSaveStoredRecord(Encoded, Entry) or
+    (Entry.Kind <> asrDraft) or
+    (Entry.DocumentKey <> string(IDBytes)) or
+    (Entry.PayloadFormatId <> 'tpx-assets') or
+    (Length(Entry.Payload) = 0) then
+  begin
+    BrowserRecoveryRestored(0, 6);
+    Exit;
+  end;
+  RecoveryAssets := nil;
+  Candidate := nil;
+  CandidateContext := nil;
+  Diagnostics := TStringList.Create;
+  RestoredEditSession := nil;
+  ProbeSession := nil;
+  EditorRestoreFailed := False;
+  try
+    TAutoSaveRuntime.UnpackTpXRecoveryPayload(Entry.Payload,
+      TDocumentPath(GetTempDir(False)), ModelBytes, AuxiliaryState,
+      RecoveryAssets, UnresolvedLinks, AutoSaveMaxBrowserPayloadBytes);
+    if UnresolvedLinks > 0 then
+      raise EReadError.Create('Recovery payload has unresolved linked images');
+    CandidatePath := string(RecoveryAssets.CandidatePath);
+    Candidate := LoadDocumentCandidate('tpx', CandidatePath, ModelBytes,
+      CanSaveBack, CandidateContext, Diagnostics);
+    if Candidate = nil then
+      raise EReadError.Create('The browser recovery draft could not be parsed');
+    if AuxiliaryState <> '' then
+    begin
+      if not TObjectEditSession.RestoreRecoveryState(Candidate,
+        CurrentDocumentEpoch, AuxiliaryState, ProbeSession, ErrorText) then
+        raise EReadError.Create(ErrorText);
+      ProbeSession.Cancel(CurrentDocumentEpoch);
+      FreeAndNil(ProbeSession);
+    end;
+    RecoveryAssets.AdoptDrawingFiles(Candidate);
+    CommitDocumentCandidate(TheDrawing, Candidate);
+    BeginLiveTeXDocument(False);
+    FormatId := Entry.SourceFormatId;
+    if FormatId = '' then FormatId := 'tpx';
+    EventManager.DocumentSession.AcceptSourceNormalized('', FormatId,
+      Entry.BaseSourceBytes, Entry.BaseRevision, False, RecoveryAssets);
+    RecoveryAssets := nil;
+    TheDrawing.SetFileNameKeepingBitmapParents(Drawing_NewFileName);
+    TheDrawing.History.MarkDirty;
+    EventManager.DocumentSession.AdvanceLocalRevision;
+    Caption := Drawing_NewFileName;
+    ResetBrowserRecoveryDocument;
+    SetBrowserDocumentSource(False);
+    UpdateBrowserDocumentDirty;
+    if AuxiliaryState <> '' then
+    begin
+      if not TObjectEditSession.RestoreRecoveryState(TheDrawing,
+        CurrentDocumentEpoch, AuxiliaryState, RestoredEditSession,
+        ErrorText) then
+        raise EReadError.Create(ErrorText);
+      if not RegisterEditSession(RestoredEditSession) then
+      begin
+        ErrorText := 'The recovered edit session could not be registered';
+        EditorRestoreFailed := True;
+        UnregisterEditSession(RestoredEditSession);
+        FreeAndNil(RestoredEditSession);
+      end;
+      if RestoredEditSession <> nil then
+      begin
+        if not Assigned(FOnRecoveryEditSessionRestored) then
+        begin
+          ErrorText := 'No editor is available for the recovered draft';
+          EditorRestoreFailed := True;
+          UnregisterEditSession(RestoredEditSession);
+          FreeAndNil(RestoredEditSession);
+        end
+        else
+          try
+            FOnRecoveryEditSessionRestored(Self, RestoredEditSession);
+            { Ownership transfers to the callback after it returns. }
+            RestoredEditSession := nil;
+          except
+            on E: Exception do
+            begin
+              ErrorText := 'The recovered edit session could not be opened: ' +
+                E.Message;
+              EditorRestoreFailed := True;
+              UnregisterEditSession(RestoredEditSession);
+              FreeAndNil(RestoredEditSession);
+            end;
+          end;
+      end;
+    end;
+    if EditorRestoreFailed then BrowserRecoveryRestored(0, 15)
+    else BrowserRecoveryRestored(1, 8);
+  except
+    on E: Exception do BrowserRecoveryRestored(0, 6);
+  end;
+  ProbeSession.Free;
+  RestoredEditSession.Free;
+  Candidate.Free;
+  CandidateContext.Free;
+  RecoveryAssets.Free;
+  Diagnostics.Free;
+end;
+{$ENDIF}{$ENDIF}
 
 procedure TMainForm.RefreshRecoveryAfterEditSessionEnd;
 begin
@@ -1590,6 +1939,9 @@ begin
   if TheDrawing <> nil then
     TheDrawing.OnBeforeSelectionChange := nil;
 {$IFDEF FPC}
+{$IFDEF CPUWASM32}
+  if FBrowserRecoveryTimer <> nil then FBrowserRecoveryTimer.Enabled := False;
+{$ENDIF}
 {$IFNDEF CPUWASM32}
   ShutdownAutoSave;
   ShutdownAutoReload;
@@ -3722,6 +4074,23 @@ begin
       Rect.Left, Rect.Top + 1, Index);
   end;
 end;
+
+{$IFDEF FPC}{$IFDEF CPUWASM32}
+procedure BrowserRecoveryEnabled(Value: LongInt);
+begin
+  if MainForm <> nil then MainForm.SetBrowserRecoveryEnabled(Value <> 0);
+end;
+
+procedure BrowserRecoverySizeReady(PayloadLength, MetadataLength: LongInt);
+begin
+  if MainForm <> nil then
+    MainForm.RestoreBrowserRecoverySelection(PayloadLength, MetadataLength);
+end;
+
+exports
+  BrowserRecoveryEnabled name 'tpx_browser_recovery_enabled',
+  BrowserRecoverySizeReady name 'tpx_browser_recovery_size_ready';
+{$ENDIF}{$ENDIF}
 
 initialization
 {$IFDEF FPC}
