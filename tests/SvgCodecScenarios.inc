@@ -92,6 +92,53 @@ begin
   Result := False;
 end;
 
+procedure CheckSvgRotatedRectangle(const Primitive: TPrimitive2D;
+  const PicScale: TRealType; const Description: string);
+const
+  Tolerance = 1E-4;
+var
+  SourceX, SourceY, ExpectedX, ExpectedY, ActualX, ActualY: array[0..3] of Double;
+  Angle, CosAngle, SinAngle, DX, DY: Double;
+  I, J: Integer;
+  Matched: Boolean;
+begin
+  Check((Primitive <> nil) and (Primitive.Points <> nil) and
+    (Primitive.Points.Count = 4), Description + ': rectangle point count changed');
+  SourceX[0] := 30; SourceY[0] := 10;
+  SourceX[1] := 34; SourceY[1] := 10;
+  SourceX[2] := 34; SourceY[2] := 16;
+  SourceX[3] := 30; SourceY[3] := 16;
+  Angle := 33.125 * Pi / 180;
+  CosAngle := Cos(Angle);
+  SinAngle := Sin(Angle);
+  for I := 0 to 3 do
+  begin
+    DX := SourceX[I] - 32;
+    DY := SourceY[I] - 13;
+    ExpectedX[I] := 32 + DX * CosAngle - DY * SinAngle;
+    ExpectedY[I] := 48 - (13 + DX * SinAngle + DY * CosAngle);
+    Matched := False;
+    for J := 0 to Primitive.Points.Count - 1 do
+      if (Abs(Primitive.Points[J].X - ExpectedX[I]) <= Tolerance) and
+        (Abs(Primitive.Points[J].Y - ExpectedY[I]) <= Tolerance) then
+      begin
+        ActualX[I] := Primitive.Points[J].X;
+        ActualY[I] := Primitive.Points[J].Y;
+        Matched := True;
+        Break;
+      end;
+    Check(Matched, Description + ': rotated rectangle corner changed');
+  end;
+  CheckSvgNear((ActualX[1] - ActualX[0]) * PicScale,
+    4 * CosAngle * PicScale, Tolerance * PicScale,
+    Description + ': rotated edge x component');
+  CheckSvgNear((ActualY[1] - ActualY[0]) * PicScale,
+    -4 * SinAngle * PicScale, Tolerance * PicScale,
+    Description + ': rotated edge y component');
+  CheckSvgNear(Primitive.LineWidth * PicScale, 2 * 25.4 / 96,
+    Tolerance, Description + ': physical stroke width');
+end;
+
 procedure FindSvgFilledPrimitive(const List: TGraphicObjList;
   const HtmlColor: string; var Primitive: TPrimitive2D);
 var
@@ -146,7 +193,8 @@ const
     '<line transform="matrix(0 1 -1 0 20 0)" x1="0" y1="0" ' +
     'x2="1" y2="0" stroke="#445566" stroke-width="1"/>' +
     '<rect x="30" y="10" width="4" height="6" ' +
-    'transform="rotate(90 32 13)" fill="#ddeeff" stroke="#663399"/>' +
+    'transform="rotate(33.125 32 13)" fill="#ddeeff" ' +
+    'stroke="#663399" stroke-width="2"/>' +
     '<text x="20" y="30" font-family="Arial" font-size="12px" ' +
     'text-anchor="middle" xml:space="preserve">A &amp; B ' +
     #$CE + #$B2 + '</text></svg>';
@@ -628,6 +676,8 @@ begin
     Filled := nil;
     FindSvgFilledPrimitive(Drawing.ObjectList, '#DDEEFF', Filled);
     Check(Filled <> nil, 'SVG filled geometry lost its fill color');
+    CheckSvgRotatedRectangle(Filled, Drawing.PicScale,
+      'independent fractional-angle rectangle');
     Check(Path.Points.Count = 4,
       'cubic path did not retain its four Bezier points');
     CheckSvgNear(Path.Points[0].X, 8, 1E-4, 'cubic start x');
@@ -688,6 +738,8 @@ begin
     ReloadedFilled := nil;
     FindSvgFilledPrimitive(Reloaded.ObjectList, '#DDEEFF', ReloadedFilled);
     Check(ReloadedFilled <> nil, 'same-format save changed fill color');
+    CheckSvgRotatedRectangle(ReloadedFilled, Reloaded.PicScale,
+      'first SVG reload fractional-angle rectangle');
     CheckSvgNear(ReloadedText.Height * Reloaded.PicScale,
       Text.Height * Drawing.PicScale, 1E-4,
       'same-format text size round trip in millimetres');
@@ -695,7 +747,7 @@ begin
       (ReloadedText.HAlignment = Text.HAlignment),
       'same-format UTF-8 text content or alignment round trip changed');
 
-    for Cycle := 1 to 2 do
+    for Cycle := 1 to 100 do
     begin
       Serialized := SerializeDocumentToBytes('svg', Reloaded,
         'roundtrip-cycle.svg', ReloadedContext);
@@ -711,6 +763,16 @@ begin
         Line.Points[0].Y), 'repeated SVG round trip changed line coordinates');
       Check(HasSvgPoint(Reloaded.ObjectList, Path.Points[1].X,
         Path.Points[1].Y), 'repeated SVG round trip changed Bezier geometry');
+      ReloadedFilled := nil;
+      FindSvgFilledPrimitive(Reloaded.ObjectList, '#DDEEFF', ReloadedFilled);
+      CheckSvgRotatedRectangle(ReloadedFilled, Reloaded.PicScale,
+        'SVG cycle ' + IntToStr(Cycle) + ' fractional-angle rectangle');
+      ReloadedText := nil;
+      FindSvgObjects(Reloaded.ObjectList, ReloadedLine, ReloadedPath,
+        ReloadedText);
+      Check((ReloadedText <> nil) and
+        (UTF8Encode(ReloadedText.WideText) = ExpectedTextUtf8),
+        'SVG cycle ' + IntToStr(Cycle) + ' changed Unicode text');
     end;
 
     CheckRootUnits('2.54cm', '1.27cm');
