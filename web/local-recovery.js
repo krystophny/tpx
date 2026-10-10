@@ -118,6 +118,7 @@ export function localRecoveryImports(runtime) {
   let sourceOpen = false;
   let dirty = false;
   let pending = null;
+  let refreshGeneration = 0;
   const sequences = new Map();
   const channel = typeof BroadcastChannel === 'function' ?
     new BroadcastChannel('tpx-browser-local-recovery') : null;
@@ -128,7 +129,7 @@ export function localRecoveryImports(runtime) {
       enabledControl.checked = enabled;
       notifyEnabled();
       if (enabled) refresh();
-      else { list.replaceChildren(); show('Off. Existing drafts were kept; enable recovery to review or delete them.'); }
+      else { refresh(); show('Off. Existing drafts were kept; enable recovery to review or delete them.'); }
       updateRestoreButtons();
     } else if (event.data?.type === 'draft-change' && enabled) refresh();
   };
@@ -189,10 +190,12 @@ export function localRecoveryImports(runtime) {
   }
 
   async function refresh() {
+    const generation = ++refreshGeneration;
     list.replaceChildren();
     if (!enabled) return;
     try {
       const rows = await getAllDrafts();
+      if (!enabled || generation !== refreshGeneration) return;
       rows.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
       for (const record of rows) {
         if (!validStoredRecord(record)) {
@@ -263,7 +266,7 @@ export function localRecoveryImports(runtime) {
       show(enabled ? 'Enabled. Browser storage may still be cleared or evicted.' :
         'Off. Existing drafts were kept; enable recovery to review or delete them.');
       notifyEnabled();
-      if (enabled) await refresh(); else list.replaceChildren();
+      await refresh();
     } catch (_) {
       enabledControl.checked = enabled;
       show(statusText.get(9));
