@@ -126,17 +126,29 @@ begin
       'a failed recovery write must not create a retry timer');
 
     C.SetConflict(False);
+    CheckCore(C.Conflict,
+      'Keep Local must not clear an observed external conflict');
     C.NotifyLocalEdit(12, 1000, True);
     CheckCore(C.TakeDue(1750, Work, Ticket),
       'a later completed edit may schedule new work');
+    CheckCore(Work = [aswRecoveryDraft],
+      'a later edit after Keep Local must remain suspended from source writes');
+    CheckCore(not C.CanStart(aswSourceSave, Ticket),
+      'a latched conflict must continue blocking automatic publication');
+    CheckCore(C.AcceptSavedRevision(C.CurrentTicket, 21) and not C.Conflict,
+      'only a successfully accepted explicit save may clear the conflict');
+    C.NotifyLocalEdit(13, 1500, True);
+    CheckCore(C.TakeDue(2250, Work, Ticket) and
+      (Work = [aswSourceSave, aswRecoveryDraft]),
+      'an edit after an accepted conflict resolution may be saved again');
     C.SourceSaveFailed(Ticket, 'source replace failed');
     CheckCore(C.Dirty and (C.LastFailure = 'source replace failed'),
       'failed publication must retain the dirty state and its error');
-    CheckCore(C.NextDelayMS(1750) < 0,
+    CheckCore(C.NextDelayMS(2250) < 0,
       'a failed publication must not spin or retry periodically');
 
-    C.NotifyLocalEdit(13, 2000, True);
-    CheckCore(C.TakeDue(2750, Work, Ticket), 'new revision should become due');
+    C.NotifyLocalEdit(14, 2500, True);
+    CheckCore(C.TakeDue(3250, Work, Ticket), 'new revision should become due');
     C.BeginDocumentTransition;
     CheckCore(not C.IsTicketCurrent(Ticket),
       'New/Open transition must invalidate queued callbacks');

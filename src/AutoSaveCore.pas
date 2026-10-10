@@ -268,8 +268,12 @@ end;
 
 procedure TAutoSaveCoordinator.SetConflict(Value: Boolean);
 begin
-  FConflict := Value;
-  if Value then CancelSourceSave;
+  { A conflict is evidence of an external revision, not a transient pause.
+    Keep Local must not clear it; only a successful accepted source write,
+    committed reload, or a new document binding establishes a new baseline. }
+  if not Value then Exit;
+  FConflict := True;
+  CancelSourceSave;
 end;
 
 function TAutoSaveCoordinator.NextDelayMS(NowMS: QWord): Integer;
