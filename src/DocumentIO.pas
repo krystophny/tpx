@@ -72,10 +72,6 @@ function SerializeDocumentForSave(const FormatId: string;
   FinalAssets: TStrings; const AllowExternalTools: Boolean = False): Boolean;
 function SerializeTpXRecoveryBytes(Drawing: TDrawing2D;
   const FileName: TDocumentPath): RawByteString;
-procedure StageRelativeBitmapAssets(Drawing: TDrawing2D;
-  const Destination, StageDirectory, StagingFileName: TDocumentPath;
-  const UseLinkBasenames: Boolean; StagedAssets, FinalAssets: TStrings;
-  out HasStagedAssets: Boolean);
 
 implementation
 
