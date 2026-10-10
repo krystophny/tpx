@@ -6,7 +6,7 @@ interface
 
 implementation
 
-uses SysUtils, Math, TikZLexer, TikZSyntax, TikZImport, CoreTestSupport;
+uses Classes, SysUtils, Math, TikZLexer, TikZSyntax, TikZImport, CoreTestSupport;
 
 function BytesOf(const Value: RawByteString): TBytes;
 var
@@ -256,6 +256,90 @@ begin
   end;
 end;
 
+
+function LoadTikZFixture(const Name: string): TBytes;
+var
+  Stream: TFileStream;
+  Root: string;
+begin
+  Root := GetEnvironmentVariable('TPX_CORE_FIXTURE_DIR');
+  CheckCore(Root <> '', 'TPX_CORE_FIXTURE_DIR is not set');
+  Stream := TFileStream.Create(IncludeTrailingPathDelimiter(Root) +
+    'tikz' + PathDelim + Name, fmOpenRead or fmShareDenyNone);
+  try
+    SetLength(Result, Stream.Size);
+    if Stream.Size > 0 then Stream.ReadBuffer(Result[0], Stream.Size);
+  finally
+    Stream.Free;
+  end;
+end;
+
+procedure TestDevTikZArrowAndHatchingGeometry;
+var
+  Source: TBytes;
+  Syntax: TTikZSyntaxResult;
+  Evaluated: TTikZSemanticResult;
+  Obj: TTikZSceneObject;
+  I: SizeInt;
+begin
+  Source := LoadTikZFixture('devtikz-arrow-hatching.tex');
+  Syntax := ParseTikZ(Source, DefaultTikZParseOptions(tikTexInput));
+  Evaluated := EvaluateTikZ(Syntax, DefaultTikZImportOptions);
+  try
+    CheckCore((Syntax.Outcome = tpoAccepted) and
+      (Evaluated.Outcome = tsoAccepted),
+      'actual DevTikZ arrow and hatching output should be importable');
+    CheckCore(Evaluated.Scene.ObjectCount = 7,
+      'bounds, arrow, hatch, and outline paths were lost or reordered');
+    Obj := Evaluated.Scene.ObjectAt(0);
+    CheckCore((Obj.Kind = tsoPath) and Obj.StrokeEnabled and
+      not Obj.FillEnabled and (Obj.StrokeRGB = $FF0000) and
+      (Length(Obj.Commands) = 2),
+      'exported arrow shaft did not remain a red line');
+    CheckNearCore(Obj.LineWidthMM, 0.5, 0.00001,
+      'exported arrow shaft width (mm)');
+    CheckNearCore(Obj.Commands[0].P1.X, 1, 0.00001,
+      'exported arrow shaft start x');
+    CheckNearCore(Obj.Commands[1].P1.X, 12, 0.00001,
+      'exported arrow shaft end x');
+    Obj := Evaluated.Scene.ObjectAt(1);
+    CheckCore((Obj.Kind = tsoPath) and Obj.StrokeEnabled and
+      Obj.FillEnabled and (Obj.StrokeRGB = $FF0000) and
+      (Obj.FillRGB = $FF0000) and (Length(Obj.Commands) = 6) and
+      (Obj.Commands[High(Obj.Commands)].Kind = tpcClose),
+      'exported arrowhead polygon was not retained as filled geometry');
+    CheckNearCore(Obj.Commands[1].P1.X, 7.8, 0.00001,
+      'exported arrowhead upper wing x');
+    CheckNearCore(Obj.Commands[1].P1.Y, 3.05, 0.00001,
+      'exported arrowhead upper wing y');
+    for I := 2 to 5 do
+    begin
+      Obj := Evaluated.Scene.ObjectAt(I);
+      CheckCore((Obj.Kind = tsoPath) and Obj.StrokeEnabled and
+        not Obj.FillEnabled and (Obj.StrokeRGB = $0000FF) and
+        (Length(Obj.Commands) = 2),
+        'each exported hatch stroke should remain an independent blue line');
+      CheckNearCore(Obj.LineWidthMM, 0.125, 0.00001,
+        'exported hatch stroke width (mm)');
+    end;
+    Obj := Evaluated.Scene.ObjectAt(6);
+    CheckCore((Obj.Kind = tsoRectangle) and Obj.StrokeEnabled and
+      not Obj.FillEnabled and (Obj.StrokeRGB = $000000),
+      'exported rectangle outline was lost after the hatch paths');
+    CheckNearCore(Obj.Origin.X, 2, 0.00001,
+      'exported rectangle outline x');
+    CheckNearCore(Obj.Origin.Y, 5, 0.00001,
+      'exported rectangle outline y');
+    CheckNearCore(Obj.WidthMM, 8, 0.00001,
+      'exported rectangle outline width');
+    CheckNearCore(Obj.HeightMM, 4, 0.00001,
+      'exported rectangle outline height');
+  finally
+    Evaluated.Free;
+    Syntax.Free;
+  end;
+end;
+
 initialization
   RegisterCoreTest('tikz-pgf-scope-transform-order',
     TestPGFScopeTransformOrder);
@@ -267,5 +351,7 @@ initialization
     TestBareDrawingStyleFlags);
   RegisterCoreTest('tikz-relative-coordinate-bases',
     TestRelativeCoordinateBases);
+  RegisterCoreTest('tikz-devtikz-arrow-hatching-geometry',
+    TestDevTikZArrowAndHatchingGeometry);
 
 end.
