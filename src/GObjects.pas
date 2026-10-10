@@ -3904,9 +3904,17 @@ begin
       StCode := Copy(St, 1, Semi - 1);
       if (StCode <> '') and (StCode[1] = 'x') then
         StCode[1] := '$';
-      if TryStrToInt(StCode, Code) then
+      if TryStrToInt(StCode, Code) and (Code >= 0) and
+        (Code <= $10FFFF) then
       begin
-        Result := Result + WideChar(Code);
+        if Code <= $FFFF then
+          Result := Result + WideChar(Code)
+        else
+        begin
+          Dec(Code, $10000);
+          Result := Result + WideChar($D800 + (Code shr 10)) +
+            WideChar($DC00 + (Code and $3FF));
+        end;
         Delete(St, 1, Semi);
       end
       else

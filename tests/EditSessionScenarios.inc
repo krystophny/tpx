@@ -57,7 +57,8 @@ const
   SourceBytes: RawByteString = '<picture>(0,0)' + LineEnding +
     '%<TpX v="5">' + LineEnding +
     '%<text x="0" y="0" h="5" ' +
-      't="before &amp;# after &amp;#nope; &amp;#xZZ;"/>' + LineEnding +
+      't="before &amp;# after &amp;#nope; &amp;#xZZ; ' +
+        '&amp;#-1; &amp;#1114112; &amp;#128512;"/>' + LineEnding +
     '%</TpX>' + LineEnding + '</picture>' + LineEnding;
 var
   Candidate: TDrawing2D;
@@ -77,12 +78,14 @@ begin
     Check(CanSaveBack and (Candidate.ObjectsCount = 1),
       'TpX must open a text attribute containing literal numeric-reference syntax');
     TextObject := Candidate.ObjectList.FirstObj as TText2D;
-    Check(TextObject.WideText = 'before &# after &#nope; &#xZZ;',
-      'unrecognized numeric-reference text must remain literal in the scene');
+    Check(TextObject.WideText =
+      'before &# after &#nope; &#xZZ; &#-1; &#1114112; ' +
+        WideChar($D83D) + WideChar($DE00),
+      'invalid references must stay literal while a scalar reference renders');
     DisplayText := DecodeTpXTextForEdit(TextObject.Text);
     Check(DisplayText =
-      'before &# after &#nope; &#xZZ;',
-      'unrecognized numeric-reference text must remain literal in the editor');
+      LCLTextToUTF8Bytes('before &# after &#nope; &#xZZ; &#-1; &#1114112; 😀'),
+      'the editor must preserve invalid references and decode a scalar reference');
   finally
     Candidate.Free;
     CodecContext.Free;
