@@ -8,6 +8,11 @@ uses Classes, Graphics, Geometry, Devices, Drawings, GObjects,
   PropertyEditCore;
 
 type
+  { LCL edit controls expose UTF-8 bytes in string values on every widgetset.
+    Keep that byte contract explicit at the shared editing boundary; in
+    particular, do not run these values through UTF8Encode on Windows. }
+  TEditUtf8Text = type UTF8String;
+
   { Text is the exact stored TpX value. Use the conversion helpers below when
     presenting it in an editor; this keeps rollback and TeX text byte-exact. }
   TObjectPropertyField = (opfLineStyle, opfLineColor, opfLineWidth,
@@ -32,9 +37,9 @@ type
     EndArrowKind: TArrowKind;
     ArrowSizeFactor: TRealType;
     Text: AnsiString;
-    TeXText: AnsiString;
+    TeXText: TEditUtf8Text;
     TextHeight: TRealType;
-    FontName: string;
+    FontName: TEditUtf8Text;
     FontStyle: TFontStyles;
     HAlignment: THAlignment;
     TextRotation: TRealType;
@@ -45,7 +50,7 @@ type
     SymbolRotation: TRealType;
     RectangleRX: TRealType;
     RectangleRY: TRealType;
-    BitmapLink: string;
+    BitmapLink: TEditUtf8Text;
     KeepAspectRatio: Boolean;
   end;
 
@@ -54,8 +59,9 @@ function ExpandObjectEditTargetIDs(Drawing: TDrawing2D;
 function AssignObjectPropertyPatchValue(var Patch: TObjectPropertyPatch;
   Field: TObjectPropertyField; const Value: Variant;
   out ErrorText: string): Boolean;
-function DecodeTpXTextForEdit(const StorageText: AnsiString): string;
-function EncodeEditTextForTpX(const DisplayText: string): AnsiString;
+function LCLTextToUTF8Bytes(const Value: string): TEditUtf8Text;
+function DecodeTpXTextForEdit(const StorageText: AnsiString): TEditUtf8Text;
+function EncodeEditTextForTpX(const DisplayText: TEditUtf8Text): AnsiString;
 
 function ReadObjectProperty(Drawing: TDrawing2D;
   const TargetIDs: array of Integer;
@@ -65,7 +71,8 @@ function ValidateObjectPropertyPatch(Drawing: TDrawing2D;
   const Patch: TObjectPropertyPatch; out ErrorText: string): Boolean;
 function ApplyObjectPropertyPatch(Drawing: TDrawing2D;
   const TargetIDs: array of Integer;
-  const Patch: TObjectPropertyPatch; out ErrorText: string): Boolean;
+  const Patch: TObjectPropertyPatch; out ErrorText: string;
+  Repaint: Boolean = True): Boolean;
 function CaptureObjectPropertyPatch(Drawing: TDrawing2D;
   const TargetIDs: array of Integer; Fields: TObjectPropertyFields;
   out Patch: TObjectPropertyPatch; out ErrorText: string): Boolean;
@@ -136,26 +143,39 @@ begin
   Move(Mask, Result, SizeOf(Mask));
 end;
 
-function DecodeTpXTextForEdit(const StorageText: AnsiString): string;
+function LCLTextToUTF8Bytes(const Value: string): TEditUtf8Text;
+var Bytes: RawByteString;
+begin
+  { A Lazarus string can carry UTF-8 bytes while tagged with the platform's
+    default ANSI code page. Retag the existing bytes; never transcode them. }
+  Bytes := RawByteString(Value);
+  SetCodePage(Bytes, 65001, False);
+  Result := TEditUtf8Text(Bytes);
+end;
+
+function DecodeTpXTextForEdit(const StorageText: AnsiString): TEditUtf8Text;
 var I, Semi, Code: Integer; Part: string; WideResult: WideString;
-  procedure AppendUtf8(const Value: string);
+  RawStorage: RawByteString;
+  procedure AppendUtf8(const Value: TEditUtf8Text);
   begin
     WideResult := WideResult + UTF8Decode(Value);
   end;
 begin
+  RawStorage := RawByteString(StorageText);
+  SetCodePage(RawStorage, 65001, False);
   WideResult := '';
   I := 1;
-  while I <= Length(StorageText) do
+  while I <= Length(RawStorage) do
   begin
-    if (StorageText[I] = '&') and (I < Length(StorageText)) and
-      (StorageText[I + 1] = '#') then
+    if (RawStorage[I] = '&') and (I < Length(RawStorage)) and
+      (RawStorage[I + 1] = '#') then
     begin
       Semi := I + 2;
-      while (Semi <= Length(StorageText)) and
-        (StorageText[Semi] <> ';') do Inc(Semi);
-      if Semi <= Length(StorageText) then
+      while (Semi <= Length(RawStorage)) and
+        (RawStorage[Semi] <> ';') do Inc(Semi);
+      if Semi <= Length(RawStorage) then
       begin
-        Part := Copy(StorageText, I + 2, Semi - I - 2);
+        Part := Copy(RawStorage, I + 2, Semi - I - 2);
         if (Part <> '') and (Part[1] = 'x') then
         begin
           Delete(Part, 1, 1);
@@ -175,16 +195,16 @@ begin
       end;
     end;
     Semi := I;
-    while (Semi <= Length(StorageText)) and
-      not ((StorageText[Semi] = '&') and (Semi < Length(StorageText)) and
-        (StorageText[Semi + 1] = '#')) do Inc(Semi);
-    AppendUtf8(Copy(StorageText, I, Semi - I));
+    while (Semi <= Length(RawStorage)) and
+      not ((RawStorage[Semi] = '&') and (Semi < Length(RawStorage)) and
+        (RawStorage[Semi + 1] = '#')) do Inc(Semi);
+    AppendUtf8(TEditUtf8Text(Copy(RawStorage, I, Semi - I)));
     I := Semi;
   end;
-  Result := UTF8Encode(WideResult);
+  Result := TEditUtf8Text(UTF8Encode(WideResult));
 end;
 
-function EncodeEditTextForTpX(const DisplayText: string): AnsiString;
+function EncodeEditTextForTpX(const DisplayText: TEditUtf8Text): AnsiString;
 var I, Count: Integer; B1, B2, B3, B4: Byte; CodePoint: Cardinal;
   procedure Append(const Value: string);
   begin
@@ -370,9 +390,11 @@ begin
   if opfArrowSizeFactor in Patch.Fields then
     Prim.ArrowSizeFactor := Patch.ArrowSizeFactor;
   if opfText in Patch.Fields then Txt.Text := Patch.Text;
-  if opfTeXText in Patch.Fields then Txt.TeXText := Patch.TeXText;
+  if opfTeXText in Patch.Fields then
+    Txt.TeXText := RawByteString(Patch.TeXText);
   if opfTextHeight in Patch.Fields then Txt.Height := Patch.TextHeight;
-  if opfFontName in Patch.Fields then Txt.Font.Name := Patch.FontName;
+  if opfFontName in Patch.Fields then
+    Txt.Font.Name := RawByteString(Patch.FontName);
   if opfFontStyle in Patch.Fields then Txt.Font.Style := Patch.FontStyle;
   if opfHAlignment in Patch.Fields then Txt.HAlignment := Patch.HAlignment;
   if opfTextRotation in Patch.Fields then Txt.Rot := Patch.TextRotation;
@@ -391,7 +413,8 @@ begin
   if opfRectangleRY in Patch.Fields then
     (Obj as TRectangle2D).RY := Patch.RectangleRY;
   if opfBitmapLink in Patch.Fields then
-    (Obj as TBitmap2D).BitmapEntry := Drawing.RegisterBitmap(Patch.BitmapLink);
+    (Obj as TBitmap2D).BitmapEntry := Drawing.RegisterBitmap(
+      RawByteString(Patch.BitmapLink));
   if opfKeepAspectRatio in Patch.Fields then
     (Obj as TBitmap2D).KeepAspectRatio := Patch.KeepAspectRatio;
   Obj.UpdateExtension(nil);
@@ -399,7 +422,8 @@ end;
 
 function ApplyObjectPropertyPatch(Drawing: TDrawing2D;
   const TargetIDs: array of Integer;
-  const Patch: TObjectPropertyPatch; out ErrorText: string): Boolean;
+  const Patch: TObjectPropertyPatch; out ErrorText: string;
+  Repaint: Boolean): Boolean;
 type
   TTargetSnapshot = record
     ID: Integer;
@@ -434,7 +458,7 @@ begin
         AppliedCount := I + 1;
         ApplyPatchToObject(Drawing, TObject2D(List[I]), Patch);
       end;
-      Drawing.RepaintViewports;
+      if Repaint then Drawing.RepaintViewports;
       Result := True;
     except
       on E: Exception do
@@ -450,7 +474,7 @@ begin
               through setters without raising. }
           end;
         end;
-        Drawing.RepaintViewports;
+        if Repaint then Drawing.RepaintViewports;
         Result := False;
       end;
     end;
@@ -477,9 +501,9 @@ begin
     opfEndArrowKind: Patch.EndArrowKind := TArrowKind(Integer(Value));
     opfArrowSizeFactor: Patch.ArrowSizeFactor := TRealType(Value);
     opfText: Patch.Text := AnsiString(string(Value));
-    opfTeXText: Patch.TeXText := AnsiString(string(Value));
+    opfTeXText: Patch.TeXText := LCLTextToUTF8Bytes(VarToStr(Value));
     opfTextHeight: Patch.TextHeight := TRealType(Value);
-    opfFontName: Patch.FontName := string(Value);
+    opfFontName: Patch.FontName := LCLTextToUTF8Bytes(VarToStr(Value));
     opfFontStyle: Patch.FontStyle := FontStylesFromMask(Byte(Value));
     opfHAlignment: Patch.HAlignment := THAlignment(Integer(Value));
     opfTextRotation: Patch.TextRotation := TRealType(Value);
@@ -490,7 +514,7 @@ begin
     opfSymbolRotation: Patch.SymbolRotation := TRealType(Value);
     opfRectangleRX: Patch.RectangleRX := TRealType(Value);
     opfRectangleRY: Patch.RectangleRY := TRealType(Value);
-    opfBitmapLink: Patch.BitmapLink := string(Value);
+    opfBitmapLink: Patch.BitmapLink := LCLTextToUTF8Bytes(VarToStr(Value));
     opfKeepAspectRatio: Patch.KeepAspectRatio := Boolean(Value);
   end;
   Result := True;

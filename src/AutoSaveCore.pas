@@ -29,6 +29,7 @@ type
     FDirty: Boolean;
     FConflict: Boolean;
     FInteractionDepth: Integer;
+    FEditSessionDepth: Integer;
     FSaveDueSet: Boolean;
     FRecoveryDueSet: Boolean;
     FSaveDueMS: QWord;
@@ -49,6 +50,8 @@ type
     procedure CloseDocument;
     procedure BeginInteraction;
     procedure EndInteraction(NowMS: QWord);
+    procedure BeginEditSession;
+    procedure EndEditSession(NowMS: QWord);
     procedure NotifyLocalEdit(LocalRevision, NowMS: QWord;
       Dirty: Boolean);
     procedure NotifyReloadCommitted(LocalRevision, WatchGeneration: QWord);
@@ -113,7 +116,8 @@ end;
 
 procedure TAutoSaveCoordinator.ScheduleSourceSave(NowMS: QWord);
 begin
-  if not FDocumentOpen or (FInteractionDepth > 0) then
+  if not FDocumentOpen or (FInteractionDepth > 0) or
+    (FEditSessionDepth > 0) then
     Exit;
   if FDirty and FAutoSaveEnabled and FCanSaveBack and not FConflict then
   begin
@@ -153,6 +157,7 @@ begin
   FDirty := Dirty;
   FConflict := False;
   FInteractionDepth := 0;
+  FEditSessionDepth := 0;
   FSaveDueSet := False;
   FRecoveryDueSet := False;
     FLastFailure := '';
@@ -168,6 +173,7 @@ begin
   FDirty := False;
   FConflict := False;
   FInteractionDepth := 0;
+  FEditSessionDepth := 0;
   FSaveDueSet := False;
   FRecoveryDueSet := False;
   FLastFailure := '';
@@ -186,6 +192,19 @@ begin
   if FInteractionDepth <= 0 then Exit;
   Dec(FInteractionDepth);
   if FInteractionDepth = 0 then SchedulePending(NowMS);
+end;
+
+procedure TAutoSaveCoordinator.BeginEditSession;
+begin
+  if not FDocumentOpen then Exit;
+  Inc(FEditSessionDepth);
+end;
+
+procedure TAutoSaveCoordinator.EndEditSession(NowMS: QWord);
+begin
+  if FEditSessionDepth <= 0 then Exit;
+  Dec(FEditSessionDepth);
+  if FEditSessionDepth = 0 then SchedulePending(NowMS);
 end;
 
 procedure TAutoSaveCoordinator.NotifyLocalEdit(LocalRevision,
@@ -254,14 +273,24 @@ end;
 function TAutoSaveCoordinator.NextDelayMS(NowMS: QWord): Integer;
 var
   Due: QWord;
+  HasDue: Boolean;
 begin
   Result := -1;
   if not FDocumentOpen or (FInteractionDepth > 0) then
     Exit;
-  if FSaveDueSet then Due := FSaveDueMS
-  else if FRecoveryDueSet then Due := FRecoveryDueMS
-  else Exit;
-  if FRecoveryDueSet and (FRecoveryDueMS < Due) then Due := FRecoveryDueMS;
+  HasDue := False;
+  if FRecoveryDueSet then
+  begin
+    Due := FRecoveryDueMS;
+    HasDue := True;
+  end;
+  if FSaveDueSet and (FEditSessionDepth = 0) and
+    (not HasDue or (FSaveDueMS < Due)) then
+  begin
+    Due := FSaveDueMS;
+    HasDue := True;
+  end;
+  if not HasDue then Exit;
   if Due <= NowMS then Result := 1
   else if Due - NowMS > High(Integer) then Result := High(Integer)
   else Result := Integer(Due - NowMS);
@@ -284,7 +313,8 @@ begin
   Result := False;
   if not FDocumentOpen or (FInteractionDepth > 0) then
     Exit;
-  if FSaveDueSet and (FSaveDueMS <= NowMS) then
+  if (FEditSessionDepth = 0) and FSaveDueSet and
+    (FSaveDueMS <= NowMS) then
   begin
     Include(Work, aswSourceSave);
     FSaveDueSet := False;
@@ -312,7 +342,8 @@ begin
   Result := IsTicketCurrent(Ticket) and FDirty;
   if not Result then Exit;
   if Kind = aswSourceSave then
-    Result := FAutoSaveEnabled and FCanSaveBack and not FConflict
+    Result := (FEditSessionDepth = 0) and FAutoSaveEnabled and
+      FCanSaveBack and not FConflict
   else
     Result := FRecoveryEnabled;
 end;

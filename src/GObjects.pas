@@ -3934,28 +3934,35 @@ constructor TText2D.CreateFromStream(const Stream: TStream);
 var
   TmpInt: Integer;
   TmpSt: string;
+  procedure ReadBoundedString(var Value: string; const FieldName: string);
+  var Remaining: Int64;
+  begin
+    if Stream.Read(TmpInt, SizeOf(TmpInt)) <> SizeOf(TmpInt) then
+      raise EReadError.Create('Incomplete text object ' + FieldName + ' length');
+    if TmpInt < 0 then
+      raise EReadError.Create('Invalid text object ' + FieldName + ' length');
+    Remaining := Stream.Size - Stream.Position;
+    if Int64(TmpInt) > Remaining then
+      raise EReadError.Create('Incomplete text object ' + FieldName);
+    SetLength(Value, TmpInt);
+    if TmpInt > 0 then Stream.ReadBuffer(Value[1], TmpInt);
+  end;
 begin
   { Load the standard properties }
   inherited CreateFromStream(Stream);
-  Stream.Read(TmpInt, SizeOf(TmpInt));
-  SetString(fText, nil, TmpInt);
-  Stream.Read(Pointer(fText)^, TmpInt);
-  Stream.Read(TmpInt, SizeOf(TmpInt));
-  SetString(fTeXText, nil, TmpInt);
-  Stream.Read(Pointer(fTeXText)^, TmpInt);
-  Stream.Read(fHeight, SizeOf(fHeight));
-  Stream.Read(fRot, SizeOf(fRot));
-  Stream.Read(fHAlignment, SizeOf(fHAlignment));
+  ReadBoundedString(fText, 'Text');
+  ReadBoundedString(fTeXText, 'TeX text');
+  Stream.ReadBuffer(fHeight, SizeOf(fHeight));
+  Stream.ReadBuffer(fRot, SizeOf(fRot));
+  Stream.ReadBuffer(fHAlignment, SizeOf(fHAlignment));
   Font := TFont.Create;
-  Stream.Read(TmpInt, SizeOf(TmpInt));
-  SetString(TmpSt, nil, TmpInt);
-  Stream.Read(Pointer(TmpSt)^, TmpInt);
+  ReadBoundedString(TmpSt, 'font name');
   Font.Name := TmpSt;
-  Stream.Read(TmpInt, SizeOf(TmpInt));
+  Stream.ReadBuffer(TmpInt, SizeOf(TmpInt));
   if TmpInt = 1 then Font.Style := Font.Style + [fsItalic];
-  Stream.Read(TmpInt, SizeOf(TmpInt));
+  Stream.ReadBuffer(TmpInt, SizeOf(TmpInt));
   if TmpInt = 1 then Font.Style := Font.Style + [fsBold];
-  Stream.Read(TmpInt, SizeOf(TmpInt));
+  Stream.ReadBuffer(TmpInt, SizeOf(TmpInt));
   Font.Charset := TmpInt;
 end;
 
