@@ -58,7 +58,12 @@ uses
   Modify in 'src\Modify.pas',
   GObjBase in 'src\GObjBase.pas',
   Bitmaps in 'src\Bitmaps.pas',
+  {$IFDEF DELPHI}
   InfoForm in 'src\InfoForm.pas' {InfoBox};
+  {$ELSE}
+  InfoForm in 'src\InfoForm.pas' {InfoBox},
+  FileWatchNative in 'src\FileWatchNative.pas';
+  {$ENDIF}
 
 {$R TpX.res}
 {$R src\Options.lfm}

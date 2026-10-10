@@ -20,6 +20,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y fpc libgtk2.0-dev xvfb xdotool texlive-latex-extra texlive-pictures ghostscript dvisvgm dvipng librsvg2-bin
+      - name: Run real Linux inotify conformance tests
+        run: python3 tests/test_filewatch_linux.py -v
       - name: Build the pinned Lazarus toolchain with the upstream opener repair
         run: bash ci/bootstrap-unix.sh
       - name: Build the pinned bitmap converter for real export tests
