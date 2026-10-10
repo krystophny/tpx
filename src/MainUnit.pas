@@ -12,7 +12,8 @@ uses
 {$ELSE}
   LCLIntf, LCLType, LMessages, LResources,
 {$ENDIF}
-  Devices, Modes, PlatformShortcuts
+  Devices, Modes, PlatformShortcuts, ObjectInspector, EditSessions,
+  PropertyEdits
 {$IFDEF FPC}
   , DocumentFormats, FileWatch, AutoReload
 {$IFNDEF CPUWASM32}
@@ -551,6 +552,8 @@ type
       Rect: TRect; State: TOwnerDrawState);
     procedure ShowPropertiesToolbar1Execute(Sender: TObject);
     procedure ShowPropertiesToolbar2Execute(Sender: TObject);
+    procedure InspectorMenuClick(Sender: TObject);
+    procedure InspectorSplitterMoved(Sender: TObject);
   private
     { Private declarations }
 {$IFDEF FPC}
@@ -629,6 +632,15 @@ type
     procedure SetFormPosition;
     procedure GetFormPosition;
 {$ENDIF}
+    FInspectorHost: TPanel;
+    FInspectorSplitter: TSplitter;
+    FInspectorMenuItem: TMenuItem;
+    procedure BuildObjectInspector;
+    procedure InspectorSessionChanged(Sender: TObject;
+      Session: TObjectEditSession; RegisterSession: Boolean);
+    function InspectorCurrentEpoch: QWord;
+    procedure InspectorEditCommitted(Sender: TObject);
+    procedure InspectorOpenCoordinates(Sender: TObject);
   public
     { Public declarations }
     TheDrawing: TDrawing2D;
@@ -636,6 +648,9 @@ type
     LocalView: TViewport2D;
     Ruler1: TRuler;
     Ruler2: TRuler;
+    Inspector: TObjectInspector;
+    InspectorPanelWidth: Integer;
+    InspectorPanelVisible: Boolean;
     FormPos_Left, FormPos_Top, FormPos_Width, FormPos_Height:
     Integer;
     FormPos_Maximized: Boolean;
@@ -658,6 +673,9 @@ type
       const HasObject, HasSelection, IsOnObject,
       IsOnPoint, CanDeletePoints: Boolean);
     procedure SetCurrentProperties;
+    procedure ApplyInspectorSettings;
+    procedure ShowInspector;
+    procedure RefreshInspectorSelection;
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
     function BeginDocumentWatchBinding(const Path: TDocumentPath;
@@ -706,7 +724,7 @@ implementation
 uses Output, Input, Settings0, ColorEtc, Geometry, Options,
   Preview,
 {$IFDEF FPC}  LiveTeX,{$ENDIF}
-  SysBasic, Modify, Propert
+  SysBasic, Modify, Table
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
   , DocumentIO, FileWatchNative
@@ -904,6 +922,9 @@ begin
   TheDrawing := TDrawing2D.Create(Self);
   LocalView := TViewport2D.Create(Panel1);
   EventManager := TTpXManager.Create(TheDrawing, LocalView);
+  InspectorPanelWidth := 360;
+  InspectorPanelVisible := True;
+  BuildObjectInspector;
   EventManager.OnExit := OnExit;
   EventManager.PushMode(BaseMode);
   EventManager.RecentFiles.OnChange := RecentChanged;
@@ -1072,8 +1093,8 @@ begin
   ComboBox6.ItemIndex := 1;
   ComboBox10.ItemIndex := 0;
 
-  ComboBox8.OnDrawItem := PropertiesForm.ArrComboBoxDrawItem;
-  ComboBox9.OnDrawItem := PropertiesForm.ArrComboBoxDrawItem;
+  ComboBox8.OnDrawItem := Inspector.DrawArrowComboItem;
+  ComboBox9.OnDrawItem := Inspector.DrawArrowComboItem;
 
   ComboBox1.Tag := Byte(chpLS) + 1;
   ComboBox3.Tag := Byte(chpLC) + 1;
@@ -1108,6 +1129,135 @@ begin
 {$IFDEF VER140}
   SetFormPosition;    
 {$ENDIF}
+end;
+
+procedure TMainForm.BuildObjectInspector;
+var
+  EmptyIDs: TEditTargetIDs;
+begin
+  FInspectorSplitter := TSplitter.Create(Self);
+  FInspectorSplitter.Parent := Panel32;
+  FInspectorSplitter.Align := alRight;
+  FInspectorSplitter.Width := 6;
+  FInspectorSplitter.MinSize := 240;
+  FInspectorSplitter.ResizeStyle := rsUpdate;
+  FInspectorSplitter.OnMoved := InspectorSplitterMoved;
+
+  FInspectorHost := TPanel.Create(Self);
+  FInspectorHost.Parent := Panel32;
+  FInspectorHost.Align := alRight;
+  FInspectorHost.Width := InspectorPanelWidth;
+  FInspectorHost.Constraints.MinWidth := 240;
+  FInspectorHost.BevelOuter := bvNone;
+  FInspectorHost.Caption := '';
+
+  Inspector := TObjectInspector.Create(Self);
+  Inspector.Parent := FInspectorHost;
+  Inspector.Align := alClient;
+  Inspector.OnSessionChanged := InspectorSessionChanged;
+  Inspector.OnEditCommitted := InspectorEditCommitted;
+  Inspector.OnOpenCoordinates := InspectorOpenCoordinates;
+  SetLength(EmptyIDs, 0);
+  Inspector.Bind(TheDrawing, EmptyIDs, InspectorCurrentEpoch);
+
+  FInspectorMenuItem := TMenuItem.Create(Self);
+  FInspectorMenuItem.Caption := 'Object inspector';
+  FInspectorMenuItem.Checked := InspectorPanelVisible;
+  FInspectorMenuItem.OnClick := InspectorMenuClick;
+  U1.Add(FInspectorMenuItem);
+  ApplyInspectorSettings;
+end;
+
+procedure TMainForm.ApplyInspectorSettings;
+begin
+  if FInspectorHost = nil then Exit;
+  if InspectorPanelWidth < 240 then InspectorPanelWidth := 240;
+  if InspectorPanelWidth > 1000 then InspectorPanelWidth := 1000;
+  FInspectorHost.Width := InspectorPanelWidth;
+  FInspectorHost.Visible := InspectorPanelVisible;
+  FInspectorSplitter.Visible := InspectorPanelVisible;
+  if FInspectorMenuItem <> nil then
+    FInspectorMenuItem.Checked := InspectorPanelVisible;
+  Panel32.Realign;
+end;
+
+procedure TMainForm.ShowInspector;
+begin
+  InspectorPanelVisible := True;
+  ApplyInspectorSettings;
+  RefreshInspectorSelection;
+  if (Inspector <> nil) and Inspector.CanFocus then Inspector.SetFocus;
+end;
+
+procedure TMainForm.InspectorMenuClick(Sender: TObject);
+begin
+  InspectorPanelVisible := not InspectorPanelVisible;
+  ApplyInspectorSettings;
+  if InspectorPanelVisible then RefreshInspectorSelection;
+end;
+
+procedure TMainForm.InspectorSplitterMoved(Sender: TObject);
+begin
+  if FInspectorHost <> nil then InspectorPanelWidth := FInspectorHost.Width;
+end;
+
+procedure TMainForm.InspectorSessionChanged(Sender: TObject;
+  Session: TObjectEditSession; RegisterSession: Boolean);
+begin
+  if RegisterSession then RegisterEditSession(Session)
+  else UnregisterEditSession(Session);
+end;
+
+function TMainForm.InspectorCurrentEpoch: QWord;
+begin
+  Result := CurrentDocumentEpoch;
+end;
+
+procedure TMainForm.RefreshInspectorSelection;
+var
+  IDs: TEditTargetIDs;
+  Obj: TGraphicObject;
+  Count: Integer;
+  HasCoordinateTable: Boolean;
+begin
+  if Inspector = nil then Exit;
+  Count := TheDrawing.SelectedObjects.Count;
+  SetLength(IDs, Count);
+  Obj := TheDrawing.SelectedObjects.FirstObj;
+  Count := 0;
+  HasCoordinateTable := False;
+  while (Obj <> nil) and (Count < Length(IDs)) do
+  begin
+    IDs[Count] := Obj.ID;
+    if (Length(IDs) = 1) and (Obj is TPrimitive2D) then
+      HasCoordinateTable := True;
+    Inc(Count);
+    Obj := TheDrawing.SelectedObjects.NextObj;
+  end;
+  SetLength(IDs, Count);
+  Inspector.RefreshSelection(IDs, Count, HasCoordinateTable);
+end;
+
+procedure TMainForm.InspectorEditCommitted(Sender: TObject);
+begin
+  TheDrawing.RepaintViewports;
+  RefreshInspectorSelection;
+end;
+
+procedure TMainForm.InspectorOpenCoordinates(Sender: TObject);
+var
+  Obj: TGraphicObject;
+begin
+  Obj := TheDrawing.SelectionFirst;
+  if not (Obj is TPrimitive2D) then Exit;
+  TableForm.PPrimitive := Obj as TPrimitive2D;
+  if TableForm.ShowModal = mrOK then
+  begin
+    TheDrawing.NotifyChanged;
+    (Obj as TObject2D).UpdateExtension(nil);
+    TheDrawing.RepaintViewports;
+    RefreshInspectorSelection;
+  end;
 end;
 
 procedure TMainForm.AreaSelectExecute(Sender: TObject);
@@ -1239,6 +1389,7 @@ procedure TMainForm.LocalViewMouseUp2D(Sender: TObject;
   WX, WY: TRealTypeX; X, Y: Integer);
 begin
   EventManager.MouseUp(Sender, Button, Shift, X, Y);
+  RefreshInspectorSelection;
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
   EndSceneInteraction;
@@ -1256,7 +1407,16 @@ procedure TMainForm.LocalViewKeyDown(Sender: TObject; var Key:
   Word;
   Shift: TShiftState);
 begin
+  if (Key = VK_ESCAPE) and (Inspector <> nil) and
+    Inspector.HasActiveEdit then
+  begin
+    Inspector.CancelActiveEdit;
+    Key := 0;
+    RefreshInspectorSelection;
+    Exit;
+  end;
   EventManager.KeyDown(Sender, Key, Shift);
+  RefreshInspectorSelection;
 end;
 
 procedure TMainForm.LocalViewKeyUp(Sender: TObject; var Key: Word;
@@ -1312,22 +1472,32 @@ begin
   if (Sender as TAction).Tag = Msg_Exit then
     Close
   else
+  begin
     EventManager.SendMessage((Sender as TAction).Tag, Sender);
+    RefreshInspectorSelection;
+  end;
 end;
 
 procedure TMainForm.BasicModeExecute(Sender: TObject);
 begin
   EventManager.SendMessage(Msg_Escape, Sender);
+  RefreshInspectorSelection;
 end;
 
 procedure TMainForm.FormCloseQuery(Sender: TObject; var
   CanClose: Boolean);
+var
+  ErrorText: string;
 begin
-  CanClose := BaseMode.AskSaveCurrentDrawing <> mrCancel;
+  CanClose := (Inspector = nil) or
+    Inspector.PrepareForSelectionChange(ErrorText);
+  if CanClose then
+    CanClose := BaseMode.AskSaveCurrentDrawing <> mrCancel;
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
+  if Inspector <> nil then Inspector.CancelActiveEdit;
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
   ShutdownAutoReload;
@@ -2454,7 +2624,10 @@ procedure TMainForm.ChangeProperties(Sender: TObject);
 var
   Kind: TChangePropertiesKind;
   Value: TRealType;
+  ErrorText: string;
 begin
+  if (Inspector <> nil) and
+    not Inspector.PrepareForSelectionChange(ErrorText) then Exit;
   if not (Sender is TComponent) then Exit;
   if (Sender as TComponent).Tag <= 0 then Exit;
   Kind := TChangePropertiesKind((Sender as TComponent).Tag - 1);
@@ -2507,6 +2680,7 @@ begin
   end;
   ChangeSelectedProperties(TheDrawing, [Kind]);
   TheDrawing.RepaintViewports;
+  RefreshInspectorSelection;
 end;
 
 procedure TMainForm.NumericPropertyExit(Sender: TObject);
@@ -2548,24 +2722,38 @@ begin
 end;
 
 procedure TMainForm.DefaultPropertiesExecute(Sender: TObject);
+var
+  ErrorText: string;
 begin
+  if (Inspector <> nil) and
+    not Inspector.PrepareForSelectionChange(ErrorText) then Exit;
   TheDrawing.SetDefaultProperties;
   SetCurrentProperties;
   ApplyPropertiesExecute(Sender);
 end;
 
 procedure TMainForm.PickUpPropertiesExecute(Sender: TObject);
+var
+  ErrorText: string;
 begin
+  if (Inspector <> nil) and
+    not Inspector.PrepareForSelectionChange(ErrorText) then Exit;
   TheDrawing.PickUpProperties(TheDrawing.SelectedObjects.FirstObj);
   SetCurrentProperties;
+  RefreshInspectorSelection;
 end;
 
 procedure TMainForm.ApplyPropertiesExecute(Sender: TObject);
+var
+  ErrorText: string;
 begin
+  if (Inspector <> nil) and
+    not Inspector.PrepareForSelectionChange(ErrorText) then Exit;
   ChangeSelectedProperties(TheDrawing,
     [TChangePropertiesKind(0)..
     TChangePropertiesKind(High(TChangePropertiesKind))]);
   TheDrawing.RepaintViewports;
+  RefreshInspectorSelection;
 end;
 
 procedure TMainForm.ScalePhysicalExecute(Sender: TObject);
@@ -2892,14 +3080,7 @@ procedure TMainForm.ComboBox10DrawItem(Control: TWinControl;
   Index: Integer; Rect: TRect; State: TOwnerDrawState);
 begin
   if not (Control is TComboBox) then Exit;
-  with (Control as TComboBox).Canvas do
-  begin
-    Brush.Color := clWhite;
-    FillRect(Rect);
-    PropertiesForm.StarsImageList.Draw(
-      (Control as TComboBox).Canvas,
-      Rect.Left, Rect.Top + 1, Index);
-  end;
+  Inspector.DrawStarComboItem(Control, Index, Rect, State);
 end;
 
 initialization

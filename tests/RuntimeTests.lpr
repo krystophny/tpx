@@ -7,10 +7,9 @@ uses
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, SvgCodec, gzio;
+  Settings0, MainUnit, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, SvgCodec, gzio;
 
 {$R ../src/MainUnit.lfm}
-{$R ../src/Propert.lfm}
 
 type
   TTestBitmapEntry = class(TBitmapEntry)
@@ -849,7 +848,7 @@ var
   InitialCount: Integer;
   CustomColor: TColor;
 begin
-  ComboBox := PropertiesForm.ComboBox3;
+  ComboBox := MainForm.ComboBox3;
   InitialCount := ComboBox.Items.Count;
   CustomColor := TColor($00123456);
   ColorBoxSet(ComboBox, CustomColor);
@@ -1407,7 +1406,6 @@ begin
     Application.Initialize;
     RequireDerivedFormResource := True;
     Application.CreateForm(TMainForm, MainForm);
-    Application.CreateForm(TPropertiesForm, PropertiesForm);
     Observer := TObserver.Create;
     MainForm.OnClose := Observer.Closing;
     PromptDialogFunction := AnswerPrompt;
