@@ -65,10 +65,35 @@ def stage_runtime(package, binary, platform, version):
                 "CFBundleInfoDictionaryVersion": "6.0",
                 "CFBundleShortVersionString": bundle_version,
                 "CFBundleVersion": bundle_version,
+                "CFBundleIconFile": "TpX.icns",
+                "UTExportedTypeDeclarations": [{
+                    "UTTypeIdentifier": "org.tpx.TpX.drawing",
+                    "UTTypeDescription": "TpX drawing",
+                    "UTTypeConformsTo": ["public.data"],
+                    "UTTypeTagSpecification": {
+                        "public.filename-extension": ["tpx"],
+                        "public.mime-type": "application/x-tpx",
+                    },
+                }],
+                "CFBundleDocumentTypes": [{
+                    "CFBundleTypeName": "TpX drawing",
+                    "CFBundleTypeRole": "Editor",
+                    "CFBundleTypeIconFile": "TpX.icns",
+                    "LSHandlerRank": "Owner",
+                    "LSItemContentTypes": ["org.tpx.TpX.drawing"],
+                }],
                 "NSHighResolutionCapable": True,
             }, stream)
     packaged_binary = executable_dir / binary.name
     shutil.copy2(binary, packaged_binary)
+    shutil.copy2(ROOT / "TpX.ico", resource_dir / "TpX.ico")
+    if platform.startswith("macos-"):
+        shutil.copy2(ROOT / "TpX.icns", resource_dir / "TpX.icns")
+    if platform.startswith("linux-"):
+        shutil.copy2(ROOT / "assets/tpx.svg", package / "tpx.svg")
+        for filename in ("org.tpx.TpX.desktop.in", "org.tpx.TpX.xml",
+                         "install-linux-desktop-entry.sh"):
+            shutil.copy2(ROOT / "ci" / filename, package / filename)
     for filename in ("preview.tex.inc", "metapost.tex.inc"):
         shutil.copy2(ROOT / "ci" / filename, resource_dir / filename)
     help_dir = resource_dir / "help"
@@ -184,10 +209,13 @@ def build_and_package():
             "checks": ["native exports", "native GUI scenarios", "packaged exports"],
         }
         if platform.startswith("linux-"):
-            manifest["checks"].extend(["TeX compilation", "packaged TeX compilation"])
+            command(sys.executable, "tests/test_linux_desktop_entry.py")
+            manifest["checks"].extend(["Linux desktop MIME and user registration",
+                                       "TeX compilation", "packaged TeX compilation"])
         if platform.startswith("macos-"):
             manifest["checks"].extend(["native Cocoa font cancellation",
                                        "native Cocoa text shortcuts",
+                                       "Cocoa document type and app icon",
                                        "ad hoc signature verification",
                                        "signature tamper detection"])
         (package / "BUILD.json").write_text(json.dumps(manifest, indent=2) + "\n")

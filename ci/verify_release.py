@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 from pathlib import PurePosixPath
+import plistlib
 import subprocess
 import tarfile
 import zipfile
@@ -132,6 +133,45 @@ def verify(directory, version, commit):
                     manifest["macos_notarized"] is False, "unexpected macOS signing metadata")
             require(files.get(prefix + "TpX.app/Contents/_CodeSignature/CodeResources"),
                     "macOS app signature is missing")
+            require("Cocoa document type and app icon" in manifest["checks"],
+                    "macOS bundle identity check is missing")
+            info = plistlib.loads(files[prefix + "TpX.app/Contents/Info.plist"])
+            bundle_version = version.split("-", 1)[0]
+            require(info.get("CFBundleIdentifier") == "org.tpx.TpX",
+                    "macOS bundle identifier mismatch")
+            require(info.get("CFBundleShortVersionString") == bundle_version and
+                    info.get("CFBundleVersion") == bundle_version,
+                    "macOS bundle version mismatch")
+            require(info.get("CFBundleIconFile") == "TpX.icns" and
+                    files.get(prefix + "TpX.app/Contents/Resources/TpX.icns"),
+                    "macOS app icon is missing")
+            document_types = info.get("CFBundleDocumentTypes", [])
+            require(len(document_types) == 1,
+                    "macOS bundle must declare only the native drawing type")
+            document_type = document_types[0]
+            require(document_type.get("LSItemContentTypes") == ["org.tpx.TpX.drawing"] and
+                    document_type.get("CFBundleTypeRole") == "Editor" and
+                    document_type.get("CFBundleTypeIconFile") == "TpX.icns" and
+                    document_type.get("LSHandlerRank") == "Owner",
+                    "macOS native drawing document declaration mismatch")
+            exported_types = info.get("UTExportedTypeDeclarations", [])
+            require(len(exported_types) == 1,
+                    "macOS bundle must export only the native drawing type")
+            exported_type = exported_types[0]
+            require(exported_type.get("UTTypeIdentifier") == "org.tpx.TpX.drawing",
+                    "macOS exported document type mismatch")
+            tags = exported_type["UTTypeTagSpecification"]
+            require(tags.get("public.filename-extension") == ["tpx"] and
+                    tags.get("public.mime-type") == "application/x-tpx",
+                    "macOS bundle must associate only native .tpx drawings")
+        if platform.startswith("linux-"):
+            required = {"Linux desktop MIME and user registration", "TeX compilation",
+                        "packaged TeX compilation"}
+            require(required <= set(manifest["checks"]),
+                    f"Linux: missing checks {required - set(manifest['checks'])}")
+            for filename in ("tpx.svg", "org.tpx.TpX.desktop.in",
+                             "org.tpx.TpX.xml", "install-linux-desktop-entry.sh"):
+                require(files.get(prefix + filename), f"Linux package missing {filename}")
         print(f"Verified {path.name}: {digest}")
     source = directory / f"tpx-{version}-source.zip"
     source.write_bytes(canonical)

@@ -1318,6 +1318,9 @@ var
   Expected: string;
   ExpectedCount: Integer;
   Line: TLine2D;
+  Marker: string;
+  MarkerFile: TFileStream;
+  MarkerText: AnsiString;
 begin
   Expected := GetEnvironmentVariable('TPX_STARTUP_EXPECTED');
   ExpectedCount := StrToInt(GetEnvironmentVariable('TPX_STARTUP_OBJECTS'));
@@ -1334,6 +1337,41 @@ begin
     Check((Line.Points[1].X = 20) and (Line.Points[1].Y = 10),
       'Startup changed loaded line geometry');
   end;
+  Marker := GetEnvironmentVariable('TPX_STARTUP_MARKER');
+  if Marker <> '' then
+  begin
+    MarkerText := 'PASS';
+    MarkerFile := TFileStream.Create(Marker, fmCreate);
+    try
+      MarkerFile.WriteBuffer(MarkerText[1], Length(MarkerText));
+    finally
+      MarkerFile.Free;
+    end;
+  end;
+end;
+
+procedure TestOSDocumentOpen;
+var
+  FirstPath, SecondPath: string;
+  Marker: string;
+  Deadline: QWord;
+begin
+  FirstPath := GetEnvironmentVariable('TPX_OS_OPEN_FIRST');
+  SecondPath := GetEnvironmentVariable('TPX_OS_OPEN_SECOND');
+  Marker := GetEnvironmentVariable('TPX_STARTUP_MARKER');
+  Check((FirstPath <> '') and (SecondPath <> '') and (Marker <> ''),
+    'OS open fixture paths or child marker are missing');
+  Check(SameDocumentPath(TDocumentPath(SecondPath),
+    TDocumentPath(MainForm.TheDrawing.FileName)),
+    'Initial process did not open the requested second document');
+  MainForm.IntfDropFiles([FirstPath, SecondPath]);
+  Check(SameDocumentPath(TDocumentPath(FirstPath),
+    TDocumentPath(MainForm.TheDrawing.FileName)),
+    'The running process did not open its first requested document');
+  Deadline := GetTickCount64 + 10000;
+  while not FileExists(Marker) and (GetTickCount64 < Deadline) do Sleep(10);
+  Check(FileExists(Marker),
+    'The second requested document did not open in a new process');
 end;
 
 {$IFDEF DARWIN}
@@ -1645,7 +1683,8 @@ begin
       WriteLn('PASS ', ParamStr(1));
       Halt(0);
     end;
-    if GetEnvironmentVariable('TPX_STARTUP_EXPECTED') <> '' then TestStartupFileName
+    if ParamStr(1) = 'external-open' then TestOSDocumentOpen
+    else if GetEnvironmentVariable('TPX_STARTUP_EXPECTED') <> '' then TestStartupFileName
     else if Pos('viewport-', ParamStr(1)) = 1 then TestViewport(ParamStr(1))
     else if ParamStr(1) = 'live-tex-missing-tool' then TestLiveTeXMissingTool
     else if ParamStr(1) = 'live-tex' then TestLiveTeX
@@ -1719,7 +1758,9 @@ begin
     else if ParamStr(1) = 'mac-resources' then TestMacResourcePaths
 {$ENDIF}
     else TestExit(ParamStr(1));
-    if GetEnvironmentVariable('TPX_STARTUP_EXPECTED') <> '' then
+    if ParamStr(1) = 'external-open' then
+      WriteLn('PASS external-open')
+    else if GetEnvironmentVariable('TPX_STARTUP_EXPECTED') <> '' then
       WriteLn('PASS startup-file')
     else WriteLn('PASS ', ParamStr(1));
   except

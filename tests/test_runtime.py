@@ -511,6 +511,28 @@ class RuntimeTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                     self.assertIn("PASS startup-file", result.stdout, result.stderr)
 
+    def test_os_open_event_handles_two_unicode_documents(self):
+        with tempfile.TemporaryDirectory(prefix="tpx OS open ") as directory:
+            root = Path(directory).resolve()
+            first = root / "Dessin – β.tpx"
+            second = root / "図形 with spaces.tpx"
+            contents = ('%<TpX v="5">\n'
+                        '%<line x1="0" y1="0" x2="20" y2="10"/>\n'
+                        '%</TpX>\n')
+            first.write_text(contents, encoding="utf-8")
+            second.write_text(contents, encoding="utf-8")
+            marker = root / "second-opened"
+            env = os.environ.copy()
+            env.update(TPX_STARTUP_EXPECTED=str(second), TPX_STARTUP_OBJECTS="1",
+                       TPX_STARTUP_MARKER=str(marker),
+                       TPX_OS_OPEN_FIRST=str(first), TPX_OS_OPEN_SECOND=str(second))
+            result = subprocess.run([str(BINARY), "external-open", "-f", str(second)],
+                                    cwd=root, env=env, capture_output=True,
+                                    text=True, timeout=40)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("PASS external-open", result.stdout, result.stderr)
+            self.assertEqual(marker.read_text(encoding="ascii"), "PASS")
+
     @unittest.skipUnless(shutil.which("pdflatex"), "pdflatex is not installed")
     def test_standalone_labeled_previews(self):
         self.run_scenario("labeled-preview")
