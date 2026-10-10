@@ -1485,6 +1485,7 @@ begin
     else if ParamStr(1) = 'edit-session-autosave-cancel' then TestEditSessionAutoSaveCancel
     else if ParamStr(1) = 'edit-session-recovery-disabled' then TestEditSessionRecoveryDisabled
     else if ParamStr(1) = 'edit-session-deferred-reload' then TestEditSessionDeferredExternalReload
+    else if ParamStr(1) = 'edit-session-form-destroy' then TestEditSessionFormDestroy
     else if ParamStr(1) = 'color-box-custom-state' then TestColorBoxCustomState
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
     else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))

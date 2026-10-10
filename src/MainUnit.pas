@@ -1585,7 +1585,6 @@ begin
   if FEditSession <> nil then
   begin
     UnregisterEditSession(FEditSession);
-    FEditSession.OnInteractionChanged := nil;
   end;
   if TheDrawing <> nil then
     TheDrawing.OnBeforeSelectionChange := nil;
