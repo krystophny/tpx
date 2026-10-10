@@ -47,6 +47,10 @@ uses Windows;
 
 const
   ApplicationStorageName = 'TpX';
+{$IFDEF MSWINDOWS}
+  StorageMoveFileReplaceExisting = $00000001;
+  StorageMoveFileWriteThrough = $00000008;
+{$ENDIF}
 
 var
   CachedPaths: TUserStoragePaths;
@@ -593,8 +597,8 @@ begin
   TemporaryWide := UTF8Decode(TemporaryFile);
   DestinationWide := UTF8Decode(DestinationFile);
   Result := Windows.MoveFileExW(PWideChar(TemporaryWide),
-    PWideChar(DestinationWide), MOVEFILE_REPLACE_EXISTING or
-    MOVEFILE_WRITE_THROUGH);
+    PWideChar(DestinationWide), StorageMoveFileReplaceExisting or
+    StorageMoveFileWriteThrough);
 end;
 {$ELSE}
 begin
