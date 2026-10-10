@@ -64,6 +64,7 @@ var
   Obj: TObject2D;
   BeforeBytes, AfterBytes, NoOpBytes, Sentinel: RawByteString;
   BeforeEnd, ExpectedEnd: TPoint2D;
+  FreshTextHeight: TRealType;
   StartAt, EndAt, NewStartAt, NewEndAt: SizeInt;
   Saved: Boolean;
 begin
@@ -130,6 +131,28 @@ begin
   TikZSaveNear(Line.Points[1].X, ExpectedEnd.X, 'reloaded edited line x');
   TikZSaveNear(Line.Points[1].Y, ExpectedEnd.Y, 'reloaded edited line y');
 
+  TextObject := TikZSaveObjectAt(Mode.Drawing, 4) as TText2D;
+  Check((TextObject.Text = '$x^2$') and (TextObject.TeXText = '$x^2$'),
+    'Imported math label did not retain its editable TeX body');
+  TextObject.TeXText := '$x^3$';
+  Check(TextObject.Text = '$x^2$',
+    'TeX-body edit unexpectedly changed the native plain-text field');
+  Check(Mode.SaveDocumentToPath(TDocumentPath(RelocatedFileName), 'tikz',
+    False, False, ErrorText), 'Editing imported math TeX failed to save: ' + ErrorText);
+  AfterBytes := TikZSaveReadBytes(RelocatedFileName);
+  Check(Pos('{$x^3$}', string(AfterBytes)) > 0,
+    'An edit to only TText2D.TeXText was not written to the source');
+  Check(Mode.OpenDocumentFromPath(TDocumentPath(RelocatedFileName), ErrorText),
+    'Reopening the edited imported math label failed: ' + ErrorText);
+  TextObject := TikZSaveObjectAt(Mode.Drawing, 4) as TText2D;
+  Check(TextObject.TeXText = '$x^3$',
+    'Saved imported math label did not reload with its new TeX body');
+  NoOpBytes := TikZSaveReadBytes(RelocatedFileName);
+  Check(Mode.SaveDocumentToPath(TDocumentPath(RelocatedFileName), 'tikz',
+    False, False, ErrorText), 'No-op save after math edit failed: ' + ErrorText);
+  Check(TikZSaveReadBytes(RelocatedFileName) = NoOpBytes,
+    'No-op save after math edit changed the TikZ source');
+
   Obj := TikZSaveObjectAt(Mode.Drawing, 5);
   Check(Obj is TBitmap2D, 'Expected the local image before structural edits');
   Mode.Drawing.SelectionAdd(Obj);
@@ -179,6 +202,7 @@ begin
     Drawing.DefaultFontHeight, '$x^2$');
   TextObject.TeXText := '$x^2$';
   TextObject.Rot := 0.37;
+  FreshTextHeight := TextObject.Height;
   Drawing.AddObject(-1, TextObject);
 
   Sentinel := 'preserve unsupported Save As target';
@@ -211,8 +235,10 @@ begin
   TikZSaveNear(Abs(Rectangle.Points[1].Y - Rectangle.Points[0].Y),
     6.25, 'fresh rectangle height');
   TextObject := TikZSaveObjectAt(Mode.Drawing, 2) as TText2D;
-  Check(TextObject.TeXText = '$x^2$',
+  Check(Pos('$x^2$', TextObject.TeXText) > 0,
     'Fresh TikZ save changed the raw TeX math body');
+  TikZSaveNear(TextObject.Height, FreshTextHeight,
+    'fresh TikZ default text size');
   TikZSaveNear(TextObject.Rot, 0.37, 'fresh text rotation');
   NoOpBytes := TikZSaveReadBytes(FreshFileName);
   Check(Mode.SaveDocumentToPath(TDocumentPath(FreshFileName), 'tikz', False,
@@ -223,15 +249,52 @@ begin
   Session.Clear;
   Drawing := Mode.Drawing;
   Drawing.Clear;
+  Drawing.DefaultFontHeight := 12.75;
   Line := TPolyline2D.CreateSpec(-1,
     [Point2D(0.625, 1.75), Point2D(3.375, 4.125)]);
   Line.LineStyle := liSolid;
   Drawing.AddObject(-1, Line);
+  TextObject := TText2D.CreateSpec(-1, Point2D(5.5, 6.75),
+    Drawing.DefaultFontHeight, 'Size probe');
+  TextObject.LineColor := clRed;
+  TextObject.HAlignment := ahCenter;
+  Drawing.AddObject(-1, TextObject);
   Check(Mode.SaveDocumentToPath(TDocumentPath(FreshTeXFileName), 'tikz',
     True, True, ErrorText), 'Fresh native drawing could not Save As TeX: ' + ErrorText);
   Check(Mode.OpenDocumentFromPath(TDocumentPath(FreshTeXFileName), ErrorText),
     'Fresh standalone TeX document could not reload: ' + ErrorText);
+  Check(Mode.Drawing.ObjectsCount = 2,
+    'Fresh standalone TeX save changed its two native objects');
   Line := TikZSaveObjectAt(Mode.Drawing, 0) as TPolyline2D;
   TikZSaveNear(Line.Points[0].X, 0.625, 'fresh TeX line start x');
   TikZSaveNear(Line.Points[1].Y, 4.125, 'fresh TeX line end y');
+  TextObject := TikZSaveObjectAt(Mode.Drawing, 1) as TText2D;
+  TikZSaveNear(TextObject.Height, 12.75, 'fresh TeX nondefault font size');
+  Check((TextObject.LineColor = clRed) and
+    (TextObject.HAlignment = ahCenter),
+    'Fresh TeX text lost its color or baseline anchor');
+  TextObject.TeXText := '$y$';
+  Check(Mode.SaveDocumentToPath(TDocumentPath(FreshTeXFileName), 'tikz',
+    False, False, ErrorText),
+    'Editing a font-wrapped text body could not be saved: ' + ErrorText);
+  Check(Mode.OpenDocumentFromPath(TDocumentPath(FreshTeXFileName), ErrorText),
+    'Reopening an edited font-wrapped text body failed: ' + ErrorText);
+  TextObject := TikZSaveObjectAt(Mode.Drawing, 1) as TText2D;
+  TikZSaveNear(TextObject.Height, 12.75,
+    'font size after font-wrapped text body edit');
+  Check(TextObject.TeXText = '$y$',
+    'Font-wrapped text edit did not retain the requested TeX payload');
+  TextObject.LineColor := clBlue;
+  Check(Mode.SaveDocumentToPath(TDocumentPath(FreshTeXFileName), 'tikz',
+    False, False, ErrorText),
+    'A local fresh-text color edit could not be saved: ' + ErrorText);
+  AfterBytes := TikZSaveReadBytes(FreshTeXFileName);
+  Check((Pos('text=blue', string(AfterBytes)) > 0) and
+    (Pos('draw=blue', string(AfterBytes)) = 0),
+    'A text color edit was not serialized as a glyph color');
+  Check(Mode.OpenDocumentFromPath(TDocumentPath(FreshTeXFileName), ErrorText),
+    'Reopening a fresh-text color edit failed: ' + ErrorText);
+  TextObject := TikZSaveObjectAt(Mode.Drawing, 1) as TText2D;
+  Check(TextObject.LineColor = clBlue,
+    'The saved fresh-text color edit did not round-trip');
 end;
