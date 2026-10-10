@@ -222,9 +222,12 @@ destructor TRecoveryAssetContext.Destroy;
 var I: Integer; AssetDirectory: TDocumentPath;
 begin
   for I := 0 to High(FOwnedFiles) do DeleteDocumentFile(FOwnedFiles[I]);
-  AssetDirectory := IncludeTrailingPathDelimiter(FRootPath) + 'bitmaps';
-  if AssetDirectory <> '' then RemoveDocumentStagingDirectory(AssetDirectory);
-  if FRootPath <> '' then RemoveDocumentStagingDirectory(FRootPath);
+  if FRootPath <> '' then
+  begin
+    AssetDirectory := IncludeTrailingPathDelimiter(FRootPath) + 'bitmaps';
+    RemoveDocumentStagingDirectory(AssetDirectory);
+    RemoveDocumentStagingDirectory(FRootPath);
+  end;
   FOwnedFiles := nil;
   inherited Destroy;
 end;
