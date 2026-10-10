@@ -7,7 +7,7 @@ uses
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Options, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, AutoSaveStore, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, SvgCodec, gzio;
+  Settings0, MainUnit, Propert, Options, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, AutoSaveStore, AutoSaveRuntime, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, SvgCodec, EditSessions, PropertyEdits, gzio;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -132,6 +132,7 @@ end;
 {$I TikZSaveScenarios.inc}
 {$I SvgCodecScenarios.inc}
 {$I AutoSaveScenarios.inc}
+{$I EditSessionScenarios.inc}
 
 procedure RunBitmapFixtureConverter;
 var
@@ -1447,6 +1448,11 @@ begin
     else if ParamStr(1) = 'autosave-named-recovery-create' then TestAutoSaveNamedRecoveryCreate
     else if ParamStr(1) = 'autosave-named-recovery-restore' then TestAutoSaveNamedRecoveryRestore
     else if ParamStr(1) = 'autosave-recovery-watch-binding' then TestAutoSaveRecoveryWatchBinding
+    else if ParamStr(1) = 'edit-session-preview-cancel' then TestEditSessionPreviewCancel
+    else if ParamStr(1) = 'edit-session-recovery-payload' then TestEditSessionRecoveryPayload
+    else if ParamStr(1) = 'edit-session-autosave-cancel' then TestEditSessionAutoSaveCancel
+    else if ParamStr(1) = 'edit-session-recovery-disabled' then TestEditSessionRecoveryDisabled
+    else if ParamStr(1) = 'edit-session-deferred-reload' then TestEditSessionDeferredExternalReload
     else if ParamStr(1) = 'color-box-custom-state' then TestColorBoxCustomState
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
     else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))

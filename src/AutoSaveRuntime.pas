@@ -5,7 +5,7 @@ unit AutoSaveRuntime;
 interface
 
 uses Classes, SysUtils, DocumentFormats, Drawings, AutoSaveCore,
-  AutoSaveStore;
+  AutoSaveStore, EditSessions;
 
 type
   TRecoveryAsset = record
@@ -43,14 +43,16 @@ type
       Drawing: TDrawing2D; out Reason: string): Boolean;
     function NewUntitledKey: string;
     procedure SaveRecoveryDraft(Session: TDocumentSession;
-      Drawing: TDrawing2D; const Ticket: TAutoSaveTicket);
+      Drawing: TDrawing2D; EditSession: TObjectEditSession;
+      const Ticket: TAutoSaveTicket);
     function SaveSource(Session: TDocumentSession; Drawing: TDrawing2D;
       const Ticket: TAutoSaveTicket): Boolean;
   public
     constructor Create(const RecoveryRoot: string);
     destructor Destroy; override;
     function BuildTpXRecoveryPayload(Drawing: TDrawing2D;
-      const SourcePath: TDocumentPath; out UnresolvedLinks: LongWord):
+      const SourcePath: TDocumentPath; out UnresolvedLinks: LongWord;
+      EditSession: TObjectEditSession = nil):
       RawByteString;
     procedure BindDocument(Session: TDocumentSession;
       Drawing: TDrawing2D; AutoSaveEnabled, RecoveryEnabled,
@@ -64,15 +66,25 @@ type
     procedure SetConflict;
     procedure SetStatus(const Value: string);
     procedure SetRecoveryWarning(const Value: string);
+    procedure UpdateRecoveryAfterEditSessionEnd(Session: TDocumentSession;
+      Drawing: TDrawing2D; Dirty: Boolean);
     function SetAutoSaveEnabled(Value: Boolean; NowMS: QWord): Boolean;
     procedure SetRecoveryEnabled(Value: Boolean; NowMS: QWord);
     function NextDelayMS(NowMS: QWord): Integer;
     function ProcessDue(Session: TDocumentSession; Drawing: TDrawing2D;
-      NowMS: QWord; out SourceSaved: Boolean): Boolean;
+      NowMS: QWord; out SourceSaved: Boolean): Boolean; overload;
+    function ProcessDue(Session: TDocumentSession; Drawing: TDrawing2D;
+      EditSession: TObjectEditSession; NowMS: QWord;
+      out SourceSaved: Boolean): Boolean; overload;
     procedure UnpackTpXRecoveryPayload(const Payload: RawByteString;
       const TempRoot: TDocumentPath; out ModelBytes: RawByteString;
       out AssetContext: TRecoveryAssetContext;
-      out UnresolvedLinks: LongWord);
+      out UnresolvedLinks: LongWord); overload;
+    procedure UnpackTpXRecoveryPayload(const Payload: RawByteString;
+      const TempRoot: TDocumentPath; out ModelBytes: RawByteString;
+      out AuxiliaryState: RawByteString;
+      out AssetContext: TRecoveryAssetContext;
+      out UnresolvedLinks: LongWord); overload;
     property Coordinator: TAutoSaveCoordinator read FCoordinator;
     property Store: TAutoSaveStore read FStore;
     property DocumentKey: string read FDocumentKey;
@@ -88,6 +100,9 @@ uses DocumentIO, Output, AutoSavePreferences, Bitmaps, MiscUtils, StrUtils;
 const
   RecoveryPayloadMagic = 'TPXRA001';
   RecoveryPayloadHeaderBytes = 8 + 4 + 4 + 4;
+  RecoveryPayloadMagicWithEditState = 'TPXRA002';
+  RecoveryPayloadHeaderWithEditStateBytes = 8 + 4 + 4 + 4 + 4;
+  RecoveryEditStateLimit = 262144;
   RecoveryAssetLimit = 8192;
 
 procedure WriteUInt32(Stream: TStream; Value: LongWord);
@@ -435,6 +450,67 @@ begin
   FRecoveryWarning := Value;
 end;
 
+procedure TAutoSaveRuntime.UpdateRecoveryAfterEditSessionEnd(
+  Session: TDocumentSession; Drawing: TDrawing2D; Dirty: Boolean);
+var Payload: RawByteString; FormatId: string; UnresolvedLinks: LongWord;
+  Files: TStringList; Entry: TAutoSaveStoredRecord; I: Integer;
+  ExistingDraft: Boolean;
+begin
+  if (FStore = nil) or (FDocumentKey = '') then Exit;
+  try
+    if not Dirty then
+    begin
+      FStore.DeleteDraft(FDocumentKey);
+      FRecoveryWarning := '';
+      Exit;
+    end;
+    if not FCoordinator.RecoveryEnabled then
+    begin
+      ExistingDraft := False;
+      Files := TStringList.Create;
+      try
+        FStore.ListDrafts(Files);
+        for I := 0 to Files.Count - 1 do
+          if FStore.LoadRecord(Files[I], Entry) and
+            (Entry.DocumentKey = FDocumentKey) then
+          begin
+            ExistingDraft := True;
+            Break;
+          end;
+      finally
+        Files.Free;
+      end;
+      if not ExistingDraft then
+      begin
+        FRecoveryWarning := '';
+        Exit;
+      end;
+    end;
+    if (Session = nil) or (Drawing = nil) then
+      raise EWriteError.Create('The current document is unavailable');
+    Payload := BuildTpXRecoveryPayload(Drawing, Session.SourcePath,
+      UnresolvedLinks, nil);
+    FormatId := Session.SourceFormatId;
+    if FormatId = '' then FormatId := 'tpx';
+    FStore.SaveDraft(FDocumentKey, Session.SourcePath, FormatId, 'tpx-assets',
+      Session.AcceptedRevision, Session.OriginalSourceBytes,
+      Session.LocalRevision, Payload);
+    if UnresolvedLinks > 0 then
+      FRecoveryWarning := Format(
+        'Recovery draft omits %d linked image(s)', [UnresolvedLinks])
+    else
+      FRecoveryWarning := '';
+    if FCoordinator.LastFailure = '' then FLastStatus := '';
+  except
+    on E: Exception do
+    begin
+      FRecoveryWarning := 'The prior recovery record may still contain the ' +
+        'ended edit: ' + E.Message;
+      FLastStatus := 'Recovery draft cleanup failed: ' + E.Message;
+    end;
+  end;
+end;
+
 function TAutoSaveRuntime.SetAutoSaveEnabled(Value: Boolean;
   NowMS: QWord): Boolean;
 begin
@@ -457,22 +533,39 @@ begin
 end;
 
 function TAutoSaveRuntime.BuildTpXRecoveryPayload(Drawing: TDrawing2D;
-  const SourcePath: TDocumentPath; out UnresolvedLinks: LongWord):
-  RawByteString;
-var ModelBytes, ChangedModel: RawByteString; Assets: TRecoveryAssetArray;
+  const SourcePath: TDocumentPath; out UnresolvedLinks: LongWord;
+  EditSession: TObjectEditSession): RawByteString;
+var ModelBytes, ChangedModel, AuxiliaryState: RawByteString;
+  Assets: TRecoveryAssetArray;
   OldLinks, NewLinks: TStringList; Entry: TBitmapEntry; Stream: TMemoryStream;
   I, LinkIndex, RewrittenCount: Integer; RelativePath: string;
   BitmapBytes: RawByteString; TotalBytes, EstimatedBytes: Int64;
+  PayloadMagic: string; HeaderBytes: Integer; ErrorText: string;
 begin
   if Drawing = nil then raise EWriteError.Create('A drawing is required');
   UnresolvedLinks := 0;
-  ModelBytes := SerializeTpXRecoveryBytes(Drawing, SourcePath);
+  AuxiliaryState := '';
+  if (EditSession <> nil) and EditSession.IsActive and
+    EditSession.HasUncommittedWork then
+  begin
+    if not EditSession.BuildRecoveryData(SourcePath, ModelBytes,
+      AuxiliaryState, ErrorText) then
+      raise EWriteError.Create(ErrorText);
+    PayloadMagic := RecoveryPayloadMagicWithEditState;
+    HeaderBytes := RecoveryPayloadHeaderWithEditStateBytes;
+  end
+  else
+  begin
+    ModelBytes := SerializeTpXRecoveryBytes(Drawing, SourcePath);
+    PayloadMagic := RecoveryPayloadMagic;
+    HeaderBytes := RecoveryPayloadHeaderBytes;
+  end;
   ChangedModel := ModelBytes;
   OldLinks := TStringList.Create;
   NewLinks := TStringList.Create;
   try
     SetLength(Assets, 0);
-    TotalBytes := Length(ModelBytes) + RecoveryPayloadHeaderBytes;
+    TotalBytes := Length(ModelBytes) + HeaderBytes + Length(AuxiliaryState);
     for I := 0 to Drawing.BitmapRegistry.Count - 1 do
     begin
       Entry := Drawing.BitmapRegistry.Objects[I] as TBitmapEntry;
@@ -531,19 +624,23 @@ begin
     OldLinks.Free;
     NewLinks.Free;
   end;
-  TotalBytes := Length(ChangedModel) + RecoveryPayloadHeaderBytes;
+  TotalBytes := Length(ChangedModel) + HeaderBytes + Length(AuxiliaryState);
   for I := 0 to High(Assets) do
     Inc(TotalBytes, Length(Assets[I].Bytes) + Length(Assets[I].RelativePath) + 8);
   if TotalBytes > AutoSaveMaxPayloadBytes then
     raise EWriteError.Create('Recovery draft exceeds the configured payload limit');
   Stream := TMemoryStream.Create;
   try
-    Stream.WriteBuffer(RecoveryPayloadMagic[1], Length(RecoveryPayloadMagic));
+    Stream.WriteBuffer(PayloadMagic[1], Length(PayloadMagic));
     WriteUInt32(Stream, Length(ChangedModel));
     WriteUInt32(Stream, UnresolvedLinks);
     WriteUInt32(Stream, Length(Assets));
+    if AuxiliaryState <> '' then
+      WriteUInt32(Stream, Length(AuxiliaryState));
     if Length(ChangedModel) > 0 then
       Stream.WriteBuffer(ChangedModel[1], Length(ChangedModel));
+    if Length(AuxiliaryState) > 0 then
+      Stream.WriteBuffer(AuxiliaryState[1], Length(AuxiliaryState));
     for I := 0 to High(Assets) do
     begin
       WriteRaw(Stream, RawByteString(Assets[I].RelativePath));
@@ -561,12 +658,25 @@ procedure TAutoSaveRuntime.UnpackTpXRecoveryPayload(
   const Payload: RawByteString; const TempRoot: TDocumentPath;
   out ModelBytes: RawByteString; out AssetContext: TRecoveryAssetContext;
   out UnresolvedLinks: LongWord);
+var AuxiliaryState: RawByteString;
+begin
+  UnpackTpXRecoveryPayload(Payload, TempRoot, ModelBytes,
+    AuxiliaryState, AssetContext, UnresolvedLinks);
+end;
+
+procedure TAutoSaveRuntime.UnpackTpXRecoveryPayload(
+  const Payload: RawByteString; const TempRoot: TDocumentPath;
+  out ModelBytes: RawByteString; out AuxiliaryState: RawByteString;
+  out AssetContext: TRecoveryAssetContext;
+  out UnresolvedLinks: LongWord);
 var Stream: TMemoryStream; Magic: array[0..7] of Char;
-  ModelLength, AssetCount: LongWord; I: Integer; TotalBytes: Int64;
+  ModelLength, AssetCount, AuxiliaryLength: LongWord;
+  I: Integer; TotalBytes: Int64; HasEditState: Boolean;
   Assets: TRecoveryAssetArray; NameBytes: RawByteString;
   Names: TStringList;
 begin
   ModelBytes := '';
+  AuxiliaryState := '';
   AssetContext := nil;
   UnresolvedLinks := 0;
   if Length(Payload) > AutoSaveMaxPayloadBytes then
@@ -579,19 +689,31 @@ begin
     if Stream.Size < RecoveryPayloadHeaderBytes then
       raise EReadError.Create('Recovery payload header is incomplete');
     Stream.ReadBuffer(Magic, SizeOf(Magic));
-    if CompareMem(@Magic[0], @RecoveryPayloadMagic[1], SizeOf(Magic)) = False then
+    HasEditState := CompareMem(@Magic[0],
+      @RecoveryPayloadMagicWithEditState[1], SizeOf(Magic));
+    if not HasEditState and not CompareMem(@Magic[0],
+      @RecoveryPayloadMagic[1], SizeOf(Magic)) then
       raise EReadError.Create('Recovery payload signature is invalid');
+    if HasEditState and
+      (Stream.Size < RecoveryPayloadHeaderWithEditStateBytes) then
+      raise EReadError.Create('Recovery payload header is incomplete');
     ModelLength := ReadUInt32(Stream);
     UnresolvedLinks := ReadUInt32(Stream);
     AssetCount := ReadUInt32(Stream);
+    AuxiliaryLength := 0;
+    if HasEditState then AuxiliaryLength := ReadUInt32(Stream);
     if (ModelLength > AutoSaveMaxPayloadBytes) or
+      (AuxiliaryLength > RecoveryEditStateLimit) or
       (AssetCount > RecoveryAssetLimit) or
-      (Int64(ModelLength) + Stream.Position > Stream.Size) then
+      (Int64(ModelLength) + AuxiliaryLength + Stream.Position > Stream.Size) then
       raise EReadError.Create('Recovery payload header is invalid');
     SetLength(ModelBytes, ModelLength);
     if ModelLength > 0 then Stream.ReadBuffer(ModelBytes[1], ModelLength);
+    SetLength(AuxiliaryState, AuxiliaryLength);
+    if AuxiliaryLength > 0 then
+      Stream.ReadBuffer(AuxiliaryState[1], AuxiliaryLength);
     SetLength(Assets, Integer(AssetCount));
-    TotalBytes := ModelLength;
+    TotalBytes := Int64(ModelLength) + AuxiliaryLength;
     if AssetCount > 0 then
     for I := 0 to Integer(AssetCount) - 1 do
     begin
@@ -617,13 +739,14 @@ begin
 end;
 
 procedure TAutoSaveRuntime.SaveRecoveryDraft(Session: TDocumentSession;
-  Drawing: TDrawing2D; const Ticket: TAutoSaveTicket);
+  Drawing: TDrawing2D; EditSession: TObjectEditSession;
+  const Ticket: TAutoSaveTicket);
 var Payload: RawByteString; SourcePath: TDocumentPath; FormatId: string;
   UnresolvedLinks: LongWord;
 begin
   if not FCoordinator.CanStart(aswRecoveryDraft, Ticket) then Exit;
   Payload := BuildTpXRecoveryPayload(Drawing, Session.SourcePath,
-    UnresolvedLinks);
+    UnresolvedLinks, EditSession);
   if not FCoordinator.IsTicketCurrent(Ticket) then Exit;
   SourcePath := Session.SourcePath;
   FormatId := Session.SourceFormatId;
@@ -696,6 +819,13 @@ end;
 
 function TAutoSaveRuntime.ProcessDue(Session: TDocumentSession;
   Drawing: TDrawing2D; NowMS: QWord; out SourceSaved: Boolean): Boolean;
+begin
+  Result := ProcessDue(Session, Drawing, nil, NowMS, SourceSaved);
+end;
+
+function TAutoSaveRuntime.ProcessDue(Session: TDocumentSession;
+  Drawing: TDrawing2D; EditSession: TObjectEditSession; NowMS: QWord;
+  out SourceSaved: Boolean): Boolean;
 var Work: TAutoSaveWork; Ticket: TAutoSaveTicket;
 begin
   SourceSaved := False;
@@ -704,7 +834,7 @@ begin
   if not Result then Exit;
   if aswRecoveryDraft in Work then
     try
-      SaveRecoveryDraft(Session, Drawing, Ticket);
+      SaveRecoveryDraft(Session, Drawing, EditSession, Ticket);
     except
       on E: Exception do
       begin

@@ -34,6 +34,8 @@ type
     LocalRevision, WatchGeneration: QWord; Dirty: Boolean) of object;
   TRecoveryRestoreCommittedEvent = procedure(Sender: TObject;
     LocalRevision, WatchGeneration: QWord) of object;
+  TRecoveryEditSessionRestoredEvent = procedure(Sender: TObject;
+    Session: TObjectEditSession) of object;
 {$ENDIF}
 
 //  TRealTypeX = Double;
@@ -597,6 +599,7 @@ type
     FOnExternalReloadKeepLocal: TExternalReloadKeepLocalEvent;
     FOnLocalEditCommitted: TLocalEditCommittedEvent;
     FOnRecoveryRestoreCommitted: TRecoveryRestoreCommittedEvent;
+    FOnRecoveryEditSessionRestored: TRecoveryEditSessionRestoredEvent;
     FSaveRuntime: TAutoSaveRuntime;
     FAutoSaveTimer: TTimer;
     FAutoSaveMenu: TMenuItem;
@@ -611,6 +614,7 @@ type
 {$ENDIF}
     ScrollPos0: Integer;             
     FEditSession: TObjectEditSession;
+    FEditSessionGateActive: Boolean;
     function GetCurrentDocumentEpoch: QWord;
     function GetHasActiveEditSession: Boolean;
     function BeforeSelectionChange(Sender: TObject): Boolean;
@@ -658,6 +662,7 @@ type
     procedure RecoverDraftsClick(Sender: TObject);
     procedure OfferRecoveryDrafts(Data: PtrInt);
     procedure RestoreRecoveryDraft(const FileName: string);
+    procedure RefreshRecoveryAfterEditSessionEnd;
     procedure NotifyAutoSaveConflict;
     procedure NotifyAutoSaveLocalEdit(LocalRevision,
       WatchGeneration: QWord; Dirty: Boolean);
@@ -735,6 +740,10 @@ type
       read FOnLocalEditCommitted write FOnLocalEditCommitted;
     property OnRecoveryRestoreCommitted: TRecoveryRestoreCommittedEvent
       read FOnRecoveryRestoreCommitted write FOnRecoveryRestoreCommitted;
+    property OnRecoveryEditSessionRestored:
+      TRecoveryEditSessionRestoredEvent
+      read FOnRecoveryEditSessionRestored
+      write FOnRecoveryEditSessionRestored;
 {$ENDIF}
 {$ENDIF}
 {$IFDEF FPC}
@@ -962,6 +971,7 @@ begin
   EventManager := TTpXManager.Create(TheDrawing, LocalView);
   TheDrawing.OnBeforeSelectionChange := BeforeSelectionChange;
   FEditSession := nil;
+  FEditSessionGateActive := False;
   EventManager.OnExit := OnExit;
   EventManager.PushMode(BaseMode);
   EventManager.RecentFiles.OnChange := RecentChanged;
@@ -1196,11 +1206,18 @@ function TMainForm.RegisterEditSession(
   Session: TObjectEditSession): Boolean;
 begin
   Result := False;
-  if Session = nil then Exit;
+  if (Session = nil) or not Session.IsActive then Exit;
+  if FEditSession = Session then Exit(True);
   if (FEditSession <> nil) and (FEditSession <> Session) and
     FEditSession.IsActive and not TrySettleEditSession then Exit;
   FEditSession := Session;
   Session.OnInteractionChanged := EditSessionChanged;
+  FEditSessionGateActive := True;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  if FSaveRuntime <> nil then FSaveRuntime.Coordinator.BeginEditSession;
+{$ENDIF}
+{$ENDIF}
   Result := True;
 end;
 
@@ -1241,12 +1258,35 @@ begin
     FEditSession := nil;
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
-  if Change in [escDraftChanged, escCancelled] then
+  if Change = escDraftChanged then
     NotifyDocumentEdited;
+  if (Change = escCancelled) or
+    ((Change = escCommitted) and
+      (not Session.LastCommitChanged or
+       ((TheDrawing <> nil) and
+        not Assigned(TheDrawing.OnChangeDrawing)))) then
+    NotifyDocumentEdited;
+  if not Session.IsActive and FEditSessionGateActive then
+  begin
+    FEditSessionGateActive := False;
+    if FSaveRuntime <> nil then
+      FSaveRuntime.Coordinator.EndEditSession(GetTickCount64);
+  end;
+  if (Change in [escCancelled, escCommitted]) and not Session.IsActive then
+    RefreshRecoveryAfterEditSessionEnd;
   if not Session.IsActive and FDeferredReload then
     Application.QueueAsyncCall(TryApplyDeferredReload, 0);
 {$ENDIF}
 {$ENDIF}
+end;
+
+procedure TMainForm.RefreshRecoveryAfterEditSessionEnd;
+begin
+  if FSaveRuntime = nil then Exit;
+  FSaveRuntime.UpdateRecoveryAfterEditSessionEnd(
+    EventManager.DocumentSession, TheDrawing, CurrentDocumentDirty);
+  ArmAutoSaveTimer;
+  UpdateAutoSaveUi;
 end;
 
 function TMainForm.SendSettledMessage(Msg: TEventMessage;
@@ -1544,8 +1584,8 @@ procedure TMainForm.FormDestroy(Sender: TObject);
 begin
   if FEditSession <> nil then
   begin
-    FEditSession.OnInteractionChanged := nil;
     UnregisterEditSession(FEditSession);
+    FEditSession.OnInteractionChanged := nil;
   end;
   if TheDrawing <> nil then
     TheDrawing.OnBeforeSelectionChange := nil;
@@ -1805,7 +1845,7 @@ begin
   if FAutoSaveTimer <> nil then FAutoSaveTimer.Enabled := False;
   if (FSaveRuntime = nil) or FClosingReload then Exit;
   FSaveRuntime.ProcessDue(EventManager.DocumentSession, TheDrawing,
-    GetTickCount64, SourceSaved);
+    FEditSession, GetTickCount64, SourceSaved);
   if SourceSaved then AcceptSavedDocumentRevision;
   if FSaveRuntime.Coordinator.Conflict then
     ScheduleSourceReconciliation;
@@ -1956,15 +1996,20 @@ var
   Snapshot: TDocumentSnapshot;
   CurrentRevision: TDiskRevision;
   SourcePath, FormatId, CandidatePath: TDocumentPath;
-  PayloadBytes: RawByteString;
+  PayloadBytes, AuxiliaryState: RawByteString;
   RecoveryAssets: TRecoveryAssetContext;
+  RestoredEditSession: TObjectEditSession;
   UnresolvedLinks: LongWord;
-  RecoveryNotice: string;
+  RecoveryNotice, AuxiliaryError: string;
   ErrorText: string;
 begin
+  if not TrySettleEditSession then Exit;
   Candidate := nil;
   CandidateContext := nil;
   RecoveryAssets := nil;
+  RestoredEditSession := nil;
+  AuxiliaryState := '';
+  AuxiliaryError := '';
   Diagnostics := TStringList.Create;
   WatchGeneration := 0;
   SubscriptionID := 0;
@@ -1999,7 +2044,7 @@ begin
     if Entry.PayloadFormatId = 'tpx-assets' then
     begin
       FSaveRuntime.UnpackTpXRecoveryPayload(Entry.Payload,
-        FSaveRuntime.Store.Root, PayloadBytes,
+        FSaveRuntime.Store.Root, PayloadBytes, AuxiliaryState,
         RecoveryAssets, UnresolvedLinks);
       CandidatePath := RecoveryAssets.CandidatePath;
     end;
@@ -2064,6 +2109,53 @@ begin
       FOnRecoveryRestoreCommitted(Self,
         EventManager.DocumentSession.LocalRevision,
         EventManager.DocumentSession.WatchGeneration);
+    if AuxiliaryState <> '' then
+    begin
+      if TObjectEditSession.RestoreRecoveryState(TheDrawing,
+        CurrentDocumentEpoch, AuxiliaryState, RestoredEditSession,
+        AuxiliaryError) then
+      begin
+        if not RegisterEditSession(RestoredEditSession) then
+        begin
+          AuxiliaryError := 'The recovered edit session could not be registered';
+          RestoredEditSession.Cancel(CurrentDocumentEpoch);
+          FreeAndNil(RestoredEditSession);
+        end
+        else if Assigned(FOnRecoveryEditSessionRestored) then
+        begin
+          try
+            FOnRecoveryEditSessionRestored(Self, RestoredEditSession);
+            { Ownership transfers to the callback after it returns. }
+            RestoredEditSession := nil;
+          except
+            on E: Exception do
+              AuxiliaryError := 'The recovered edit session could not be opened: ' +
+                E.Message;
+          end;
+          if RestoredEditSession <> nil then
+          begin
+            UnregisterEditSession(RestoredEditSession);
+            FreeAndNil(RestoredEditSession);
+          end;
+        end
+        else
+        begin
+          AuxiliaryError := 'No editor is available for the recovered draft';
+          UnregisterEditSession(RestoredEditSession);
+          FreeAndNil(RestoredEditSession);
+        end;
+      end;
+      if AuxiliaryError <> '' then
+      begin
+        { Discard only the invalid auxiliary editor state. Keep the restored
+          committed scene recoverable, and retire the stale sidecar now. }
+        FSaveRuntime.UpdateRecoveryAfterEditSessionEnd(
+          EventManager.DocumentSession, TheDrawing, CurrentDocumentDirty);
+        FSaveRuntime.SetRecoveryWarning(
+          'The drawing was recovered, but its pending editor draft was discarded: ' +
+          AuxiliaryError);
+      end;
+    end;
     TheDrawing.RepaintViewports;
     ArmAutoSaveTimer;
     UpdateAutoSaveUi;
@@ -2080,6 +2172,7 @@ begin
     CancelDocumentWatchBinding(WatchGeneration, SubscriptionID);
   Candidate.Free;
   CandidateContext.Free;
+  RestoredEditSession.Free;
   RecoveryAssets.Free;
   Diagnostics.Free;
 end;
