@@ -578,7 +578,9 @@ def s_download_status_and_unload(app):
         raise AssertionError('a failed browser download opened a modal dialog')
     if not unload_is_blocked():
         raise AssertionError('failed download incorrectly marked the drawing clean')
-    app.page.evaluate('HTMLAnchorElement.prototype.click = window.tpxOriginalAnchorClick')
+    app.page.evaluate('''() => {
+      HTMLAnchorElement.prototype.click = window.tpxOriginalAnchorClick;
+    }''')
     with app.page.expect_download() as retried:
         app.menu('File', 'Save')
     retry_path = app.output / retried.value.suggested_filename
@@ -650,8 +652,8 @@ def s_bitmap_roundtrip(app):
     app.page.wait_for_timeout(100)
     objects = drawing_xml(saved)
     link = objects[0].get('link', '') if len(objects) == 1 else ''
-    if not link or link.replace('\\', '/').rsplit('/', 1)[-1] != fixture.name:
-        raise AssertionError('saved drawing lost the bitmap reference')
+    if link != fixture.name:
+        raise AssertionError('saved drawing did not use a portable relative bitmap link')
     if app.page.get_by_role('dialog').count():
         raise AssertionError('saving a bitmap displayed an unexpected dialog')
     asset_download = next((item for item in related_downloads
