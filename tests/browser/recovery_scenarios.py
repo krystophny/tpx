@@ -440,6 +440,59 @@ def s_recovery_opt_in_is_origin_scoped(app):
     return 'consent is isolated by browser origin'
 
 
+
+def s_recovery_opt_out_keeps_drafts_and_ignores_stale_reads(app):
+    opt_in(app.page)
+    draw_line(app)
+    wait_saved(app.page)
+    before = records(app.page)
+    if len(before) != 1:
+        raise AssertionError(f'expected one draft before opting out, got {before}')
+    app.page.wait_for_function('document.querySelectorAll("#tpx-recovery-drafts .draft").length === 1')
+
+    app.page.evaluate('''() => {
+      const originalGetAll = IDBObjectStore.prototype.getAll;
+      window.tpxHeldDraftReads = [];
+      window.tpxHoldDraftReads = true;
+      window.tpxOriginalDraftGetAll = originalGetAll;
+      IDBObjectStore.prototype.getAll = function(...args) {
+        const request = originalGetAll.apply(this, args);
+        if (this.name === 'drafts' && window.tpxHoldDraftReads) {
+          request.addEventListener('success', event => {
+            if (!window.tpxHoldDraftReads) return;
+            event.stopImmediatePropagation();
+            window.tpxHeldDraftReads.push(() => {
+              if (typeof request.onsuccess === 'function') request.onsuccess.call(request, event);
+            });
+          }, {once: true});
+        }
+        return request;
+      };
+      const change = new BroadcastChannel('tpx-browser-local-recovery');
+      change.postMessage({type: 'draft-change'});
+      change.close();
+    }''')
+    app.page.wait_for_function('window.tpxHeldDraftReads.length === 1')
+    app.page.locator('#tpx-recovery-enabled').uncheck()
+    app.page.wait_for_function('!document.querySelector("#tpx-recovery-enabled").checked && document.querySelector("#tpx-recovery-drafts").children.length === 0')
+    app.page.evaluate('''async () => {
+      window.tpxHoldDraftReads = false;
+      IDBObjectStore.prototype.getAll = window.tpxOriginalDraftGetAll;
+      for (const resume of window.tpxHeldDraftReads) resume();
+      await Promise.resolve();
+      await Promise.resolve();
+    }''')
+    if app.page.locator('#tpx-recovery-drafts').locator('.draft').count() != 0:
+        raise AssertionError('a read started before opting out repopulated the recovery list')
+    after = records(app.page)
+    if len(after) != 1 or after[0]['id'] != before[0]['id']:
+        raise AssertionError('opting out deleted an existing browser recovery draft')
+
+    opt_in(app.page)
+    app.page.wait_for_function('document.querySelectorAll("#tpx-recovery-drafts .draft").length === 1')
+    return 'opting out keeps the IndexedDB draft and a delayed pre-opt-out read cannot repopulate the panel'
+
+
 def s_recovery_tabs_get_distinct_records(app):
     second = app.page.context.new_page()
     try:
@@ -474,5 +527,6 @@ SCENARIOS = [
     ('recovery-capacity', s_recovery_capacity_does_not_evict),
     ('recovery-corrupt', s_recovery_corrupt_record_is_retained_until_deleted),
     ('recovery-origin', s_recovery_opt_in_is_origin_scoped),
+    ('recovery-optout', s_recovery_opt_out_keeps_drafts_and_ignores_stale_reads),
     ('recovery-two-tabs', s_recovery_tabs_get_distinct_records),
 ]
