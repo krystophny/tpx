@@ -286,8 +286,15 @@ function StoreToFile_TpX0(const Drawing: TDrawing2D;
   AClass_TeX, AClass_PdfTeX: TDrawingSaverClass;
   const DvipsFixBB: Boolean): Boolean;
 function StoreToFile_TpX(const Drawing: TDrawing2D;
-  const FileName: string;
+  const FileName: string; const DvipsFixBB: Boolean): Boolean;
+function StoreToStream_TpX(const Drawing: TDrawing2D;
+  const Destination: TStream; const FileName: string;
   const DvipsFixBB: Boolean): Boolean;
+function StoreToStream_TpXDocument(const Drawing: TDrawing2D;
+  const Destination: TStream; const FileName: string;
+  const DvipsFixBB: Boolean): Boolean;
+function StoreToStream_TpXModel(const Drawing: TDrawing2D;
+  const Destination: TStream; const FileName: string): Boolean;
 function StoreToFile_MPS(const Drawing: TDrawing2D;
   const FileName: string): Boolean;
 procedure StoreToFile_LaTeX_EPS(const Drawing: TDrawing2D;
@@ -975,12 +982,12 @@ begin
     (ExtRect.Right - ExtRect.Left) / FactorMM]);
 end;
 
-function StoreToFile_TpX0(const Drawing: TDrawing2D;
-  const FileName: string;
+function StoreToStream_TpX0(const Drawing: TDrawing2D;
+  const Destination: TStream; const FileName: string;
   AClass_TeX, AClass_PdfTeX: TDrawingSaverClass;
   const DvipsFixBB: Boolean): Boolean;
 var
-  Stream: TMemoryStream;
+  Stream: TStream;
   ARect: TRect2D;
   PicWidth: TRealType;
   procedure WriteAsClass(
@@ -1015,9 +1022,12 @@ begin
       Drawing.PicScale
       + Drawing.Border * 2;
   end;
-  Stream := TMemoryStream.Create;
-  try
-    WriteAsClass(T_TpX_Saver);
+  Stream := Destination;
+  if Stream = nil then
+    raise Exception.Create('A destination stream is required');
+  Stream.Size := 0;
+  Stream.Position := 0;
+  WriteAsClass(T_TpX_Saver);
     if //(Drawing.TeXFigure <> fig_none)      and
       (Drawing.TeXFigurePrologue <> '') then
       WriteLnStream(Drawing.TeXFigurePrologue);
@@ -1094,18 +1104,31 @@ begin
       or (Drawing.PdfTeXFormat <> pdftex_none))
       and (Drawing.TeXFigure = fig_none)
       then ; //WriteLnStream('\hfil');
-    if //(Drawing.TeXFigure <> fig_none)      and
-      (Drawing.TeXFigureEpilogue <> '') then
-      WriteLnStream(Drawing.TeXFigureEpilogue);
-    Stream.SaveToFile(FileName);
+  if //(Drawing.TeXFigure <> fig_none)      and
+    (Drawing.TeXFigureEpilogue <> '') then
+    WriteLnStream(Drawing.TeXFigureEpilogue);
+  Result := Stream.Size > 0;
+end;
+
+function StoreToFile_TpX0(const Drawing: TDrawing2D;
+  const FileName: string;
+  AClass_TeX, AClass_PdfTeX: TDrawingSaverClass;
+  const DvipsFixBB: Boolean): Boolean;
+var Stream: TMemoryStream;
+begin
+  Stream := TMemoryStream.Create;
+  try
+    Result := StoreToStream_TpX0(Drawing, Stream, FileName,
+      AClass_TeX, AClass_PdfTeX, DvipsFixBB);
+    if Result then Stream.SaveToFile(FileName);
+    Result := FileExists(FileName);
   finally
     Stream.Free;
   end;
-  Result := FileExists(FileName);
 end;
 
-function StoreToFile_TpX(const Drawing: TDrawing2D;
-  const FileName: string;
+function StoreToStream_TpX(const Drawing: TDrawing2D;
+  const Destination: TStream; const FileName: string;
   const DvipsFixBB: Boolean): Boolean;
 var
   AClass_TeX, AClass_PdfTeX: TDrawingSaverClass;
@@ -1154,8 +1177,23 @@ begin
   else
     AClass_PdfTeX := T_TeX_Picture_Export;
   end;
-  Result := StoreToFile_TpX0(Drawing, FileName,
+  Result := StoreToStream_TpX0(Drawing, Destination, FileName,
     AClass_TeX, AClass_PdfTeX, DvipsFixBB);
+end;
+
+function StoreToFile_TpX(const Drawing: TDrawing2D;
+  const FileName: string;
+  const DvipsFixBB: Boolean): Boolean;
+var Stream: TMemoryStream;
+begin
+  Stream := TMemoryStream.Create;
+  try
+    Result := StoreToStream_TpX(Drawing, Stream, FileName, DvipsFixBB);
+    if Result then Stream.SaveToFile(FileName);
+    Result := FileExists(FileName);
+  finally
+    Stream.Free;
+  end;
 end;
 
 { --================ T_Device_Export ==================-- }

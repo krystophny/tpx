@@ -5,7 +5,7 @@ interface
 uses SysUtils, StrUtils, Classes, Controls, ExtCtrls, Graphics,
   Forms, Dialogs, ExtDlgs, Registry, Math,
   Manage, Options0, Geometry, Drawings, ViewPort, GObjBase,
-  GObjects,
+  GObjects, DocumentFormats,
 {$IFNDEF FPC}
   Windows
 {$ELSE}
@@ -27,6 +27,7 @@ type
     function GetRecentShort(I: Integer): string;
   public
     RecentFiles: THistoryList;
+    DocumentSession: TDocumentSession;
     constructor Create(ADrawing: TDrawing2D; AViewPort:
       TViewport2D);
     destructor Destroy; override;
@@ -62,7 +63,7 @@ type
     procedure PictureProperties;
     procedure TpXSettings;
     procedure TransformSelected(const Transf: TTransf2D);
-    procedure DoSaveDrawing(FileName: string);
+    function DoSaveDrawing(const FileName: string): Boolean;
     procedure DrawingSaveDlgTypeChange(Sender: TObject);
     function DlgSaveDrawing(FileName: string): Word;
     function TrySaveDrawing(const FileName: string): Word;
@@ -469,7 +470,7 @@ uses MainUnit, SysBasic, Propert, Options, TransForm, PreView,
 {$ELSE}
 {$ENDIF}
   Settings0, AboutUnit, Input, Output, ScaleStandardUnit, Modify,
-  InfoForm, Devices;
+  InfoForm, Devices, DocumentIO;
 
 { --================ TTpXManager ==================-- }
 
@@ -481,6 +482,7 @@ begin
   fViewPort := AViewPort;
   fPickFilter := TObject2D;
   RecentFiles := THistoryList.Create;
+  DocumentSession := TDocumentSession.Create;
   ADrawing.OnChangeDrawing := BaseMode.OnChangeDrawing;
   ADrawing.OnPasteMetafileFromClipboard :=
     BaseMode.OnPasteMetafileFromClipboard;
@@ -488,6 +490,7 @@ end;
 
 destructor TTpXManager.Destroy;
 begin
+  DocumentSession.Free;
   RecentFiles.Free;
   inherited Destroy;
 end;
@@ -758,6 +761,7 @@ end;
 
 procedure TTpXMode.OnChangeDrawing(ADrawing: TDrawing);
 begin
+  TpX_Manager.DocumentSession.AdvanceLocalRevision;
   with ADrawing as TDrawing2D do
     if Assigned(Drawing.History) then
     begin

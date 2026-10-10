@@ -62,6 +62,7 @@ type
     procedure LoadFromStream;
     procedure LoadFromClipboard;
     procedure LoadFromFile(const FileName: string);
+    procedure LoadFromBytes(const SourceBytes: RawByteString);
     property XMLDoc: TXMLDDocument read fXML;
   end;
 
@@ -160,7 +161,7 @@ var
 implementation
 
 uses Math, Forms, StrUtils, ColorEtc, Output, SysBasic,
-  ClpbrdOp, MiscUtils, MprtEMF, Modify;
+  ClpbrdOp, MiscUtils, MprtEMF, Modify, TpXXmlSource;
 
 { --================ T_TpX_Loader ==================-- }
 
@@ -960,7 +961,8 @@ var
 begin
   if fDrawing2D = nil then Exit;
   //if fStream = nil then Exit;
-  if fXML.DocumentElement = nil then Exit;
+  if fXML.DocumentElement = nil then
+    raise EReadError.Create('TpX document has no XML root element');
   ReadHeader;
   ReadEntities;
   if fDrawing2D.PicScale = 0 then //for backward compatibility
@@ -981,35 +983,31 @@ end;
 
 procedure T_TpX_Loader.LoadFromStream;
 var
-  Lines1, Lines2: TStringList;
-  I: Integer;
-  St: string;
-  Size: Integer;
-  Started: Boolean;
+  XmlSource: string;
 begin
-  Lines1 := TStringList.Create;
-  Size := fStream.Size;
-  SetLength(St, Size);
-  fStream.Position := 0;
-  fStream.ReadBuffer(St[1], Size);
-  Lines1.Text := St;
-  Lines2 := TStringList.Create;
-  Started := False;
-  for I := 0 to Lines1.Count - 1 do
-  begin
-    St := Lines1[I];
-    if Pos('%', St) <> 1 then Continue;
-    Delete(St, 1, 1);
-    if not Started then
-      if Pos('<TpX', St) > 0 then Started := True
-      else Continue;
-    Lines2.Add(St);
-    if Pos('</TpX>', St) > 0 then Break;
+  if (fStream = nil) or (fStream.Size <= 0) then
+    raise EReadError.Create('Empty TpX document');
+  XmlSource := ExtractTpXXml(fStream);
+  if XmlSource = '' then
+    raise EReadError.Create('TpX XML comment block was not found');
+  fXML.LoadXML(XmlSource);
+  if fXML.DocumentElement = nil then
+    raise EReadError.Create('TpX XML block is malformed');
+end;
+
+procedure T_TpX_Loader.LoadFromBytes(const SourceBytes: RawByteString);
+begin
+  FreeAndNil(fStream);
+  fStream := TMemoryStream.Create;
+  try
+    if Length(SourceBytes) > 0 then
+      fStream.WriteBuffer(SourceBytes[1], Length(SourceBytes));
+    fStream.Position := 0;
+    LoadFromStream;
+    ReadAll;
+  finally
+    FreeAndNil(fStream);
   end;
-  //MainUnit.MainForm.RichEdit1.Lines.Clear;
-  //MainUnit.MainForm.RichEdit1.Lines.AddStrings(Lines2);
-  //Lines2.SaveToFile('###');
-  fXML.LoadXML(Lines2.Text);
 end;
 
 procedure T_TpX_Loader.LoadFromClipboard;
