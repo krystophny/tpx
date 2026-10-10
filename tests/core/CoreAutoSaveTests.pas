@@ -19,6 +19,10 @@ begin
     CheckCore(not C.AutoSaveEnabled, 'AutoSave must default off');
     CheckCore(C.RecoveryEnabled, 'crash recovery must default on');
     C.BindDocument(1, 2, False, True, True, False, 0);
+    CheckCore(C.NextDelayMS(0) < 0,
+      'a clean idle document must not schedule periodic work');
+    CheckCore(not C.TakeDue(10000, Work, Ticket),
+      'an idle document must produce no background save callback');
     CheckCore(not C.AutoSaveEnabled,
       'an unsupported document must not enable source AutoSave');
     C.NotifyLocalEdit(3, 100, True);
