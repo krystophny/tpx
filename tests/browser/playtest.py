@@ -81,6 +81,8 @@ try:
             results.append({'scenario': name, 'status': status, 'detail': detail,
                             'frames': app.frames(), 'shots': app.shots})
             print(f'{status:5} {name:24} {detail[:150]}')
+            page.on('dialog', lambda dialog: dialog.accept()
+                    if dialog.type == 'beforeunload' else dialog.dismiss())
             page.close()
         browser.close()
 finally:

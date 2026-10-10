@@ -306,14 +306,34 @@ begin
     Entry := FDrawing.BitmapRegistry.Objects[I] as TBitmapEntry;
     Link := TDocumentPath(Entry.ImageLink);
     if Link = '' then Continue;
-    if IsAbsoluteDocumentLink(Link) or (Link = '.') or (Link = '..') or
+    if IsAbsoluteDocumentLink(Link) then
+    begin
+{$IFDEF CPUWASM32}
+      { Browser-selected files live at the WASI virtual root. Download only a
+        root-level file; nested paths cannot be represented by this host. }
+      if (Length(Link) < 2) or (Link[1] <> '/') or
+        (Pos('/', Copy(string(Link), 2, MaxInt)) > 0) or
+        (Pos('\', string(Link)) > 0) or (Pos(':', string(Link)) > 0) or
+        (Pos(#0, string(Link)) > 0) then
+        raise EWriteError.CreateFmt(
+          'This browser cannot download linked bitmap paths safely: "%s"',
+          [string(Link)]);
+      Path := NormalizeDocumentPath(Link);
+{$ELSE}
+      raise EWriteError.CreateFmt(
+        'This browser cannot download linked bitmap paths safely: "%s"',
+        [string(Link)]);
+{$ENDIF}
+    end
+    else if (Link = '.') or (Link = '..') or
       (Pos('/', string(Link)) > 0) or (Pos('\', string(Link)) > 0) or
       (Pos(':', string(Link)) > 0) or (Pos(#0, string(Link)) > 0) then
       raise EWriteError.CreateFmt(
         'This browser cannot download linked bitmap paths safely: "%s"',
-        [string(Link)]);
-    Path := NormalizeDocumentPath(DocumentPathDirectory(FPath) +
-      PathDelim + Link);
+        [string(Link)])
+    else
+      Path := NormalizeDocumentPath(DocumentPathDirectory(FPath) +
+        PathDelim + Link);
     AddUnique(Path);
   end;
 end;
