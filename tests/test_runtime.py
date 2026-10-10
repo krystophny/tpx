@@ -137,6 +137,30 @@ class RuntimeTests(unittest.TestCase):
                 "TPX_TIKZ_FRAGMENT_FIXTURE": str(fragment),
             })
 
+    def test_tikz_source_edit_save_as_and_fresh_document(self):
+        fixture_dir = Path(__file__).parent / "core" / "fixtures" / "tikz"
+        with tempfile.TemporaryDirectory(prefix="tpx-tikz-save-") as directory:
+            root = Path(directory).resolve()
+            source_dir = root / "source"
+            source_dir.mkdir()
+            source = source_dir / "independent-scene.tex"
+            shutil.copy2(fixture_dir / source.name, source)
+            shutil.copy2(fixture_dir / "acceptance-image.png", source_dir)
+            relocated_dir = root / "relocated"
+            relocated_dir.mkdir()
+            fresh_dir = root / "fresh"
+            fresh_dir.mkdir()
+            rejected = fresh_dir / "rejected.tikz"
+            rejected.write_bytes(b"preserve unsupported Save As target")
+            self.run_scenario("tikz-source-save", {
+                "TPX_TIKZ_SOURCE_FILE": str(source),
+                "TPX_TIKZ_RELOCATED_FILE": str(relocated_dir / source.name),
+                "TPX_TIKZ_FRESH_FILE": str(fresh_dir / "fractional.tikz"),
+                "TPX_TIKZ_REJECTED_FILE": str(rejected),
+                "TPX_TIKZ_FRESH_TEX_FILE": str(fresh_dir / "standalone.tex"),
+                "TPX_TIKZ_EMPTY_FILE": str(fresh_dir / "empty.tikz"),
+            })
+
     @unittest.skipUnless(shutil.which("latex") and
                          (shutil.which("dvipng") or
                           (shutil.which("dvisvgm") and shutil.which("rsvg-convert"))),
