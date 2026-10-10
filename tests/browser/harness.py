@@ -21,33 +21,15 @@ OUT = ROOT / 'dist/browser-playtest'
 class App:
     """Drive the browser TpX and observe it through its rendered output."""
 
-    def __init__(self, page, prefix='', output=OUT, restart_page=None, url=None):
+    def __init__(self, page, prefix='', output=OUT):
         self.page = page
         self.prefix = prefix
         self.output = Path(output)
-        self._restart_page = restart_page
-        self._url = url
         self.shots = 0
         self.errors = []
-        self._observe_page(page)
-
-    def _observe_page(self, page):
         page.on('pageerror', lambda e: self.errors.append(str(e)[:400]))
         page.on('console', lambda m: self.errors.append(f'{m.type}: {m.text}'[:400])
                 if m.type == 'error' else None)
-
-    def restart(self):
-        """Close and relaunch this scenario's persistent browser profile."""
-        if self._restart_page is None or self._url is None:
-            raise RuntimeError('this scenario has no persistent browser restart')
-        self.page.context.close()
-        self.page = self._restart_page()
-        self._observe_page(self.page)
-        self.page.goto(self._url)
-        self.page.wait_for_selector('#status[data-state=ready]', timeout=30000)
-        self.page.wait_for_function('Number(document.querySelector("#lcl").dataset.frames)>0')
-        self.page.wait_for_timeout(500)
-        return self.page
 
     # --- observation -------------------------------------------------------
     def box(self):
