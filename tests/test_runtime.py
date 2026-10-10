@@ -158,6 +158,7 @@ class RuntimeTests(unittest.TestCase):
                 "TPX_TIKZ_FRESH_FILE": str(fresh_dir / "fractional.tikz"),
                 "TPX_TIKZ_REJECTED_FILE": str(rejected),
                 "TPX_TIKZ_FRESH_TEX_FILE": str(fresh_dir / "standalone.tex"),
+                "TPX_TIKZ_EMPTY_FILE": str(fresh_dir / "empty.tikz"),
             })
 
     @unittest.skipUnless(shutil.which("latex") and
