@@ -47,6 +47,7 @@ uses
   XmlOut in 'src\XmlOut.pas',
   DevSVG in 'src\DevSVG.pas',
   DevTikZ in 'src\DevTikZ.pas',
+  TikZImportDrawing in 'src\TikZImportDrawing.pas',
   DevPGF in 'src\DevPGF.pas',
   DevTeXPc in 'src\DevTeXPc.pas',
   TpXSaver in 'src\TpXSaver.pas',
