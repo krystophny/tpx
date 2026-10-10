@@ -197,13 +197,19 @@ const
     'stroke="#663399" stroke-width="2"/>' +
     '<text x="20" y="30" font-family="Arial" font-size="12px" ' +
     'text-anchor="middle" xml:space="preserve">A &amp; B ' +
-    #$CE + #$B2 + '</text></svg>';
+    #$CE + #$B2 + ' ' + #$F0 + #$9F + #$98 + #$80 +
+    '</text></svg>';
   Unsupported: RawByteString =
     '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" ' +
     'height="10mm" viewBox="0 0 10 10"><line x1="1" y1="1" ' +
     'x2="9" y2="9" stroke="black"/><image x="2" y="2" ' +
     'width="4" height="4" href="file:///tmp/should-not-be-read.png"/>' +
     '</svg>';
+  UnicodeMetadata: RawByteString =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" ' +
+    'height="10mm" viewBox="0 0 10 10"><title>Label ' +
+    #$CE + #$B2 + '</title><text x="1" y="2" font-family="Arial" ' +
+    'font-size="1">plain</text></svg>';
   UnknownPrefixAttribute: RawByteString =
     '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" ' +
     'height="10mm" viewBox="0 0 10 10"><line x1="1" y1="1" ' +
@@ -688,10 +694,13 @@ begin
     CheckSvgNear(Path.Points[3].Y, 47, 1E-4, 'cubic end y');
     Check(ColorToHtml(Path.LineColor) = '#ABCDEF',
       'cubic path stroke color changed');
-    ExpectedTextUtf8 := 'A & B ' + #$CE + #$B2;
+    ExpectedTextUtf8 := 'A & B ' + #$CE + #$B2 + ' ' +
+      #$F0 + #$9F + #$98 + #$80;
     Check((UTF8Encode(Text.WideText) = ExpectedTextUtf8) and
       (Text.HAlignment = ahCenter),
-      'SVG UTF-8 text content or text-anchor changed');
+      'SVG UTF-8 text content or text-anchor changed: got "' +
+      UTF8Encode(Text.WideText) + '" with alignment ' +
+      IntToStr(Ord(Text.HAlignment)));
     Check(Text.Font.Name = 'Arial', 'SVG text font family changed');
     CheckSvgNear(Text.Points[0].X, 20, 1E-4, 'text x');
     CheckSvgNear(Text.Points[0].Y, 18, 1E-4, 'text baseline y');
@@ -702,6 +711,8 @@ begin
       'roundtrip.svg', CodecContext);
     Check(Pos(#$CE + #$B2, Serialized) > 0,
       'SVG serialization changed UTF-8 text bytes');
+    Check(Pos(#$F0 + #$9F + #$98 + #$80, Serialized) > 0,
+      'SVG serialization changed supplementary UTF-8 text bytes');
     CheckSvgNear(SvgFloat(SvgAttribute(string(Serialized), 'width')),
       25.4, 1E-4, 'same-format physical page width');
     CheckSvgNear(SvgFloat(SvgAttribute(string(Serialized), 'height')),
@@ -806,6 +817,19 @@ begin
         'unknown font attribute was not diagnosed');
       Check(AuxDrawing.ObjectsCount = 1,
         'import-only unknown attribute lost representable line geometry');
+    finally
+      FreeAndNil(AuxContext);
+      FreeAndNil(AuxDrawing);
+    end;
+
+    Diagnostics.Clear;
+    AuxDrawing := LoadDocumentCandidate('svg', 'unicode-metadata.svg',
+      UnicodeMetadata, AuxCanSave, AuxContext, Diagnostics);
+    try
+      Check(not AuxCanSave,
+        'non-ASCII title metadata was marked save-back capable');
+      Check(Pos('metadata', LowerCase(Diagnostics.Text)) > 0,
+        'non-ASCII title metadata was not diagnosed');
     finally
       FreeAndNil(AuxContext);
       FreeAndNil(AuxDrawing);
