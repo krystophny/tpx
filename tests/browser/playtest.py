@@ -53,6 +53,7 @@ try:
                 continue
             page = browser.new_page(viewport={'width': 1280, 'height': 900})
             app = App(page, name, OUT)
+            app.capture_requested = args.screenshots
             status = 'pass'
             detail = ''
             try:

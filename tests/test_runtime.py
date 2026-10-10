@@ -20,7 +20,7 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "document-io",
              "canvas-focus-transfer",
              "auto-reload-integration",
-             "property-dimensions", "font-choice", "conversion-save",
+             "property-dimensions", "inspector-mixed-selection", "inspector-property-families", "font-choice", "conversion-save",
              "unsupported-exports", "live-tex-missing-tool", "clipboard-format-width",
              "clipboard-roundtrip", "color-box-custom-state",
              "platform-shortcuts", "svg-linked-image-copy", "svg-codec")
