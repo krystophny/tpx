@@ -8,6 +8,7 @@ import shutil
 import struct
 import sys
 import tempfile
+import time
 import uuid
 import unittest
 
