@@ -115,6 +115,7 @@ begin
   try
     Source.Start;
     if Source.WaitUntilReady(5000) <> fwsReady then Halt(3);
+    if not Source.WaitForFirstPollForTest(5000) then Halt(8);
     if Source.Subscribe(Path, 41, SubscriptionID) <> fwsReady then Halt(4);
     while Source.TryDequeue(Event) do ;
     WriteLn('READY|', SubscriptionID, '|41|', StatusName(Source.Status));
@@ -177,9 +178,13 @@ begin
         WriteLn('INJECTED');
         Flush(Output);
       end
-      else if Argument = 'POLL_COUNT' then
+      else if Argument = 'WAIT_POLL' then
       begin
-        WriteLn('POLL_COUNT|', Source.PollReturnsForTest);
+        WaitMS := StrToIntDef(Rest, 3000);
+        if Source.WaitForPollReturnForTest(WaitMS) then
+          WriteLn('POLL_RETURNED|', Source.PollReturnsForTest)
+        else
+          WriteLn('IDLE|', Source.PollReturnsForTest);
         Flush(Output);
       end
       else if Argument = 'WAIT' then
