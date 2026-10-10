@@ -236,6 +236,47 @@ begin
   end;
 end;
 
+procedure TestPortableRecordCodec;
+var
+  Entry, Decoded: TAutoSaveStoredRecord;
+  Encoded, Truncated, Corrupt: RawByteString;
+begin
+  Entry.Kind := asrDraft;
+  Entry.DocumentKey := 'browser-draft-1';
+  Entry.SourcePath := '/imports/source-β.svg';
+  Entry.SourceFormatId := 'svg';
+  Entry.PayloadFormatId := 'tpx-assets';
+  Entry.BaseRevision := Revision('source-digest', 17, 29, 'source-id');
+  Entry.BaseSourceBytes := 'exact-source'#0'bytes';
+  Entry.LocalRevision := 31;
+  Entry.Payload := 'TPXRA002'#0'model-and-assets';
+  Encoded := EncodeAutoSaveStoredRecord(Entry);
+  CheckCore(DecodeAutoSaveStoredRecord(Encoded, Decoded),
+    'a browser recovery record should decode after durable byte transfer');
+  CheckCore((Decoded.Kind = Entry.Kind) and
+    (Decoded.DocumentKey = Entry.DocumentKey) and
+    (Decoded.SourcePath = Entry.SourcePath) and
+    (Decoded.SourceFormatId = Entry.SourceFormatId) and
+    (Decoded.PayloadFormatId = Entry.PayloadFormatId) and
+    SameDiskRevision(Decoded.BaseRevision, Entry.BaseRevision) and
+    (Decoded.BaseSourceBytes = Entry.BaseSourceBytes) and
+    (Decoded.LocalRevision = Entry.LocalRevision) and
+    (Decoded.Payload = Entry.Payload),
+    'the portable record must retain source bytes and recovery payload exactly');
+
+  Truncated := Copy(Encoded, 1, Length(Encoded) - 1);
+  CheckCore(not DecodeAutoSaveStoredRecord(Truncated, Decoded),
+    'a truncated browser record must be rejected before restoration');
+  CheckCore(Decoded.DocumentKey = '',
+    'a rejected browser record must not expose partial metadata');
+  Corrupt := Encoded;
+  Corrupt[1] := 'X';
+  CheckCore(not DecodeAutoSaveStoredRecord(Corrupt, Decoded),
+    'a browser record with an unknown signature must be rejected');
+  CheckCore(Decoded.DocumentKey = '',
+    'a bad browser-record signature must leave no partial record');
+end;
+
 initialization
   RegisterCoreTest('autosave-store-roundtrip-restart',
     @TestDraftAndPriorVersionRoundTrip);
@@ -243,5 +284,7 @@ initialization
     @TestRetentionKeepsLatestAndProtectsDrafts);
   RegisterCoreTest('autosave-store-unicode-paths',
     @TestUnicodeDirectoryAndSourcePath);
+  RegisterCoreTest('autosave-store-portable-codec',
+    @TestPortableRecordCodec);
 
 end.
