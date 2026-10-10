@@ -762,7 +762,7 @@ begin
 {$IFNDEF CPUWASM32}
   MainForm.NotifyDocumentEdited;
 {$ELSE}
-  MainForm.NotifyBrowserDocumentEdited;
+  BrowserDocumentDidChange(Drawing.History.IsChanged);
 {$ENDIF}
 {$ENDIF}
   Drawing.Update;
@@ -780,7 +780,7 @@ begin
 {$IFNDEF CPUWASM32}
   MainForm.NotifyDocumentEdited;
 {$ELSE}
-  MainForm.NotifyBrowserDocumentEdited;
+  BrowserDocumentDidChange(Drawing.History.IsChanged);
 {$ENDIF}
 {$ENDIF}
   Drawing.Update;
@@ -802,7 +802,7 @@ begin
 {$IFNDEF CPUWASM32}
       MainForm.NotifyDocumentEdited;
 {$ELSE}
-      MainForm.NotifyBrowserDocumentEdited;
+      BrowserDocumentDidChange(Drawing.History.IsChanged);
 {$ENDIF}
 {$ENDIF}
       //SaveDoc.Enabled := History.IsChanged;
@@ -858,7 +858,7 @@ begin
       MainForm.NotifyDocumentEdited;
 {$ELSE}
       TpX_Manager.DocumentSession.AdvanceLocalRevision;
-      MainForm.NotifyBrowserDocumentEdited;
+      BrowserDocumentDidChange(Drawing.History.IsChanged);
 {$ENDIF}
 {$ELSE}
       TpX_Manager.DocumentSession.AdvanceLocalRevision;
@@ -981,10 +981,7 @@ begin
     if Result then
     begin
 {$IFDEF CPUWASM32}
-    ResetBrowserDocumentStatus;
-    SetBrowserDocumentSource(True);
-    SetBrowserDocumentDirty(False);
-    MainForm.ResetBrowserRecoveryDocument;
+      ReplaceBrowserDocument(True);
 {$ENDIF}
       try
         TpX_Manager.DocumentSession.Diagnostics.Assign(Diagnostics);
@@ -1132,7 +1129,7 @@ begin
       BrowserBundleStarted := False;
       if not FinishBrowserDownloadBundle(True) then
         raise EWriteError.Create('The browser could not start the document download');
-      MainForm.ResetBrowserRecoveryDocument;
+      BrowserDocumentDownloadRequested;
 {$ENDIF}
 
 {$IFDEF FPC}
@@ -1413,10 +1410,7 @@ begin
     TpX_Manager.RecentFiles.Update(FileName);
   Drawing.History.SaveCheckSum;
 {$IFDEF CPUWASM32}
-  ResetBrowserDocumentStatus;
-  SetBrowserDocumentSource(False);
-  SetBrowserDocumentDirty(False);
-  MainForm.ResetBrowserRecoveryDocument;
+  ReplaceBrowserDocument(False);
 {$ENDIF}
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}

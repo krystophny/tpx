@@ -620,6 +620,9 @@ type
     FBrowserRecoveryRevision: QWord;
     procedure ProcessBrowserRecoveryDeadline(Sender: TObject);
     procedure SetBrowserRecoveryEnabled(Value: Boolean);
+    procedure ResetBrowserRecoveryDocument;
+    procedure BrowserRecoveryDocumentEdited;
+    procedure BrowserRecoveryDownloadRequested;
     procedure RestoreBrowserRecoverySelection(PayloadLength,
       MetadataLength: LongInt);
 {$ENDIF}
@@ -725,10 +728,6 @@ type
     property CurrentDocumentEpoch: QWord read GetCurrentDocumentEpoch;
     property HasActiveEditSession: Boolean read GetHasActiveEditSession;
 {$IFDEF FPC}
-{$IFDEF CPUWASM32}
-    procedure NotifyBrowserDocumentEdited;
-    procedure ResetBrowserRecoveryDocument;
-{$ENDIF}
 {$IFNDEF CPUWASM32}
     function BeginDocumentWatchBinding(const Path: TDocumentPath;
       out WatchGeneration, SubscriptionID: QWord): TFileWatchStatus;
@@ -1311,10 +1310,11 @@ begin
     RefreshRecoveryAfterEditSessionEnd;
   if not Session.IsActive and FDeferredReload then
     Application.QueueAsyncCall(TryApplyDeferredReload, 0);
-{$ENDIF}
-{$IFDEF CPUWASM32}
-  if Change = escDraftChanged then NotifyBrowserDocumentEdited
-  else if not Session.IsActive then UpdateBrowserDocumentDirty;
+{$ELSE}
+  BrowserDocumentDidChange(Assigned(TheDrawing) and
+    Assigned(TheDrawing.History) and
+    (TheDrawing.History.IsChanged or
+    ((FEditSession <> nil) and FEditSession.HasUncommittedWork)));
 {$ENDIF}
 {$ENDIF}
 end;
@@ -1352,8 +1352,8 @@ begin
   FBrowserRecoveryTimer.Enabled := False;
   FBrowserRecoveryTimer.Interval := 750;
   FBrowserRecoveryTimer.OnTimer := ProcessBrowserRecoveryDeadline;
-  SaveDoc.Caption := 'Download a copy';
-  SaveAs.Caption := 'Download a copy as...';
+  SetBrowserDocumentLifecycleCallbacks(@BrowserRecoveryDocumentEdited,
+    @ResetBrowserRecoveryDocument, @BrowserRecoveryDownloadRequested);
   ResetBrowserRecoveryDocument;
   SetBrowserDocumentSource(False);
   SetBrowserDocumentDirty(False);
@@ -1372,6 +1372,7 @@ begin
     SetString(FBrowserRecoveryDocumentID, NewID, Count)
   else
     BrowserRecoveryShowStatus(9);
+  UpdateBrowserDocumentDirty;
 end;
 
 procedure TMainForm.SetBrowserRecoveryEnabled(Value: Boolean);
@@ -1381,8 +1382,10 @@ begin
   begin
     if FBrowserRecoveryTimer <> nil then FBrowserRecoveryTimer.Enabled := False;
   end
-  else if (TheDrawing <> nil) and TheDrawing.History.IsChanged then
-    NotifyBrowserDocumentEdited;
+  else if (TheDrawing <> nil) and
+    (TheDrawing.History.IsChanged or
+      ((FEditSession <> nil) and FEditSession.HasUncommittedWork)) then
+    BrowserRecoveryDocumentEdited;
 end;
 
 procedure TMainForm.UpdateBrowserDocumentDirty;
@@ -1398,7 +1401,7 @@ begin
   BrowserRecoveryDocumentState(Ord(HasSource), Ord(IsDirty));
 end;
 
-procedure TMainForm.NotifyBrowserDocumentEdited;
+procedure TMainForm.BrowserRecoveryDocumentEdited;
 begin
   if FBrowserRecoveryRevision < High(QWord) then
     Inc(FBrowserRecoveryRevision);
@@ -1408,6 +1411,12 @@ begin
     FBrowserRecoveryTimer.Enabled := False;
     FBrowserRecoveryTimer.Enabled := True;
   end;
+end;
+
+procedure TMainForm.BrowserRecoveryDownloadRequested;
+begin
+  if FBrowserRecoveryEnabled then BrowserRecoveryCheckpoint;
+  ResetBrowserRecoveryDocument;
 end;
 
 procedure TMainForm.ProcessBrowserRecoveryDeadline(Sender: TObject);
