@@ -7,10 +7,11 @@ uses
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, SvgCodec, gzio;
+  Settings0, MainUnit, Propert, Options, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, AutoSaveStore, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, SvgCodec, gzio;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
+{$R ../src/Options.lfm}
 
 type
   TTestBitmapEntry = class(TBitmapEntry)
@@ -79,6 +80,9 @@ begin
     Inc(PromptCount);
     Exit(idButtonYes);
   end;
+  if (ParamStr(1) = 'autosave-recovery-watch-binding') and
+    (Pos('Could not recover the selected draft', Message) > 0) then
+    Exit(idButtonOK);
   if (ParamStr(1) = 'bitmap-eps') and
     (Pos('Conversion of bitmap to EPS failed:', Message) > 0) then begin
     Inc(PromptCount);
@@ -127,15 +131,21 @@ end;
 {$I TikZImportScenarios.inc}
 {$I TikZSaveScenarios.inc}
 {$I SvgCodecScenarios.inc}
+{$I AutoSaveScenarios.inc}
 
 procedure RunBitmapFixtureConverter;
 var
   Source, Destination: TFileStream;
+  ExpectedExtension: string;
 begin
   if GetEnvironmentVariable('TPX_EPS_FIXTURE_MODE') = 'nonzero' then Halt(7);
   if GetEnvironmentVariable('TPX_EPS_FIXTURE_MODE') = 'no-output' then Halt(0);
   Check(ParamCount = 2, 'Fixture converter expected input and output paths');
-  Source := TFileStream.Create(GetEnvironmentVariable('TPX_EPS_FIXTURE'), fmOpenRead);
+  ExpectedExtension := GetEnvironmentVariable('TPX_EPS_EXPECT_INPUT_EXT');
+  if (ExpectedExtension <> '') and
+    (LowerCase(ExtractFileExt(ParamStr(1))) <> ExpectedExtension) then Halt(8);
+  Source := TFileStream.Create(
+    GetEnvironmentVariableUTF8('TPX_EPS_FIXTURE'), fmOpenRead);
   try
     Destination := TFileStream.Create(ParamStr(2), fmCreate);
     try Destination.CopyFrom(Source, 0) finally Destination.Free end;
@@ -177,10 +187,10 @@ var
   Converted, Expected: Boolean;
 begin
   PromptCount := 0;
-  Bitmap2EpsPath := GetEnvironmentVariable('TPX_EPS_CONVERTER');
+  Bitmap2EpsPath := GetEnvironmentVariableUTF8('TPX_EPS_CONVERTER');
   Expected := GetEnvironmentVariable('TPX_EPS_EXPECT_SUCCESS') = '1';
-  Converted := BitmapToEps(GetEnvironmentVariable('TPX_EPS_INPUT'),
-    GetEnvironmentVariable('TPX_EPS_OUTPUT'));
+  Converted := BitmapToEps(GetEnvironmentVariableUTF8('TPX_EPS_INPUT'),
+    GetEnvironmentVariableUTF8('TPX_EPS_OUTPUT'));
   Check(Converted = Expected, 'BitmapToEps returned ' + BoolToStr(Converted, True));
   Check(PromptCount = Ord(not Expected), 'Unexpected bitmap conversion error count');
 end;
@@ -1427,6 +1437,15 @@ begin
     else if ParamStr(1) = 'document-io' then TestDocumentIO
     else if ParamStr(1) = 'pstoedit-import' then TestPstoeditEmfImport
     else if ParamStr(1) = 'auto-reload-integration' then TestAutoReloadIntegration
+    else if ParamStr(1) = 'autosave-integration' then TestAutoSaveIntegration
+    else if ParamStr(1) = 'autosave-recovery-create' then TestAutoSaveRecoveryCreate
+    else if ParamStr(1) = 'autosave-empty-recovery-create' then TestAutoSaveEmptyRecoveryCreate
+    else if ParamStr(1) = 'autosave-empty-recovery-restore' then TestAutoSaveEmptyRecoveryRestore
+    else if ParamStr(1) = 'autosave-unresolved-image-warning' then TestAutoSaveUnresolvedImageWarning
+    else if ParamStr(1) = 'autosave-recovery-restore' then TestAutoSaveRecoveryRestore
+    else if ParamStr(1) = 'autosave-named-recovery-create' then TestAutoSaveNamedRecoveryCreate
+    else if ParamStr(1) = 'autosave-named-recovery-restore' then TestAutoSaveNamedRecoveryRestore
+    else if ParamStr(1) = 'autosave-recovery-watch-binding' then TestAutoSaveRecoveryWatchBinding
     else if ParamStr(1) = 'color-box-custom-state' then TestColorBoxCustomState
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
     else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))

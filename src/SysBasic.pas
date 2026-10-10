@@ -75,22 +75,37 @@ implementation
 
 uses
 //WinBasic,
-  MainUnit, Math{$IFDEF FPC}, Classes, {$IFDEF WINDOWS}Windows,{$ENDIF}
-  {$IFNDEF WASI}Process,{$ENDIF} ExtCtrls{$ENDIF};
+  MainUnit, Math{$IFDEF FPC}, Classes,
+{$IFNDEF WASI}
+  Process{$IFDEF MSWINDOWS}, ProcessUnicode{$ENDIF},
+{$ENDIF}
+  {$IFDEF WINDOWS}Windows,{$ENDIF} ExtCtrls
+{$ENDIF};
+
+{$IF DEFINED(FPC) AND DEFINED(MSWINDOWS)}
+function c_GetTempPathW(BufferLength: Cardinal; Buffer: PWideChar): Cardinal;
+  stdcall; external 'kernel32' name 'GetTempPathW';
+{$ENDIF}
 
 {$IF DEFINED(FPC) AND NOT DEFINED(WASI)}
 type
+{$IFDEF MSWINDOWS}
+  TFileExecProcess = ProcessUnicode.TProcess;
+{$ELSE}
+  TFileExecProcess = TProcess;
+{$ENDIF}
+
   TBackgroundTool = class(TComponent)
   private
-    Child: TProcess;
+    Child: TFileExecProcess;
     Timer: TTimer;
     procedure Poll(Sender: TObject);
   public
-    constructor Create(AChild: TProcess); reintroduce;
+    constructor Create(AChild: TFileExecProcess); reintroduce;
     destructor Destroy; override;
   end;
 
-constructor TBackgroundTool.Create(AChild: TProcess);
+constructor TBackgroundTool.Create(AChild: TFileExecProcess);
 begin
   inherited Create(Application);
   Timer := TTimer.Create(Self);
@@ -263,8 +278,10 @@ var
 {$ELSE}
   {$IFNDEF WASI}
 var
-  Child: TProcess;
+  Child: TFileExecProcess;
+{$IFDEF UNIX}
   Command: string;
+{$ENDIF}
   {$ENDIF}
 {$ENDIF}
 begin
@@ -354,9 +371,13 @@ begin
     [ExtractFileName(aCmdLine)]));
   {$ELSE}
   Result := False;
-  Child := TProcess.Create(nil);
+  Child := TFileExecProcess.Create(nil);
   try
+{$IFDEF MSWINDOWS}
+    Child.CurrentDirectory := UTF8Decode(Directory);
+{$ELSE}
     Child.CurrentDirectory := Directory;
+{$ENDIF}
 {$IFDEF UNIX}
     Command := aCmdLine;
     if InFile <> '' then Command := Command + ' < ' + QuoteShellArg(InFile);
@@ -365,10 +386,15 @@ begin
     Child.Parameters.Add('-c');
     Child.Parameters.Add(Command);
 {$ELSE}
+{$IFDEF MSWINDOWS}
+    Child.CommandLine := UTF8Decode(aCmdLine);
+    if aHide then Child.Options := Child.Options + [Process.poNoConsole];
+{$ELSE}
     Child.CommandLine := aCmdLine;
-    if aHide then Child.Options := Child.Options + [poNoConsole];
+    if aHide then Child.Options := Child.Options + [Process.poNoConsole];
 {$ENDIF}
-    if aWait then Child.Options := Child.Options + [poWaitOnExit];
+{$ENDIF}
+    if aWait then Child.Options := Child.Options + [Process.poWaitOnExit];
     try
       Child.Execute;
       Result := not aWait or (Child.ExitStatus = 0);
@@ -526,14 +552,35 @@ end;
 
 function GetTempDir: string;
 var
+{$IF DEFINED(FPC) AND DEFINED(MSWINDOWS)}
+  WidePath: UnicodeString;
+  BufferLength, PathLength: Cardinal;
+{$ELSE}
   Buffer: array[0..1023] of Char;
+{$ENDIF}
 begin
 {$IFNDEF FPC}
   GetTempPath(SizeOf(Buffer) - 1, Buffer);
   SetString(Result, Buffer, StrLen(Buffer));
   Result := GetLongPath(Result);
 {$ELSE}
+{$IFDEF MSWINDOWS}
+  BufferLength := 260;
+  repeat
+    SetLength(WidePath, BufferLength);
+    PathLength := c_GetTempPathW(BufferLength, PWideChar(WidePath));
+    if PathLength = 0 then
+      raise EInOutError.Create('Windows could not determine the temporary directory');
+    if PathLength < BufferLength then Break;
+    if PathLength >= 32767 then
+      raise EInOutError.Create('Windows temporary directory path is too long');
+    BufferLength := PathLength + 1;
+  until False;
+  SetLength(WidePath, PathLength);
+  Result := UTF8Encode(WidePath);
+{$ELSE}
   Result := SysUtils.GetTempDir;
+{$ENDIF}
 {$ENDIF}
   Result := IncludeTrailingPathDelimiter(Result);
 end;

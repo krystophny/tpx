@@ -72,6 +72,8 @@ class RuntimeTests(unittest.TestCase):
         # It runs the copied native test executable before Application.Initialize.
         with tempfile.TemporaryDirectory(prefix="tpx-eps-") as directory:
             root = Path(directory).resolve()
+            unicode_root = root / "Grüß-Καλημέρα"
+            unicode_root.mkdir()
             suffix = ".exe" if sys.platform == "win32" else ""
             converter = root / ("sam2p-fixture" + suffix)
             shutil.copy2(BINARY, converter)
@@ -85,35 +87,72 @@ class RuntimeTests(unittest.TestCase):
                     ("modern", modern, modern),
                     ("legacy", legacy, legacy.replace(b"%%BeginData:", b"%%BeginData")),
                     ("no-output", modern, None), ("nonzero", modern, None)):
-                with self.subTest(case=case):
-                    source = root / "fixture.eps"
-                    output = root / "converted.eps"
-                    source.write_bytes(fixture)
-                    # Conversion must discard stale output even when the tool fails.
-                    output.write_bytes(b"stale output")
-                    self.run_scenario("bitmap-eps", {
-                        "TMPDIR": str(root), "TMP": str(root), "TEMP": str(root),
-                        "TPX_EPS_CONVERTER": str(converter),
-                        "TPX_EPS_FIXTURE_MODE": case,
-                        "TPX_EPS_FIXTURE": str(source),
-                        "TPX_EPS_INPUT": str(root / "source.bmp"),
-                        "TPX_EPS_OUTPUT": str(output),
-                        "TPX_EPS_EXPECT_SUCCESS": "1" if expected is not None else "0",
-                    })
-                    if expected is None:
-                        self.assertFalse(output.exists())
-                    else:
-                        self.assertEqual(output.read_bytes(), expected)
-                    self.assertFalse((root / "(bitmap2eps)eps.eps").exists(),
-                                     "EPS compatibility check leaked its scratch file")
+                extensions = ((".bmp", ".png", ".jpg", ".jpeg")
+                              if expected is not None else (".bmp",))
+                for extension in extensions:
+                    with self.subTest(case=case, extension=extension):
+                        source = root / "fixture.eps"
+                        input_file = unicode_root / ("source" + extension)
+                        output = unicode_root / "converted.eps"
+                        source.write_bytes(fixture)
+                        bitmap = (b"BM" + struct.pack("<IHHI", 58, 0, 0, 54) +
+                                  struct.pack("<IiiHHIIiiII", 40, 1, 1, 1, 24,
+                                              0, 4, 2835, 2835, 0, 0) +
+                                  b"\xff\x00\xff\x00")
+                        input_file.write_bytes(bitmap)
+                        # Conversion must discard stale output even when the tool fails.
+                        output.write_bytes(b"stale output")
+                        self.run_scenario("bitmap-eps", {
+                            "TMPDIR": str(root), "TMP": str(root), "TEMP": str(root),
+                            "TPX_EPS_CONVERTER": str(converter),
+                            "TPX_EPS_FIXTURE_MODE": case,
+                            "TPX_EPS_FIXTURE": str(source),
+                            "TPX_EPS_INPUT": str(input_file),
+                            "TPX_EPS_OUTPUT": str(output),
+                            "TPX_EPS_EXPECT_INPUT_EXT": extension,
+                            "TPX_EPS_EXPECT_SUCCESS": "1" if expected is not None else "0",
+                        })
+                        if expected is None:
+                            self.assertFalse(output.exists())
+                        else:
+                            self.assertEqual(output.read_bytes(), expected)
+                        self.assertFalse((root / "(bitmap2eps)eps.eps").exists(),
+                                         "EPS compatibility check leaked its scratch file")
 
-    def run_scenario(self, scenario, extra_env=None, directory_prefix="tpx-runtime-"):
+    def run_scenario(self, scenario, extra_env=None, directory_prefix="tpx-runtime-",
+                     beside_executable=(), runtime_directory=None):
         with tempfile.TemporaryDirectory(prefix=directory_prefix) as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            work = root / "work"
+            home.mkdir()
+            config.mkdir()
+            work.mkdir()
+            runtime_dir = (Path(runtime_directory).resolve() if runtime_directory
+                           else root / "runtime")
+            runtime_dir.mkdir(parents=True, exist_ok=True)
+            runtime_binary = runtime_dir / BINARY.name
+            if not runtime_binary.exists():
+                shutil.copy2(BINARY, runtime_binary)
+            for resource_name in ("preview.tex.inc", "metapost.tex.inc", "help", "Help"):
+                source = BINARY.parent / resource_name
+                destination = runtime_dir / resource_name
+                if source.is_dir() and not destination.exists():
+                    shutil.copytree(source, runtime_dir / resource_name)
+                elif source.is_file() and not destination.exists():
+                    shutil.copy2(source, runtime_dir / resource_name)
+            for file_name in beside_executable:
+                (runtime_dir / file_name).touch()
             env = os.environ.copy()
-            env["TMPDIR"] = directory
+            env.update({"TMPDIR": str(root), "TMP": str(root), "TEMP": str(root),
+                        "HOME": str(home), "USERPROFILE": str(home),
+                        "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                        "LOCALAPPDATA": str(config)})
             env.update(extra_env or {})
-            result = subprocess.run([str(BINARY), scenario], cwd=directory,
-                                    env=env, capture_output=True, text=True, timeout=40)
+            result = subprocess.run([str(runtime_binary), scenario], cwd=work,
+                                    env=env, capture_output=True, text=True,
+                                    encoding="utf-8", errors="replace", timeout=40)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("PASS " + scenario, result.stdout, result.stderr)
 
@@ -160,6 +199,98 @@ class RuntimeTests(unittest.TestCase):
                 "TPX_TIKZ_FRESH_TEX_FILE": str(fresh_dir / "standalone.tex"),
                 "TPX_TIKZ_EMPTY_FILE": str(fresh_dir / "empty.tikz"),
             })
+
+    def test_untitled_recovery_survives_restart_and_requires_choice(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-autosave-restart-") as directory:
+            root = Path(directory).resolve()
+            # The recovery bundle and bitmap conversion stage live under the
+            # profile path. Exercise UTF-8 process launch there and GetTempPath.
+            home = root / "home-Καλημέρα-ß"
+            config = root / "config-Καλημέρα-ß"
+            temp = root / "temp-Καλημέρα-ß"
+            home.mkdir()
+            config.mkdir()
+            temp.mkdir()
+            env = {"HOME": str(home), "USERPROFILE": str(home),
+                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                   "LOCALAPPDATA": str(config), "TMPDIR": str(temp),
+                   "TMP": str(temp), "TEMP": str(temp)}
+            runtime_dir = root / "runtime"
+            self.run_scenario("autosave-recovery-create", env,
+                              runtime_directory=runtime_dir)
+            self.run_scenario("autosave-recovery-restore", env,
+                              runtime_directory=runtime_dir)
+
+    def test_dirty_empty_draft_survives_restart_without_source_write(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-autosave-empty-restart-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
+            env = {"HOME": str(home), "USERPROFILE": str(home),
+                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                   "LOCALAPPDATA": str(config),
+                   "TPX_AUTOSAVE_EMPTY_SOURCE": str(root / "empty.tpx")}
+            runtime_dir = root / "runtime"
+            self.run_scenario("autosave-empty-recovery-create", env,
+                              runtime_directory=runtime_dir)
+            self.run_scenario("autosave-empty-recovery-restore", env,
+                              runtime_directory=runtime_dir)
+
+    def test_recovery_warns_about_unresolved_bitmap_links(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-autosave-warning-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
+            env = {"HOME": str(home), "USERPROFILE": str(home),
+                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                   "LOCALAPPDATA": str(config)}
+            self.run_scenario("autosave-unresolved-image-warning", env)
+
+    def test_named_bitmap_recovery_gates_source_autosave_until_manual_save(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-autosave-named-restart-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
+            env = {"HOME": str(home), "USERPROFILE": str(home),
+                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                   "LOCALAPPDATA": str(config),
+                   "TPX_AUTOSAVE_NAMED_SOURCE": str(root / "named.tpx")}
+            runtime_dir = root / "runtime"
+            self.run_scenario("autosave-named-recovery-create", env,
+                              runtime_directory=runtime_dir)
+            self.run_scenario("autosave-named-recovery-restore", env,
+                              runtime_directory=runtime_dir)
+
+    def test_recovery_retires_old_source_watch_only_after_commit(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-autosave-watch-restore-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
+            env = {"HOME": str(home), "USERPROFILE": str(home),
+                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                   "LOCALAPPDATA": str(config),
+                   "TPX_AUTOSAVE_WATCH_SOURCE": str(root / "active.tpx")}
+            self.run_scenario("autosave-recovery-watch-binding", env)
+
+    def test_source_autosave_undo_picture_properties_and_conflict(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-autosave-source-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
+            env = {"HOME": str(home), "USERPROFILE": str(home),
+                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                   "LOCALAPPDATA": str(config)}
+            self.run_scenario("autosave-integration", env)
 
     @unittest.skipUnless(shutil.which("latex") and
                          (shutil.which("dvipng") or
@@ -242,16 +373,11 @@ class RuntimeTests(unittest.TestCase):
 
     def test_check_file_path_searches_beside_runtime_executable(self):
         tool_name = "tpx-path-probe-" + uuid.uuid4().hex
-        tool = BINARY.parent / tool_name
         with tempfile.TemporaryDirectory(prefix="tpx-empty-path-") as directory:
-            try:
-                tool.write_bytes(b"")
-                self.run_scenario("check-file-path", {
-                    "PATH": directory,
-                    "TPX_FILEPATH_TOOL": tool_name,
-                })
-            finally:
-                tool.unlink(missing_ok=True)
+            self.run_scenario("check-file-path", {
+                "PATH": directory,
+                "TPX_FILEPATH_TOOL": tool_name,
+            }, beside_executable=(tool_name,))
 
     @unittest.skipUnless(sys.platform == "darwin", "macOS user settings location")
     def test_macos_settings_are_saved_outside_application_bundle(self):
