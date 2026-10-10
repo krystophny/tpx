@@ -383,6 +383,28 @@ def s_open_roundtrip(app):
     app.key('Escape')
     saved = app.save('open-roundtrip.tpx')
     before = drawing_xml(saved)
+    if len(before) != 1:
+        raise AssertionError('initial Save As did not retain the drawing')
+
+    def ordinary_save(filename, expected_count):
+        with app.page.expect_download(timeout=5000) as saved_download:
+            app.menu('File', 'Save')
+        path = app.output / filename
+        saved_download.value.save_as(path)
+        objects = drawing_xml(path)
+        if len(objects) != expected_count:
+            raise AssertionError(
+                f'ordinary save produced {len(objects)} objects; '
+                f'expected {expected_count}')
+        return path, objects
+
+    for offset in (0, 70):
+        app.menu('Insert', 'Insert rectangle')
+        app.drag(cx-30+offset, cy-20, cx+30+offset, cy+40)
+        app.key('Escape')
+        expected_count = len(before) + 1
+        saved, before = ordinary_save(
+            f'open-roundtrip-save-{expected_count}.tpx', expected_count)
     app.menu('File', 'New')
     app.menu('File', 'Open')
     dialog = app.page.get_by_role('dialog')
@@ -405,7 +427,8 @@ def s_open_roundtrip(app):
     after_failure = drawing_xml(app.save('open-invalid-preserved.tpx'))
     if [c.attrib for c in after_failure] != [c.attrib for c in before]:
         raise AssertionError('failed document open changed the current drawing')
-    return 'uploaded drawing reopens unchanged; malformed upload preserves the accepted scene'
+    return ('ordinary saves after Save As stay conflict-free; uploaded drawings '
+            'reopen unchanged and malformed uploads preserve the accepted scene')
 
 
 def s_export_formats(app):
@@ -454,7 +477,8 @@ def s_bitmap_roundtrip(app):
     app.key('Escape')
     saved = app.save('bitmap-roundtrip.tpx')
     objects = drawing_xml(saved)
-    if len(objects) != 1 or objects[0].get('link') != fixture.name:
+    link = objects[0].get('link', '') if len(objects) == 1 else ''
+    if not link or link.replace('\\', '/').rsplit('/', 1)[-1] != fixture.name:
         raise AssertionError('saved drawing lost the bitmap reference')
     if app.page.get_by_role('dialog').count():
         raise AssertionError('saving a bitmap displayed an unexpected dialog')

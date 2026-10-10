@@ -83,6 +83,39 @@ begin
   end;
 end;
 
+function DocumentPathCodePointUtf8(CodePoint: Word): TDocumentPath;
+var Value: UnicodeString;
+begin
+  SetLength(Value, 1);
+  Value[1] := WideChar(CodePoint);
+  Result := UTF8Encode(Value);
+end;
+
+procedure TestDocumentPathCasePolicy;
+var UpperPath, LowerPath, UpperGreek, LowerGreek: TDocumentPath;
+begin
+  Check(SameDocumentPath('', ''), 'Empty document paths were not equal');
+  Check(SameDocumentPath('document.tpx', 'document.tpx'),
+    'Identical document paths were not equal');
+  UpperGreek := DocumentPathCodePointUtf8($0391);
+  LowerGreek := DocumentPathCodePointUtf8($03B1);
+  Check((Length(UpperGreek) = 2) and (Ord(UpperGreek[1]) = $CE) and
+    (Ord(UpperGreek[2]) = $91), 'Greek uppercase test path is not UTF-8');
+  Check((Length(LowerGreek) = 2) and (Ord(LowerGreek[1]) = $CE) and
+    (Ord(LowerGreek[2]) = $B1), 'Greek lowercase test path is not UTF-8');
+  UpperPath := NormalizeDocumentPath(TDocumentPath('issue62-case-') +
+    UpperGreek);
+  LowerPath := NormalizeDocumentPath(TDocumentPath('issue62-case-') +
+    LowerGreek);
+{$IFDEF WINDOWS}
+  Check(SameDocumentPath(UpperPath, LowerPath),
+    'Windows document path comparison did not fold Unicode case');
+{$ELSE}
+  Check(not SameDocumentPath(UpperPath, LowerPath),
+    'Non-Windows document path comparison folded Unicode case');
+{$ENDIF}
+end;
+
 procedure PrepareDocumentTestDirectory(const Name: string;
   out Directory, FileName: string);
 begin
@@ -932,6 +965,7 @@ end;
 
 procedure TestDocumentIO;
 begin
+  TestDocumentPathCasePolicy;
   TestDocumentRevisionConflict;
   TestDocumentSavedRevision;
   TestDocumentUnixPermissions;

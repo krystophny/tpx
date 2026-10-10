@@ -172,6 +172,22 @@ type
 const
   FileIdentityUnavailable = 'path-identity';
 
+function SyntheticPathIdentity(const FileName: TDocumentPath): string;
+begin
+  Result := FileIdentityUnavailable + ':' +
+    string(NormalizeDocumentPath(FileName));
+end;
+
+function RebindStagedRevision(const Revision: TDiskRevision;
+  const StagePath, FinalPath: TDocumentPath): TDiskRevision;
+var StageIdentity: string;
+begin
+  Result := Revision;
+  StageIdentity := SyntheticPathIdentity(StagePath);
+  if Result.Identity = StageIdentity then
+    Result.Identity := SyntheticPathIdentity(FinalPath);
+end;
+
 {$IFDEF FPC}{$IFDEF UNIX}
 function c_fsync(const FileDescriptor: LongInt): LongInt; cdecl;
   external 'c' name 'fsync';
@@ -227,6 +243,10 @@ var
 function c_GetFullPathNameW(FileName: PWideChar; BufferLength: Cardinal;
   Buffer: PWideChar; FilePart: Pointer): Cardinal; stdcall;
   external 'kernel32' name 'GetFullPathNameW';
+
+function c_CompareStringOrdinal(String1: PWideChar; Count1: Integer;
+  String2: PWideChar; Count2: Integer; IgnoreCase: LongInt): Integer; stdcall;
+  external 'kernel32' name 'CompareStringOrdinal';
 
 function WidePath(const FileName: TDocumentPath): UnicodeString;
 begin
@@ -291,11 +311,23 @@ end;
 
 function SameDocumentPath(const A, B: TDocumentPath): Boolean;
 var LeftPath, RightPath: TDocumentPath;
+{$IFDEF FPC}{$IFDEF WINDOWS}
+  WideLeft, WideRight: UnicodeString;
+{$ENDIF}{$ENDIF}
 begin
   LeftPath := NormalizeDocumentPath(A);
   RightPath := NormalizeDocumentPath(B);
+  if LeftPath = RightPath then Exit(True);
 {$IFDEF WINDOWS}
+{$IFDEF FPC}
+  WideLeft := UTF8Decode(LeftPath);
+  WideRight := UTF8Decode(RightPath);
+  { CompareStringOrdinal takes BOOL as 0/1; LongBool(True) is -1. }
+  Result := c_CompareStringOrdinal(PWideChar(WideLeft), Length(WideLeft),
+    PWideChar(WideRight), Length(WideRight), 1) = 2;
+{$ELSE}
   Result := SameText(LeftPath, RightPath);
+{$ENDIF}
 {$ELSE}
   Result := LeftPath = RightPath;
 {$ENDIF}
@@ -1048,6 +1080,7 @@ procedure WriteDocumentAtomically(const FileName: TDocumentPath;
   out BackupFileName: TDocumentPath);
 var Dest, DestDir, StageFile, ExistingBackup: TDocumentPath;
   Existing: TDocumentSnapshot; StageRevision: TDiskRevision;
+  PublishedRevision: TDiskRevision;
   HasExisting, StageCreated,
   BackupCreated, ReplaceSucceeded: Boolean;
 begin
@@ -1087,6 +1120,7 @@ begin
     { Capture the identity and digest of our exact output before publishing.
       A destination read after rename could observe a later external writer. }
     StageRevision := ReadDocumentRevision(StageFile);
+    PublishedRevision := RebindStagedRevision(StageRevision, StageFile, Dest);
     if HasExisting then
     begin
       ExistingBackup := TempFileInDirectory(DestDir, 'bak');
@@ -1108,7 +1142,7 @@ begin
       raise EWriteError.CreateFmt('Could not replace %s', [Dest]);
     ReplaceSucceeded := True;
     StageCreated := False;
-    NewRevision := StageRevision;
+    NewRevision := PublishedRevision;
     if HasExisting then
     begin
       BackupFileName := ExistingBackup;
@@ -1196,6 +1230,8 @@ begin
     if Assets[I].HadOriginal then
       PreserveExistingPermissions(Assets[I].FinalPath, Assets[I].StagePath);
     Assets[I].StageRevision := ReadDocumentRevision(Assets[I].StagePath);
+    Assets[I].StageRevision := RebindStagedRevision(Assets[I].StageRevision,
+      Assets[I].StagePath, Assets[I].FinalPath);
     for J := 0 to I - 1 do
       if SameDocumentPath(Assets[J].FinalPath, Assets[I].FinalPath) then
         raise EWriteError.Create('An asset destination is duplicated');
