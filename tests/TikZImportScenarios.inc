@@ -1,6 +1,7 @@
 procedure TestTikZImportNativeScene;
 var
-  FileName, FragmentFileName, RejectedFileName, ErrorText: string;
+  FileName, FragmentFileName, RejectedFileName, UntrustedFileName,
+    ErrorText: string;
   Mode: TTpXMode;
   Context: TTikZImportContext;
   Binding: TTikZSourceBinding;
@@ -12,8 +13,8 @@ var
   Angle: Double;
   I: Integer;
   OriginalObjectID: Integer;
-  RejectedSource: RawByteString;
-  RejectedStream: TFileStream;
+  RejectedSource, UntrustedSource: RawByteString;
+  RejectedStream, UntrustedStream: TFileStream;
   CompilationsBefore: Integer;
   procedure Near(Actual, Expected: Double; const Description: string);
   begin
@@ -153,6 +154,7 @@ begin
   Primitive := MainForm.TheDrawing.GetObject(0) as TPrimitive2D;
   Near(Primitive.Points[1].X, 20, 'bare-fragment end x (mm)');
   Near(Primitive.Points[1].Y, 10, 'bare-fragment end y (mm)');
+
   RejectedFileName := ChangeFileExt(FragmentFileName, '.text-color.tex');
   RejectedSource := '\providecommand{\tpxTextSize}{10pt}' +
     '\begin{tikzpicture}' +
@@ -182,4 +184,36 @@ begin
     'wrapped native text height (mm)');
   Check(LiveTeXCompilationCount = CompilationsBefore,
     'Opening an imported colored text node must not launch TeX preview');
+
+  UntrustedFileName := ChangeFileExt(FragmentFileName, '.untrusted.tex');
+  UntrustedSource := '\begin{tikzpicture}\node at (0,0){\input{untrusted}};' +
+    '\end{tikzpicture}';
+  UntrustedStream := TFileStream.Create(UntrustedFileName, fmCreate);
+  try
+    UntrustedStream.WriteBuffer(UntrustedSource[1], Length(UntrustedSource));
+  finally
+    UntrustedStream.Free;
+  end;
+  CompilationsBefore := LiveTeXCompilationCount;
+  Check(Mode.OpenDocumentFromPath(UntrustedFileName, ErrorText),
+    'Registered source with a raw TeX label failed to open: ' + ErrorText);
+  Check((MainForm.TheDrawing.ObjectsCount = 1) and
+    (MainForm.TheDrawing.GetObject(0) is TText2D) and
+    ((MainForm.TheDrawing.GetObject(0) as TText2D).TeXText =
+      '\input{untrusted}'),
+    'Imported raw TeX label was not retained in the native text object');
+  Check(not LiveTeXDocumentTrusted,
+    'Opening imported TeX must revoke live-preview trust before repaint');
+  Check(not LiveTeXPending,
+    'Untrusted imported TeX queued a preview job');
+  Check(LiveTeXCompilationCount = CompilationsBefore,
+    'Untrusted imported TeX started a preview compile');
+  Application.ProcessMessages;
+  Sleep(50);
+  Application.ProcessMessages;
+  Check(not LiveTeXPending,
+    'Untrusted imported TeX queued preview work after the event loop ran');
+  Check(LiveTeXCompilationCount = CompilationsBefore,
+    'Untrusted imported TeX started a compile after the event loop ran');
+
 end;
