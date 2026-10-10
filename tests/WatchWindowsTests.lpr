@@ -109,6 +109,12 @@ begin
   Move(Header, Buffer[0], SizeOf(Header));
   Check(not TryParseWindowsNotifyBuffer(Buffer[0], 16, Records),
     'The parser accepted a misaligned record offset');
+
+  SetLength(Buffer, SizeOf(TTestNotifyHeader) + 4);
+  FillChar(Buffer[0], Length(Buffer), 0);
+  PutNotifyRecord(Buffer, 0, Length(Buffer), 1, 'ab');
+  Check(not TryParseWindowsNotifyBuffer(Buffer[0], Length(Buffer), Records),
+    'The parser accepted a nonfinal record without a following header');
 end;
 
 function Base64Utf8(const Value: UTF8String): string;

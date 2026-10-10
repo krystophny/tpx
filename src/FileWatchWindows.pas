@@ -262,7 +262,8 @@ begin
     begin
       if (Entry^.NextEntryOffset mod SizeOf(Cardinal) <> 0) or
          (Entry^.NextEntryOffset < MinimumLength) or
-         (Entry^.NextEntryOffset > Remaining) then Exit;
+         (Entry^.NextEntryOffset > Remaining - SizeOf(TRecordHeader)) then
+        Exit;
       NextOffset := Offset + Entry^.NextEntryOffset;
     end;
     SetLength(Records, RecordCount + 1);

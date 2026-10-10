@@ -25,7 +25,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $build = Join-Path $env:RUNNER_TEMP 'file-watch-windows'
           New-Item -ItemType Directory -Path $build -Force | Out-Null
-          fpc -B -gl -Crtoi -Sa -dFILEWATCH_TESTS "-FU$build" "-FE$build" -Fu./src tests/WatchWindowsTests.lpr
+          fpc -B -gl -Crtoi -Sa -dFILEWATCH_TESTS "-FU$build" "-FE$build" "-Fu./src" tests/WatchWindowsTests.lpr
           if ($LASTEXITCODE -ne 0) { throw "FPC failed with exit code $LASTEXITCODE" }
           $helper = (Resolve-Path tests/watch_windows_helper.ps1).Path
           & (Join-Path $build 'WatchWindowsTests.exe') $helper
