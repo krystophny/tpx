@@ -551,7 +551,7 @@ end;
 procedure TSvgProfileScan.CheckAttributes(const Tag: string;
   const Attributes: TAttributes);
 var
-  I: Integer;
+  I, J: Integer;
   Name, Value: string;
   Allowed: string;
   PositiveOnly: Boolean;
@@ -591,6 +591,13 @@ begin
   begin
     Name := Attributes.Names[I];
     Value := Attributes.ValueFromIndex[I];
+    for J := 1 to Length(Value) do
+      if Ord(Value[J]) > 127 then
+      begin
+        AddIssue('non-ASCII attribute value ' + Name +
+          ' is not retained by the TpX model');
+        Break;
+      end;
     if (Name = 'style') then CheckStyle(Tag, Value)
     else if Name = 'transform' then ValidateTransform(Value, TransformScale)
     else if (Name = 'fill') or (Name = 'stroke') then
@@ -942,6 +949,7 @@ begin
       // UTF-8. XML defaults to UTF-8 when no declaration is present.
       Parser.DefaultEncoding := enUTF8;
       Parser.TextUTF8AsCharReferences := True;
+      Parser.PreserveUTF8Attributes := True;
       Parser.OnCDATA := CDATA;
       Parser.OnDOCTYPE := Doctype;
       Parser.ParseStream(Stream);
