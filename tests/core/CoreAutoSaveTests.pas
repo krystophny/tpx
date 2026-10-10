@@ -177,6 +177,40 @@ begin
   end;
 end;
 
+procedure TestWorkFailuresClearOnlyAfterMatchingSuccess;
+var
+  C: TAutoSaveCoordinator;
+  Work: TAutoSaveWork;
+  Ticket: TAutoSaveTicket;
+begin
+  C := TAutoSaveCoordinator.Create;
+  try
+    C.BindDocument(0, 1, False, False, True, False, 0);
+    C.NotifyLocalEdit(1, 100, True);
+    CheckCore(C.TakeDue(850, Work, Ticket),
+      'the initial recovery write should become due');
+    C.WorkFailed(aswRecoveryDraft, Ticket, 'recovery write failed');
+    C.NotifyLocalEdit(2, 1000, True);
+    CheckCore(C.TakeDue(1750, Work, Ticket),
+      'a later edit should make one new recovery attempt available');
+    C.WorkSucceeded(aswRecoveryDraft, Ticket);
+    CheckCore(C.LastFailure = '',
+      'a successful retry should clear its own persistent failure');
+
+    C.SetCanSaveBack(True);
+    C.SetAutoSaveEnabled(True, 2000);
+    C.NotifyLocalEdit(3, 2100, True);
+    CheckCore(C.TakeDue(2850, Work, Ticket),
+      'both independent mechanisms should become due together');
+    C.SourceSaveFailed(Ticket, 'source publication failed');
+    C.WorkSucceeded(aswRecoveryDraft, Ticket);
+    CheckCore(C.LastFailure = 'source publication failed',
+      'recovery success must not hide an unrelated source-save failure');
+  finally
+    C.Free;
+  end;
+end;
+
 procedure TestPerDocumentPreference;
 var
   Values: TStringList;
@@ -213,6 +247,8 @@ initialization
     @TestConflictFailuresAndGenerationInvalidation);
   RegisterCoreTest('autosave-save-undo-reschedule',
     @TestAcceptedSaveAndSubsequentUndoEdit);
+  RegisterCoreTest('autosave-failure-status-independent',
+    @TestWorkFailuresClearOnlyAfterMatchingSuccess);
   RegisterCoreTest('autosave-document-preference', @TestPerDocumentPreference);
 
 end.
