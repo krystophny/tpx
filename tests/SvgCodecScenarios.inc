@@ -148,7 +148,8 @@ const
     '<rect x="30" y="10" width="4" height="6" ' +
     'transform="rotate(90 32 13)" fill="#ddeeff" stroke="#663399"/>' +
     '<text x="20" y="30" font-family="Arial" font-size="12px" ' +
-    'text-anchor="middle" xml:space="preserve">A &amp; B</text></svg>';
+    'text-anchor="middle" xml:space="preserve">A &amp; B ' +
+    #$CE + #$B2 + '</text></svg>';
   Unsupported: RawByteString =
     '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" ' +
     'height="10mm" viewBox="0 0 10 10"><line x1="1" y1="1" ' +
@@ -186,6 +187,7 @@ var
   CanSaveBack, ReloadedCanSaveBack, Failed: Boolean;
   CodecContext, ReloadedContext: TObject;
   Serialized, Deep: RawByteString;
+  ExpectedTextUtf8: RawByteString;
   I, Cycle: Integer;
   Profile: TSvgDocumentProfile;
   Detail, TempName: string;
@@ -636,8 +638,10 @@ begin
     CheckSvgNear(Path.Points[3].Y, 47, 1E-4, 'cubic end y');
     Check(ColorToHtml(Path.LineColor) = '#ABCDEF',
       'cubic path stroke color changed');
-    Check((Text.Text = 'A & B') and (Text.HAlignment = ahCenter),
-      'SVG text content or text-anchor changed');
+    ExpectedTextUtf8 := 'A & B ' + #$CE + #$B2;
+    Check((UTF8Encode(Text.WideText) = ExpectedTextUtf8) and
+      (Text.HAlignment = ahCenter),
+      'SVG UTF-8 text content or text-anchor changed');
     Check(Text.Font.Name = 'Arial', 'SVG text font family changed');
     CheckSvgNear(Text.Points[0].X, 20, 1E-4, 'text x');
     CheckSvgNear(Text.Points[0].Y, 18, 1E-4, 'text baseline y');
@@ -646,6 +650,8 @@ begin
 
     Serialized := SerializeDocumentToBytes('svg', Drawing,
       'roundtrip.svg', CodecContext);
+    Check(Pos(#$CE + #$B2, Serialized) > 0,
+      'SVG serialization changed UTF-8 text bytes');
     CheckSvgNear(SvgFloat(SvgAttribute(string(Serialized), 'width')),
       25.4, 1E-4, 'same-format physical page width');
     CheckSvgNear(SvgFloat(SvgAttribute(string(Serialized), 'height')),
@@ -685,9 +691,9 @@ begin
     CheckSvgNear(ReloadedText.Height * Reloaded.PicScale,
       Text.Height * Drawing.PicScale, 1E-4,
       'same-format text size round trip in millimetres');
-    Check((ReloadedText.Text = Text.Text) and
+    Check((UTF8Encode(ReloadedText.WideText) = ExpectedTextUtf8) and
       (ReloadedText.HAlignment = Text.HAlignment),
-      'same-format text content or alignment round trip changed');
+      'same-format UTF-8 text content or alignment round trip changed');
 
     for Cycle := 1 to 2 do
     begin
