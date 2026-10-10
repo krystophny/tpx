@@ -2731,8 +2731,6 @@ begin
       end;
       Obj.SourceRotation := Obj.Rotation;
       Obj.SourceRotationCenter := Obj.RotationCenter;
-      AddPointDependencies(Obj, 0, 1, XSpan, YSpan, XScale, YScale,
-        XUnit, YUnit, IsRelative, UpdateBase);
       AddDependency(Obj, tdWidth, tdepLocalLiteral, '', XSpan, SpanAtZero,
         SpanAtZero, SpanAtZero, True, 0, 1, XScale, XUnit, IsRelative);
       AddDependency(Obj, tdHeight, tdepLocalLiteral, '', YSpan, SpanAtZero,

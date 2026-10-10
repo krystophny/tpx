@@ -139,7 +139,10 @@ environments, and drawing statements without a terminating semicolon.
 
 Dynamic or side-effecting commands such as `\write`, `\input`, `\include`,
 catcode changes, macro definitions outside the generated defaults, loops,
-Lua, `pgfplots`, and library/style mutation are diagnosed as unsupported. The
+Lua, `pgfplots`, and library/style mutation are diagnosed as unsupported,
+except when their bytes occur inside a TikZ node text group. Node text is
+retained opaquely; import never expands or runs it. TeX preview for an opened
+source stays blocked until the user explicitly trusts that document. The
 parser does not expand macros, execute control flow, run external tools, access
 the network, or resolve image files. In a `.tex` source, non-command content
 outside the selected picture is unsupported; unknown preamble code is never

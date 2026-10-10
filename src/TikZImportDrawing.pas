@@ -105,6 +105,7 @@ begin
   Y := Point.Y - Center.Y;
   Result.X := Center.X + C * X - S * Y;
   Result.Y := Center.Y + S * X + C * Y;
+  Result.W := 1;
 end;
 
 function BuildPath(const Obj: TTikZSceneObject): TPrimitive2D;
