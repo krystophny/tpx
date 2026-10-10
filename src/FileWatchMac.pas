@@ -10,7 +10,7 @@ uses
 type
   TMacWatchSubscription = record
     ID, Generation: QWord;
-    Path, ParentPath, TargetParentPath: string;
+    Path, ParentPath, TargetParentPath: UTF8String;
     ParentFD, TargetParentFD, FileFD: LongInt;
     ParentToken, TargetParentToken, FileToken: QWord;
     Device, Inode: QWord;
@@ -53,7 +53,7 @@ type
     destructor Destroy; override;
     procedure Start; override;
     procedure Stop; override;
-    function Subscribe(const Path: string; Generation: QWord;
+    function Subscribe(const Path: UTF8String; Generation: QWord;
       out SubscriptionID: QWord): TFileWatchStatus; override;
     procedure Unsubscribe(SubscriptionID: QWord); override;
     {$IFDEF TPX_FILEWATCH_TESTS}
@@ -120,8 +120,28 @@ function kevent(KQueueFD: LongInt; ChangeList: PKernelEvent;
   ChangeCount: LongInt; EventList: PKernelEvent; EventCount: LongInt;
   Timeout: Pointer): LongInt; cdecl; external name 'kevent';
 function __error: PLongInt; cdecl; external name '__error';
-function realpath(Path, ResolvedPath: PChar): PChar; cdecl;
+function realpath(Path, ResolvedPath: PAnsiChar): PAnsiChar; cdecl;
   external name 'realpath';
+
+function ParentDirectoryUTF8(const Path: UTF8String): UTF8String;
+var
+  I: SizeInt;
+begin
+  I := Length(Path);
+  while (I > 0) and (Path[I] <> PathDelim) do Dec(I);
+  if I = 0 then Exit('');
+  if I = 1 then Exit(PathDelim);
+  Result := Copy(Path, 1, I - 1);
+end;
+
+function UTF8FromNullTerminated(Value: PAnsiChar): UTF8String;
+var
+  ByteCount: SizeInt;
+begin
+  ByteCount := StrLen(Value);
+  SetLength(Result, ByteCount);
+  if ByteCount > 0 then Move(Value^, Result[1], ByteCount);
+end;
 
 function LibcErrorCode: LongInt; inline;
 var
@@ -225,7 +245,7 @@ begin
   end;
 end;
 
-function OpenForEvents(const Path: string; Directory: Boolean): LongInt;
+function OpenForEvents(const Path: UTF8String; Directory: Boolean): LongInt;
 var
   Flags: LongInt;
   ErrorCode: LongInt;
@@ -234,7 +254,7 @@ begin
   Flags := O_EVTONLY or O_CLOEXEC;
   if Directory then Flags := Flags or O_DIRECTORY;
   repeat
-    Result := fpOpen(PChar(Path), Flags);
+    Result := fpOpen(PAnsiChar(Path), Flags);
     if Result < 0 then ErrorCode := GetLastOSError;
   until (Result >= 0) or (ErrorCode <> ESysEINTR);
 end;
@@ -444,10 +464,10 @@ begin
   Worker.Free;
 end;
 
-function TMacFileChangeSource.Subscribe(const Path: string;
+function TMacFileChangeSource.Subscribe(const Path: UTF8String;
   Generation: QWord; out SubscriptionID: QWord): TFileWatchStatus;
 var
-  Normalized, Parent: string;
+  Normalized, Parent: UTF8String;
   Index, ErrorCode, FD: LongInt;
   Token: QWord;
   Device, Inode: QWord;
@@ -456,7 +476,7 @@ begin
   SubscriptionID := 0;
   if Path = '' then Exit(fwsError);
   Normalized := NormalizeFileWatchPath(Path);
-  Parent := ExtractFileDir(Normalized);
+  Parent := ParentDirectoryUTF8(Normalized);
   if Parent = '' then Parent := PathDelim;
   FillChar(Sub, SizeOf(Sub), 0);
   Sub.ParentFD := -1;
@@ -633,7 +653,7 @@ procedure TMacFileChangeSource.MarkDegraded(Index: LongInt;
   const ErrorText: string);
 var
   SubID, Generation: QWord;
-  Path: string;
+  Path: UTF8String;
 begin
   if (Index < 0) or (Index > High(FSubscriptions)) then Exit;
   if FSubscriptions[Index].Degraded then Exit;
@@ -653,7 +673,7 @@ var
   Token, Device, Inode, VerifyDevice, VerifyInode: QWord;
   HadIdentity, SameIdentity, TargetParentReady: Boolean;
   EventKind: TFileChangeKind;
-  Path: string;
+  Path: UTF8String;
 begin
   if (Index < 0) or (Index > High(FSubscriptions)) then Exit;
   {$IFDEF TPX_FILEWATCH_TESTS}
@@ -769,14 +789,14 @@ end;
 function TMacFileChangeSource.UpdateTargetParent(Index: LongInt): Boolean;
 var
   Resolved: array[0..TARGET_PATH_BUFFER - 1] of AnsiChar;
-  ResolvedFile, NewParentPath: string;
+  ResolvedFile, NewParentPath: UTF8String;
   NewFD, ErrorCode: LongInt;
   NewToken, Device, Inode, ParentDevice, ParentInode: QWord;
 begin
   Result := False;
   if (Index < 0) or (Index > High(FSubscriptions)) then Exit;
   FillChar(Resolved, SizeOf(Resolved), 0);
-  if realpath(PChar(FSubscriptions[Index].Path), @Resolved[0]) = nil then begin
+  if realpath(PAnsiChar(FSubscriptions[Index].Path), @Resolved[0]) = nil then begin
     ErrorCode := LibcErrorCode;
     { Keep the last target-directory watch while a source is missing. }
     if ErrorCode <> ESysENOENT then
@@ -784,8 +804,8 @@ begin
         ErrorDescription(ErrorCode));
     Exit;
   end;
-  ResolvedFile := StrPas(@Resolved[0]);
-  NewParentPath := ExtractFileDir(ResolvedFile);
+  ResolvedFile := UTF8FromNullTerminated(@Resolved[0]);
+  NewParentPath := ParentDirectoryUTF8(ResolvedFile);
   if NewParentPath = '' then NewParentPath := PathDelim;
   NewFD := OpenForEvents(NewParentPath, True);
   if NewFD < 0 then begin
@@ -838,7 +858,7 @@ procedure TMacFileChangeSource.ReconcileParent(Index: LongInt;
 var
   FD, ErrorCode: LongInt;
   Token: QWord;
-  ParentPath: string;
+  ParentPath: UTF8String;
 begin
   if (Index < 0) or (Index > High(FSubscriptions)) then Exit;
   if (Flags and (NOTE_RENAME or NOTE_DELETE or NOTE_REVOKE)) <> 0 then begin

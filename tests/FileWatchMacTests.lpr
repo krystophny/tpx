@@ -29,7 +29,7 @@ begin
   if not Condition then raise Exception.Create(MessageText);
 end;
 
-procedure CycleSources(const Path: string; Count: LongInt);
+procedure CycleSources(const Path: UTF8String; Count: LongInt);
 var
   I: LongInt;
   Source: TFileChangeSource;
@@ -55,7 +55,8 @@ end;
 var
   Source: TFileChangeSource;
   MacSource: TMacFileChangeSource;
-  Path, Command, Operation: string;
+  Path: UTF8String;
+  Command, Operation: string;
   SubscriptionID, Generation: QWord;
   Status: TFileWatchStatus;
   TimeoutMS, Count: LongInt;
@@ -64,7 +65,7 @@ begin
   Source := nil;
   try
     Require(ParamCount = 1, 'usage: FileWatchMacTests <path>');
-    Path := ParamStr(1);
+    Path := UTF8String(ParamStr(1));
     Source := CreateFileChangeSource;
     Require(Source is TMacFileChangeSource,
       'macOS factory did not return the native backend');
