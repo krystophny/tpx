@@ -242,12 +242,14 @@ type
     property Stream: TStream read fStream write SetStream;
   end;
 
+  TDeviceFilePath = {$IFDEF FPC}UTF8String{$ELSE}string{$ENDIF};
+
   TFileDevice = class(TStreamDevice)
   protected
-    fFileName: string;
+    fFileName: TDeviceFilePath;
     fIncludePath: string;
   public
-    property FileName: string read fFileName write fFileName;
+    property FileName: TDeviceFilePath read fFileName write fFileName;
     property IncludePath: string read fIncludePath write
       fIncludePath;
   end;
