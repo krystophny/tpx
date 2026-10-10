@@ -7,7 +7,8 @@ interface
 {$IFDEF LINUX}
 
 uses
-  Classes, SysUtils, FileWatch;
+  Classes, SysUtils, FileWatch
+  {$IFDEF TPX_FILEWATCH_TESTS}, SyncObjs{$ENDIF};
 
 type
   TLinuxFileChangeSource = class(TFileChangeSource)
@@ -22,6 +23,10 @@ type
     FStarted: Boolean;
     FTerminalError: Boolean;
     FPollReturns: QWord;
+    {$IFDEF TPX_FILEWATCH_TESTS}
+    FFirstPollEntered: TEvent;
+    FPollReturnedForTest: TEvent;
+    {$ENDIF}
     procedure RunWorker;
     procedure ProcessBuffer(Buffer: PByte; Count: LongInt);
     procedure ProcessEvent(WatchDescriptor: LongInt; Mask: LongWord;
@@ -48,6 +53,8 @@ type
     procedure InjectQueueOverflowForTest;
     procedure InjectWatchLossForTest(SubscriptionID: QWord);
     function PollReturnsForTest: QWord;
+    function WaitForFirstPollForTest(TimeoutMS: LongInt): Boolean;
+    function WaitForPollReturnForTest(TimeoutMS: LongInt): Boolean;
     {$ENDIF}
   end;
 
@@ -154,6 +161,10 @@ begin
   inherited Create;
   InitCriticalSection(FLock);
   FSubscriptions := TList.Create;
+  {$IFDEF TPX_FILEWATCH_TESTS}
+  FFirstPollEntered := TEvent.Create(nil, True, False, '');
+  FPollReturnedForTest := TEvent.Create(nil, True, False, '');
+  {$ENDIF}
   FInotifyFD := -1;
   FWakeReadFD := -1;
   FWakeWriteFD := -1;
@@ -167,6 +178,10 @@ begin
   for I := 0 to FSubscriptions.Count - 1 do
     TObject(FSubscriptions[I]).Free;
   FSubscriptions.Free;
+  {$IFDEF TPX_FILEWATCH_TESTS}
+  FPollReturnedForTest.Free;
+  FFirstPollEntered.Free;
+  {$ENDIF}
   DoneCriticalSection(FLock);
   inherited Destroy;
 end;
@@ -258,6 +273,10 @@ begin
     SetStatus(fwsStarting);
     FStopping := False;
     FTerminalError := False;
+    {$IFDEF TPX_FILEWATCH_TESTS}
+    FFirstPollEntered.ResetEvent;
+    FPollReturnedForTest.ResetEvent;
+    {$ENDIF}
     FInotifyFD := c_inotify_init1(InNonblock or InCloexec);
     if FInotifyFD < 0 then
     begin
@@ -403,7 +422,6 @@ begin
   finally
     LeaveCriticalSection(FLock);
   end;
-  WakeWorker;
 end;
 
 procedure TLinuxFileChangeSource.Unsubscribe(SubscriptionID: QWord);
@@ -441,7 +459,6 @@ begin
   finally
     LeaveCriticalSection(FLock);
   end;
-  WakeWorker;
 end;
 
 procedure TLinuxFileChangeSource.ProcessBuffer(Buffer: PByte; Count: LongInt);
@@ -588,6 +605,9 @@ begin
   FDs[1].ReturnedEvents := 0;
   while not ReadStopping do
   begin
+    {$IFDEF TPX_FILEWATCH_TESTS}
+    FFirstPollEntered.SetEvent;
+    {$ENDIF}
     PollResult := c_poll(@FDs[0], 2, -1);
     if PollResult < 0 then
     begin
@@ -599,6 +619,9 @@ begin
     EnterCriticalSection(FLock);
     try
       Inc(FPollReturns);
+      {$IFDEF TPX_FILEWATCH_TESTS}
+      FPollReturnedForTest.SetEvent;
+      {$ENDIF}
     finally
       LeaveCriticalSection(FLock);
     end;
@@ -683,6 +706,30 @@ begin
   finally
     LeaveCriticalSection(FLock);
   end;
+end;
+
+function TLinuxFileChangeSource.WaitForFirstPollForTest(
+  TimeoutMS: LongInt): Boolean;
+var
+  WaitResult: TWaitResult;
+begin
+  if TimeoutMS < 0 then
+    WaitResult := FFirstPollEntered.WaitFor(High(Cardinal))
+  else
+    WaitResult := FFirstPollEntered.WaitFor(Cardinal(TimeoutMS));
+  Result := WaitResult = wrSignaled;
+end;
+
+function TLinuxFileChangeSource.WaitForPollReturnForTest(
+  TimeoutMS: LongInt): Boolean;
+var
+  WaitResult: TWaitResult;
+begin
+  if TimeoutMS < 0 then
+    WaitResult := FPollReturnedForTest.WaitFor(High(Cardinal))
+  else
+    WaitResult := FPollReturnedForTest.WaitFor(Cardinal(TimeoutMS));
+  Result := WaitResult = wrSignaled;
 end;
 {$ENDIF}
 

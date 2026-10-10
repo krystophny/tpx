@@ -275,10 +275,9 @@ class LinuxFileWatchTests(unittest.TestCase):
                           if event["kind"] == "error")
         self.assertNotIn("Success", error_text,
                          "libc errno was lost while reporting an unwatchable parent")
-        first = int(self.watcher.command("POLL_COUNT").split("|")[1])
-        time.sleep(0.35)
-        second = int(self.watcher.command("POLL_COUNT").split("|")[1])
-        self.assertEqual(second, first, "idle watcher returned from poll without an event")
+        idle_result = self.watcher.command("WAIT_POLL|350")
+        self.assertEqual(idle_result, "IDLE|0",
+                         "idle watcher returned from poll without an event")
 
     def test_empty_path_is_rejected(self):
         response = self.watcher.command("SUBPATH|88|")
