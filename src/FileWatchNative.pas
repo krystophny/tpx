@@ -19,4 +19,9 @@ uses
   FileWatchMac;
 {$ENDIF}
 
+{$IFDEF MSWINDOWS}
+uses
+  FileWatchWindows;
+{$ENDIF}
+
 end.
