@@ -10,7 +10,7 @@ BUILD_OPTIONS = --pcp="$(LAZARUS_CONFIG)" $(if $(LAZARUS_DIR),--lazarusdir="$(LA
 
 WEB_PORT ?= 8791
 
-.PHONY: all build run test web web-check web-serve
+.PHONY: all build run test test-source-acceptance web web-check web-serve
 
 all: build
 
@@ -25,6 +25,9 @@ test: build
 	TPX_BINARY="$(CURDIR)/$(TPX_BINARY)" python3 tests/test_tex.py
 	$(LAZBUILD) $(BUILD_OPTIONS) tests/RuntimeTests.lpi
 	RUNTIME_BINARY="$(CURDIR)/$(RUNTIME_BINARY)" python3 tests/test_runtime.py
+
+test-source-acceptance: build
+	TPX_BINARY="$(CURDIR)/$(TPX_BINARY)" python3 tests/test_source_acceptance.py
 
 # Browser (WASI) target. Toolchain pins and locations: web/pins.env, web/README.md.
 web:
