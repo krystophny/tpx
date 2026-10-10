@@ -53,19 +53,15 @@ begin
   Result := EvaluateTikZ(Syntax, DefaultTikZImportOptions);
 end;
 
-function ExpectedUtf8BetaLabel: RawByteString;
+function IsUtf8BetaLabel(const Value: RawByteString): Boolean;
 begin
-  { TextBody preserves source bytes. Build its UTF-8 oracle explicitly so the
-    host ANSI code page cannot transcode the non-ASCII suffix. }
-  SetLength(Result, 8);
-  Result[1] := AnsiChar(Ord('L'));
-  Result[2] := AnsiChar(Ord('a'));
-  Result[3] := AnsiChar(Ord('b'));
-  Result[4] := AnsiChar(Ord('e'));
-  Result[5] := AnsiChar(Ord('l'));
-  Result[6] := AnsiChar(Ord(' '));
-  Result[7] := AnsiChar($CE);
-  Result[8] := AnsiChar($B2);
+  { TextBody preserves source bytes. Compare byte values so the host ANSI code
+    page cannot transcode the non-ASCII suffix during string comparison. }
+  if Length(Value) <> 8 then Exit(False);
+  Result := (Ord(Value[1]) = Ord('L')) and (Ord(Value[2]) = Ord('a')) and
+    (Ord(Value[3]) = Ord('b')) and (Ord(Value[4]) = Ord('e')) and
+    (Ord(Value[5]) = Ord('l')) and (Ord(Value[6]) = Ord(' ')) and
+    (Ord(Value[7]) = $CE) and (Ord(Value[8]) = $B2);
 end;
 
 procedure TestIndependentTikZSemanticScene;
@@ -177,7 +173,7 @@ begin
     Obj := Scene.ObjectAt(3);
     CheckCore((Obj.Kind = tsoText) and (Obj.TextAnchor = 'base west'),
       'West text anchor was not preserved');
-    CheckCore(Obj.TextBody = ExpectedUtf8BetaLabel,
+    CheckCore(IsUtf8BetaLabel(Obj.TextBody),
       'First Unicode text body was altered');
     CheckNearCore(Obj.Center.X, 1.25, 0.0001, 'west text x');
     CheckNearCore(Obj.Center.Y, 10.5, 0.0001, 'west text y');
