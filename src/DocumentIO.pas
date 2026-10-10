@@ -18,6 +18,36 @@ type
     ParsedDrawing: TDrawing2D; CodecContext: TObject);
   TDocumentSaveValidationPath = (dsvpFinalDestination, dsvpPrivateStage);
 
+  { Prepares source bytes and linked assets without changing the destination.
+    Publish uses the exact accepted disk revision; Accept transfers a freshly
+    parsed codec context only after atomic publication succeeds. }
+  TDocumentSaveTransaction = class
+  private
+    FFormatId: string;
+    FPath, FStageDirectory, FStagingFileName: TDocumentPath;
+    FExpectedRevision: TDiskRevision;
+    FDrawing: TDrawing2D;
+    FBytes: RawByteString;
+    FCanSaveBack, FPublished, FCommitted: Boolean;
+    FNewRevision: TDiskRevision;
+    FBackupFileName: TDocumentPath;
+    FCodecContext: TObject;
+    FStagedAssets, FFinalAssets, FDiagnostics: TStringList;
+  public
+    constructor Create(const FormatId: string; Drawing: TDrawing2D;
+      const FileName: TDocumentPath; const ExpectedRevision: TDiskRevision;
+      CodecContext: TObject; const AllowExternalTools: Boolean);
+    destructor Destroy; override;
+    procedure Publish(out NewRevision: TDiskRevision;
+      out BackupFileName: TDocumentPath);
+    procedure Accept(Session: TDocumentSession);
+    procedure Commit(Session: TDocumentSession;
+      out NewRevision: TDiskRevision; out BackupFileName: TDocumentPath);
+    property SourceBytes: RawByteString read FBytes;
+    property Diagnostics: TStringList read FDiagnostics;
+    property CanSaveBack: Boolean read FCanSaveBack;
+  end;
+
 procedure RegisterDocumentCodec(const Format: TDocumentFormat;
   Loader: TDocumentLoader; Saver: TDocumentSaver;
   ContextRebinder: TDocumentContextRebinder = nil;
@@ -42,10 +72,24 @@ function SerializeDocumentForSave(const FormatId: string;
   FinalAssets: TStrings; const AllowExternalTools: Boolean = False): Boolean;
 function SerializeTpXRecoveryBytes(Drawing: TDrawing2D;
   const FileName: TDocumentPath): RawByteString;
+procedure StageRelativeBitmapAssets(Drawing: TDrawing2D;
+  const Destination, StageDirectory, StagingFileName: TDocumentPath;
+  const UseLinkBasenames: Boolean; StagedAssets, FinalAssets: TStrings;
+  out HasStagedAssets: Boolean);
 
 implementation
 
-uses Contnrs, Input, Output, SysBasic;
+uses Contnrs, Input, Output, SysBasic, Bitmaps;
+
+function IsAbsoluteDocumentLink(const Link: TDocumentPath): Boolean;
+begin
+{$IFDEF WINDOWS}
+  Result := (Length(Link) > 0) and (Link[1] in ['/', '\']);
+  if Length(Link) > 1 then Result := Result or (Link[2] = ':');
+{$ELSE}
+  Result := (Length(Link) > 0) and (Link[1] = '/');
+{$ENDIF}
+end;
 
 type
   TDocumentCodec = class
@@ -72,6 +116,204 @@ begin
       Exit;
     end;
   end;
+end;
+
+procedure StageRelativeBitmapAssets(Drawing: TDrawing2D;
+  const Destination, StageDirectory, StagingFileName: TDocumentPath;
+  const UseLinkBasenames: Boolean; StagedAssets, FinalAssets: TStrings;
+  out HasStagedAssets: Boolean);
+var I, J: Integer; Entry: TBitmapEntry;
+  Link, SourcePath, FinalPath, StagePath, Directory: TDocumentPath;
+  Snapshot: TDocumentSnapshot; Duplicate: Boolean;
+begin
+  if (Drawing = nil) or (StagedAssets = nil) or (FinalAssets = nil) then
+    raise EWriteError.Create('A drawing and asset lists are required');
+  HasStagedAssets := False;
+  Directory := DocumentPathDirectory(Destination);
+  for I := 0 to Drawing.BitmapRegistry.Count - 1 do
+  begin
+    Entry := Drawing.BitmapRegistry.Objects[I] as TBitmapEntry;
+    Link := TDocumentPath(Entry.ImageLink);
+    if Link = '' then Continue;
+    if UseLinkBasenames then
+    begin
+      if IsAbsoluteDocumentLink(Link) or (Link = '.') or (Link = '..') or
+        (Pos('/', string(Link)) > 0) or (Pos('\', string(Link)) > 0) or
+        (Pos(':', string(Link)) > 0) or (Pos(#0, string(Link)) > 0) then
+        raise EWriteError.CreateFmt(
+          'This format requires bitmap links to be safe file basenames: "%s"',
+          [string(Link)]);
+    end
+    else if IsAbsoluteDocumentLink(Link) then Continue;
+    SourcePath := NormalizeDocumentPath(TDocumentPath(Entry.GetFullLink));
+    FinalPath := NormalizeDocumentPath(Directory + PathDelim + Link);
+    if SameDocumentPath(SourcePath, FinalPath) then Continue;
+    Duplicate := False;
+    for J := 0 to FinalAssets.Count - 1 do
+      if SameDocumentPath(TDocumentPath(FinalAssets[J]), FinalPath) then
+      begin
+        Duplicate := True;
+        Break;
+      end;
+    if Duplicate then Continue;
+    Snapshot := ReadDocumentSnapshot(SourcePath);
+    if UseLinkBasenames then
+      StagePath := IncludeTrailingPathDelimiter(StageDirectory) + Link
+    else
+      StagePath := IncludeTrailingPathDelimiter(StageDirectory) +
+        'bitmap-' + IntToStr(I) + DocumentPathExtension(Link);
+    if SameDocumentPath(StagePath, StagingFileName) then
+      raise EWriteError.Create('A bitmap asset collides with the staged document');
+    StagedAssets.Add(string(StagePath));
+    FinalAssets.Add(string(FinalPath));
+    WriteDocumentStagingFile(StagePath, Snapshot.SourceBytes);
+    HasStagedAssets := True;
+  end;
+end;
+
+constructor TDocumentSaveTransaction.Create(const FormatId: string;
+  Drawing: TDrawing2D; const FileName: TDocumentPath;
+  const ExpectedRevision: TDiskRevision; CodecContext: TObject;
+  const AllowExternalTools: Boolean);
+var Stream: TMemoryStream; Candidate: TDrawing2D;
+  CandidateFileName: TDocumentPath; HasStagedAssets,
+  UseStagedValidation: Boolean; Format: TDocumentFormat;
+begin
+  inherited Create;
+  FFormatId := FormatId;
+  FDrawing := Drawing;
+  FExpectedRevision := ExpectedRevision;
+  FCodecContext := nil;
+  FPublished := False;
+  FCommitted := False;
+  FStagedAssets := TStringList.Create;
+  FFinalAssets := TStringList.Create;
+  FDiagnostics := TStringList.Create;
+  Stream := nil;
+  Candidate := nil;
+  try
+    if Drawing = nil then
+      raise EWriteError.Create('A drawing is required for serialization');
+    if not FindDocumentFormatById(FormatId, Format) or
+      not Format.CanSaveBack or not IsDocumentCodecRegistered(FormatId) then
+      raise EWriteError.CreateFmt('No save-back codec is available for %s',
+        [FormatId]);
+    FPath := NormalizeDocumentPath(FileName);
+    FStageDirectory := CreateDocumentStagingDirectory(
+      DocumentPathDirectory(FPath));
+    if FStageDirectory = '' then
+      raise EWriteError.Create('Could not create a private staging directory');
+    FStagingFileName := IncludeTrailingPathDelimiter(FStageDirectory) +
+      DocumentPathFileName(FPath);
+    Stream := TMemoryStream.Create;
+    if not SerializeDocumentForSave(FormatId, Drawing, FPath, FStagingFileName,
+      Stream, CodecContext, FStagedAssets, FFinalAssets, AllowExternalTools) then
+      raise EWriteError.Create('The document could not be serialized');
+    UseStagedValidation := DocumentCodecUsesStagedValidationPath(FormatId);
+    StageRelativeBitmapAssets(Drawing, FPath, FStageDirectory,
+      FStagingFileName, UseStagedValidation, FStagedAssets, FFinalAssets,
+      HasStagedAssets);
+    if Stream.Size > MaxDocumentBytes then
+      raise EWriteError.CreateFmt('Document exceeds the %d byte limit',
+        [MaxDocumentBytes]);
+    SetLength(FBytes, Stream.Size);
+    if Stream.Size > 0 then
+    begin
+      Stream.Position := 0;
+      Stream.ReadBuffer(FBytes[1], Stream.Size);
+    end;
+    CandidateFileName := FPath;
+    if UseStagedValidation and (FStagedAssets.Count > 0) then
+    begin
+      WriteDocumentStagingFile(FStagingFileName, FBytes);
+      CandidateFileName := FStagingFileName;
+    end;
+    Candidate := LoadDocumentCandidate(FormatId, CandidateFileName, FBytes,
+      FCanSaveBack, FCodecContext, FDiagnostics);
+    if (Candidate = nil) or not FCanSaveBack then
+      raise EWriteError.CreateFmt(
+        'The serialized %s document cannot be safely reopened for editing',
+        [FormatId]);
+    RebindDocumentCodecContext(FormatId, Drawing, Candidate, FCodecContext);
+  except
+    Candidate.Free;
+    Stream.Free;
+    raise;
+  end;
+  Candidate.Free;
+  Stream.Free;
+end;
+
+destructor TDocumentSaveTransaction.Destroy;
+var I: Integer;
+begin
+  try FCodecContext.Free except end;
+  if not FCommitted and (FStagedAssets <> nil) then
+    for I := 0 to FStagedAssets.Count - 1 do
+      try
+        if DocumentFileExists(TDocumentPath(FStagedAssets[I])) then
+          DeleteDocumentFile(TDocumentPath(FStagedAssets[I]));
+      except
+        { Preserve the original save failure; staged files are private temp data. }
+      end;
+  if FStagingFileName <> '' then
+    try
+      if DocumentFileExists(FStagingFileName) then
+        DeleteDocumentFile(FStagingFileName);
+    except
+    end;
+  if FStageDirectory <> '' then
+    try
+      RemoveDocumentStagingDirectory(FStageDirectory);
+    except
+    end;
+  if FDiagnostics <> nil then FDiagnostics.Free;
+  if FFinalAssets <> nil then FFinalAssets.Free;
+  if FStagedAssets <> nil then FStagedAssets.Free;
+  inherited Destroy;
+end;
+
+procedure TDocumentSaveTransaction.Publish(out NewRevision: TDiskRevision;
+  out BackupFileName: TDocumentPath);
+begin
+  if FPublished then
+    raise EWriteError.Create('The document save transaction was already published');
+  WriteDocumentBundleAtomically(FPath, FBytes, FExpectedRevision, True,
+    FStagedAssets, FFinalAssets, NewRevision, BackupFileName);
+  FDrawing.RebindFileNameAfterAssetCommit(FPath);
+  FNewRevision := NewRevision;
+  FBackupFileName := BackupFileName;
+  FPublished := True;
+end;
+
+procedure TDocumentSaveTransaction.Accept(Session: TDocumentSession);
+var SameSource: Boolean;
+begin
+  if not FPublished then
+    raise EWriteError.Create('The document save transaction was not published');
+  if FCommitted then
+    raise EWriteError.Create('The document save transaction was already accepted');
+  if Session = nil then
+    raise EWriteError.Create('A document session is required');
+  SameSource := (Session.SourcePath <> '') and
+    SameDocumentPath(Session.SourcePath, FPath) and
+    SameText(Session.SourceFormatId, FFormatId) and Session.CanSaveBack;
+  if SameSource then
+    Session.AcceptSavedRevision(FBytes, FNewRevision, FCodecContext,
+      FBackupFileName)
+  else
+    Session.RebindSavedSourceNormalized(FPath, FFormatId, FBytes,
+      FNewRevision, FCanSaveBack, FCodecContext, FBackupFileName);
+  FCodecContext := nil;
+  Session.Diagnostics.Assign(FDiagnostics);
+  FCommitted := True;
+end;
+
+procedure TDocumentSaveTransaction.Commit(Session: TDocumentSession;
+  out NewRevision: TDiskRevision; out BackupFileName: TDocumentPath);
+begin
+  Publish(NewRevision, BackupFileName);
+  Accept(Session);
 end;
 
 procedure RegisterDocumentCodec(const Format: TDocumentFormat;
