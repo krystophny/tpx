@@ -160,6 +160,17 @@ var I, Semi, Code: Integer; Part: string; WideResult: WideString;
   begin
     WideResult := WideResult + UTF8Decode(Value);
   end;
+  procedure AppendCodePoint(Value: Cardinal);
+  begin
+    if Value <= $FFFF then
+      WideResult := WideResult + WideChar(Value)
+    else
+    begin
+      Dec(Value, $10000);
+      WideResult := WideResult + WideChar($D800 + (Value shr 10)) +
+        WideChar($DC00 + (Value and $3FF));
+    end;
+  end;
 begin
   RawStorage := RawByteString(StorageText);
   SetCodePage(RawStorage, 65001, False);
@@ -179,16 +190,18 @@ begin
         if (Part <> '') and (Part[1] = 'x') then
         begin
           Delete(Part, 1, 1);
-          if TryStrToInt('$' + Part, Code) then
+          if TryStrToInt('$' + Part, Code) and
+            (Code >= 0) and (Code <= $10FFFF) then
           begin
-            WideResult := WideResult + WideChar(Code);
+            AppendCodePoint(Code);
             I := Semi + 1;
             Continue;
           end;
         end
-        else if TryStrToInt(Part, Code) then
+        else if TryStrToInt(Part, Code) and
+          (Code >= 0) and (Code <= $10FFFF) then
         begin
-          WideResult := WideResult + WideChar(Code);
+          AppendCodePoint(Code);
           I := Semi + 1;
           Continue;
         end;

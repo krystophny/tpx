@@ -8,6 +8,53 @@ begin
   Check(Obj = Second, Description + ': second object changed');
 end;
 
+procedure SetFirstProvisionalPointCount(var State: RawByteString;
+  PointCount: Longint);
+var
+  Stream: TMemoryStream;
+  TargetCount, PathLength, ClassLength, ProvisionalCount,
+    ObjectLength: LongWord;
+  ClassIndex: Word;
+  I: Integer;
+  ObjectStart: Int64;
+begin
+  Stream := TMemoryStream.Create;
+  try
+    if Length(State) = 0 then
+      raise EReadError.Create('Missing edit recovery fixture');
+    Stream.WriteBuffer(State[1], Length(State));
+    Stream.Position := 8 + 1;
+    Stream.ReadBuffer(TargetCount, SizeOf(TargetCount));
+    for I := 0 to Integer(TargetCount) - 1 do
+    begin
+      Stream.ReadBuffer(PathLength, SizeOf(PathLength));
+      if Int64(PathLength) * SizeOf(LongWord) >
+        Stream.Size - Stream.Position then
+        raise EReadError.Create('Invalid edit recovery target fixture');
+      Stream.Position := Stream.Position +
+        Int64(PathLength) * SizeOf(LongWord);
+      Stream.ReadBuffer(ClassLength, SizeOf(ClassLength));
+      if ClassLength > Stream.Size - Stream.Position then
+        raise EReadError.Create('Invalid edit recovery class fixture');
+      Stream.Position := Stream.Position + ClassLength;
+    end;
+    Stream.ReadBuffer(ProvisionalCount, SizeOf(ProvisionalCount));
+    if ProvisionalCount = 0 then
+      raise EReadError.Create('Missing provisional recovery fixture');
+    Stream.ReadBuffer(ClassIndex, SizeOf(ClassIndex));
+    Stream.ReadBuffer(ObjectLength, SizeOf(ObjectLength));
+    ObjectStart := Stream.Position;
+    if (ObjectLength < 13) or
+      (ObjectLength > Stream.Size - ObjectStart) then
+      raise EReadError.Create('Invalid provisional recovery fixture');
+    { TGraphicObject's stream header is nine bytes; the primitive point count
+      follows it before the point records. }
+    Move(PointCount, State[ObjectStart + 10], SizeOf(PointCount));
+  finally
+    Stream.Free;
+  end;
+end;
+
 procedure TestEditSessionPreviewCancel;
 var
   Drawing: TDrawing2D;
@@ -253,6 +300,9 @@ begin
     Check((Length(DecodedEditText) = Length(ExpectedUtf8)) and
       CompareMem(@DecodedEditText[1], @ExpectedUtf8[1], Length(ExpectedUtf8)),
       'TpX text encoding must preserve Unicode and literal entity-like text');
+    Check(DecodeTpXTextForEdit('&#x1F600;') =
+      LCLTextToUTF8Bytes('😀'),
+      'hexadecimal supplementary references must decode as UTF-16 pairs');
     Check(Session.TrySetRawDraft(opfTextHeight, '1e', ErrorText),
       'raw numeric draft setup failed: ' + ErrorText);
     Session.Presentation := espInlineText;
@@ -345,6 +395,21 @@ begin
       Check(CorruptSession.BuildRecoveryData('', CorruptModel,
         CorruptAuxiliary, ErrorText),
         'Could not build the provisional-object corruption fixture: ' +
+          ErrorText);
+      SetFirstProvisionalPointCount(CorruptAuxiliary, High(Longint));
+      CorruptedRestoredSession := nil;
+      Check(not TObjectEditSession.RestoreRecoveryState(Candidate, Epoch,
+        CorruptAuxiliary, CorruptedRestoredSession, ErrorText),
+        'A provisional point count exceeding its object stream must be rejected');
+      Check((CorruptedRestoredSession = nil) and
+        (Candidate.ObjectsCount = 3) and
+        (Candidate.GetObject(Provisional.ID) = Provisional) and
+        (RestoredFirst.Text = 'Committed first') and
+        (RestoredSecond.Text = 'Committed sibling'),
+        'A corrupt provisional point count changed the committed drawing');
+      Check(CorruptSession.BuildRecoveryData('', CorruptModel,
+        CorruptAuxiliary, ErrorText),
+        'Could not reset the provisional-object corruption fixture: ' +
           ErrorText);
       MarkerIndex := Pos('RecoveryUniqueSentinel', string(CorruptAuxiliary));
       Check(MarkerIndex > 4,
