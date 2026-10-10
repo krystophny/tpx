@@ -7,6 +7,9 @@ interface
 uses Classes, SysUtils, DocumentFormats, Drawings, AutoSaveCore,
   AutoSaveStore, EditSessions;
 
+const
+  AutoSaveMaxBrowserPayloadBytes = 24 * 1024 * 1024;
+
 type
   TRecoveryAsset = record
     RelativePath: string;
@@ -50,10 +53,10 @@ type
   public
     constructor Create(const RecoveryRoot: string);
     destructor Destroy; override;
-    function BuildTpXRecoveryPayload(Drawing: TDrawing2D;
+    class function BuildTpXRecoveryPayload(Drawing: TDrawing2D;
       const SourcePath: TDocumentPath; out UnresolvedLinks: LongWord;
-      EditSession: TObjectEditSession = nil):
-      RawByteString;
+      EditSession: TObjectEditSession = nil;
+      MaxPayloadBytes: Int64 = AutoSaveDefaultMaxPayloadBytes): RawByteString; static;
     procedure BindDocument(Session: TDocumentSession;
       Drawing: TDrawing2D; AutoSaveEnabled, RecoveryEnabled,
       Dirty: Boolean; NowMS: QWord; const RecoveryKey: string = '');
@@ -76,15 +79,17 @@ type
     function ProcessDue(Session: TDocumentSession; Drawing: TDrawing2D;
       EditSession: TObjectEditSession; NowMS: QWord;
       out SourceSaved: Boolean): Boolean; overload;
-    procedure UnpackTpXRecoveryPayload(const Payload: RawByteString;
+    class procedure UnpackTpXRecoveryPayload(const Payload: RawByteString;
       const TempRoot: TDocumentPath; out ModelBytes: RawByteString;
       out AssetContext: TRecoveryAssetContext;
-      out UnresolvedLinks: LongWord); overload;
-    procedure UnpackTpXRecoveryPayload(const Payload: RawByteString;
+      out UnresolvedLinks: LongWord;
+      MaxPayloadBytes: Int64 = AutoSaveDefaultMaxPayloadBytes); overload; static;
+    class procedure UnpackTpXRecoveryPayload(const Payload: RawByteString;
       const TempRoot: TDocumentPath; out ModelBytes: RawByteString;
       out AuxiliaryState: RawByteString;
       out AssetContext: TRecoveryAssetContext;
-      out UnresolvedLinks: LongWord); overload;
+      out UnresolvedLinks: LongWord;
+      MaxPayloadBytes: Int64 = AutoSaveDefaultMaxPayloadBytes); overload; static;
     property Coordinator: TAutoSaveCoordinator read FCoordinator;
     property Store: TAutoSaveStore read FStore;
     property DocumentKey: string read FDocumentKey;
@@ -532,9 +537,9 @@ begin
   Result := FCoordinator.NextDelayMS(NowMS);
 end;
 
-function TAutoSaveRuntime.BuildTpXRecoveryPayload(Drawing: TDrawing2D;
+class function TAutoSaveRuntime.BuildTpXRecoveryPayload(Drawing: TDrawing2D;
   const SourcePath: TDocumentPath; out UnresolvedLinks: LongWord;
-  EditSession: TObjectEditSession): RawByteString;
+  EditSession: TObjectEditSession; MaxPayloadBytes: Int64): RawByteString;
 var ModelBytes, ChangedModel, AuxiliaryState: RawByteString;
   Assets: TRecoveryAssetArray;
   OldLinks, NewLinks: TStringList; Entry: TBitmapEntry; Stream: TMemoryStream;
@@ -543,6 +548,8 @@ var ModelBytes, ChangedModel, AuxiliaryState: RawByteString;
   PayloadMagic: string; HeaderBytes: Integer; ErrorText: string;
 begin
   if Drawing = nil then raise EWriteError.Create('A drawing is required');
+  if (MaxPayloadBytes <= 0) or (MaxPayloadBytes > AutoSaveMaxPayloadBytes) then
+    raise EWriteError.Create('Recovery payload limit is invalid');
   UnresolvedLinks := 0;
   AuxiliaryState := '';
   if (EditSession <> nil) and EditSession.IsActive and
@@ -561,6 +568,9 @@ begin
     HeaderBytes := RecoveryPayloadHeaderBytes;
   end;
   ChangedModel := ModelBytes;
+  if Length(ModelBytes) + HeaderBytes + Length(AuxiliaryState) >
+    MaxPayloadBytes then
+    raise EWriteError.Create('Recovery draft exceeds the configured payload limit');
   OldLinks := TStringList.Create;
   NewLinks := TStringList.Create;
   try
@@ -587,7 +597,7 @@ begin
         [Length(Assets) + 1]);
       if (Length(Assets) >= RecoveryAssetLimit) or
         (EstimatedBytes + Length(RelativePath) + 72 >
-          AutoSaveMaxPayloadBytes - TotalBytes) then
+          MaxPayloadBytes - TotalBytes) then
       begin
         Inc(UnresolvedLinks);
         Continue;
@@ -596,7 +606,7 @@ begin
       try
         Entry.Bitmap.SaveToStream(Stream);
         if (Stream.Size <= 0) or (Stream.Size + Length(RelativePath) + 72 >
-          AutoSaveMaxPayloadBytes - TotalBytes) then
+          MaxPayloadBytes - TotalBytes) then
         begin
           Inc(UnresolvedLinks);
           Continue;
@@ -608,7 +618,7 @@ begin
         Stream.Free;
       end;
       Inc(TotalBytes, Length(BitmapBytes) + Length(RelativePath) + 8);
-      if TotalBytes > AutoSaveMaxPayloadBytes then
+      if TotalBytes > MaxPayloadBytes then
         raise EWriteError.Create('Recovery draft exceeds the configured payload limit');
       SetLength(Assets, Length(Assets) + 1);
       Assets[High(Assets)].RelativePath := RelativePath;
@@ -627,7 +637,7 @@ begin
   TotalBytes := Length(ChangedModel) + HeaderBytes + Length(AuxiliaryState);
   for I := 0 to High(Assets) do
     Inc(TotalBytes, Length(Assets[I].Bytes) + Length(Assets[I].RelativePath) + 8);
-  if TotalBytes > AutoSaveMaxPayloadBytes then
+  if TotalBytes > MaxPayloadBytes then
     raise EWriteError.Create('Recovery draft exceeds the configured payload limit');
   Stream := TMemoryStream.Create;
   try
@@ -654,21 +664,21 @@ begin
   end;
 end;
 
-procedure TAutoSaveRuntime.UnpackTpXRecoveryPayload(
+class procedure TAutoSaveRuntime.UnpackTpXRecoveryPayload(
   const Payload: RawByteString; const TempRoot: TDocumentPath;
   out ModelBytes: RawByteString; out AssetContext: TRecoveryAssetContext;
-  out UnresolvedLinks: LongWord);
+  out UnresolvedLinks: LongWord; MaxPayloadBytes: Int64);
 var AuxiliaryState: RawByteString;
 begin
-  UnpackTpXRecoveryPayload(Payload, TempRoot, ModelBytes,
-    AuxiliaryState, AssetContext, UnresolvedLinks);
+  TAutoSaveRuntime.UnpackTpXRecoveryPayload(Payload, TempRoot, ModelBytes,
+    AuxiliaryState, AssetContext, UnresolvedLinks, MaxPayloadBytes);
 end;
 
-procedure TAutoSaveRuntime.UnpackTpXRecoveryPayload(
+class procedure TAutoSaveRuntime.UnpackTpXRecoveryPayload(
   const Payload: RawByteString; const TempRoot: TDocumentPath;
   out ModelBytes: RawByteString; out AuxiliaryState: RawByteString;
   out AssetContext: TRecoveryAssetContext;
-  out UnresolvedLinks: LongWord);
+  out UnresolvedLinks: LongWord; MaxPayloadBytes: Int64);
 var Stream: TMemoryStream; Magic: array[0..7] of Char;
   ModelLength, AssetCount, AuxiliaryLength: LongWord;
   I: Integer; TotalBytes: Int64; HasEditState: Boolean;
@@ -679,7 +689,9 @@ begin
   AuxiliaryState := '';
   AssetContext := nil;
   UnresolvedLinks := 0;
-  if Length(Payload) > AutoSaveMaxPayloadBytes then
+  if (MaxPayloadBytes <= 0) or (MaxPayloadBytes > AutoSaveMaxPayloadBytes) then
+    raise EReadError.Create('Recovery payload limit is invalid');
+  if Length(Payload) > MaxPayloadBytes then
     raise EReadError.Create('Recovery payload exceeds the configured limit');
   Stream := TMemoryStream.Create;
   Names := TStringList.Create;
@@ -702,7 +714,7 @@ begin
     AssetCount := ReadUInt32(Stream);
     AuxiliaryLength := 0;
     if HasEditState then AuxiliaryLength := ReadUInt32(Stream);
-    if (ModelLength > AutoSaveMaxPayloadBytes) or
+    if (ModelLength > MaxPayloadBytes) or
       (AuxiliaryLength > RecoveryEditStateLimit) or
       (AssetCount > RecoveryAssetLimit) or
       (Int64(ModelLength) + AuxiliaryLength + Stream.Position > Stream.Size) then
@@ -724,9 +736,9 @@ begin
       if Names.IndexOf(Assets[I].RelativePath) >= 0 then
         raise EReadError.Create('Recovery payload contains a duplicate asset path');
       Names.Add(Assets[I].RelativePath);
-      Assets[I].Bytes := ReadRaw(Stream, AutoSaveMaxPayloadBytes);
+      Assets[I].Bytes := ReadRaw(Stream, MaxPayloadBytes);
       Inc(TotalBytes, Length(NameBytes) + Length(Assets[I].Bytes) + 8);
-      if TotalBytes > AutoSaveMaxPayloadBytes then
+      if TotalBytes > MaxPayloadBytes then
         raise EReadError.Create('Recovery payload exceeds the configured limit');
     end;
     if Stream.Position <> Stream.Size then
@@ -745,8 +757,8 @@ var Payload: RawByteString; SourcePath: TDocumentPath; FormatId: string;
   UnresolvedLinks: LongWord;
 begin
   if not FCoordinator.CanStart(aswRecoveryDraft, Ticket) then Exit;
-  Payload := BuildTpXRecoveryPayload(Drawing, Session.SourcePath,
-    UnresolvedLinks, EditSession);
+  Payload := TAutoSaveRuntime.BuildTpXRecoveryPayload(Drawing,
+    Session.SourcePath, UnresolvedLinks, EditSession);
   if not FCoordinator.IsTicketCurrent(Ticket) then Exit;
   SourcePath := Session.SourcePath;
   FormatId := Session.SourceFormatId;
