@@ -88,10 +88,10 @@ constructs outside its own supported semantic subset.
 
 The semantic evaluator converts a supported picture into an ordered list of
 existing TpX drawing primitives. A `.tex` document must contain one supported
-picture; a `.tikz` file may contain a bare fragment. Import rejects a picture
-with no visible editable objects, any unsupported visible construct, and any
-materialization failure. It never accepts a partial scene. A failed open leaves
-the current drawing unchanged.
+picture; a `.tikz` file may contain a bare fragment. Empty pictures are
+accepted. Import rejects unsupported visible constructs and materialization
+failures. It never accepts a partial scene. A failed open leaves the current
+drawing unchanged.
 
 Coordinates without units use the picture's `x` and `y` basis, which defaults
 to one centimetre per coordinate unit. Picture bases and explicit coordinate,
