@@ -53,7 +53,7 @@ const
   LineMarker = '\path[line width=0.75mm,draw=L,dash pattern=on 2mm off 1mm] (1,0) -- (';
 var
   FileName, RelocatedFileName, FreshFileName, RejectedFileName,
-    FreshTeXFileName, ErrorText: string;
+    FreshTeXFileName, EmptyFileName, ErrorText: string;
   Mode: TTpXMode;
   Session: TDocumentSession;
   Drawing: TDrawing2D;
@@ -65,7 +65,7 @@ var
   BeforeBytes, AfterBytes, NoOpBytes, Sentinel: RawByteString;
   BeforeEnd, ExpectedEnd: TPoint2D;
   FreshTextHeight: TRealType;
-  StartAt, EndAt, NewStartAt, NewEndAt: SizeInt;
+  StartAt, EndAt, NewStartAt, NewEndAt, I: SizeInt;
   Saved: Boolean;
 begin
   FileName := GetEnvironmentVariable('TPX_TIKZ_SOURCE_FILE');
@@ -73,9 +73,11 @@ begin
   FreshFileName := GetEnvironmentVariable('TPX_TIKZ_FRESH_FILE');
   RejectedFileName := GetEnvironmentVariable('TPX_TIKZ_REJECTED_FILE');
   FreshTeXFileName := GetEnvironmentVariable('TPX_TIKZ_FRESH_TEX_FILE');
+  EmptyFileName := GetEnvironmentVariable('TPX_TIKZ_EMPTY_FILE');
   Check((FileName <> '') and (RelocatedFileName <> '') and
     (FreshFileName <> '') and (RejectedFileName <> '') and
-    (FreshTeXFileName <> ''), 'TikZ source-save paths are not configured');
+    (FreshTeXFileName <> '') and (EmptyFileName <> ''),
+    'TikZ source-save paths are not configured');
   RegisterTikZDocumentCodec;
   Mode := MainForm.EventManager.Mode as TTpXMode;
   Check(Mode.OpenDocumentFromPath(TDocumentPath(FileName), ErrorText),
@@ -180,6 +182,35 @@ begin
     False, False, ErrorText), 'No-op TikZ save after rebinding failed: ' + ErrorText);
   Check(TikZSaveReadBytes(RelocatedFileName) = NoOpBytes,
     'No-op save after object-ID rebinding changed TikZ source bytes');
+
+  for I := 0 to Drawing.ObjectsCount - 1 do
+    Drawing.SelectionAdd(TikZSaveObjectAt(Drawing, I));
+  MainForm.UserEventExecute(MainForm.DeleteSelected);
+  Check(Drawing.ObjectsCount = 0,
+    'Deleting all imported TikZ objects left native objects behind');
+  Check(Mode.SaveDocumentToPath(TDocumentPath(RelocatedFileName), 'tikz',
+    False, False, ErrorText),
+    'Saving a source document after deleting all objects failed: ' + ErrorText);
+  Check(not Drawing.History.IsChanged,
+    'Successful empty-picture save left the drawing dirty');
+  AfterBytes := TikZSaveReadBytes(RelocatedFileName);
+  Check((Pos('\begin{tikzpicture}', string(AfterBytes)) > 0) and
+    (Pos('\end{tikzpicture}', string(AfterBytes)) > 0) and
+    (Pos('\path', string(AfterBytes)) = 0) and
+    (Pos('\draw', string(AfterBytes)) = 0) and
+    (Pos('\node', string(AfterBytes)) = 0),
+    'Deleting all objects did not leave a valid empty picture');
+  Check(Mode.OpenDocumentFromPath(TDocumentPath(RelocatedFileName), ErrorText),
+    'Reopening a source document after deleting all objects failed: ' + ErrorText);
+  Check((Mode.Drawing.ObjectsCount = 0) and
+    Mode.TpX_Manager.DocumentSession.CanSaveBack,
+    'Reopened empty TikZ picture did not retain its save-back context');
+  NoOpBytes := TikZSaveReadBytes(RelocatedFileName);
+  Check(Mode.SaveDocumentToPath(TDocumentPath(RelocatedFileName), 'tikz',
+    False, False, ErrorText),
+    'No-op save of an empty TikZ picture failed: ' + ErrorText);
+  Check(TikZSaveReadBytes(RelocatedFileName) = NoOpBytes,
+    'No-op save changed an empty TikZ source');
 
   Drawing := Mode.Drawing;
   Session.Clear;
@@ -297,4 +328,28 @@ begin
   TextObject := TikZSaveObjectAt(Mode.Drawing, 1) as TText2D;
   Check(TextObject.LineColor = clBlue,
     'The saved fresh-text color edit did not round-trip');
+
+  Session.Clear;
+  Drawing := Mode.Drawing;
+  Drawing.Clear;
+  Check(Mode.SaveDocumentToPath(TDocumentPath(EmptyFileName), 'tikz',
+    True, True, ErrorText),
+    'Saving a fresh empty native drawing as TikZ failed: ' + ErrorText);
+  Check((Drawing.ObjectsCount = 0) and not Drawing.History.IsChanged,
+    'Fresh empty TikZ Save As did not accept the empty drawing');
+  AfterBytes := TikZSaveReadBytes(EmptyFileName);
+  Check((Pos('\begin{tikzpicture}', string(AfterBytes)) > 0) and
+    (Pos('\end{tikzpicture}', string(AfterBytes)) > 0),
+    'Fresh empty TikZ Save As did not emit a picture wrapper');
+  Check(Mode.OpenDocumentFromPath(TDocumentPath(EmptyFileName), ErrorText),
+    'Reopening a fresh empty TikZ document failed: ' + ErrorText);
+  Check((Mode.Drawing.ObjectsCount = 0) and
+    Mode.TpX_Manager.DocumentSession.CanSaveBack,
+    'Fresh empty TikZ document did not reload with save-back capability');
+  NoOpBytes := TikZSaveReadBytes(EmptyFileName);
+  Check(Mode.SaveDocumentToPath(TDocumentPath(EmptyFileName), 'tikz',
+    False, False, ErrorText),
+    'Same-source save of a fresh empty TikZ document failed: ' + ErrorText);
+  Check(TikZSaveReadBytes(EmptyFileName) = NoOpBytes,
+    'No-op save changed a fresh empty TikZ document');
 end;

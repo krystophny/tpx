@@ -1098,8 +1098,6 @@ begin
     Result := FontDefault + EOL +
       '\begin{tikzpicture}[x=1mm,y=1mm]' + EOL;
   Obj := Drawing.ObjectList.FirstObj as TObject2D;
-  if Obj = nil then
-    raise EWriteError.Create('An empty drawing has no TikZ objects to save');
   while Obj <> nil do
   begin
     Result := Result + SerializeNewObject(Obj, Drawing) + EOL;
