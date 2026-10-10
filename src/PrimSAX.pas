@@ -72,6 +72,7 @@ type
     Encoding: TEncoding;
     fDefaultEncoding: TEncoding;
     fTextUTF8AsCharReferences: Boolean;
+    fPreserveUTF8Attributes: Boolean;
     function NextTag: TStitchSAXTag;
     function CharsetDecode(const Value: string): string;
     function UTF8ToCharReferences(const Value: string): string;
@@ -101,6 +102,8 @@ type
       write fDefaultEncoding;
     property TextUTF8AsCharReferences: Boolean
       read fTextUTF8AsCharReferences write fTextUTF8AsCharReferences;
+    property PreserveUTF8Attributes: Boolean
+      read fPreserveUTF8Attributes write fPreserveUTF8Attributes;
   end; // TStitchSAX
 
 //TSY: Some variant of SAX which collects info automatically
@@ -206,6 +209,7 @@ begin
   XMLStack := TStringStack.Create;
   fDefaultEncoding := enUnknown;
   fTextUTF8AsCharReferences := False;
+  fPreserveUTF8Attributes := False;
   OnCDATA := nil;
   OnDOCTYPE := nil;
 end; // Create
@@ -430,7 +434,9 @@ var
         Inc(X);
       end; // while
 
-      Result := CharsetDecode(DecodeHtmlString({StrHtmlDecode(} Result));
+      Result := DecodeHtmlString(Result);
+      if not (fPreserveUTF8Attributes and (Encoding = enUTF8)) then
+        Result := CharsetDecode(Result);
     end; // GetAttributeValue
 
   var
@@ -779,7 +785,12 @@ var
     J: SizeInt;
   begin
     ReferenceText := '&#' + IntToStr(CodeUnit) + ';';
-    for J := 1 to Length(ReferenceText) do AppendChar(ReferenceText[J]);
+    J := 1;
+    while J <= Length(ReferenceText) do
+    begin
+      AppendChar(ReferenceText[J]);
+      Inc(J);
+    end;
   end;
 
   function ContinuationByte(const Index: SizeInt): Byte;

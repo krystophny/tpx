@@ -210,6 +210,10 @@ const
     'height="10mm" viewBox="0 0 10 10"><title>Label ' +
     #$CE + #$B2 + '</title><text x="1" y="2" font-family="Arial" ' +
     'font-size="1">plain</text></svg>';
+  UnicodeFontAttribute: RawByteString =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" ' +
+    'height="10mm" viewBox="0 0 10 10"><text x="1" y="2" ' +
+    'font-family="Font ' + #$CE + #$B2 + '" font-size="1">plain</text></svg>';
   UnknownPrefixAttribute: RawByteString =
     '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" ' +
     'height="10mm" viewBox="0 0 10 10"><line x1="1" y1="1" ' +
@@ -543,6 +547,70 @@ var
     end;
   end;
 
+  procedure CheckSourceSavePreservesUnicodeAttribute;
+  var
+    Mode: TTpXMode;
+    SourcePath, TempName, ErrorText: string;
+    SourceFile: TFileStream;
+    BytesOnDisk: RawByteString;
+    AcceptedBefore: TDiskRevision;
+  begin
+    TempName := GetTempFileName(GetTempDir, 'tpx-svg-unicode-save-');
+    DeleteFile(TempName);
+    SourcePath := ChangeFileExt(TempName, '.svg');
+    try
+      SourceFile := TFileStream.Create(SourcePath, fmCreate);
+      try
+        SourceFile.WriteBuffer(UnicodeFontAttribute[1],
+          Length(UnicodeFontAttribute));
+      finally
+        SourceFile.Free;
+      end;
+      Mode := TTpXMode(MainForm.EventManager.Mode);
+      ErrorText := '';
+      Check(Mode.OpenDocumentFromPath(TDocumentPath(SourcePath), ErrorText),
+        'application open route rejected the Unicode-attribute SVG: ' +
+        ErrorText);
+      Check(not Mode.TpX_Manager.DocumentSession.CanSaveBack,
+        'Unicode-attribute SVG was eligible for same-format source save');
+      Check(Mode.TpX_Manager.DocumentSession.OriginalSourceBytes =
+        UnicodeFontAttribute,
+        'Unicode-attribute SVG original source snapshot was not retained');
+      AcceptedBefore := Mode.TpX_Manager.DocumentSession.AcceptedRevision;
+      Mode.Drawing.AddObject(-1,
+        TLine2D.CreateSpec(-1, Point2D(1, 2), Point2D(3, 4)));
+      Check(Mode.Drawing.History.IsChanged,
+        'editing import-only SVG did not dirty the drawing');
+      ErrorText := '';
+      Check(not Mode.SaveDocumentToPath(TDocumentPath(SourcePath), 'svg',
+        False, False, ErrorText),
+        'same-source save accepted an import-only Unicode attribute');
+      SourceFile := TFileStream.Create(SourcePath, fmOpenRead or fmShareDenyNone);
+      try
+        SetLength(BytesOnDisk, SourceFile.Size);
+        if SourceFile.Size > 0 then
+          SourceFile.ReadBuffer(BytesOnDisk[1], SourceFile.Size);
+      finally
+        SourceFile.Free;
+      end;
+      Check((BytesOnDisk = UnicodeFontAttribute) and
+        SameDiskRevision(ReadDocumentRevision(TDocumentPath(SourcePath)),
+          AcceptedBefore),
+        'rejected import-only source save changed the original SVG');
+      Check((Mode.TpX_Manager.DocumentSession.OriginalSourceBytes =
+        UnicodeFontAttribute) and
+        SameDiskRevision(Mode.TpX_Manager.DocumentSession.AcceptedRevision,
+          AcceptedBefore),
+        'rejected import-only source save changed the accepted source');
+      Check(Mode.Drawing.History.IsChanged and
+        not Mode.TpX_Manager.DocumentSession.CanSaveBack,
+        'rejected import-only source save changed document state');
+    finally
+      DeleteFile(SourcePath);
+      DeleteFile(ChangeFileExt(SourcePath, '.tpx-recovery'));
+    end;
+  end;
+
   procedure CheckReferenceExpansionBounded;
   var
     UseSource: RawByteString;
@@ -836,6 +904,19 @@ begin
     end;
 
     Diagnostics.Clear;
+    AuxDrawing := LoadDocumentCandidate('svg', 'unicode-font.svg',
+      UnicodeFontAttribute, AuxCanSave, AuxContext, Diagnostics);
+    try
+      Check(not AuxCanSave,
+        'non-ASCII font-family attribute was marked save-back capable');
+      Check(Pos('non-ASCII attribute value font-family', Diagnostics.Text) > 0,
+        'lossy font-family attribute was not diagnosed');
+    finally
+      FreeAndNil(AuxContext);
+      FreeAndNil(AuxDrawing);
+    end;
+
+    Diagnostics.Clear;
     AuxDrawing := LoadDocumentCandidate('svg', 'stylesheet-pi.svg',
       StylesheetInstruction, AuxCanSave, AuxContext, Diagnostics);
     try
@@ -878,6 +959,7 @@ begin
     end;
 
     CheckSourceSaveRejectsBitmap;
+    CheckSourceSavePreservesUnicodeAttribute;
 
     ExistingLine := TLine2D.CreateSpec(-1, Point2D(3, 4), Point2D(5, 6));
     Drawing.AddObject(-1, ExistingLine);
