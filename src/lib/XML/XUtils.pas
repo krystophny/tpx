@@ -110,7 +110,8 @@ end;
 function DecodeHtmlString(const s: String): String;
 var
   I, J, Code: Integer;
-  Entity, Decoded: string;
+  Entity: string;
+  Decoded: RawByteString;
   Characters: WideString;
 begin
   Result := '';
@@ -144,7 +145,9 @@ begin
           end;
         end;
         if Decoded <> '' then begin
-          Result := Result + Decoded;
+          SetLength(Result, Length(Result) + Length(Decoded));
+          Move(Decoded[1], Result[Length(Result) - Length(Decoded) + 1],
+            Length(Decoded));
           I := J + 1;
           Continue;
         end;

@@ -11,6 +11,9 @@ uses Types,
 {$ELSE}
   Windows, ShellAPI, WinBasic,
 {$ENDIF}
+{$IFDEF FPC}
+  {$IFDEF UNIX}BaseUnix,{$ENDIF}
+{$ENDIF}
   SysUtils, Forms, Graphics;
 
 function CheckFilePath(var FilePath: string;
@@ -72,7 +75,8 @@ implementation
 
 uses
 //WinBasic,
-  MainUnit, Math{$IFDEF FPC}, Classes, {$IFNDEF WASI}Process,{$ENDIF} ExtCtrls{$ENDIF};
+  MainUnit, Math{$IFDEF FPC}, Classes, {$IFDEF WINDOWS}Windows,{$ENDIF}
+  {$IFNDEF WASI}Process,{$ENDIF} ExtCtrls{$ENDIF};
 
 {$IF DEFINED(FPC) AND NOT DEFINED(WASI)}
 type
@@ -213,7 +217,7 @@ begin
     TmpFilePath := FileSearch(
       TmpFilePath, '.' + PathSeparator +
       ExtractFilePath(ParamStr(0)) + PathSeparator +
-      GetEnvironmentVariable('PATH'));
+      SysUtils.GetEnvironmentVariable('PATH'));
   if not FileExists(TmpFilePath) then
   begin
     MessageBoxError(
@@ -409,6 +413,74 @@ begin
     Result := True;
 end;
 
+{$IFDEF FPC}{$IFDEF WINDOWS}
+function WindowsExtendedPath(const FileName: string): UnicodeString;
+begin
+  Result := UTF8Decode(FileName);
+  if Length(Result) < MAX_PATH then Exit;
+  if Copy(Result, 1, 4) = '\\?\' then Exit;
+  if Copy(Result, 1, 2) = '\\' then
+    Result := '\\?\UNC\' + Copy(Result, 3, MaxInt)
+  else
+    Result := '\\?\' + Result;
+end;
+
+function SameWindowsFileIdentity(const FileName1, FileName2: string): Boolean;
+var
+  WideName1, WideName2: UnicodeString;
+  Handle1, Handle2: THandle;
+  Info1, Info2: TByHandleFileInformation;
+begin
+  Result := False;
+  WideName1 := WindowsExtendedPath(FileName1);
+  WideName2 := WindowsExtendedPath(FileName2);
+  Handle1 := Windows.CreateFileW(PWideChar(WideName1), 0,
+    FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE, nil,
+    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+  if Handle1 = INVALID_HANDLE_VALUE then Exit;
+  try
+    Handle2 := Windows.CreateFileW(PWideChar(WideName2), 0,
+      FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE, nil,
+      OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+    if Handle2 = INVALID_HANDLE_VALUE then Exit;
+    try
+      if Windows.GetFileInformationByHandle(Handle1, Info1) and
+        Windows.GetFileInformationByHandle(Handle2, Info2) then
+        Result := (Info1.dwVolumeSerialNumber = Info2.dwVolumeSerialNumber) and
+          (Info1.nFileIndexHigh = Info2.nFileIndexHigh) and
+          (Info1.nFileIndexLow = Info2.nFileIndexLow);
+    finally
+      Windows.CloseHandle(Handle2);
+    end;
+  finally
+    Windows.CloseHandle(Handle1);
+  end;
+end;
+{$ENDIF}{$ENDIF}
+
+function SameExistingFile(const FileName1, FileName2: string): Boolean;
+var
+  Path1, Path2: string;
+{$IFDEF UNIX}
+  Info1, Info2: Stat;
+{$ENDIF}
+begin
+  Path1 := ExpandFileName(FileName1);
+  Path2 := ExpandFileName(FileName2);
+  Result := FileExists(Path1) and FileExists(Path2) and
+    SameFileName(Path1, Path2);
+{$IFDEF UNIX}
+  if not Result and (fpStat(PChar(Path1), Info1) = 0) and
+    (fpStat(PChar(Path2), Info2) = 0) then
+    Result := (Info1.st_dev = Info2.st_dev) and
+      (Info1.st_ino = Info2.st_ino);
+{$ENDIF}
+{$IFDEF FPC}{$IFDEF WINDOWS}
+  if not Result then
+    Result := SameWindowsFileIdentity(Path1, Path2);
+{$ENDIF}{$ENDIF}
+end;
+
 function RenameFile(const FileName1, FileName2: string): Boolean;
 begin
   TryDeleteFile(FileName2);
@@ -422,6 +494,11 @@ var
   Buffer: PChar;
 begin
   Result := False;
+  if SameExistingFile(FileName1, FileName2) then
+  begin
+    Result := True;
+    Exit;
+  end;
   FHandle1 := FileOpen(FileName1, fmOpenRead + fmShareDenyNone);
   if FHandle1 >= 0 then
   try
@@ -562,14 +639,14 @@ procedure GetTextDimension(
   const Charset: TFontCharSet;
   out Width, Descent: Single);
 var
-  BMP: TBitmap;
-  S: TSize;
+  BMP: Graphics.TBitmap;
+  S: Types.TSize;
   TmpH: Integer;
   ExtendedFont: TExtendedFont;
   Text_Metric: tagTEXTMETRIC;
 begin
   ExtendedFont := TExtendedFont.Create;
-  BMP := TBitmap.Create;
+  BMP := Graphics.TBitmap.Create;
   try
     ExtendedFont.Canvas := BMP.Canvas;
     ExtendedFont.FaceName := FaceName;
