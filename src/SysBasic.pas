@@ -11,6 +11,9 @@ uses Types,
 {$ELSE}
   Windows, ShellAPI, WinBasic,
 {$ENDIF}
+{$IFDEF FPC}
+  {$IFDEF UNIX}BaseUnix,{$ENDIF}
+{$ENDIF}
   SysUtils, Forms, Graphics;
 
 function CheckFilePath(var FilePath: string;
@@ -409,6 +412,25 @@ begin
     Result := True;
 end;
 
+function SameExistingFile(const FileName1, FileName2: string): Boolean;
+var
+  Path1, Path2: string;
+{$IFDEF UNIX}
+  Info1, Info2: Stat;
+{$ENDIF}
+begin
+  Path1 := ExpandFileName(FileName1);
+  Path2 := ExpandFileName(FileName2);
+  Result := FileExists(Path1) and FileExists(Path2) and
+    SameFileName(Path1, Path2);
+{$IFDEF UNIX}
+  if not Result and (fpStat(PChar(Path1), Info1) = 0) and
+    (fpStat(PChar(Path2), Info2) = 0) then
+    Result := (Info1.st_dev = Info2.st_dev) and
+      (Info1.st_ino = Info2.st_ino);
+{$ENDIF}
+end;
+
 function RenameFile(const FileName1, FileName2: string): Boolean;
 begin
   TryDeleteFile(FileName2);
@@ -422,6 +444,11 @@ var
   Buffer: PChar;
 begin
   Result := False;
+  if SameExistingFile(FileName1, FileName2) then
+  begin
+    Result := True;
+    Exit;
+  end;
   FHandle1 := FileOpen(FileName1, fmOpenRead + fmShareDenyNone);
   if FHandle1 >= 0 then
   try
@@ -563,7 +590,7 @@ procedure GetTextDimension(
   out Width, Descent: Single);
 var
   BMP: TBitmap;
-  S: TSize;
+  S: Types.TSize;
   TmpH: Integer;
   ExtendedFont: TExtendedFont;
   Text_Metric: tagTEXTMETRIC;
