@@ -122,8 +122,12 @@ external changes arrive while the drawing has unsaved edits, TpX keeps the
 local scene and offers **Keep local edits** or **Save local copy…**; malformed
 external files leave the current scene unchanged. Imported or refreshed TeX
 content stays inert until **View → Trust TeX preview for this document** is
-chosen. Browser builds do not watch local files; reopen or import the source to
-refresh it.
+chosen. Trust applies only to the current document; opening another file,
+reloading changed source, or restoring a recovery draft asks again. Approving
+preview allows the configured local TeX tools to process its labels, so approve
+only source you trust. Browser builds open and save supported SVG and TikZ
+sources, but each file is a temporary snapshot: use **File → Open** again to
+import external changes.
 
 TikZ output supplies drawing defaults for `\tpxLineWidth`, `\tpxTextSize`,
 `\tpxDashSize`, and `\tpxDotSize`. Define these before including the drawing

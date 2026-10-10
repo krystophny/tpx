@@ -480,70 +480,6 @@ uses MainUnit, SysBasic, Propert, Options, TransForm, PreView,
   Settings0, AboutUnit, Input, Output, ScaleStandardUnit, Modify,
   InfoForm, Devices, Bitmaps;
 
-function IsAbsoluteDocumentLink(const Link: TDocumentPath): Boolean;
-begin
-{$IFDEF WINDOWS}
-  Result := (Length(Link) > 0) and (Link[1] in ['/', '\']);
-  if Length(Link) > 1 then Result := Result or (Link[2] = ':');
-{$ELSE}
-  Result := (Length(Link) > 0) and (Link[1] = '/');
-{$ENDIF}
-end;
-
-procedure StageRelativeBitmapAssets(Drawing: TDrawing2D;
-  const Destination, StageDirectory, StagingFileName: TDocumentPath;
-  StagedAssets, FinalAssets: TStrings; const UseLinkBasenames: Boolean;
-  out HasStagedAssets: Boolean);
-var
-  I, J: Integer;
-  Entry: TBitmapEntry;
-  Link, SourcePath, FinalPath, StagePath, Directory: TDocumentPath;
-  Snapshot: TDocumentSnapshot;
-  Duplicate: Boolean;
-begin
-  HasStagedAssets := False;
-  Directory := DocumentPathDirectory(Destination);
-  for I := 0 to Drawing.BitmapRegistry.Count - 1 do
-  begin
-    Entry := Drawing.BitmapRegistry.Objects[I] as TBitmapEntry;
-    Link := TDocumentPath(Entry.ImageLink);
-    if Link = '' then Continue;
-    if UseLinkBasenames then
-    begin
-      if IsAbsoluteDocumentLink(Link) or (Link = '.') or (Link = '..') or
-        (Pos('/', string(Link)) > 0) or (Pos('\', string(Link)) > 0) or
-        (Pos(':', string(Link)) > 0) or (Pos(#0, string(Link)) > 0) then
-        raise EWriteError.CreateFmt(
-          'This format requires bitmap links to be safe file basenames: "%s"',
-          [string(Link)]);
-    end
-    else if IsAbsoluteDocumentLink(Link) then Continue;
-    SourcePath := NormalizeDocumentPath(TDocumentPath(Entry.GetFullLink));
-    FinalPath := NormalizeDocumentPath(Directory + PathDelim + Link);
-    if SameDocumentPath(SourcePath, FinalPath) then Continue;
-    Duplicate := False;
-    for J := 0 to FinalAssets.Count - 1 do
-      if SameDocumentPath(TDocumentPath(FinalAssets[J]), FinalPath) then
-      begin
-        Duplicate := True;
-        Break;
-      end;
-    if Duplicate then Continue;
-    Snapshot := ReadDocumentSnapshot(SourcePath);
-    if UseLinkBasenames then
-      StagePath := IncludeTrailingPathDelimiter(StageDirectory) + Link
-    else
-      StagePath := IncludeTrailingPathDelimiter(StageDirectory) +
-        'bitmap-' + IntToStr(I) + DocumentPathExtension(Link);
-    if SameDocumentPath(StagePath, StagingFileName) then
-      raise EWriteError.Create('A bitmap asset collides with the staged document');
-    WriteDocumentStagingFile(StagePath, Snapshot.SourceBytes);
-    StagedAssets.Add(string(StagePath));
-    FinalAssets.Add(string(FinalPath));
-    HasStagedAssets := True;
-  end;
-end;
-
 { --================ TTpXManager ==================-- }
 
 constructor TTpXManager.Create(
@@ -1013,7 +949,11 @@ begin
         Snapshot.SourceBytes, Snapshot.Revision, CanSaveBack, CodecContext);
       CodecContext := nil;
 {$IFDEF FPC}
+{$IFDEF CPUWASM32}
+      BeginLiveTeXDocument(False, True);
+{$ELSE}
       BeginLiveTeXDocument(False);
+{$ENDIF}
 {$ENDIF}
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
@@ -1069,19 +1009,13 @@ function TTpXMode.SaveDocumentToPath(const FileName: TDocumentPath;
   const FormatId: string; const IsSaveAs, AllowOverwrite: Boolean;
   out ErrorText: string): Boolean;
 var
-  Path, StageDirectory, StagingFileName, BackupFileName,
-    PreviousBackup, CandidateFileName: TDocumentPath;
+  Path, BackupFileName, PreviousBackup: TDocumentPath;
   Format: TDocumentFormat;
   ExpectedRevision, NewRevision: TDiskRevision;
-  Bytes: RawByteString;
-  Stream: TMemoryStream;
-  StagedAssets, FinalAssets, Diagnostics: TStringList;
-  Candidate: TDrawing2D;
-  CodecContext: TObject;
+  Transaction: TDocumentSaveTransaction;
   SaveCodecContext: TObject;
-  CanSaveBack, SameSource, ExtensionAllowed, UseStagedValidation,
-    HasStagedAssets: Boolean;
-  I, Sep: Integer;
+  SameSource, ExtensionAllowed: Boolean;
+  Sep: Integer;
   Ext, Extensions: string;
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
@@ -1095,11 +1029,7 @@ var
 begin
   Result := False;
   ErrorText := '';
-  Stream := nil;
-  Candidate := nil;
-  CodecContext := nil;
-  StageDirectory := '';
-  StagingFileName := '';
+  Transaction := nil;
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
   WatchGeneration := 0;
@@ -1110,9 +1040,6 @@ begin
   PreviousAutoSaveKey := MainForm.CurrentAutoSaveKey;
 {$ENDIF}
 {$ENDIF}
-  StagedAssets := TStringList.Create;
-  FinalAssets := TStringList.Create;
-  Diagnostics := TStringList.Create;
   try
     try
       if not FindDocumentFormatById(FormatId, Format) or
@@ -1151,50 +1078,12 @@ begin
         if ExpectedRevision.Exists and not AllowOverwrite then
           raise EDocumentConflict.Create('The destination already exists');
       end;
-      StageDirectory := CreateDocumentStagingDirectory(
-        DocumentPathDirectory(Path));
-      if StageDirectory = '' then
-        raise EWriteError.Create('Could not create a private staging directory');
-      StagingFileName := IncludeTrailingPathDelimiter(StageDirectory) +
-        DocumentPathFileName(Path);
-      Stream := TMemoryStream.Create;
       SaveCodecContext := nil;
       if SameText(TpX_Manager.DocumentSession.SourceFormatId, Format.Id) then
         SaveCodecContext := TpX_Manager.DocumentSession.CodecContext;
-      if not SerializeDocumentForSave(Format.Id, Drawing, Path,
-        StagingFileName, Stream, SaveCodecContext, StagedAssets, FinalAssets,
-        True) then
-        raise EWriteError.Create('The document could not be serialized');
-      UseStagedValidation :=
-        DocumentCodecUsesStagedValidationPath(Format.Id);
-      StageRelativeBitmapAssets(Drawing, Path, StageDirectory,
-        StagingFileName, StagedAssets, FinalAssets, UseStagedValidation,
-        HasStagedAssets);
-      if Stream.Size > MaxDocumentBytes then
-        raise EWriteError.CreateFmt('Document exceeds the %d byte limit',
-          [MaxDocumentBytes]);
-      SetLength(Bytes, Stream.Size);
-      if Stream.Size > 0 then
-      begin
-        Stream.Position := 0;
-        Stream.ReadBuffer(Bytes[1], Stream.Size);
-      end;
-      CandidateFileName := Path;
-      if UseStagedValidation and HasStagedAssets then
-      begin
-        WriteDocumentStagingFile(StagingFileName, Bytes);
-        CandidateFileName := StagingFileName;
-      end;
-      Candidate := LoadDocumentCandidate(Format.Id, CandidateFileName, Bytes,
-        CanSaveBack, CodecContext, Diagnostics);
-      if not CanSaveBack then
-        raise EWriteError.CreateFmt(
-          'The serialized %s document cannot be safely reopened for editing',
-          [Format.DisplayName]);
-      RebindDocumentCodecContext(Format.Id, Drawing, Candidate, CodecContext);
-      WriteDocumentBundleAtomically(Path, Bytes, ExpectedRevision, True,
-        StagedAssets, FinalAssets, NewRevision, BackupFileName);
-      Drawing.RebindFileNameAfterAssetCommit(Path);
+      Transaction := TDocumentSaveTransaction.Create(Format.Id, Drawing,
+        Path, ExpectedRevision, SaveCodecContext, True);
+      Transaction.Publish(NewRevision, BackupFileName);
 
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
@@ -1207,17 +1096,12 @@ begin
 {$ENDIF}
 {$ENDIF}
       PreviousBackup := TpX_Manager.DocumentSession.RecoveryBackupPath;
-      if SameSource then
-        TpX_Manager.DocumentSession.AcceptSavedRevision(Bytes, NewRevision,
-          CodecContext, BackupFileName)
-      else
-        TpX_Manager.DocumentSession.RebindSavedSourceNormalized(Path,
-          Format.Id, Bytes, NewRevision, CanSaveBack, CodecContext,
-          BackupFileName);
-      CodecContext := nil;
+      Transaction.Accept(TpX_Manager.DocumentSession);
       Result := True;
       try
-        TpX_Manager.DocumentSession.Diagnostics.Assign(Diagnostics);
+        TpX_Manager.DocumentSession.Diagnostics.Assign(
+          Transaction.Diagnostics);
+        MainForm.RefreshSourceStatus;
         Drawing.History.SaveCheckSum;
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
@@ -1225,7 +1109,7 @@ begin
           MainForm.AcceptSavedDocumentRevision
         else
         begin
-          SavedSnapshot.SourceBytes := Bytes;
+          SavedSnapshot.SourceBytes := Transaction.SourceBytes;
           SavedSnapshot.Revision := NewRevision;
           MainForm.AcceptDocumentWatchBinding(SavedSnapshot,
             WatchGeneration, SubscriptionID);
@@ -1252,18 +1136,7 @@ begin
       MainForm.CancelDocumentWatchBinding(WatchGeneration, SubscriptionID);
 {$ENDIF}
 {$ENDIF}
-    Candidate.Free;
-    CodecContext.Free;
-    Stream.Free;
-    for I := 0 to StagedAssets.Count - 1 do
-      if DocumentFileExists(TDocumentPath(StagedAssets[I])) then
-        DeleteDocumentFile(TDocumentPath(StagedAssets[I]));
-    if (StagingFileName <> '') and DocumentFileExists(StagingFileName) then
-      DeleteDocumentFile(StagingFileName);
-    if StageDirectory <> '' then RemoveDocumentStagingDirectory(StageDirectory);
-    StagedAssets.Free;
-    FinalAssets.Free;
-    Diagnostics.Free;
+    Transaction.Free;
   end;
 end;
 

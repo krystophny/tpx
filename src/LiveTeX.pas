@@ -19,7 +19,8 @@ var
 procedure InitializeLiveTeX(const Changed: TNotifyEvent);
 procedure ConfigureLiveTeX(const Drawing: TDrawing2D);
 procedure ShutdownLiveTeX;
-procedure BeginLiveTeXDocument(Trusted: Boolean);
+procedure BeginLiveTeXDocument(Trusted: Boolean;
+  BrowserSourceSnapshot: Boolean = False);
 procedure SetLiveTeXDocumentTrusted(Trusted: Boolean);
 procedure SetLiveTeXEnabled(Value: Boolean);
 procedure FlushLiveTeX;
@@ -36,6 +37,15 @@ implementation
 
 {$IFDEF CPUWASM32}
 uses WebTeXPreview;
+{$ELSE}
+uses SysUtils, Math, Forms, ExtCtrls, MD5, FileUtil, LazFileUtils,
+  SysBasic, Preview, TeXPreviewWorker, TeXPreviewCache;
+{$ENDIF}
+
+var
+  LiveTeXBrowserSourceSnapshot: Boolean = False;
+
+{$IFDEF CPUWASM32}
 
 procedure InitializeLiveTeX(const Changed: TNotifyEvent);
 begin
@@ -52,19 +62,23 @@ begin
   SetWebTeXEnabled(False);
 end;
 
-procedure BeginLiveTeXDocument(Trusted: Boolean);
+procedure BeginLiveTeXDocument(Trusted: Boolean;
+  BrowserSourceSnapshot: Boolean);
 begin
   Inc(LiveTeXDocumentGeneration);
   LiveTeXDocumentTrusted := Trusted;
+  LiveTeXBrowserSourceSnapshot := BrowserSourceSnapshot;
   if not Trusted then LiveTeXStatus := LiveTeXTrustStatus
   else LiveTeXStatus := '';
+  ResetWebTeXDocument;
+  SetWebSourceSnapshotStatus(LiveTeXBrowserSourceSnapshot);
   if Assigned(OnPreviewChanged) then OnPreviewChanged(nil);
 end;
 
 procedure SetLiveTeXDocumentTrusted(Trusted: Boolean);
 begin
   if LiveTeXDocumentTrusted = Trusted then Exit;
-  BeginLiveTeXDocument(Trusted);
+  BeginLiveTeXDocument(Trusted, LiveTeXBrowserSourceSnapshot);
 end;
 
 procedure SetLiveTeXEnabled(Value: Boolean);
@@ -110,9 +124,6 @@ begin
     DrawWebTeX(Canvas, ObjectKey, P, H, Rotation, Source, HAlign, VAlign, Color);
 end;
 {$ELSE}
-
-uses SysUtils, Math, Forms, ExtCtrls, MD5, FileUtil, LazFileUtils,
-  SysBasic, Preview, TeXPreviewWorker, TeXPreviewCache;
 
 type
   TPreviewEntry = class
@@ -637,10 +648,12 @@ begin
   FreeAndNil(Manager);
 end;
 
-procedure BeginLiveTeXDocument(Trusted: Boolean);
+procedure BeginLiveTeXDocument(Trusted: Boolean;
+  BrowserSourceSnapshot: Boolean);
 begin
   Inc(LiveTeXDocumentGeneration);
   LiveTeXDocumentTrusted := Trusted;
+  LiveTeXBrowserSourceSnapshot := BrowserSourceSnapshot;
   if not Trusted then LiveTeXStatus := LiveTeXTrustStatus
   else LiveTeXStatus := '';
   if Assigned(Manager) then Manager.InvalidateDocument;
@@ -649,7 +662,7 @@ end;
 procedure SetLiveTeXDocumentTrusted(Trusted: Boolean);
 begin
   if LiveTeXDocumentTrusted = Trusted then Exit;
-  BeginLiveTeXDocument(Trusted);
+  BeginLiveTeXDocument(Trusted, LiveTeXBrowserSourceSnapshot);
 end;
 
 procedure SetLiveTeXEnabled(Value: Boolean);

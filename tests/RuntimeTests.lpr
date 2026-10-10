@@ -1438,6 +1438,7 @@ begin
     else if ParamStr(1) = 'pstoedit-import' then TestPstoeditEmfImport
     else if ParamStr(1) = 'auto-reload-integration' then TestAutoReloadIntegration
     else if ParamStr(1) = 'autosave-integration' then TestAutoSaveIntegration
+    else if ParamStr(1) = 'autosave-source-formats' then TestAutoSaveSourceFormats
     else if ParamStr(1) = 'autosave-recovery-create' then TestAutoSaveRecoveryCreate
     else if ParamStr(1) = 'autosave-empty-recovery-create' then TestAutoSaveEmptyRecoveryCreate
     else if ParamStr(1) = 'autosave-empty-recovery-restore' then TestAutoSaveEmptyRecoveryRestore

@@ -47,7 +47,10 @@ recreates the layout from the pins on a clean machine.
 Working: the drawing canvas, editing interactions, toolbars and dialogs, viewport
 and export text generation, in-memory filesystem through the WASI shim.
 TeX text labels have cached MathJax previews; the typesetter loads only when
-a drawing contains TeX text. The View menu can disable live previews.
+a drawing contains TeX text. Imported TeX labels remain inert until **View →
+Trust TeX preview for this document** is selected. The approval applies only to
+the current drawing; opening another source clears it. The View menu can
+disable live previews.
 
 The browser cannot run external programs: full-document LaTeX compilation,
 MetaPost compilation and printing require desktop tools. Exporting MetaPost
@@ -58,8 +61,12 @@ require `sam2p`.
 
 Open `.tpx` files with their referenced images using **Related files (optional)**
 in the file dialog. The browser filesystem is temporary; keep the downloaded
-`.tpx` and its image files together. Browser support is exercised through the
-application scenarios below, not every LCL API or TpX drawing tool.
+`.tpx` and its image files together. Supported SVG and TikZ sources can be
+opened, edited and saved in their source format. Every browser-opened file is a
+snapshot without desktop filesystem access; the status notice explains that
+external auto-refresh is unavailable and **File → Open** re-imports changes.
+Browser support is exercised through the application scenarios below, not every
+LCL API or TpX drawing tool.
 
 ## Measured performance
 

@@ -7,6 +7,7 @@ export function texPreviewImports(runtime) {
   const layer = document.createElement('canvas');
   const context = layer.getContext('2d', {willReadFrequently: true});
   let loader, timer, enabled = true, running = false, rasterBytes = 0, sourceBytes = 0;
+  let documentGeneration = 0;
   const touch = (map, key, value) => { map.delete(key); map.set(key, value); return value; };
 
   function trimRasters(keep, needed = 0) {
@@ -42,11 +43,35 @@ export function texPreviewImports(runtime) {
     element.hidden = false;
   }
 
-  async function rasterize(entry) {
+  function sourceSnapshotStatus(visible) {
+    let element = document.querySelector('#source-snapshot-status');
+    if (!visible) {
+      if (element) element.hidden = true;
+      return;
+    }
+    if (!element) {
+      element = document.createElement('aside');
+      element.id = 'source-snapshot-status';
+      element.setAttribute('role', 'status');
+      const message = document.createElement('span');
+      const close = document.createElement('button');
+      close.textContent = 'Dismiss';
+      close.onclick = () => { element.hidden = true; };
+      element.append(message, close);
+      document.body.append(element);
+    }
+    element.firstElementChild.textContent =
+      'This opened file is a temporary browser snapshot. External file auto-refresh is unavailable; use File → Open again to re-import changes.';
+    element.hidden = false;
+  }
+
+  async function rasterize(entry, generation) {
     let svg = sources.get(entry.source);
     if (!svg) {
       loader ||= import('./tex-svg.bundle.js');
-      svg = (await loader).texSVG(entry.source);
+      const math = await loader;
+      if (generation !== documentGeneration) return false;
+      svg = math.texSVG(entry.source);
       sourceBytes += svg.xml.length * 2;
       sources.set(entry.source, svg);
       while (sourceBytes > 8 * 1024 * 1024 || sources.size > 128) {
@@ -71,6 +96,7 @@ export function texPreviewImports(runtime) {
         image.src = url;
       });
     } finally { URL.revokeObjectURL(url); }
+    if (generation !== documentGeneration) return false;
     // Retain pixels, not an SVG image tree that can be rasterized again on
     // every pointer frame. The cache budget now describes its backing stores.
     const raster = document.createElement('canvas');
@@ -80,6 +106,7 @@ export function texPreviewImports(runtime) {
     entry.baseline = svg.baseline * entry.size;
     rasterBytes += width * height * 4;
     trimRasters(entry);
+    return true;
   }
 
   async function processQueue() {
@@ -90,16 +117,21 @@ export function texPreviewImports(runtime) {
     try {
       while (pending.size && enabled) {
         const entry = pending.values().next().value; pending.delete(entry);
+        const generation = documentGeneration;
         // Editing may have replaced all users of this source during debounce.
         if (![...objects.values()].some(object => object.request === entry)) continue;
         entry.loading = true;
-        try { await rasterize(entry); }
+        try {
+          if (await rasterize(entry, generation)) changed = true;
+        }
         catch (error) {
-          entry.error = true; entry.capacityBlocked = error.capacity;
-          if (enabled) notice(error);
+          if (generation === documentGeneration) {
+            entry.error = true; entry.capacityBlocked = error.capacity;
+            if (enabled) notice(error);
+            changed = true;
+          }
         }
         finally { entry.loading = false; }
-        changed = true;
       }
     } finally {
       running = false;
@@ -163,6 +195,14 @@ export function texPreviewImports(runtime) {
 
   return {tpx: {
     tex_draw: draw,
+    tex_reset: () => {
+      documentGeneration++;
+      clearTimeout(timer); timer = null; pending.clear(); objects.clear();
+      rasters.clear(); sources.clear(); rasterBytes = 0; sourceBytes = 0;
+      const errorNotice = document.querySelector('#notice');
+      if (errorNotice) errorNotice.hidden = true;
+    },
+    source_snapshot: value => sourceSnapshotStatus(Boolean(value)),
     tex_forget: key => {
       objects.delete(key); trimRasters();
       for (const entry of rasters.values()) if (entry.capacityBlocked) entry.error = false;

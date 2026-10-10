@@ -113,6 +113,118 @@ begin
   Check(False, 'Completed edit was not AutoSaved within six seconds');
 end;
 
+function AutoSaveSourceLineX2(const FormatId, FileName: string): Double;
+var
+  Snapshot: TDocumentSnapshot;
+  Candidate: TDrawing2D;
+  CodecContext: TObject;
+  CanSaveBack: Boolean;
+  Diagnostics: TStringList;
+  Primitive: TPrimitive2D;
+begin
+  Snapshot := ReadDocumentSnapshot(TDocumentPath(FileName));
+  Diagnostics := TStringList.Create;
+  CodecContext := nil;
+  Candidate := nil;
+  try
+    Candidate := LoadDocumentCandidate(FormatId, TDocumentPath(FileName),
+      Snapshot.SourceBytes, CanSaveBack, CodecContext, Diagnostics);
+    Check((Candidate <> nil) and CanSaveBack,
+      FormatId + ' AutoSave output did not reopen: ' + Diagnostics.Text);
+    Check((Candidate.ObjectsCount = 1) and
+      (Candidate.GetObject(0) is TPrimitive2D),
+      FormatId + ' AutoSave output changed its simple line scene');
+    Primitive := Candidate.GetObject(0) as TPrimitive2D;
+    Check(Primitive.Points.Count >= 2,
+      FormatId + ' AutoSave output lost a line endpoint');
+    Result := Primitive.Points[1].X;
+  finally
+    Candidate.Free;
+    CodecContext.Free;
+    Diagnostics.Free;
+  end;
+end;
+
+procedure TestAutoSaveSourceFormats;
+const
+  SvgSource: RawByteString =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 100 100">' +
+    '<line x1="1" y1="2" x2="20" y2="10" stroke="#000000"/>' +
+    '</svg>';
+  TikZSource: RawByteString =
+    '\begin{tikzpicture}' + LineEnding +
+    '\draw (1mm,2mm) -- (20mm,10mm);' + LineEnding +
+    '\end{tikzpicture}' + LineEnding;
+  FormatIds: array[0..1] of string = ('svg', 'tikz');
+var
+  I: Integer;
+  FormatId, FileName, ErrorText: string;
+  Extension: string;
+  SourceBytes, SavedBytes: RawByteString;
+  Deadline: QWord;
+  Primitive: TPrimitive2D;
+  Endpoint: TPoint2D;
+  Unsupported: TObject2D;
+begin
+  RegisterTikZDocumentCodec;
+  AutoRefreshEnabled := False;
+  MainForm.ApplyAutoReloadSettings;
+  MainForm.ApplyAutoSavePreference(False);
+  for I := Low(FormatIds) to High(FormatIds) do
+  begin
+    FormatId := FormatIds[I];
+    if FormatId = 'svg' then
+    begin
+      Extension := '.svg';
+      SourceBytes := SvgSource;
+    end
+    else
+    begin
+      Extension := '.tex';
+      SourceBytes := TikZSource;
+    end;
+    FileName := IncludeTrailingPathDelimiter(GetCurrentDir) +
+      'autosave-source-' + FormatId + Extension;
+    WriteReloadSource(FileName, SourceBytes);
+    Check(BaseMode.OpenDocumentFromPath(TDocumentPath(FileName), ErrorText),
+      FormatId + ' production open failed: ' + ErrorText);
+    Check((MainForm.EventManager.DocumentSession.SourceFormatId = FormatId) and
+      MainForm.EventManager.DocumentSession.CanSaveBack,
+      FormatId + ' source session is not safely writable');
+    MainForm.ApplyAutoSavePreference(True);
+    Check(MainForm.CurrentAutoSaveEnabled,
+      FormatId + ' source AutoSave was not enabled');
+
+    Primitive := MainForm.TheDrawing.GetObject(0) as TPrimitive2D;
+    Check(Primitive.Points.Count >= 2,
+      FormatId + ' fixture did not produce an editable line');
+    Endpoint := Primitive.Points[1];
+    Endpoint.X := 31;
+    Primitive.Points[1] := Endpoint;
+    MainForm.TheDrawing.History.Save;
+    MainForm.NotifyDocumentEdited;
+    WaitForAutoSaveClean(FileName);
+    Check(Abs(AutoSaveSourceLineX2(FormatId, FileName) - 31) < 0.001,
+      FormatId + ' AutoSave did not publish the edited source geometry');
+    SavedBytes := ReadDocumentSnapshot(TDocumentPath(FileName)).SourceBytes;
+
+    Unsupported := TArc2D.CreateSpec(-1, Point2D(0, 0), 1, 0, Pi / 2);
+    MainForm.TheDrawing.AddObject(-1, Unsupported);
+    MainForm.TheDrawing.History.Save;
+    MainForm.NotifyDocumentEdited;
+    Deadline := GetTickCount64 + 1800;
+    repeat
+      Application.ProcessMessages;
+      Sleep(10);
+    until GetTickCount64 >= Deadline;
+    Check(ReadDocumentSnapshot(TDocumentPath(FileName)).SourceBytes = SavedBytes,
+      FormatId + ' unsupported-shape AutoSave changed accepted source bytes');
+    Check(MainForm.TheDrawing.History.IsChanged,
+      FormatId + ' unsupported-shape AutoSave marked the edit clean');
+    MainForm.ApplyAutoSavePreference(False);
+  end;
+end;
+
 procedure TestAutoSaveIntegration;
 const
   InitialSource: RawByteString =

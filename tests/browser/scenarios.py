@@ -643,7 +643,14 @@ def s_tex_preview(app):
     open_drawing('tex-preview-input.tpx')
     if app.page.evaluate("performance.getEntriesByType('resource').some(e=>e.name.endsWith('/tex-svg.bundle.js'))"):
         raise AssertionError('Imported TeX was previewed before document trust')
+    snapshot_status = app.page.locator('#source-snapshot-status')
+    snapshot_status.wait_for(state='visible')
+    snapshot_message = snapshot_status.inner_text()
+    if 'auto-refresh is unavailable' not in snapshot_message or 'File → Open again' not in snapshot_message:
+        raise AssertionError('Browser source snapshot notice does not explain how to refresh it')
     app.menu('View', 'Trust TeX preview for this document')
+    if not snapshot_status.is_visible():
+        raise AssertionError('Approving TeX preview hid the browser source snapshot notice')
     app.page.wait_for_function("performance.getEntriesByType('resource').some(e=>e.name.endsWith('/tex-svg.bundle.js'))")
     v = app.viewport()
     area = [v['x'], v['y'], v['w'], v['h']]
@@ -703,6 +710,10 @@ def s_tex_preview(app):
     park(app, v)
     if difference('invalid') > 20:
         raise AssertionError('new invalid TeX object retained another object\'s cached preview')
+    app.menu('File', 'New')
+    app.page.wait_for_timeout(100)
+    if snapshot_status.is_visible():
+        raise AssertionError('Starting a new drawing kept the prior source snapshot notice')
     return f'lazy MathJax changed {changed} pixels; toggle/cache/save/fallback and idle verified'
 
 
