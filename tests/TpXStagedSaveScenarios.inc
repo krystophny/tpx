@@ -1,30 +1,69 @@
-function ReadStagedFixture(const FileName: string): RawByteString;
+function StagedTestPath(const EnvironmentName: string): TOutputPath;
 var
-  Stream: TFileStream;
+  Raw: RawByteString;
+begin
+  Raw := RawByteString(GetEnvironmentVariableUTF8(EnvironmentName));
+  if Raw = '' then Raw := RawByteString(SysToUTF8(SysUtils.GetTempDir(False)));
+  SetCodePage(Raw, 65001, False);
+  Result := TOutputPath(Raw);
+end;
+
+function StagedTestChangeExt(const FileName: TOutputPath;
+  const Extension: string): TOutputPath;
+var
+  Raw: RawByteString;
+begin
+  Raw := RawByteString(ChangeFileExt(FileName, Extension));
+  SetCodePage(Raw, 65001, False);
+  Result := TOutputPath(Raw);
+end;
+
+function StagedTestExpand(const FileName: TOutputPath): TOutputPath;
+var
+  Raw: RawByteString;
+begin
+  Raw := RawByteString(ExpandFileNameUTF8(FileName));
+  SetCodePage(Raw, 65001, False);
+  Result := TOutputPath(Raw);
+end;
+
+function ReadStagedFixture(const FileName: TOutputPath): RawByteString;
+var
+  Handle: THandle;
+  Count: Integer;
+  Size: Int64;
 begin
   Result := '';
-  if not FileExists(FileName) then Exit;
-  Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
+  if not FileExistsUTF8(FileName) then Exit;
+  Size := FileSizeUTF8(FileName);
+  if (Size < 0) or (Size > 1024 * 1024) then
+    raise EReadError.Create('Invalid staged fixture size');
+  Count := Integer(Size);
+  Handle := FileOpenUTF8(FileName, fmOpenRead or fmShareDenyNone);
+  if Handle = THandle(-1) then RaiseLastOSError;
   try
-    SetLength(Result, Stream.Size);
-    if Stream.Size > 0 then
-      Stream.ReadBuffer(Result[1], Stream.Size);
+    SetLength(Result, Count);
+    if Count > 0 then
+      if FileRead(Handle, Result[1], Count) <> Count then
+        raise EReadError.Create('Could not read staged fixture');
   finally
-    Stream.Free;
+    FileClose(Handle);
   end;
 end;
 
-procedure WriteStagedFixture(const FileName: string;
+procedure WriteStagedFixture(const FileName: TOutputPath;
   const Contents: RawByteString);
 var
-  Stream: TFileStream;
+  Handle: THandle;
 begin
-  Stream := TFileStream.Create(FileName, fmCreate);
+  Handle := FileCreateUTF8(FileName);
+  if Handle = THandle(-1) then RaiseLastOSError;
   try
     if Length(Contents) > 0 then
-      Stream.WriteBuffer(Contents[1], Length(Contents));
+      if FileWrite(Handle, Contents[1], Length(Contents)) <> Length(Contents) then
+        raise EWriteError.Create('Could not write staged fixture');
   finally
-    Stream.Free;
+    FileClose(Handle);
   end;
 end;
 
@@ -33,8 +72,8 @@ var
   Drawing: TDrawing2D;
   Destination: TMemoryStream;
   StagedAssets, FinalAssets: TStringList;
-  Root, StageDir, FinalDir, FinalName, StageName: string;
-  FinalEPS, FinalPDF, StageEPS, StagePDF, Marker: string;
+  Root, StageDir, FinalDir, FinalName, StageName: TOutputPath;
+  FinalEPS, FinalPDF, StageEPS, StagePDF, Marker: TOutputPath;
   Serialized, KeepBytes: RawByteString;
   BeforeName: string;
   BeforeCount: Integer;
@@ -43,22 +82,22 @@ var
   MarkerLines: TStringList;
   OldMetaPostPath, OldGhostscriptPath: string;
 begin
-  Root := IncludeTrailingPathDelimiter(SysUtils.GetTempDir(False))
-    + 'tpx-staged-sidecars-' + IntToStr(GetProcessID);
-  StageDir := IncludeTrailingPathDelimiter(Root) + 'stage';
-  FinalDir := IncludeTrailingPathDelimiter(Root) + 'final';
-  Check(ForceDirectories(StageDir) and ForceDirectories(FinalDir),
+  Root := StagedTestPath('TPX_STAGED_TEST_ROOT');
+  Root := Root + PathDelim + 'tpx-staged-sidecars-' + IntToStr(GetProcessID);
+  StageDir := Root + PathDelim + 'stage';
+  FinalDir := Root + PathDelim + 'final';
+  Check(ForceDirectoriesUTF8(StageDir) and ForceDirectoriesUTF8(FinalDir),
     'Could not create staged-save test directories');
-  FinalName := IncludeTrailingPathDelimiter(FinalDir) + 'drawing.tpx';
-  StageName := IncludeTrailingPathDelimiter(StageDir) + 'drawing.tpx';
-  FinalEPS := ChangeFileExt(FinalName, '.eps');
-  FinalPDF := ChangeFileExt(FinalName, '.pdf');
-  StageEPS := ChangeFileExt(StageName, '.eps');
-  StagePDF := ChangeFileExt(StageName, '.pdf');
-  Marker := GetEnvironmentVariable('TPX_STAGED_TOOL_MARKER');
-  Check((Marker <> '') and FileExists(GetEnvironmentVariable(
-    'TPX_STAGED_META_CONVERTER')) and FileExists(GetEnvironmentVariable(
-    'TPX_STAGED_GS_CONVERTER')),
+  FinalName := FinalDir + PathDelim + 'drawing.tpx';
+  StageName := StageDir + PathDelim + 'drawing.tpx';
+  FinalEPS := StagedTestChangeExt(FinalName, '.eps');
+  FinalPDF := StagedTestChangeExt(FinalName, '.pdf');
+  StageEPS := StagedTestChangeExt(StageName, '.eps');
+  StagePDF := StagedTestChangeExt(StageName, '.pdf');
+  Marker := StagedTestPath('TPX_STAGED_TOOL_MARKER');
+  Check((Marker <> '') and FileExistsUTF8(
+    StagedTestPath('TPX_STAGED_META_CONVERTER')) and FileExistsUTF8(
+    StagedTestPath('TPX_STAGED_GS_CONVERTER')),
     'Staged-save converter fixtures are not configured');
 
   WriteStagedFixture(FinalName, 'existing source');
@@ -98,10 +137,10 @@ begin
       'Staged TpX writer produced no document');
     Check((StagedAssets.Count = 2) and (FinalAssets.Count = 2),
       'The EPS/PDF profile did not report both generated sidecars');
-    Check((StagedAssets[0] = ExpandFileName(StageEPS)) and
-      (FinalAssets[0] = ExpandFileName(FinalEPS)) and
-      (StagedAssets[1] = ExpandFileName(StagePDF)) and
-      (FinalAssets[1] = ExpandFileName(FinalPDF)),
+    Check((StagedAssets[0] = StagedTestExpand(StageEPS)) and
+      (FinalAssets[0] = StagedTestExpand(FinalEPS)) and
+      (StagedAssets[1] = StagedTestExpand(StagePDF)) and
+      (FinalAssets[1] = StagedTestExpand(FinalPDF)),
       'Staged and final sidecar mappings changed');
     Check(Pos('%!PS-Adobe', string(ReadStagedFixture(StageEPS))) = 1,
       'The EPS profile did not generate an EPS sidecar');
@@ -153,7 +192,7 @@ begin
     MetaPostPath := GetEnvironmentVariable('TPX_STAGED_META_CONVERTER');
     Drawing.PicScale := 0;
     WriteStagedFixture(FinalName, 'existing source');
-    WriteStagedFixture(ChangeFileExt(FinalName, '.mps'), 'existing mps');
+    WriteStagedFixture(StagedTestChangeExt(FinalName, '.mps'), 'existing mps');
     Failed := False;
     try
       StoreToStream_TpXDocumentStaged(Drawing, Destination, FinalName,
@@ -164,8 +203,8 @@ begin
     Check(Failed, 'Failed MetaPost conversion reported a successful save');
     Check((ReadStagedFixture(Marker) <> '') and
       (ReadStagedFixture(FinalName) = 'existing source') and
-      (ReadStagedFixture(ChangeFileExt(FinalName, '.mps')) = 'existing mps') and
-      not FileExists(ChangeFileExt(StageName, '.mps')),
+      (ReadStagedFixture(StagedTestChangeExt(FinalName, '.mps')) = 'existing mps') and
+      not FileExistsUTF8(StagedTestChangeExt(StageName, '.mps')),
       'Failed MetaPost save changed a published source or sidecar');
     SetLength(Serialized, Destination.Size);
     Destination.Position := 0;
@@ -219,7 +258,7 @@ begin
     Check((ReadStagedFixture(Marker) <> '') and
       (ReadStagedFixture(FinalName) = 'existing source') and
       (ReadStagedFixture(FinalPDF) = 'existing pdf') and
-      not FileExists(StagePDF),
+      not FileExistsUTF8(StagePDF),
       'Failed EPS-to-PDF save changed a published source or sidecar');
     MarkerLines.LoadFromFile(Marker);
     Check((MarkerLines.Count = 2) and
@@ -233,16 +272,16 @@ begin
     FinalAssets.Free;
     StagedAssets.Free;
     Destination.Free;
-    DeleteFile(StageEPS);
-    DeleteFile(StagePDF);
-    DeleteFile(ChangeFileExt(StageName, '.mps'));
-    DeleteFile(FinalName);
-    DeleteFile(FinalEPS);
-    DeleteFile(FinalPDF);
-    DeleteFile(ChangeFileExt(FinalName, '.mps'));
-    RemoveDir(StageDir);
-    RemoveDir(FinalDir);
-    RemoveDir(Root);
+    DeleteFileUTF8(StageEPS);
+    DeleteFileUTF8(StagePDF);
+    DeleteFileUTF8(StagedTestChangeExt(StageName, '.mps'));
+    DeleteFileUTF8(FinalName);
+    DeleteFileUTF8(FinalEPS);
+    DeleteFileUTF8(FinalPDF);
+    DeleteFileUTF8(StagedTestChangeExt(FinalName, '.mps'));
+    RemoveDirUTF8(StageDir);
+    RemoveDirUTF8(FinalDir);
+    RemoveDirUTF8(Root);
   end;
 end;
 

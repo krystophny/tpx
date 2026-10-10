@@ -28,6 +28,8 @@ class RuntimeTests(unittest.TestCase):
     def test_tpx_staged_sidecars_and_converter_failures(self):
         with tempfile.TemporaryDirectory(prefix="tpx-staged-tools-") as directory:
             root = Path(directory).resolve()
+            unicode_root = root / "Grüß-Καλημέρα"
+            unicode_root.mkdir()
             suffix = ".exe" if sys.platform == "win32" else ""
             meta = root / ("mpost-fixture" + suffix)
             ghostscript = root / ("gs-fixture" + suffix)
@@ -38,6 +40,7 @@ class RuntimeTests(unittest.TestCase):
                 "TPX_STAGED_META_CONVERTER": str(meta),
                 "TPX_STAGED_GS_CONVERTER": str(ghostscript),
                 "TPX_STAGED_TOOL_MARKER": str(marker),
+                "TPX_STAGED_TEST_ROOT": str(unicode_root),
             })
             self.assertEqual(marker.read_text().splitlines(),
                              ["mpost-fixture" + suffix, "gs-fixture" + suffix])
