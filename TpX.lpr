@@ -47,6 +47,7 @@ uses
   XmlOut in 'src\XmlOut.pas',
   DevSVG in 'src\DevSVG.pas',
   DevTikZ in 'src\DevTikZ.pas',
+  TikZDocumentWriter in 'src\TikZDocumentWriter.pas',
   DevPGF in 'src\DevPGF.pas',
   DevTeXPc in 'src\DevTeXPc.pas',
   TpXSaver in 'src\TpXSaver.pas',
@@ -82,6 +83,7 @@ uses
 
 
 begin
+  RegisterTikZDocumentCodec;
   if not CheckCommandLine then Exit;
   RequireDerivedFormResource := True;
   Application.Initialize;

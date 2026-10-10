@@ -5,7 +5,7 @@ program CoreTests;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   SysUtils, CoreTestSupport, CoreXmlFixtureTests, CoreFileWatchTests,
-  TikZSyntaxTests;
+  TikZSyntaxTests, TikZWriterTests;
 
 var
   ExitStatus: Integer;
