@@ -70,6 +70,7 @@ type
     Attributes: TAttributes;
     XMLStack: TStringStack;
     Encoding: TEncoding;
+    fDefaultEncoding: TEncoding;
     function NextTag: TStitchSAXTag;
     function CharsetDecode(const Value: string): string;
   public
@@ -94,6 +95,8 @@ type
     procedure BeginOfParsing;
     procedure ParseBlock(const Data: string);
     procedure EndOfParsing;
+    property DefaultEncoding: TEncoding read fDefaultEncoding
+      write fDefaultEncoding;
   end; // TStitchSAX
 
 //TSY: Some variant of SAX which collects info automatically
@@ -196,6 +199,7 @@ begin
 
   Attributes := TAttributes.Create;
   XMLStack := TStringStack.Create;
+  fDefaultEncoding := enUnknown;
   OnCDATA := nil;
   OnDOCTYPE := nil;
 end; // Create
@@ -671,7 +675,7 @@ procedure TStitchSAX.BeginOfParsing;
 begin
   XML := '';
   XMLStack.Clear;
-  Encoding := enUnknown;
+  Encoding := fDefaultEncoding;
 end; // BeginOfParsing
 
 procedure TStitchSAX.ParseBlock(const Data: string);
