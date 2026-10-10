@@ -127,6 +127,7 @@ end;
 {$I TikZImportScenarios.inc}
 {$I TikZSaveScenarios.inc}
 {$I SvgCodecScenarios.inc}
+{$I NonModalRecoveryScenarios.inc}
 
 procedure RunBitmapFixtureConverter;
 var
@@ -1447,6 +1448,8 @@ begin
     else if ParamStr(1) = 'bitmap-eps' then TestBitmapEps
     else if ParamStr(1) = 'svg-linked-image-copy' then TestSvgLinkedImageCopy
     else if ParamStr(1) = 'svg-codec' then TestSvgCodec
+    else if ParamStr(1) = 'nonmodal-recovery-create' then TestNonModalRecoveryCreate
+    else if ParamStr(1) = 'nonmodal-recovery-restore' then TestNonModalRecoveryRestore
     else if ParamStr(1) = 'labeled-preview' then TestLabeledPreview
 {$IFDEF DARWIN}
     else if ParamStr(1) = 'mac-settings' then TestMacSettings

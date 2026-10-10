@@ -40,3 +40,29 @@ skips when those optional paths are unavailable.
 fails while no watcher case is registered; the watcher backend issue adds the
 first such cases. The aggregate target will include that layer when the
 production watcher suite is introduced.
+
+## Non-modal editing review
+
+Run `xvfb-run -a make test-gui` for the native LCL scenarios. For the browser,
+build with `make web` using the pinned revisions in `web/pins.env`, then run
+`python3 tests/browser/playtest.py --only nonmodal-editing-workflow`; add
+`--screenshots` when reviewing the interaction visually. The browser host and
+toolchain setup are documented in `web/README.md`. The native suite also starts
+two separate processes to verify that a pending TeX draft rebinds to its nested
+label after restart while the accepted source file remains unchanged.
+
+Reviewer task: draw a line and rectangle with the existing tools, place and
+type a label directly on the canvas, change its fractional height in the
+inspector, and edit the label in place. Undo and redo each completed change,
+save, reopen, and compare the saved object count, geometry, styles, plain-text
+source, TeX source, and anchor. Confirm that ordinary text and property edits
+do not open a properties or text modal, browser prompt, or new page. Repeat a
+property edit with a mixed selection and confirm that only that property
+changes.
+
+While a text or numeric draft is active, try the supported cancel and commit
+keys, resize or collapse the inspector, and move keyboard focus or selection.
+Verify that the draft stays with its original target and that an external
+document change follows the documented keep-local/reload behavior. On a desktop
+with an input method configured, enter a composed character while editing and
+record the OS, widgetset, and input method in the review notes.

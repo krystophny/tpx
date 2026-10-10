@@ -122,6 +122,33 @@ class RuntimeTests(unittest.TestCase):
             with self.subTest(scenario=scenario):
                 self.run_scenario(scenario)
 
+    def test_nonmodal_text_recovery_across_process_restart(self):
+        fixture = Path(__file__).parent / "fixtures" / "nonmodal-recovery-scene.tpx"
+        with tempfile.TemporaryDirectory(prefix="tpx-nonmodal-recovery-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
+            source = root / "nested-recovery.tpx"
+            shutil.copy2(fixture, source)
+            original_source = source.read_bytes()
+            env = os.environ.copy()
+            env.update(HOME=str(home), USERPROFILE=str(home), APPDATA=str(config),
+                       XDG_CONFIG_HOME=str(config), TMPDIR=str(root),
+                       TPX_NONMODAL_RECOVERY_SOURCE=str(source),
+                       TPX_NONMODAL_RECOVERY_OLD_ID="30000")
+            for scenario in ("nonmodal-recovery-create", "nonmodal-recovery-restore"):
+                with self.subTest(scenario=scenario):
+                    result = subprocess.run([str(BINARY), scenario], cwd=root,
+                                            env=env, capture_output=True,
+                                            text=True, timeout=40)
+                    self.assertEqual(result.returncode, 0,
+                                     result.stdout + result.stderr)
+                    self.assertIn("PASS " + scenario, result.stdout, result.stderr)
+                    self.assertEqual(source.read_bytes(), original_source,
+                                     "recovery changed the accepted source file")
+
     def test_registered_tikz_open_materializes_native_scene(self):
         fixture_dir = Path(__file__).parent / "core" / "fixtures" / "tikz"
         with tempfile.TemporaryDirectory(prefix="tpx-tikz-import-") as directory:

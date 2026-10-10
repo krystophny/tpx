@@ -618,6 +618,183 @@ def s_unsaved_confirmation(app):
     return 'confirmation labels and Cancel/No results preserve or discard the drawing'
 
 
+def s_nonmodal_editing_workflow(app):
+    """Keep canvas geometry and both text sources through an integrated edit."""
+    import copy
+
+    native_dialogs = []
+    popups = []
+
+    def dismiss_and_record(dialog):
+        native_dialogs.append(dialog.type)
+        dialog.dismiss()
+
+    app.page.on('dialog', dismiss_and_record)
+    app.page.on('popup', lambda page: popups.append(page.url))
+
+    # Normalize a saved visible/hidden setting because this scenario checks
+    # the inspector and canvas editor together. Hiding the panel grows paper.
+    previous_width = app.viewport()['w']
+    app.menu('View', 'Object inspector')
+    if app.viewport()['w'] > previous_width:
+        app.menu('View', 'Object inspector')
+    # Recompute canvas coordinates after the side panel changes its layout.
+    v, cx, cy = box(app)
+    app.menu('Insert', 'Insert line')
+    app.drag(cx - 130, cy - 70, cx + 90, cy - 30)
+    app.key('Escape')
+    app.menu('Insert', 'Insert rectangle')
+    app.drag(cx + 25, cy + 15, cx + 125, cy + 85)
+    app.key('Escape')
+
+    # Change a real line through the same inspector used by the label edit.
+    # These values also make the later undo/redo and reopen oracle non-default.
+    app.click(cx - 20, cy - 50)
+    app.menu('Edit', 'Object properties')
+    line_width = app.page.get_by_role('textbox', name='Width multiplier', exact=True)
+    line_width.fill('2.25')
+    line_width.press('Enter')
+    end_arrow = app.page.get_by_role('combobox', name='End arrow', exact=True)
+    end_arrow.select_option(label='h40')
+    end_arrow.press('Enter')
+
+    app.menu('Insert', 'Insert text')
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('Insert text opened a dialog')
+    app.click(cx - 80, cy - 40)
+    text_editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    text_editor.fill('Fallback α')
+    app.page.get_by_role('button', name='Done', exact=True).click()
+    app.page.wait_for_function('document.querySelector("#lcl").width > 500')
+
+    # Select the newly committed label through the canvas before opening its
+    # properties, so the text-specific inspector fields are exercised.
+    app.click(cx - 80, cy - 40)
+    app.menu('Edit', 'Object properties')
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('Object properties opened a dialog')
+    tex = app.page.get_by_role('textbox', name='TeX source', exact=True)
+    if tex.input_value() != '':
+        raise AssertionError(f'new label inspector started with unexpected TeX: {tex.input_value()}')
+    tex.fill(r'\beta_{i}')
+    tex.press('Control+Enter')
+    height = app.page.get_by_role('textbox', name='Text height (mm)', exact=True)
+    height.fill('2.75')
+    height.press('Enter')
+
+    def no_edit_dialogs():
+        if native_dialogs:
+            raise AssertionError(f'ordinary editing opened browser dialogs: {native_dialogs}')
+        if popups:
+            raise AssertionError(f'ordinary editing opened new pages: {popups}')
+        if app.page.get_by_role('dialog').count():
+            raise AssertionError('ordinary editing left a modal dialog open')
+
+    no_edit_dialogs()
+    baseline_path = app.save('nonmodal-initial.tpx')
+    baseline = drawing_xml(baseline_path)
+    if [obj.tag for obj in baseline] != ['line', 'rect', 'text']:
+        raise AssertionError(f'workflow saved the wrong scene: {[obj.tag for obj in baseline]}')
+    baseline_attrs = [copy.deepcopy(obj.attrib) for obj in baseline]
+    if (baseline[0].get('x1') == baseline[0].get('x2') and
+            baseline[0].get('y1') == baseline[0].get('y2')):
+        raise AssertionError(f'line tool saved a zero-length line: {baseline[0].attrib}')
+    if (float(baseline[1].get('w', '0')) <= 0 or
+            float(baseline[1].get('h', '0')) <= 0):
+        raise AssertionError(f'rectangle tool saved invalid geometry: {baseline[1].attrib}')
+    label = baseline[2]
+    if (label.get('t') != 'Fallback α' or label.get('tex') != r'\beta_{i}' or
+            float(label.get('h', '0')) != 2.75):
+        raise AssertionError(f'inspector values were not saved independently: {label.attrib}')
+    if float(baseline[0].get('lw', '0')) != 2.25 or baseline[0].get('arr2') != 'h40':
+        raise AssertionError(f'inspector stroke or arrow values were not saved: {baseline[0].attrib}')
+
+    def snapshot(name):
+        objects = drawing_xml(app.save(name))
+        attrs = [obj.attrib for obj in objects]
+        if [obj.tag for obj in objects] != ['line', 'rect', 'text']:
+            raise AssertionError(f'{name} changed the object count or types')
+        if attrs[0] != baseline_attrs[0] or attrs[1] != baseline_attrs[1]:
+            raise AssertionError(f'{name} changed line or rectangle geometry/style')
+        return attrs[2]
+
+    focus_document(app, app.viewport())
+    app.key('Control+z')
+    undone_height = snapshot('nonmodal-height-undone.tpx')
+    if float(undone_height.get('h', '0')) == 2.75:
+        raise AssertionError('undo did not restore the earlier text height')
+    app.key('Control+Shift+z')
+    redone_height = snapshot('nonmodal-height-redone.tpx')
+    if float(redone_height.get('h', '0')) != 2.75:
+        raise AssertionError('redo did not restore the inspector text height')
+
+    v = app.viewport()
+    px, py = app.at(cx - 80, cy - 40)
+    app.page.mouse.dblclick(px, py, delay=80)
+    editor = app.page.get_by_role('textbox', name='TeX source (canvas)', exact=True)
+    editor.wait_for()
+    inline_element = editor.element_handle()
+    editor.fill(r'\gamma_{j}')
+    app.menu('View', 'Object inspector')
+    app.page.wait_for_timeout(200)
+    if not editor.is_visible() or editor.input_value() != r'\gamma_{j}':
+        raise AssertionError('collapsing the inspector lost or hid the active text buffer')
+    app.menu('View', 'Object inspector')
+    app.page.wait_for_timeout(200)
+    if not editor.is_visible() or editor.input_value() != r'\gamma_{j}':
+        raise AssertionError('reopening the inspector lost or hid the active text buffer')
+    browser_size = app.page.viewport_size
+    app.page.set_viewport_size({'width': 900, 'height': 720})
+    app.page.wait_for_timeout(200)
+    editor_box = editor.bounding_box()
+    if (not editor.is_visible() or editor.input_value() != r'\gamma_{j}' or
+            editor_box is None or editor_box['x'] < 0 or editor_box['y'] < 0 or
+            editor_box['x'] + editor_box['width'] > 900 or
+            editor_box['y'] + editor_box['height'] > 720):
+        raise AssertionError('resizing the workspace hid or moved the active text buffer off-screen')
+    app.page.set_viewport_size(browser_size)
+    app.page.wait_for_timeout(200)
+    v = app.viewport()
+    if not editor.is_visible() or editor.input_value() != r'\gamma_{j}':
+        raise AssertionError('restoring the workspace size lost the active text buffer')
+    app.page.get_by_role('button', name='Done', exact=True).click()
+    inline_element.wait_for_element_state('hidden')
+    app.page.wait_for_timeout(150)
+    no_edit_dialogs()
+    edited = snapshot('nonmodal-inline-edited.tpx')
+    expected_edited = copy.deepcopy(baseline_attrs[2])
+    expected_edited['tex'] = r'\gamma_{j}'
+    if edited != expected_edited:
+        raise AssertionError(f'inline edit changed source, anchor, style or unrelated text fields: {edited}')
+
+    focus_document(app, v)
+    app.key('Control+z')
+    undone_text = snapshot('nonmodal-text-undone.tpx')
+    if undone_text != baseline_attrs[2]:
+        raise AssertionError(f'undo did not restore the complete previous text object: {undone_text}')
+    app.key('Control+Shift+z')
+    app.move(v['x'] + 4, v['y'] + 4)
+    final_path = app.save('nonmodal-final.tpx')
+    final = drawing_xml(final_path)
+    final_label = final[2]
+    if (final_label != expected_edited or
+            float(final_label.get('h', '0')) != 2.75 or
+            [obj.attrib for obj in final[:2]] != baseline_attrs[:2]):
+        raise AssertionError(f'final save lost an edit or changed unrelated scene data: {[o.attrib for o in final]}')
+
+    app.menu('File', 'New')
+    app.menu('File', 'Open')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('Choose file').set_input_files(final_path)
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    app.page.wait_for_timeout(250)
+    reopened = drawing_xml(app.save('nonmodal-reopened.tpx'))
+    if [obj.attrib for obj in reopened] != [obj.attrib for obj in final]:
+        raise AssertionError('save/reopen changed the accepted scene or either text source')
+    no_edit_dialogs()
+    return 'canvas label, inspector stroke/arrow and height, inline TeX edit, undo/redo and save/reopen preserve source, anchor and unrelated geometry'
+
+
 def s_tex_preview(app):
     import re
     import xml.etree.ElementTree as ET
@@ -730,4 +907,5 @@ SCENARIOS = [
     ('nested-coordinates', s_nested_coordinates),
     ('unsaved-confirmation', s_unsaved_confirmation),
     ('tex-preview', s_tex_preview),
+    ('nonmodal-editing-workflow', s_nonmodal_editing_workflow),
 ]
