@@ -74,6 +74,7 @@ type
     function CommitSession(out ErrorText: string): Boolean;
     procedure SetFieldError(Field: TObjectPropertyField;
       const ErrorText: string);
+    procedure RejectBlockedField(Field: TObjectPropertyField);
     procedure RefreshField(Field: TObjectPropertyField);
     procedure ClearFieldEditor(Field: TObjectPropertyField);
     procedure SetFieldValue(Field: TObjectPropertyField;
@@ -1042,7 +1043,9 @@ begin
     Patch.KeepAspectRatio := Check.Checked;
     Exit(True);
   end;
-  if Editor is TMemo then Raw := (Editor as TMemo).Text
+  if Editor is TCompositionAwareMemo then
+    Raw := (Editor as TCompositionAwareMemo).EditText
+  else if Editor is TMemo then Raw := (Editor as TMemo).Text
   else if Editor is TEdit then Raw := (Editor as TEdit).Text
   else Raw := '';
   case Field of
@@ -1159,11 +1162,45 @@ begin
   FWidgets[Field].ErrorText.Visible := ErrorText <> '';
 end;
 
+procedure TObjectInspector.RejectBlockedField(Field: TObjectPropertyField);
+var
+  Value: TPropertyValue;
+  ActiveField: TObjectPropertyField;
+begin
+  Value := ReadObjectProperty(FDrawing, FTargetIDs, Field);
+  FRefreshing := FRefreshing + 1;
+  try
+    if Value.State = pvsUniform then SetFieldValue(Field, Value.Value)
+    else ClearFieldEditor(Field);
+  finally
+    Dec(FRefreshing);
+  end;
+  SetFieldError(Field, '');
+  if not FHasSessionField then Exit;
+  ActiveField := FSessionField;
+  if FWidgets[ActiveField].Editor.CanFocus then
+    FWidgets[ActiveField].Editor.SetFocus;
+  FSelectionLabel.Caption := 'Finish or cancel ' + FieldName(ActiveField) +
+    ' before editing another field';
+  if (FSession <> nil) and (FSession.LastError <> '') then
+    SetFieldError(ActiveField, FSession.LastError);
+end;
+
 procedure TObjectInspector.FieldEnter(Sender: TObject);
+var
+  Field: TObjectPropertyField;
 begin
   if FRefreshing > 0 then Exit;
+  Field := FieldFromControl(Sender);
+  if (FSession <> nil) and FSession.IsActive and
+    (Field <> FSessionField) and
+    (FSession.HasRawDraftPending or FSession.CompositionPending) then
+  begin
+    RejectBlockedField(Field);
+    Exit;
+  end;
   FSelectionLabel.Caption := 'Editing ' +
-    FieldName(FieldFromControl(Sender));
+    FieldName(Field);
 end;
 
 procedure TObjectInspector.FieldChanged(Sender: TObject);
@@ -1177,7 +1214,10 @@ begin
   Field := FieldFromControl(Sender);
   if not StartFieldSession(Field) then
   begin
-    if FHasSessionField and (FSessionField <> Field) then
+    if (FSession <> nil) and FSession.IsActive and
+      (FSessionField <> Field) then
+      RejectBlockedField(Field)
+    else if FHasSessionField and (FSessionField <> Field) then
       SetFieldError(Field, 'Finish or cancel the active edit first');
     Exit;
   end;
@@ -1193,6 +1233,8 @@ begin
   end;
   if FWidgets[Field].Editor is TEdit then
     Raw := (FWidgets[Field].Editor as TEdit).Text
+  else if FWidgets[Field].Editor is TCompositionAwareMemo then
+    Raw := (FWidgets[Field].Editor as TCompositionAwareMemo).EditText
   else if FWidgets[Field].Editor is TMemo then
     Raw := (FWidgets[Field].Editor as TMemo).Text
   else if FWidgets[Field].Editor is TComboBox then
@@ -1248,7 +1290,11 @@ begin
   begin
     if not StartFieldSession(Field) then
     begin
-      SetFieldError(Field, 'Finish or cancel the active property edit first');
+      if (FSession <> nil) and FSession.IsActive and
+        (FSessionField <> Field) then
+        RejectBlockedField(Field)
+      else
+        SetFieldError(Field, 'Finish or cancel the active property edit first');
       Exit;
     end;
     if FSession <> nil then FSession.SetCompositionPending(True);

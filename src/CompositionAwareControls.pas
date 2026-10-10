@@ -31,12 +31,14 @@ type
     FCompositionPending: Boolean;
     FOnCompositionChanged: TCompositionChangedEvent;
     procedure SetCompositionPending(Value: Boolean);
+    function GetEditText: string;
   protected
     procedure WndProc(var Message: TLMessage); override;
   public
     function SampleCompositionState: Boolean;
     procedure RefreshCompositionState;
     property CompositionPending: Boolean read FCompositionPending;
+    property EditText: string read GetEditText;
     property OnCompositionChanged: TCompositionChangedEvent
       read FOnCompositionChanged write FOnCompositionChanged;
   end;
@@ -152,6 +154,20 @@ begin
   {$IFDEF LCLCOCOA}
   SetCompositionPending(NativeMemoHasMarkedText(Self));
   {$ENDIF}
+end;
+
+function TCompositionAwareMemo.GetEditText: string;
+var
+  TextLength: SizeInt;
+begin
+  Result := Text;
+  TextLength := Length(Result);
+  if TextLength = 0 then Exit;
+  if (Result[TextLength] = #10) and (TextLength > 1) and
+    (Result[TextLength - 1] = #13) then
+    Delete(Result, TextLength - 1, 2)
+  else if Result[TextLength] in [#10, #13] then
+    Delete(Result, TextLength, 1);
 end;
 
 function TCompositionAwareMemo.SampleCompositionState: Boolean;
