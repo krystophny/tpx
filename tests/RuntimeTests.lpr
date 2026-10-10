@@ -2,11 +2,12 @@ program RuntimeTests;
 {$mode Delphi}
 uses
   {$IFDEF UNIX}{$IFNDEF CPUWASM32}cthreads,{$ENDIF}{$ENDIF}
+  {$IFDEF UNIX}BaseUnix,{$ENDIF}
   Interfaces, Forms, SysUtils, Classes, Types, Math, Controls, Dialogs, Clipbrd, InterfaceBase, LCLType, LMessages, Process,
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX;
+  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -90,6 +91,7 @@ end;
 {$I ViewportScenarios.inc}
 {$I PlaytestScenarios.inc}
 {$I TpXStagedSaveScenarios.inc}
+{$I DocumentIOScenarios.inc}
 
 procedure RunBitmapFixtureConverter;
 var
@@ -1238,6 +1240,7 @@ begin
     else if ParamStr(1) = 'editable-shortcut-routing' then TestEditableShortcutRouting
     else if ParamStr(1) = 'canvas-focus-transfer' then TestCanvasFocusTransfer
     else if ParamStr(1) = 'platform-shortcuts' then TestPlatformShortcuts
+    else if ParamStr(1) = 'document-io' then TestDocumentIO
     else if ParamStr(1) = 'color-box-custom-state' then TestColorBoxCustomState
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
     else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))

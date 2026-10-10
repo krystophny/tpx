@@ -16,6 +16,7 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "default-view", "toolbar", "draw-click", "draw-drag", "draw-rectangle", "draw-jitter", "draw-cancel", "shape-snap", "external-tools", "preview-state",
              "viewport-events", "viewport-crosshair", "viewport-preview", "viewport-damage",
              "text-metrics", "path-first-click", "async-tools",
+             "document-io",
              "canvas-focus-transfer",
              "property-dimensions", "font-choice", "conversion-save",
              "unsupported-exports", "live-tex-missing-tool", "clipboard-format-width",
