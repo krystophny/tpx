@@ -13,10 +13,26 @@ mime_packages_dir=$data_home/mime/packages
 icons_dir=$data_home/icons/hicolor/scalable/apps
 mkdir -p "$applications_dir" "$mime_packages_dir" "$icons_dir"
 
-# Path is a desktop-entry string value. Escape sed replacement metacharacters
-# so package directories containing spaces or punctuation remain valid.
-escaped_package_dir=$(printf '%s' "$package_dir" | sed 's/[\\&|]/\\&/g')
-sed "s|@TPX_PACKAGE_DIR@|$escaped_package_dir|g" \
+# Desktop Exec uses its own quoting and field-code syntax, not shell quoting.
+case "$package_dir" in
+  *'
+'*) echo "Package path cannot contain a newline" >&2; exit 1 ;;
+esac
+desktop_exec_path=$(printf '%s' "$package_dir/TpX" | sed \
+  -e 's/\\/\\\\/g' -e 's/"/\\"/g' \
+  -e 's/\$/\\$/g' -e 's/`/\\`/g' -e 's/%/%%/g')
+desktop_exec_path=$(printf '%s' "$desktop_exec_path" | sed 's/\\/\\\\/g')
+case "$package_dir" in
+  *%*) desktop_exec_path="\"/usr/bin/env\" \"$desktop_exec_path\"" ;;
+  *) desktop_exec_path="\"$desktop_exec_path\"" ;;
+esac
+desktop_string_path=$(printf '%s' "$package_dir" | sed 's/\\/\\\\/g')
+
+# Escape sed replacement metacharacters after desktop-entry encoding.
+escaped_exec_path=$(printf '%s' "$desktop_exec_path" | sed 's/[\\&|]/\\&/g')
+escaped_string_path=$(printf '%s' "$desktop_string_path" | sed 's/[\\&|]/\\&/g')
+sed -e "s|@TPX_PACKAGE_DIR@|$escaped_string_path|g" \
+  -e "s|@TPX_EXECUTABLE@|$escaped_exec_path|g" \
   "$package_dir/org.tpx.TpX.desktop.in" \
   > "$applications_dir/org.tpx.TpX.desktop"
 cp "$package_dir/org.tpx.TpX.xml" "$mime_packages_dir/org.tpx.TpX.xml"
