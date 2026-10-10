@@ -9,6 +9,64 @@ begin
   end;
 end;
 
+{$IFDEF WINDOWS}
+type
+  TAutoReloadFileTime = packed record
+    LowDateTime: Cardinal;
+    HighDateTime: Cardinal;
+  end;
+  PAutoReloadFileTime = ^TAutoReloadFileTime;
+
+function AutoReloadCreateFileW(FileName: PWideChar; DesiredAccess,
+  ShareMode: Cardinal; SecurityAttributes: Pointer; CreationDisposition,
+  FlagsAndAttributes: Cardinal; TemplateFile: PtrUInt): PtrUInt; stdcall;
+  external 'kernel32' name 'CreateFileW';
+function AutoReloadGetFileTime(Handle: PtrUInt; CreationTime, LastAccessTime,
+  LastWriteTime: PAutoReloadFileTime): LongBool; stdcall;
+  external 'kernel32' name 'GetFileTime';
+function AutoReloadSetFileTime(Handle: PtrUInt; CreationTime, LastAccessTime,
+  LastWriteTime: PAutoReloadFileTime): LongBool; stdcall;
+  external 'kernel32' name 'SetFileTime';
+function AutoReloadCloseHandle(Handle: PtrUInt): LongBool; stdcall;
+  external 'kernel32' name 'CloseHandle';
+
+function ReadExactLastWriteTime(const FileName: string): TAutoReloadFileTime;
+var
+  Handle: PtrUInt;
+  WidePath: UnicodeString;
+begin
+  WidePath := UTF8Decode(FileName);
+  Handle := AutoReloadCreateFileW(PWideChar(WidePath), $00000080,
+    $00000001 or $00000002 or $00000004, nil, 3, 0, 0);
+  if Handle = PtrUInt(-1) then RaiseLastOSError;
+  try
+    if not AutoReloadGetFileTime(Handle, nil, nil, @Result) then
+      RaiseLastOSError;
+  finally
+    AutoReloadCloseHandle(Handle);
+  end;
+end;
+
+procedure RestoreExactLastWriteTime(const FileName: string;
+  const LastWriteTime: TAutoReloadFileTime);
+var
+  Handle: PtrUInt;
+  WidePath: UnicodeString;
+begin
+  WidePath := UTF8Decode(FileName);
+  Handle := AutoReloadCreateFileW(PWideChar(WidePath), $00000100,
+    $00000001 or $00000002 or $00000004, nil, 3, 0, 0);
+  if Handle = PtrUInt(-1) then RaiseLastOSError;
+  try
+    if not AutoReloadSetFileTime(Handle, nil, nil,
+      PAutoReloadFileTime(@LastWriteTime)) then
+      RaiseLastOSError;
+  finally
+    AutoReloadCloseHandle(Handle);
+  end;
+end;
+{$ENDIF}
+
 function ReloadLineX2: Double; forward;
 
 type
@@ -179,7 +237,13 @@ const
     '%</TpX>' + LineEnding;
 var
   FileName: string;
-  SavedAge, SavedHistoryCount: LongInt;
+  SavedHistoryCount: LongInt;
+  {$IFNDEF WINDOWS}
+  SavedAge: LongInt;
+  {$ENDIF}
+  {$IFDEF WINDOWS}
+  InitialLastWriteTime: TAutoReloadFileTime;
+  {$ENDIF}
   InitialRevision, SameStatRevision: TDiskRevision;
   TeXRevision: TDiskRevision;
   TeXDrawing: TDrawing2D;
@@ -276,10 +340,18 @@ begin
   MainForm.TheDrawing.SelectionAdd(Line);
   SavedHistoryCount := MainForm.TheDrawing.History.Count;
   InitialRevision := ReadDocumentRevision(FileName);
+  {$IFDEF WINDOWS}
+  InitialLastWriteTime := ReadExactLastWriteTime(FileName);
+  {$ELSE}
   SavedAge := FileAge(FileName);
+  {$ENDIF}
   WriteReloadSource(FileName, StableSizeSource);
+  {$IFDEF WINDOWS}
+  RestoreExactLastWriteTime(FileName, InitialLastWriteTime);
+  {$ELSE}
   Check(FileSetDate(FileName, SavedAge) = 0,
     'Could not restore fixture timestamp for same-size/same-mtime update');
+  {$ENDIF}
   Check(Length(StableSizeSource) = Length(InitialSource),
     'Same-size rewrite fixture changed length');
   SameStatRevision := ReadDocumentRevision(FileName);
