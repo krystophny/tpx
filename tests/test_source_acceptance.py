@@ -700,10 +700,11 @@ class SourceAcceptance(unittest.TestCase):
                            0.05, "TeX renderer did not reflect the post-refresh edit")
         self.assertIn("Label β", self.command(["pdftotext", pdf, "-"]))
 
-    def test_lcl_source_binding_bursts_ignore_stale_callbacks(self):
-        for format_id in ("svg", "tikz"):
-            with self.subTest(format=format_id):
-                self.run_lcl_binding_burst(format_id)
+    def test_lcl_svg_source_binding_bursts_ignore_stale_callbacks(self):
+        self.run_lcl_binding_burst("svg")
+
+    def test_lcl_tikz_source_binding_bursts_ignore_stale_callbacks(self):
+        self.run_lcl_binding_burst("tikz")
 
     def test_lcl_document_write_failures_preserve_source_and_session(self):
         source_dir = self.root / "write failure source β"
