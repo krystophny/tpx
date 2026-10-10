@@ -1530,6 +1530,9 @@ object MainForm: TMainForm
       object LiveTeXPreviewItem: TMenuItem
         Action = LiveTeXPreview
       end
+      object TrustTeXPreviewItem: TMenuItem
+        Action = TrustTeXPreview
+      end
       object Showgrid2: TMenuItem
         Action = ShowGrid
       end
@@ -2041,6 +2044,12 @@ object MainForm: TMainForm
       Caption = 'Live LaTeX Preview'
       Checked = True
       OnExecute = LiveTeXPreviewExecute
+    end
+    object TrustTeXPreview: TAction
+      Category = 'View'
+      Caption = 'Trust TeX preview for this document'
+      Hint = 'Allow TeX labels in this document to run in the local preview toolchain'
+      OnExecute = TrustTeXPreviewExecute
     end
     object ShowGrid: TAction
       Category = 'View'

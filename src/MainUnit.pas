@@ -12,9 +12,27 @@ uses
 {$ELSE}
   LCLIntf, LCLType, LMessages, LResources,
 {$ENDIF}
-  Devices, Modes, PlatformShortcuts;
+  Devices, Modes, PlatformShortcuts
+{$IFDEF FPC}
+  , DocumentFormats, FileWatch, AutoReload
+{$IFNDEF CPUWASM32}
+  , SyncObjs
+{$ENDIF}
+{$ENDIF}
+  ;
 
 type
+
+{$IFDEF FPC}
+  TExternalReloadCommittedEvent = procedure(Sender: TObject;
+    LocalRevision, WatchGeneration: QWord) of object;
+  TExternalReloadConflictEvent = procedure(Sender: TObject;
+    const Snapshot: TDocumentSnapshot) of object;
+  TExternalReloadKeepLocalEvent = procedure(Sender: TObject;
+    LocalRevision, WatchGeneration: QWord) of object;
+  TLocalEditCommittedEvent = procedure(Sender: TObject;
+    LocalRevision, WatchGeneration: QWord; Dirty: Boolean) of object;
+{$ENDIF}
 
 //  TRealTypeX = Double;
   TRealTypeX = Single;
@@ -158,6 +176,7 @@ type
     Useareatoselectobjects2: TMenuItem;
     ShowGrid: TAction;
     LiveTeXPreview: TAction;
+    TrustTeXPreview: TAction;
     LiveTeXPreviewItem: TMenuItem;
     SnapToGrid: TAction;
     SnapToShapes: TAction;
@@ -457,6 +476,7 @@ type
       Shift: TShiftState; WX, WY: TRealTypeX; X, Y: Integer);
     procedure ShowGridExecute(Sender: TObject);
     procedure LiveTeXPreviewExecute(Sender: TObject);
+    procedure TrustTeXPreviewExecute(Sender: TObject);
     procedure LiveTeXChanged(Sender: TObject);
     procedure InsertRectangleExecute(Sender: TObject);
     procedure InsertEllipseExecute(Sender: TObject);
@@ -535,10 +555,75 @@ type
     { Private declarations }
 {$IFDEF FPC}
     InitialViewQueued: Boolean;
+{$IFNDEF CPUWASM32}
+    FFileChangeSource: TFileChangeSource;
+    FWatchDispatcher: TThread;
+    FWatchEventQueue: TObject;
+    FReloadCoordinator: TReloadCoordinator;
+    FReloadTimer: TTimer;
+    FReloadMenu: TMenuItem;
+    FAutoRefreshMenu: TMenuItem;
+    FPauseRefreshMenu: TMenuItem;
+    FReloadDiskMenu: TMenuItem;
+    FConflictMenu: TMenuItem;
+    FKeepLocalMenu: TMenuItem;
+    FSaveCopyMenu: TMenuItem;
+    FCancelConflictMenu: TMenuItem;
+    FReloadStatusPanel: TStatusPanel;
+    FWatchSubscriptionID: QWord;
+    FPendingSubscriptionID: QWord;
+    FDeferredReload: Boolean;
+    FDocumentPaused: Boolean;
+    FPointerDown: Boolean;
+    FInteractionEditNotified: Boolean;
+    FInteractionHistoryCount: Integer;
+    FInteractionStartRevision: QWord;
+    FModalDepth: Integer;
+    FClosingReload: Boolean;
+    FConsistencyRetryCount: Integer;
+    FConflictSnapshot: TDocumentSnapshot;
+    FLastConflictRevisionKey: string;
+    FLastReloadErrorText: string;
+    FExplicitReloadRequested: Boolean;
+    FExplicitReloadInProgress: Boolean;
+    FExplicitDiscardArmed: Boolean;
+    FConfirmedLocalRevision: QWord;
+    FOnExternalReloadCommitted: TExternalReloadCommittedEvent;
+    FOnExternalReloadConflict: TExternalReloadConflictEvent;
+    FOnExternalReloadKeepLocal: TExternalReloadKeepLocalEvent;
+    FOnLocalEditCommitted: TLocalEditCommittedEvent;
+{$ENDIF}
 {$ENDIF}
     ScrollPos0: Integer;             
 {$IFDEF FPC}
     procedure InitializeEmptyView(Data: PtrInt);
+{$IFNDEF CPUWASM32}
+    procedure InitializeAutoReload;
+    procedure ShutdownAutoReload;
+    procedure ProcessFileWatchEvents(Data: PtrInt);
+    procedure ProcessReloadDeadline(Sender: TObject);
+    procedure ProcessReloadAt(NowMS: QWord);
+    procedure QueueFileWatchEvent(const Event: TFileChangeEvent);
+    procedure HandleFileWatchEvent(const Event: TFileChangeEvent);
+    procedure ScheduleConsistencyRetry;
+    procedure ReadAndApplyReload(const Ticket: TReloadReadTicket);
+    procedure UpdateReloadUi;
+    procedure UpdateReloadStatus(const Text: string);
+    procedure AutoRefreshClick(Sender: TObject);
+    procedure PauseRefreshClick(Sender: TObject);
+    procedure ReloadDiskClick(Sender: TObject);
+    procedure KeepLocalClick(Sender: TObject);
+    procedure SaveCopyClick(Sender: TObject);
+    procedure CancelConflictClick(Sender: TObject);
+    procedure ApplicationModalBegin(Sender: TObject);
+    procedure ApplicationModalEnd(Sender: TObject);
+    procedure TryApplyDeferredReload(Data: PtrInt);
+    procedure ApplyDeferredReload;
+    function SceneInteractionActive: Boolean;
+    function CurrentDocumentDirty: Boolean;
+    procedure ScheduleSourceReconciliation;
+    procedure RestoreExistingWatch;
+{$ENDIF}
 {$ENDIF}
 {$IFDEF VER140}
     procedure SetFormPosition;
@@ -574,6 +659,32 @@ type
       IsOnPoint, CanDeletePoints: Boolean);
     procedure SetCurrentProperties;
 {$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+    function BeginDocumentWatchBinding(const Path: TDocumentPath;
+      out WatchGeneration, SubscriptionID: QWord): TFileWatchStatus;
+    procedure AcceptDocumentWatchBinding(const Snapshot: TDocumentSnapshot;
+      WatchGeneration, SubscriptionID: QWord);
+    procedure CancelDocumentWatchBinding(WatchGeneration,
+      SubscriptionID: QWord);
+    procedure ClearDocumentWatchBinding;
+    procedure AcceptSavedDocumentRevision;
+    procedure NotifyDocumentEdited;
+    procedure BeginSceneInteraction;
+    procedure EndSceneInteraction;
+    procedure ProcessPendingReload(NowMS: QWord);
+    procedure ApplyAutoReloadSettings;
+    property AutoReloadState: TReloadCoordinator read FReloadCoordinator;
+    property OnExternalReloadCommitted: TExternalReloadCommittedEvent
+      read FOnExternalReloadCommitted write FOnExternalReloadCommitted;
+    property OnExternalReloadConflict: TExternalReloadConflictEvent
+      read FOnExternalReloadConflict write FOnExternalReloadConflict;
+    property OnExternalReloadKeepLocal: TExternalReloadKeepLocalEvent
+      read FOnExternalReloadKeepLocal write FOnExternalReloadKeepLocal;
+    property OnLocalEditCommitted: TLocalEditCommittedEvent
+      read FOnLocalEditCommitted write FOnLocalEditCommitted;
+{$ENDIF}
+{$ENDIF}
+{$IFDEF FPC}
     function IsShortcut(var Message: TLMKey): Boolean; override;
 {$ENDIF}
   end;
@@ -595,7 +706,154 @@ implementation
 uses Output, Input, Settings0, ColorEtc, Geometry, Options,
   Preview,
 {$IFDEF FPC}  LiveTeX,{$ENDIF}
-  SysBasic, Modify, Propert;
+  SysBasic, Modify, Propert
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  , DocumentIO, FileWatchNative
+{$ENDIF}
+{$ENDIF}
+  ;
+
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+type
+  TQueuedFileChange = class
+    Event: TFileChangeEvent;
+  end;
+
+  TWatchEventQueue = class
+  private
+    FLock: TCriticalSection;
+    FItems: TList;
+    FDispatchPending: Boolean;
+    FOverflowPending: Boolean;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    function Push(const Event: TFileChangeEvent): Boolean;
+    function Pop(out Event: TFileChangeEvent): Boolean;
+    procedure Clear;
+  end;
+
+  TFileWatchDispatcher = class(TThread)
+  private
+    FSource: TFileChangeSource;
+    FOwner: TMainForm;
+  protected
+    procedure Execute; override;
+  public
+    constructor Create(Source: TFileChangeSource; Owner: TMainForm);
+  end;
+
+constructor TWatchEventQueue.Create;
+begin
+  inherited Create;
+  FLock := TCriticalSection.Create;
+  FItems := TList.Create;
+end;
+
+destructor TWatchEventQueue.Destroy;
+begin
+  Clear;
+  FItems.Free;
+  FLock.Free;
+  inherited Destroy;
+end;
+
+function TWatchEventQueue.Push(const Event: TFileChangeEvent): Boolean;
+var Item: TQueuedFileChange; I: Integer; Collapsed: TFileChangeEvent;
+begin
+  Result := False;
+  FLock.Acquire;
+  try
+    if FOverflowPending then Exit;
+    if FItems.Count >= FileWatchQueueCapacity then
+    begin
+      for I := FItems.Count - 1 downto 0 do TObject(FItems[I]).Free;
+      FItems.Clear;
+      Collapsed := Event;
+      Collapsed.SubscriptionID := 0;
+      Collapsed.Generation := 0;
+      Collapsed.Path := '';
+      Collapsed.Kind := fckRescanRequired;
+      Collapsed.ErrorText := 'Reload event queue overflow; rescan active source';
+      FOverflowPending := True;
+      Item := TQueuedFileChange.Create;
+      Item.Event := Collapsed;
+      FItems.Add(Item);
+    end
+    else
+    begin
+      Item := TQueuedFileChange.Create;
+      Item.Event := Event;
+      FItems.Add(Item);
+    end;
+    if not FDispatchPending then
+    begin
+      FDispatchPending := True;
+      Result := True;
+    end;
+  finally
+    FLock.Release;
+  end;
+end;
+
+function TWatchEventQueue.Pop(out Event: TFileChangeEvent): Boolean;
+var Item: TQueuedFileChange;
+begin
+  FLock.Acquire;
+  try
+    Result := FItems.Count > 0;
+    if Result then
+    begin
+      Item := TQueuedFileChange(FItems[0]);
+      FItems.Delete(0);
+      Event := Item.Event;
+      if Event.Kind = fckRescanRequired then FOverflowPending := False;
+      Item.Free;
+    end
+    else FDispatchPending := False;
+  finally
+    FLock.Release;
+  end;
+end;
+
+procedure TWatchEventQueue.Clear;
+var I: Integer;
+begin
+  FLock.Acquire;
+  try
+    for I := FItems.Count - 1 downto 0 do TObject(FItems[I]).Free;
+    FItems.Clear;
+    FDispatchPending := False;
+    FOverflowPending := False;
+  finally
+    FLock.Release;
+  end;
+end;
+
+constructor TFileWatchDispatcher.Create(Source: TFileChangeSource;
+  Owner: TMainForm);
+begin
+  inherited Create(True);
+  FreeOnTerminate := False;
+  FSource := Source;
+  FOwner := Owner;
+end;
+
+procedure TFileWatchDispatcher.Execute;
+var Event: TFileChangeEvent;
+begin
+  while not Terminated do
+  begin
+    FSource.WaitForEvent(-1);
+    if Terminated or (FSource.Status = fwsStopped) then Break;
+    while FSource.TryDequeue(Event) do
+      FOwner.QueueFileWatchEvent(Event);
+  end;
+end;
+{$ENDIF}
+{$ENDIF}
 
 {$IFDEF VER140}
 {$R *.lfm}
@@ -664,6 +922,9 @@ begin
   LocalView.OnEndRedraw := LocalViewEndRedraw;
 {$IFDEF FPC}
   InitializeLiveTeX(LiveTeXChanged);
+{$IFNDEF CPUWASM32}
+  InitializeAutoReload;
+{$ENDIF}
 {$ENDIF}
   LocalView.OnDblClick := LocalViewDblClick;
   LocalView.OnKeyDown := LocalViewKeyDown;
@@ -700,6 +961,7 @@ begin
     LocalView.ClientHeight * 25.4 / Screen.PixelsPerInch);
   SmoothBezierNodes := SmoothBezierNodesAction.Checked;
   ScaleLineWidthAction.Checked := ScaleLineWidth;
+
   NewDoc.Tag := Msg_New;
   NewWindow.Tag := Msg_NewWindow;
   OpenDoc.Tag := Msg_Open;
@@ -869,11 +1131,22 @@ begin
 {$ENDIF}
 end;
 
+procedure TMainForm.TrustTeXPreviewExecute(Sender: TObject);
+begin
+{$IFDEF FPC}
+  SetLiveTeXDocumentTrusted(not LiveTeXDocumentTrusted);
+  TrustTeXPreview.Checked := LiveTeXDocumentTrusted;
+  LocalView.Repaint;
+  LiveTeXChanged(Self);
+{$ENDIF}
+end;
+
 procedure TMainForm.LiveTeXChanged(Sender: TObject);
 var
   Damage: TRect;
 begin
 {$IFDEF FPC}
+  TrustTeXPreview.Checked := LiveTeXDocumentTrusted;
   StatusBar1.Panels[1].Text := LiveTeXStatus;
   StatusBar1.Hint := LiveTeXStatus;
   StatusBar1.ShowHint := True;
@@ -953,6 +1226,11 @@ procedure TMainForm.LocalViewMouseDown2D(Sender: TObject;
 begin
   if LocalView.CanFocus and not LocalView.Focused then
     LocalView.SetFocus;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  BeginSceneInteraction;
+{$ENDIF}
+{$ENDIF}
   EventManager.MouseDown(Sender, Button, Shift, X, Y);
 end;
 
@@ -961,6 +1239,11 @@ procedure TMainForm.LocalViewMouseUp2D(Sender: TObject;
   WX, WY: TRealTypeX; X, Y: Integer);
 begin
   EventManager.MouseUp(Sender, Button, Shift, X, Y);
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  EndSceneInteraction;
+{$ENDIF}
+{$ENDIF}
 end;
 
 procedure TMainForm.FormKeyDown(Sender: TObject; var Key: Word;
@@ -1046,6 +1329,9 @@ end;
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
 {$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  ShutdownAutoReload;
+{$ENDIF}
   ShutdownLiveTeX;
 {$ENDIF}        
 {$IFDEF VER140}
@@ -1063,6 +1349,863 @@ begin
   Ruler1.Free;
   Ruler2.Free;
 end;
+
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+procedure TMainForm.InitializeAutoReload;
+begin
+  FReloadCoordinator := TReloadCoordinator.Create(100);
+  FWatchEventQueue := TWatchEventQueue.Create;
+  FFileChangeSource := CreateFileChangeSource;
+  FReloadTimer := TTimer.Create(Self);
+  FReloadTimer.Enabled := False;
+  FReloadTimer.Interval := 100;
+  FReloadTimer.OnTimer := ProcessReloadDeadline;
+  FReloadMenu := TMenuItem.Create(Self);
+  FReloadMenu.Caption := 'Automatic refresh';
+  File1.Add(FReloadMenu);
+  FAutoRefreshMenu := TMenuItem.Create(Self);
+  FAutoRefreshMenu.Caption := 'Auto refresh';
+  FAutoRefreshMenu.OnClick := AutoRefreshClick;
+  FReloadMenu.Add(FAutoRefreshMenu);
+  FPauseRefreshMenu := TMenuItem.Create(Self);
+  FPauseRefreshMenu.Caption := 'Pause refresh for this document';
+  FPauseRefreshMenu.OnClick := PauseRefreshClick;
+  FReloadMenu.Add(FPauseRefreshMenu);
+  FReloadDiskMenu := TMenuItem.Create(Self);
+  FReloadDiskMenu.Caption := 'Reload from disk…';
+  FReloadDiskMenu.OnClick := ReloadDiskClick;
+  FReloadMenu.Add(FReloadDiskMenu);
+  FConflictMenu := TMenuItem.Create(Self);
+  FConflictMenu.Caption := 'External changes conflict with local edits';
+  FConflictMenu.Enabled := False;
+  FReloadMenu.Add(FConflictMenu);
+  FKeepLocalMenu := TMenuItem.Create(Self);
+  FKeepLocalMenu.Caption := 'Keep local edits';
+  FKeepLocalMenu.OnClick := KeepLocalClick;
+  FReloadMenu.Add(FKeepLocalMenu);
+  FSaveCopyMenu := TMenuItem.Create(Self);
+  FSaveCopyMenu.Caption := 'Save local copy…';
+  FSaveCopyMenu.OnClick := SaveCopyClick;
+  FReloadMenu.Add(FSaveCopyMenu);
+  FCancelConflictMenu := TMenuItem.Create(Self);
+  FCancelConflictMenu.Caption := 'Cancel';
+  FCancelConflictMenu.OnClick := CancelConflictClick;
+  FReloadMenu.Add(FCancelConflictMenu);
+  FReloadStatusPanel := StatusBar1.Panels.Add;
+  FReloadStatusPanel.Width := 230;
+  FReloadCoordinator.SetWatchUnavailable(True);
+  Application.AddOnModalBeginHandler(ApplicationModalBegin);
+  Application.AddOnModalEndHandler(ApplicationModalEnd);
+  FDocumentPaused := False;
+  UpdateReloadUi;
+end;
+
+procedure TMainForm.ShutdownAutoReload;
+begin
+  if FReloadTimer <> nil then FReloadTimer.Enabled := False;
+  FClosingReload := True;
+  if FReloadCoordinator <> nil then FReloadCoordinator.Close;
+  if FFileChangeSource <> nil then
+  begin
+    if FPendingSubscriptionID <> 0 then
+      FFileChangeSource.Unsubscribe(FPendingSubscriptionID);
+    if FWatchSubscriptionID <> 0 then
+      FFileChangeSource.Unsubscribe(FWatchSubscriptionID);
+    FFileChangeSource.Stop;
+  end;
+  if FWatchDispatcher <> nil then
+  begin
+    FWatchDispatcher.Terminate;
+    FWatchDispatcher.WaitFor;
+    FreeAndNil(FWatchDispatcher);
+  end;
+  Application.RemoveAsyncCalls(Self);
+  Application.RemoveOnModalBeginHandler(ApplicationModalBegin);
+  Application.RemoveOnModalEndHandler(ApplicationModalEnd);
+  if FWatchEventQueue <> nil then
+  begin
+    TWatchEventQueue(FWatchEventQueue).Clear;
+    FreeAndNil(FWatchEventQueue);
+  end;
+  FreeAndNil(FReloadTimer);
+  FreeAndNil(FFileChangeSource);
+  FreeAndNil(FReloadCoordinator);
+end;
+
+procedure TMainForm.QueueFileWatchEvent(const Event: TFileChangeEvent);
+begin
+  if FClosingReload or (FWatchEventQueue = nil) then Exit;
+  if TWatchEventQueue(FWatchEventQueue).Push(Event) then
+    Application.QueueAsyncCall(ProcessFileWatchEvents, 0);
+end;
+
+procedure TMainForm.ProcessFileWatchEvents(Data: PtrInt);
+var Event: TFileChangeEvent;
+begin
+  if FClosingReload or FExplicitReloadInProgress or
+    (FWatchEventQueue = nil) then Exit;
+  while TWatchEventQueue(FWatchEventQueue).Pop(Event) do
+    HandleFileWatchEvent(Event);
+end;
+
+procedure TMainForm.HandleFileWatchEvent(const Event: TFileChangeEvent);
+var Relevant: Boolean;
+begin
+  if FClosingReload or (FReloadCoordinator = nil) then Exit;
+  Relevant := IsFileWatchEventRelevant(Event, FWatchSubscriptionID,
+    EventManager.DocumentSession.WatchGeneration,
+    EventManager.DocumentSession.SourcePath);
+  if not Relevant then Exit;
+  if Event.Kind = fckReady then
+  begin
+    FReloadCoordinator.SetWatchUnavailable(Event.Status <> fwsReady);
+    UpdateReloadUi;
+    Exit;
+  end;
+  if Event.Kind = fckBackendError then
+  begin
+    FReloadCoordinator.SetWatchUnavailable(True);
+    UpdateReloadStatus('File watching unavailable: ' + Event.ErrorText);
+    UpdateReloadUi;
+    Exit;
+  end;
+  if FWatchSubscriptionID = 0 then Exit;
+  FConsistencyRetryCount := 0;
+  if FReloadCoordinator.NotifyFileEvent(
+    EventManager.DocumentSession.WatchGeneration, GetTickCount64) then
+  begin
+    FReloadTimer.Interval := 100;
+    FReloadTimer.Enabled := True;
+  end;
+  UpdateReloadUi;
+end;
+
+procedure TMainForm.ProcessReloadDeadline(Sender: TObject);
+begin
+  FReloadTimer.Enabled := False;
+  ProcessReloadAt(GetTickCount64);
+end;
+
+procedure TMainForm.ProcessPendingReload(NowMS: QWord);
+begin
+  if (FReloadTimer <> nil) and FReloadTimer.Enabled then
+    FReloadTimer.Enabled := False;
+  ProcessFileWatchEvents(0);
+  ProcessReloadAt(NowMS);
+end;
+
+procedure TMainForm.ApplyAutoReloadSettings;
+begin
+  if FReloadCoordinator = nil then Exit;
+  FReloadCoordinator.Paused := not AutoRefreshEnabled or FDocumentPaused;
+  UpdateReloadUi;
+end;
+
+procedure TMainForm.ProcessReloadAt(NowMS: QWord);
+var Ticket: TReloadReadTicket;
+begin
+  if FExplicitReloadInProgress then Exit;
+  if FClosingReload or (FReloadCoordinator = nil) then Exit;
+  if SceneInteractionActive then
+  begin
+    FDeferredReload := True;
+    Exit;
+  end;
+  FDeferredReload := False;
+  if FExplicitReloadRequested then
+  begin
+    if FExplicitDiscardArmed and
+      (EventManager.DocumentSession.LocalRevision <>
+       FConfirmedLocalRevision) then
+    begin
+      FExplicitReloadRequested := False;
+      FExplicitDiscardArmed := False;
+      UpdateReloadStatus('Local edits changed; confirm Reload from disk again');
+    end
+    else if FReloadCoordinator.BeginExplicitReload(Ticket) then
+    begin
+      FExplicitReloadRequested := False;
+      FExplicitDiscardArmed := False;
+      if FReloadTimer <> nil then FReloadTimer.Enabled := False;
+      FExplicitReloadInProgress := True;
+      try
+        ReadAndApplyReload(Ticket);
+      finally
+        FExplicitReloadInProgress := False;
+      end;
+      ProcessFileWatchEvents(0);
+    end;
+  end
+  else if FReloadCoordinator.TakeSettledRead(NowMS, Ticket) then
+    ReadAndApplyReload(Ticket);
+  UpdateReloadUi;
+end;
+
+function TMainForm.BeginDocumentWatchBinding(const Path: TDocumentPath;
+  out WatchGeneration, SubscriptionID: QWord): TFileWatchStatus;
+var OldID: QWord; Ready: TFileWatchStatus;
+begin
+  WatchGeneration := EventManager.DocumentSession.NextWatchGeneration;
+  SubscriptionID := 0;
+  if (FFileChangeSource = nil) or (Path = '') then
+  begin
+    Result := fwsUnsupported;
+    Exit;
+  end;
+  if FFileChangeSource.Status = fwsStopped then
+  begin
+    FFileChangeSource.Start;
+    Ready := FFileChangeSource.WaitUntilReady(3000);
+    FReloadCoordinator.SetWatchUnavailable(Ready <> fwsReady);
+    if (Ready in [fwsReady, fwsDegraded]) and
+      (FWatchDispatcher = nil) then
+    begin
+      FWatchDispatcher := TFileWatchDispatcher.Create(FFileChangeSource, Self);
+      FWatchDispatcher.Start;
+    end;
+  end;
+  OldID := FPendingSubscriptionID;
+  if OldID <> 0 then FFileChangeSource.Unsubscribe(OldID);
+  Result := FFileChangeSource.Subscribe(NormalizeDocumentPath(Path),
+    WatchGeneration, SubscriptionID);
+  if Result in [fwsReady, fwsDegraded] then
+  begin
+    FPendingSubscriptionID := SubscriptionID;
+  end
+  else
+    FReloadCoordinator.SetWatchUnavailable(True);
+end;
+
+procedure TMainForm.AcceptDocumentWatchBinding(
+  const Snapshot: TDocumentSnapshot; WatchGeneration,
+  SubscriptionID: QWord);
+begin
+  if (WatchGeneration <> EventManager.DocumentSession.WatchGeneration) or
+    FClosingReload then Exit;
+  if FWatchSubscriptionID <> 0 then
+    FFileChangeSource.Unsubscribe(FWatchSubscriptionID);
+  FWatchSubscriptionID := SubscriptionID;
+  FPendingSubscriptionID := 0;
+  FDocumentPaused := False;
+  if FReloadTimer <> nil then FReloadTimer.Enabled := False;
+  FReloadCoordinator.Bind(WatchGeneration,
+    EventManager.DocumentSession.LocalRevision,
+    DiskRevisionKey(Snapshot.Revision), Snapshot.Revision.ContentDigest,
+    CurrentDocumentDirty);
+  FReloadCoordinator.Paused := not AutoRefreshEnabled;
+  if not EventManager.DocumentSession.CanSaveBack then
+  begin
+    if (FWatchSubscriptionID <> 0) and (FFileChangeSource <> nil) then
+      FFileChangeSource.Unsubscribe(FWatchSubscriptionID);
+    FWatchSubscriptionID := 0;
+  end;
+  FReloadCoordinator.SetWatchUnavailable(
+    not EventManager.DocumentSession.CanSaveBack or (SubscriptionID = 0) or
+    (FFileChangeSource = nil) or
+    (FFileChangeSource.Status <> fwsReady));
+  FConsistencyRetryCount := 0;
+  FLastConflictRevisionKey := '';
+  FLastReloadErrorText := '';
+  ScheduleSourceReconciliation;
+  UpdateReloadUi;
+end;
+
+procedure TMainForm.CancelDocumentWatchBinding(WatchGeneration,
+  SubscriptionID: QWord);
+begin
+  if (FFileChangeSource <> nil) and (SubscriptionID <> 0) then
+    FFileChangeSource.Unsubscribe(SubscriptionID);
+  if FPendingSubscriptionID = SubscriptionID then
+  begin
+    FPendingSubscriptionID := 0;
+      end;
+  if (EventManager.DocumentSession.SourcePath <> '') and
+    (WatchGeneration = EventManager.DocumentSession.WatchGeneration) then
+    RestoreExistingWatch;
+end;
+
+procedure TMainForm.ClearDocumentWatchBinding;
+begin
+  if FReloadTimer <> nil then FReloadTimer.Enabled := False;
+  if FFileChangeSource <> nil then
+  begin
+    if FPendingSubscriptionID <> 0 then
+      FFileChangeSource.Unsubscribe(FPendingSubscriptionID);
+    if FWatchSubscriptionID <> 0 then
+      FFileChangeSource.Unsubscribe(FWatchSubscriptionID);
+  end;
+  FPendingSubscriptionID := 0;
+  FWatchSubscriptionID := 0;
+  FDeferredReload := False;
+  FExplicitReloadRequested := False;
+  FExplicitDiscardArmed := False;
+  FDocumentPaused := False;
+  FLastConflictRevisionKey := '';
+  FLastReloadErrorText := '';
+  FConflictSnapshot.SourceBytes := '';
+  if FReloadCoordinator <> nil then FReloadCoordinator.Close;
+  UpdateReloadUi;
+end;
+
+procedure TMainForm.RestoreExistingWatch;
+var SubID: QWord; Status: TFileWatchStatus; Gen: QWord;
+begin
+  if (FFileChangeSource = nil) or
+    (EventManager.DocumentSession.SourcePath = '') or
+    not EventManager.DocumentSession.CanSaveBack then Exit;
+  Gen := EventManager.DocumentSession.WatchGeneration;
+  Status := FFileChangeSource.Subscribe(
+    EventManager.DocumentSession.SourcePath, Gen, SubID);
+  if FWatchSubscriptionID <> 0 then
+    FFileChangeSource.Unsubscribe(FWatchSubscriptionID);
+  FWatchSubscriptionID := SubID;
+  FReloadCoordinator.Bind(Gen, EventManager.DocumentSession.LocalRevision,
+    DiskRevisionKey(EventManager.DocumentSession.AcceptedRevision),
+    EventManager.DocumentSession.AcceptedRevision.ContentDigest,
+    CurrentDocumentDirty);
+  FReloadCoordinator.Paused := not AutoRefreshEnabled or FDocumentPaused;
+  FReloadCoordinator.SetWatchUnavailable(Status <> fwsReady);
+  if FReloadTimer <> nil then FReloadTimer.Enabled := False;
+  ScheduleSourceReconciliation;
+  UpdateReloadUi;
+end;
+
+procedure TMainForm.AcceptSavedDocumentRevision;
+begin
+  if FReloadCoordinator <> nil then
+  begin
+    FReloadCoordinator.AcceptSavedRevision(
+      EventManager.DocumentSession.WatchGeneration,
+      EventManager.DocumentSession.LocalRevision,
+      DiskRevisionKey(EventManager.DocumentSession.AcceptedRevision),
+      EventManager.DocumentSession.AcceptedRevision.ContentDigest,
+      CurrentDocumentDirty);
+    FReloadCoordinator.Paused := not AutoRefreshEnabled or FDocumentPaused;
+  end;
+  UpdateReloadUi;
+end;
+
+function TMainForm.CurrentDocumentDirty: Boolean;
+begin
+  Result := Assigned(TheDrawing) and Assigned(TheDrawing.History) and
+    TheDrawing.History.IsChanged;
+end;
+
+procedure TMainForm.ScheduleSourceReconciliation;
+begin
+  if (FReloadCoordinator = nil) or FReloadCoordinator.Paused or
+    (EventManager.DocumentSession.SourcePath = '') or
+    not EventManager.DocumentSession.CanSaveBack then Exit;
+  if FReloadCoordinator.NotifyFileEvent(
+    EventManager.DocumentSession.WatchGeneration, GetTickCount64) then
+  begin
+    FReloadTimer.Interval := 100;
+    FReloadTimer.Enabled := True;
+  end;
+end;
+
+function TMainForm.SceneInteractionActive: Boolean;
+begin
+  Result := FPointerDown or (FModalDepth > 0);
+end;
+
+procedure TMainForm.NotifyDocumentEdited;
+var Session: TDocumentSession;
+begin
+  Session := EventManager.DocumentSession;
+  if FPointerDown then
+  begin
+    FInteractionEditNotified := True;
+    Exit;
+  end;
+  if (FReloadCoordinator = nil) or
+    (Session.LocalRevision = FReloadCoordinator.LocalRevision) then
+    Session.AdvanceLocalRevision;
+  if FReloadCoordinator <> nil then
+  begin
+    FReloadCoordinator.SetLocalState(Session.LocalRevision,
+      CurrentDocumentDirty);
+    if Assigned(FOnLocalEditCommitted) then
+      FOnLocalEditCommitted(Self, Session.LocalRevision,
+        Session.WatchGeneration, CurrentDocumentDirty);
+  end;
+end;
+
+procedure TMainForm.BeginSceneInteraction;
+begin
+  if FPointerDown then Exit;
+  FPointerDown := True;
+  FInteractionEditNotified := False;
+  FInteractionHistoryCount := TheDrawing.History.Count;
+  FInteractionStartRevision := EventManager.DocumentSession.LocalRevision;
+end;
+
+procedure TMainForm.EndSceneInteraction;
+var Session: TDocumentSession; Changed: Boolean;
+begin
+  if not FPointerDown then Exit;
+  Changed := FInteractionEditNotified or
+    (TheDrawing.History.Count <> FInteractionHistoryCount);
+  FPointerDown := False;
+  FInteractionEditNotified := False;
+  if Changed then
+  begin
+    Session := EventManager.DocumentSession;
+    if Session.LocalRevision = FInteractionStartRevision then
+      Session.AdvanceLocalRevision;
+    if FReloadCoordinator <> nil then
+    begin
+      FReloadCoordinator.SetLocalState(Session.LocalRevision,
+        CurrentDocumentDirty);
+      if Assigned(FOnLocalEditCommitted) then
+        FOnLocalEditCommitted(Self, Session.LocalRevision,
+          Session.WatchGeneration, CurrentDocumentDirty);
+    end;
+  end;
+  if FDeferredReload then
+    Application.QueueAsyncCall(TryApplyDeferredReload, 0);
+end;
+
+procedure TMainForm.ApplicationModalBegin(Sender: TObject);
+begin
+  Inc(FModalDepth);
+end;
+
+procedure TMainForm.ApplicationModalEnd(Sender: TObject);
+begin
+  if FModalDepth > 0 then Dec(FModalDepth);
+  if (FModalDepth = 0) and FDeferredReload then
+    Application.QueueAsyncCall(TryApplyDeferredReload, 0);
+end;
+
+procedure TMainForm.TryApplyDeferredReload(Data: PtrInt);
+begin
+  ApplyDeferredReload;
+end;
+
+procedure TMainForm.ApplyDeferredReload;
+begin
+  if FDeferredReload and not SceneInteractionActive and
+    (FModalDepth = 0) then
+    ProcessReloadAt(GetTickCount64);
+end;
+
+procedure TMainForm.AutoRefreshClick(Sender: TObject);
+begin
+  AutoRefreshEnabled := not AutoRefreshEnabled;
+  SaveSettings;
+  FReloadCoordinator.Paused := not AutoRefreshEnabled or FDocumentPaused;
+  if AutoRefreshEnabled and (FWatchSubscriptionID <> 0) then
+    if FReloadCoordinator.NotifyFileEvent(
+      EventManager.DocumentSession.WatchGeneration, GetTickCount64) then
+    begin
+      FReloadTimer.Interval := 100;
+      FReloadTimer.Enabled := True;
+    end;
+  UpdateReloadUi;
+end;
+
+procedure TMainForm.PauseRefreshClick(Sender: TObject);
+begin
+  FDocumentPaused := not FDocumentPaused;
+  FReloadCoordinator.Paused := not AutoRefreshEnabled or FDocumentPaused;
+  if not FReloadCoordinator.Paused and (FWatchSubscriptionID <> 0) then
+    if FReloadCoordinator.NotifyFileEvent(
+      EventManager.DocumentSession.WatchGeneration, GetTickCount64) then
+    begin
+      FReloadTimer.Interval := 100;
+      FReloadTimer.Enabled := True;
+    end;
+  UpdateReloadUi;
+end;
+
+procedure TMainForm.ReloadDiskClick(Sender: TObject);
+var Session: TDocumentSession; Answer: Integer;
+begin
+  Session := EventManager.DocumentSession;
+  if Session.SourcePath = '' then Exit;
+  if CurrentDocumentDirty then
+  begin
+    Answer := MessageDlg('Reloading from disk will discard local edits. ' +
+      'Continue?', mtConfirmation, [mbYes, mbNo], 0);
+    if Answer <> mrYes then Exit;
+    FExplicitDiscardArmed := True;
+    FConfirmedLocalRevision := Session.LocalRevision;
+  end
+  else
+    FExplicitDiscardArmed := False;
+  FExplicitReloadRequested := True;
+  ProcessReloadAt(GetTickCount64);
+end;
+
+procedure TMainForm.KeepLocalClick(Sender: TObject);
+var Session: TDocumentSession;
+begin
+  Session := EventManager.DocumentSession;
+  FReloadCoordinator.KeepLocal;
+  if Assigned(FOnExternalReloadKeepLocal) then
+    FOnExternalReloadKeepLocal(Self, Session.LocalRevision,
+      Session.WatchGeneration);
+  UpdateReloadUi;
+end;
+
+procedure TMainForm.SaveCopyClick(Sender: TObject);
+begin
+  EventManager.SendMessage(Msg_SaveAs, Sender);
+end;
+
+procedure TMainForm.CancelConflictClick(Sender: TObject);
+begin
+  { Closing the menu leaves both versions and the conflict notice intact. }
+end;
+
+procedure TMainForm.UpdateReloadStatus(const Text: string);
+begin
+  if FReloadStatusPanel = nil then Exit;
+  FReloadStatusPanel.Text := Text;
+  if (FReloadCoordinator <> nil) and FReloadCoordinator.InvalidExternal and
+    (FLastReloadErrorText <> '') then
+  begin
+    FReloadDiskMenu.Hint := FLastReloadErrorText;
+    StatusBar1.Hint := FLastReloadErrorText;
+    StatusBar1.ShowHint := True;
+  end
+  else
+  begin
+    FReloadDiskMenu.Hint := Text;
+    StatusBar1.Hint := Text;
+    StatusBar1.ShowHint := Text <> '';
+  end;
+end;
+
+procedure TMainForm.UpdateReloadUi;
+var Session: TDocumentSession; Text: string;
+begin
+  if (FReloadCoordinator = nil) or (FAutoRefreshMenu = nil) then Exit;
+  Session := EventManager.DocumentSession;
+  FAutoRefreshMenu.Checked := AutoRefreshEnabled;
+  FPauseRefreshMenu.Enabled := Session.SourcePath <> '';
+  FPauseRefreshMenu.Checked := FDocumentPaused;
+  FReloadDiskMenu.Enabled := Session.SourcePath <> '';
+  FConflictMenu.Visible := FReloadCoordinator.Conflict;
+  FKeepLocalMenu.Visible := FReloadCoordinator.Conflict;
+  FSaveCopyMenu.Visible := FReloadCoordinator.Conflict;
+  FCancelConflictMenu.Visible := FReloadCoordinator.Conflict;
+  if FReloadCoordinator.Missing then
+    Text := 'Source file missing'
+  else if FReloadCoordinator.InvalidExternal then
+    Text := 'External source is invalid; last valid drawing retained'
+  else if FReloadCoordinator.Conflict then
+    Text := 'External changes conflict with local edits'
+  else if FReloadCoordinator.WatchUnavailable then
+    Text := 'File watching unavailable; use Reload from disk'
+  else if FDocumentPaused then
+    Text := 'Automatic refresh paused for this document'
+  else if not AutoRefreshEnabled then
+    Text := 'Automatic refresh disabled'
+  else
+    Text := '';
+  UpdateReloadStatus(Text);
+end;
+
+procedure TMainForm.ScheduleConsistencyRetry;
+begin
+  Inc(FConsistencyRetryCount);
+  if FConsistencyRetryCount > 1 then
+  begin
+    UpdateReloadStatus('Source is changing; waiting for another file event');
+    Exit;
+  end;
+  if FReloadCoordinator.NotifyFileEvent(
+    EventManager.DocumentSession.WatchGeneration, GetTickCount64) then
+  begin
+    FReloadTimer.Interval := 100;
+    FReloadTimer.Enabled := True;
+  end;
+end;
+
+procedure TMainForm.ReadAndApplyReload(const Ticket: TReloadReadTicket);
+var
+  Session: TDocumentSession;
+  Snapshot: TDocumentSnapshot;
+  DiskRevision: TDiskRevision;
+  Candidate: TDrawing2D;
+  CandidateCanSaveBack, ErrorAgain, Exists, CommitPrepared: Boolean;
+  CandidateContext: TObject;
+  Diagnostics: TStringList;
+  Decision: TReloadDecision;
+  ErrorText, DiskKey: string;
+  FinalRevision: TDiskRevision;
+  OldCanSaveBack, HadFocus: Boolean;
+  OldViewRect: TRect2D;
+  SelectedIDs: array of Integer;
+  SelectedClasses: array of TClass;
+  Obj: TGraphicObject;
+  I, N: Integer;
+  SelectedObj: TGraphicObject;
+begin
+  Session := EventManager.DocumentSession;
+  Candidate := nil;
+  CandidateContext := nil;
+  CommitPrepared := False;
+  Diagnostics := TStringList.Create;
+  try
+    Exists := DocumentFileExists(Session.SourcePath);
+    if not Exists then
+    begin
+      DiskRevision.ContentDigest := '';
+      DiskRevision.Size := 0;
+      DiskRevision.ModifiedUTC := 0;
+      DiskRevision.Identity := '';
+      DiskRevision.Exists := False;
+      FReloadCoordinator.CompleteRead(Ticket, DiskRevisionKey(DiskRevision), '',
+        False, True, Session.LocalRevision, CurrentDocumentDirty,
+        Decision, ErrorAgain);
+      UpdateReloadUi;
+      Exit;
+    end;
+    try
+      Snapshot := ReadDocumentSnapshot(Session.SourcePath);
+    except
+      on E: Exception do
+      begin
+        ErrorText := E.Message;
+        if Pos('changed while it was being read', ErrorText) > 0 then
+        begin
+          FReloadCoordinator.CompleteRead(Ticket,
+            FReloadCoordinator.BaseRevision, FReloadCoordinator.BaseContent,
+            True, True, Session.LocalRevision, CurrentDocumentDirty,
+            Decision, ErrorAgain);
+          ScheduleConsistencyRetry;
+          Exit;
+        end;
+        DiskKey := 'io:' + E.ClassName + ':' + ErrorText;
+        FReloadCoordinator.CompleteRead(Ticket, DiskKey, '', True, False,
+          Session.LocalRevision, CurrentDocumentDirty, Decision, ErrorAgain);
+        if ErrorAgain then
+          FLastReloadErrorText := 'Could not read external source ' +
+            Session.SourcePath + LineEnding + ErrorText;
+        UpdateReloadUi;
+        Exit;
+      end;
+    end;
+    DiskKey := DiskRevisionKey(Snapshot.Revision);
+    if not Ticket.ExplicitReload and
+      (Snapshot.Revision.ContentDigest = FReloadCoordinator.BaseContent) then
+    begin
+      FReloadCoordinator.CompleteRead(Ticket, DiskKey,
+        Snapshot.Revision.ContentDigest, True, True,
+        Session.LocalRevision, CurrentDocumentDirty, Decision, ErrorAgain);
+      if Decision = rdNoChange then
+      begin
+        OldCanSaveBack := Session.CanSaveBack;
+        Session.AcceptSavedRevision(Snapshot.SourceBytes,
+          Snapshot.Revision, Session.CodecContext,
+          Session.RecoveryBackupPath);
+        Session.CanSaveBack := OldCanSaveBack;
+        FLastConflictRevisionKey := '';
+      end;
+      UpdateReloadUi;
+      Exit;
+    end;
+    try
+      Candidate := LoadDocumentCandidate(Session.SourceFormatId,
+        Session.SourcePath, Snapshot.SourceBytes, CandidateCanSaveBack,
+        CandidateContext, Diagnostics);
+    except
+      on E: Exception do
+      begin
+        ErrorText := E.Message;
+        if Diagnostics.Count > 0 then
+          ErrorText := ErrorText + LineEnding + Diagnostics.Text;
+        FReloadCoordinator.CompleteRead(Ticket, DiskKey,
+          Snapshot.Revision.ContentDigest, True, False,
+          Session.LocalRevision, CurrentDocumentDirty, Decision, ErrorAgain);
+        if ErrorAgain then
+          FLastReloadErrorText := 'Could not reload external source ' +
+            Session.SourcePath + LineEnding + ErrorText;
+        UpdateReloadUi;
+        Exit;
+      end;
+    end;
+    try
+      FinalRevision := ReadDocumentRevision(Session.SourcePath);
+    except
+      on E: Exception do
+      begin
+        FReloadCoordinator.CompleteRead(Ticket,
+          FReloadCoordinator.BaseRevision, FReloadCoordinator.BaseContent,
+          True, True, Session.LocalRevision, CurrentDocumentDirty,
+          Decision, ErrorAgain);
+        ScheduleConsistencyRetry;
+        Exit;
+      end;
+    end;
+    if not SameDiskRevision(Snapshot.Revision, FinalRevision) then
+    begin
+      FReloadCoordinator.CompleteRead(Ticket,
+        FReloadCoordinator.BaseRevision, FReloadCoordinator.BaseContent,
+        True, True, Session.LocalRevision, CurrentDocumentDirty,
+        Decision, ErrorAgain);
+      ScheduleConsistencyRetry;
+      Exit;
+    end;
+    if not CandidateCanSaveBack then
+    begin
+      FReloadCoordinator.CompleteRead(Ticket, DiskKey,
+        Snapshot.Revision.ContentDigest, True, False,
+        Session.LocalRevision, CurrentDocumentDirty, Decision, ErrorAgain);
+      if ErrorAgain then
+      begin
+        ErrorText := 'The external source can no longer be safely saved back';
+        if Diagnostics.Count > 0 then
+          ErrorText := ErrorText + LineEnding + Diagnostics.Text;
+        FLastReloadErrorText := 'Could not reload external source ' +
+          Session.SourcePath + LineEnding + ErrorText;
+      end;
+      UpdateReloadUi;
+      Exit;
+    end;
+    FReloadCoordinator.CompleteRead(Ticket, DiskKey,
+      Snapshot.Revision.ContentDigest, True, True, Session.LocalRevision,
+      CurrentDocumentDirty, Decision, ErrorAgain);
+    if Decision <> rdInvalid then FLastReloadErrorText := '';
+    case Decision of
+      rdIgnore: Exit;
+      rdNoChange:
+        begin
+          OldCanSaveBack := Session.CanSaveBack;
+          Session.AcceptSavedRevision(Snapshot.SourceBytes,
+            Snapshot.Revision, Session.CodecContext,
+            Session.RecoveryBackupPath);
+          Session.CanSaveBack := OldCanSaveBack;
+          FLastConflictRevisionKey := '';
+          UpdateReloadUi;
+          Exit;
+        end;
+      rdMissing:
+        begin
+          UpdateReloadUi;
+          Exit;
+        end;
+      rdInvalid:
+        begin
+          if ErrorAgain and (FLastReloadErrorText = '') then
+            FLastReloadErrorText := 'External source is invalid: ' +
+              Session.SourcePath + LineEnding + Diagnostics.Text;
+          UpdateReloadUi;
+          Exit;
+        end;
+      rdConflict:
+        begin
+          FConflictSnapshot := Snapshot;
+          if FLastConflictRevisionKey <> DiskKey then
+          begin
+            FLastConflictRevisionKey := DiskKey;
+            if Assigned(FOnExternalReloadConflict) then
+              FOnExternalReloadConflict(Self, FConflictSnapshot);
+          end;
+          UpdateReloadUi;
+          Exit;
+        end;
+      rdWatchUnavailable: begin UpdateReloadUi; Exit; end;
+      rdApply: ;
+    end;
+    { The explicit user request already names this disk snapshot. A native
+      watcher hint that arrives while parsing it is only a redundant rescan;
+      consuming that hint here would invalidate the confirmed read ticket. }
+    if not Ticket.ExplicitReload then
+      ProcessFileWatchEvents(0);
+    FReloadCoordinator.SetLocalState(Session.LocalRevision,
+      CurrentDocumentDirty);
+    if not FReloadCoordinator.PrepareReloadCommit(Ticket, DiskKey,
+      Snapshot.Revision.ContentDigest, Session.LocalRevision + 1,
+      Session.LocalRevision, CurrentDocumentDirty) then
+    begin
+      if CurrentDocumentDirty then
+      begin
+        FReloadCoordinator.KeepLocal;
+        FConflictSnapshot := Snapshot;
+        if FLastConflictRevisionKey <> DiskKey then
+        begin
+          FLastConflictRevisionKey := DiskKey;
+          if Assigned(FOnExternalReloadConflict) then
+            FOnExternalReloadConflict(Self, FConflictSnapshot);
+        end;
+      end;
+      UpdateReloadUi;
+      Exit;
+    end;
+    CommitPrepared := True;
+    try
+      try
+        FinalRevision := ReadDocumentRevision(Session.SourcePath);
+      except
+        on E: Exception do
+        begin
+          ScheduleConsistencyRetry;
+          Exit;
+        end;
+      end;
+      if not SameDiskRevision(Snapshot.Revision, FinalRevision) then
+      begin
+        ScheduleConsistencyRetry;
+        Exit;
+      end;
+      OldViewRect := LocalView.VisualRect;
+      HadFocus := LocalView.Focused;
+      SetLength(SelectedIDs, TheDrawing.SelectedObjects.Count);
+      SetLength(SelectedClasses, Length(SelectedIDs));
+      N := 0;
+      SelectedObj := TheDrawing.SelectedObjects.FirstObj;
+      while (SelectedObj <> nil) and (N < Length(SelectedIDs)) do
+      begin
+        SelectedIDs[N] := SelectedObj.ID;
+        SelectedClasses[N] := SelectedObj.ClassType;
+        Inc(N);
+        SelectedObj := TheDrawing.SelectedObjects.NextObj;
+      end;
+      SetLength(SelectedIDs, N);
+      SetLength(SelectedClasses, N);
+      CommitDocumentCandidate(TheDrawing, Candidate);
+      FReloadCoordinator.CompleteReloadCommit;
+      CommitPrepared := False;
+      Session.AcceptExternalRevision(Snapshot.SourceBytes,
+        Snapshot.Revision, CandidateContext);
+      CandidateContext := nil;
+      Session.CanSaveBack := CandidateCanSaveBack;
+      BeginLiveTeXDocument(False);
+      if Assigned(FOnExternalReloadCommitted) then
+        FOnExternalReloadCommitted(Self, Session.LocalRevision,
+          Session.WatchGeneration);
+      TheDrawing.SelectionClear;
+      for I := 0 to N - 1 do
+      begin
+        Obj := TheDrawing.GetObject(SelectedIDs[I]);
+        if (Obj <> nil) and (Obj.ClassType = SelectedClasses[I]) then
+          TheDrawing.SelectionAdd(Obj);
+      end;
+      LocalView.VisualRect := OldViewRect;
+      Undo.Enabled := TheDrawing.History.CanUndo;
+      Redo.Enabled := TheDrawing.History.CanRedo;
+      TheDrawing.RepaintViewports;
+      if HadFocus and LocalView.CanFocus then LocalView.SetFocus;
+      FConflictSnapshot.SourceBytes := '';
+      FLastConflictRevisionKey := '';
+      UpdateReloadUi;
+    finally
+      if CommitPrepared then FReloadCoordinator.CancelReloadCommit;
+    end;
+  finally
+    Candidate.Free;
+    CandidateContext.Free;
+    Diagnostics.Free;
+  end;
+end;
+
+{$ENDIF}
+{$ENDIF}
 
 procedure TMainForm.ShowTpXHelp;
 begin
@@ -1197,6 +2340,7 @@ procedure TMainForm.FormShow(Sender: TObject);
 begin
 {$IFDEF FPC}
   LiveTeXPreview.Checked := LiveTeXEnabled;
+  TrustTeXPreview.Checked := LiveTeXDocumentTrusted;
 {$ENDIF}
   ShowGrid.Checked := LocalView.ShowGrid;
   ShowCrossHair.Checked := LocalView.ShowCrossHair;

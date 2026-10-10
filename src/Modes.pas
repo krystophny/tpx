@@ -818,6 +818,11 @@ begin
   if not Drawing.History.CanUndo then Exit;
   Drawing.History.Undo;
   TpX_Manager.DocumentSession.AdvanceLocalRevision;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  MainForm.NotifyDocumentEdited;
+{$ENDIF}
+{$ENDIF}
   Drawing.Update;
   MainForm.Undo.Enabled := Drawing.History.CanUndo;
   MainForm.Redo.Enabled := Drawing.History.CanRedo;
@@ -829,6 +834,11 @@ begin
   if not Drawing.History.CanRedo then Exit;
   Drawing.History.Redo;
   TpX_Manager.DocumentSession.AdvanceLocalRevision;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  MainForm.NotifyDocumentEdited;
+{$ENDIF}
+{$ENDIF}
   Drawing.Update;
   MainForm.Undo.Enabled := Drawing.History.CanUndo;
   MainForm.Redo.Enabled := Drawing.History.CanRedo;
@@ -844,6 +854,11 @@ begin
       History.Save;
       MainForm.Undo.Enabled := History.CanUndo;
       MainForm.Redo.Enabled := History.CanRedo;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+      MainForm.NotifyDocumentEdited;
+{$ENDIF}
+{$ENDIF}
       //SaveDoc.Enabled := History.IsChanged;
     end;
 end;
@@ -944,15 +959,36 @@ var
   CodecContext: TObject;
   Diagnostics: TStringList;
   CanSaveBack: Boolean;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  WatchGeneration, SubscriptionID: QWord;
+  WatchBindingStarted, WatchBindingAccepted: Boolean;
+{$ENDIF}
+{$ENDIF}
 begin
   Result := False;
   ErrorText := '';
   Candidate := nil;
   CodecContext := nil;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  WatchGeneration := 0;
+  SubscriptionID := 0;
+  WatchBindingStarted := False;
+  WatchBindingAccepted := False;
+{$ENDIF}
+{$ENDIF}
   Diagnostics := TStringList.Create;
   try
     try
       Path := NormalizeDocumentPath(FileName);
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+      MainForm.BeginDocumentWatchBinding(Path, WatchGeneration,
+        SubscriptionID);
+      WatchBindingStarted := True;
+{$ENDIF}
+{$ENDIF}
       Snapshot := ReadDocumentSnapshot(Path);
       if not DetectDocumentFormat(Path, Snapshot.SourceBytes, Format) then
         raise EReadError.Create('The file format is not supported for opening');
@@ -968,6 +1004,16 @@ begin
       TpX_Manager.DocumentSession.AcceptSourceNormalized(Path, Format.Id,
         Snapshot.SourceBytes, Snapshot.Revision, CanSaveBack, CodecContext);
       CodecContext := nil;
+{$IFDEF FPC}
+      BeginLiveTeXDocument(False);
+{$ENDIF}
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+      MainForm.AcceptDocumentWatchBinding(Snapshot, WatchGeneration,
+        SubscriptionID);
+      WatchBindingAccepted := True;
+{$ENDIF}
+{$ENDIF}
       Result := True;
     except
       on E: Exception do ErrorText := E.Message;
@@ -991,6 +1037,12 @@ begin
       end;
     end;
   finally
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+    if WatchBindingStarted and not WatchBindingAccepted then
+      MainForm.CancelDocumentWatchBinding(WatchGeneration, SubscriptionID);
+{$ENDIF}
+{$ENDIF}
     Candidate.Free;
     CodecContext.Free;
     Diagnostics.Free;
@@ -1022,6 +1074,13 @@ var
     HasStagedAssets: Boolean;
   I, Sep: Integer;
   Ext, Extensions: string;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  WatchGeneration, SubscriptionID: QWord;
+  WatchBindingStarted, WatchBindingAccepted: Boolean;
+  SavedSnapshot: TDocumentSnapshot;
+{$ENDIF}
+{$ENDIF}
 begin
   Result := False;
   ErrorText := '';
@@ -1030,6 +1089,14 @@ begin
   CodecContext := nil;
   StageDirectory := '';
   StagingFileName := '';
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  WatchGeneration := 0;
+  SubscriptionID := 0;
+  WatchBindingStarted := False;
+  WatchBindingAccepted := False;
+{$ENDIF}
+{$ENDIF}
   StagedAssets := TStringList.Create;
   FinalAssets := TStringList.Create;
   Diagnostics := TStringList.Create;
@@ -1115,6 +1182,16 @@ begin
       WriteDocumentBundleAtomically(Path, Bytes, ExpectedRevision, True,
         StagedAssets, FinalAssets, NewRevision, BackupFileName);
 
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+      if not SameSource then
+      begin
+        MainForm.BeginDocumentWatchBinding(Path, WatchGeneration,
+          SubscriptionID);
+        WatchBindingStarted := True;
+      end;
+{$ENDIF}
+{$ENDIF}
       PreviousBackup := TpX_Manager.DocumentSession.RecoveryBackupPath;
       if SameSource then
         TpX_Manager.DocumentSession.AcceptSavedRevision(Bytes, NewRevision,
@@ -1129,6 +1206,20 @@ begin
         TpX_Manager.DocumentSession.Diagnostics.Assign(Diagnostics);
         if not SameSource then Drawing.RebindFileNameAfterAssetCommit(Path);
         Drawing.History.SaveCheckSum;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+        if SameSource then
+          MainForm.AcceptSavedDocumentRevision
+        else
+        begin
+          SavedSnapshot.SourceBytes := Bytes;
+          SavedSnapshot.Revision := NewRevision;
+          MainForm.AcceptDocumentWatchBinding(SavedSnapshot,
+            WatchGeneration, SubscriptionID);
+          WatchBindingAccepted := True;
+        end;
+{$ENDIF}
+{$ENDIF}
         TpX_Manager.RecentFiles.Update(Drawing.FileName);
         MainForm.Caption := ExtractFileName(Drawing.FileName);
         if (PreviousBackup <> '') and (PreviousBackup <> BackupFileName) then
@@ -1140,6 +1231,12 @@ begin
       on E: Exception do ErrorText := E.Message;
     end;
   finally
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+    if WatchBindingStarted and not WatchBindingAccepted then
+      MainForm.CancelDocumentWatchBinding(WatchGeneration, SubscriptionID);
+{$ENDIF}
+{$ENDIF}
     Candidate.Free;
     CodecContext.Free;
     Stream.Free;
@@ -1317,6 +1414,9 @@ procedure TTpXMode.NewDrawing(const FileName: string);
 begin
   Drawing.Clear;
   TpX_Manager.DocumentSession.Clear;
+{$IFDEF FPC}
+  BeginLiveTeXDocument(True);
+{$ENDIF}
   Drawing.RepaintViewports;
   Drawing.FileName := FileName;
   MainForm.Caption := FileName;

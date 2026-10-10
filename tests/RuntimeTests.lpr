@@ -3,7 +3,7 @@ program RuntimeTests;
 uses
   {$IFDEF UNIX}{$IFNDEF CPUWASM32}cthreads,{$ENDIF}{$ENDIF}
   {$IFDEF UNIX}BaseUnix,{$ENDIF}
-  Interfaces, Forms, SysUtils, Classes, Types, Math, Controls, Dialogs, Clipbrd, InterfaceBase, LCLType, LMessages, Process, LazFileUtils, LazUTF8,
+  Interfaces, Forms, SysUtils, Classes, Types, Math, Controls, Dialogs, ExtCtrls, Clipbrd, InterfaceBase, LCLType, LMessages, Process, LazFileUtils, LazUTF8,
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
@@ -53,6 +53,12 @@ function AnswerPrompt(const Caption, Message: string; DialogType: LongInt;
   Buttons: PLongInt; ButtonCount, DefaultIndex, EscapeResult: LongInt;
   UseDefaultPos: Boolean; X, Y: LongInt): LongInt;
 begin
+  if (ParamStr(1) = 'auto-reload-integration') and
+    (Pos('Reloading from disk will discard local edits', Message) > 0) then
+  begin
+    Inc(PromptCount);
+    Exit(idButtonYes);
+  end;
   if (ParamStr(1) = 'bitmap-eps') and
     (Pos('Conversion of bitmap to EPS failed:', Message) > 0) then begin
     Inc(PromptCount);
@@ -97,6 +103,7 @@ end;
 {$I PlaytestScenarios.inc}
 {$I TpXStagedSaveScenarios.inc}
 {$I DocumentIOScenarios.inc}
+{$I AutoReloadScenarios.inc}
 
 procedure RunBitmapFixtureConverter;
 var
@@ -1304,6 +1311,7 @@ begin
     else if ParamStr(1) = 'platform-shortcuts' then TestPlatformShortcuts
     else if ParamStr(1) = 'document-io' then TestDocumentIO
     else if ParamStr(1) = 'pstoedit-import' then TestPstoeditEmfImport
+    else if ParamStr(1) = 'auto-reload-integration' then TestAutoReloadIntegration
     else if ParamStr(1) = 'color-box-custom-state' then TestColorBoxCustomState
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
     else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))

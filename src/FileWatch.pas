@@ -80,6 +80,9 @@ type
 procedure RegisterFileChangeSourceFactory(Factory: TFileChangeSourceFactory);
 function CreateFileChangeSource: TFileChangeSource;
 function NormalizeFileWatchPath(const Path: UTF8String): UTF8String;
+function IsFileWatchEventRelevant(const Event: TFileChangeEvent;
+  ActiveSubscriptionID, ActiveGeneration: QWord;
+  const ActivePath: UTF8String): Boolean;
 
 implementation
 
@@ -402,6 +405,27 @@ begin
     {$ENDIF}
     Delete(Result, Length(Result), 1);
   end;
+end;
+
+function IsFileWatchEventRelevant(const Event: TFileChangeEvent;
+  ActiveSubscriptionID, ActiveGeneration: QWord;
+  const ActivePath: UTF8String): Boolean;
+var
+  IsGlobalStatus: Boolean;
+begin
+  IsGlobalStatus := (Event.SubscriptionID = 0) and (Event.Generation = 0) and
+    (Event.Path = '') and
+    (Event.Kind in [fckReady, fckBackendError, fckRescanRequired]);
+  if IsGlobalStatus then Exit(True);
+
+  if (ActiveSubscriptionID = 0) or
+    (Event.SubscriptionID <> ActiveSubscriptionID) or
+    (Event.Generation <> ActiveGeneration) then Exit(False);
+  if Event.Kind = fckRescanRequired then
+    Exit(NormalizeFileWatchPath(Event.Path) =
+      NormalizeFileWatchPath(ActivePath));
+  Result := NormalizeFileWatchPath(Event.Path) =
+    NormalizeFileWatchPath(ActivePath);
 end;
 
 end.
