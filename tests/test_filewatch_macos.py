@@ -88,12 +88,12 @@ def event_kinds(events):
 class MacFileWatchTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        if sys.platform != "darwin":
+            raise unittest.SkipTest("native kqueue tests require macOS")
         cls.build = Path(tempfile.mkdtemp(prefix="tpx-filewatch-mac-build-"))
         fpc = os.environ.get("FPC") or shutil.which("fpc")
         if not fpc:
-            if sys.platform == "darwin":
-                raise AssertionError("Free Pascal compiler is required on macOS")
-            raise unittest.SkipTest("Free Pascal compiler is required")
+            raise AssertionError("Free Pascal compiler is required on macOS")
         api_dir = Path(os.environ.get("TPX_FILEWATCH_API_DIR", ROOT / "src"))
         command = [fpc, "-B", "-gl", "-Crtoi", "-Sa",
                    "-dTPX_FILEWATCH_TESTS", "-Fu" + str(api_dir),
