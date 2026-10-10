@@ -525,6 +525,7 @@ procedure T_TpX_Saver.WriteBitmap2D(Obj: TBitmap2D);
 var
   P: TPoint2D;
   W, H: TRealType;
+  Link: string;
 begin
   if not Assigned(Obj.BitmapEntry) then
     raise Exception.Create('Bitmap has no image resource');
@@ -536,7 +537,15 @@ begin
     fXML.AddAttribute('y', FF(P.Y));
     fXML.AddAttribute('w', FF(W));
     fXML.AddAttribute('h', FF(H));
-    fXML.AddAttribute('link', BitmapEntry.ImageLink);
+    Link := BitmapEntry.ImageLink;
+{$IFDEF CPUWASM32}
+    { Browser-selected assets are stored at the virtual root. A downloaded
+      source and its asset sit together, so emit a portable relative link. }
+    if (Length(Link) > 1) and (Link[1] = '/') and
+      (Pos('/', Copy(Link, 2, MaxInt)) = 0) then
+      Link := ExtractFileName(Link);
+{$ENDIF}
+    fXML.AddAttribute('link', Link);
     if not KeepAspectRatio then
       fXML.AddAttribute('keepaspectratio', '0');
   end;
