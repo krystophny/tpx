@@ -29,7 +29,7 @@ type
 
 var
   Observer: TObserver;
-  PromptCount, ReplyButton: Integer;
+  PromptCount, ReplyButton, SaveErrorPromptCount: Integer;
   ShortcutModifierSimulation: Boolean = False;
   ShortcutModifiers: TShiftState = [];
 
@@ -65,6 +65,11 @@ begin
   if (ParamStr(1) = 'property-dimensions') and
     ((Pos('Line width must', Message) > 0) or (Pos('Text height must', Message) > 0)) then
     Exit(idButtonOK);
+  if (ParamStr(1) = 'exit-save-failure') and
+    (Pos('Can not save', Message) > 0) then begin
+    Inc(SaveErrorPromptCount);
+    Exit(idButtonOK);
+  end;
   Check(Pos('Save current drawing?', Message) > 0, 'Unexpected dialog: ' + Message);
   Inc(PromptCount);
   Result := ReplyButton;
@@ -1103,12 +1108,21 @@ var
   Line: TLine2D;
   Saved: TDrawing2D;
   Loader: T_TpX_Loader;
+  Session: TDocumentSession;
   SaveName: string;
   SaveFailed: Boolean;
+  procedure AcceptPendingNativeSource(const FileName: string);
+  begin
+    Session.AcceptSource(FileName, 'tpx', '',
+      ReadDocumentRevision(FileName), True);
+  end;
 begin
   PromptCount := 0;
+  SaveErrorPromptCount := 0;
   ReplyButton := idButtonNo;
   SaveFailed := False;
+  Session := MainForm.EventManager.DocumentSession;
+  Session.Clear;
   if Scenario = 'exit-empty-cancel' then
     MainForm.TheDrawing.History.MarkDirty
   else if Scenario <> 'exit-clean' then begin
@@ -1122,6 +1136,7 @@ begin
     MainForm.TheDrawing.FileName := IncludeTrailingPathDelimiter(
       SysUtils.GetTempDir(False)) + 'tpx-missing-save-parent-' + IntToStr(GetProcessID) +
       PathDelim + 'drawing.tpx';
+    AcceptPendingNativeSource(MainForm.TheDrawing.FileName);
     ReplyButton := idButtonYes;
   end;
   SaveName := '';
@@ -1130,6 +1145,7 @@ begin
     DeleteFile(SaveName);
     SaveName := SaveName + '.tpx';
     MainForm.TheDrawing.FileName := SaveName;
+    AcceptPendingNativeSource(SaveName);
     ReplyButton := idButtonYes;
   end;
   ModeBefore := MainForm.EventManager.Mode;
@@ -1147,6 +1163,7 @@ begin
     except
       on E: Exception do SaveFailed := True;
     end;
+    if SaveErrorPromptCount = 1 then SaveFailed := True;
   end
   else if Scenario = 'exit-close' then MainForm.Close
   else MainForm.UserEventExecute(MainForm.ExitProgram);
@@ -1173,6 +1190,8 @@ begin
   end
   else if Scenario = 'exit-save-failure' then begin
     Check(SaveFailed, 'Failed save did not block closing');
+    Check(SaveErrorPromptCount = 1,
+      'Failed save did not report its error and await acknowledgment');
     Check(Observer.CloseRequests = 0, 'Failed save requested closing');
     Check(MainForm.TheDrawing.History.IsChanged,
       'Failed save cleared the modified state');
