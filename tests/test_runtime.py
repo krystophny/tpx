@@ -109,8 +109,16 @@ class RuntimeTests(unittest.TestCase):
 
     def run_scenario(self, scenario, extra_env=None, directory_prefix="tpx-runtime-"):
         with tempfile.TemporaryDirectory(prefix=directory_prefix) as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
             env = os.environ.copy()
-            env["TMPDIR"] = directory
+            env.update({"TMPDIR": str(root), "TMP": str(root), "TEMP": str(root),
+                        "HOME": str(home), "USERPROFILE": str(home),
+                        "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                        "LOCALAPPDATA": str(config)})
             env.update(extra_env or {})
             result = subprocess.run([str(BINARY), scenario], cwd=directory,
                                     env=env, capture_output=True, text=True, timeout=40)
@@ -136,6 +144,84 @@ class RuntimeTests(unittest.TestCase):
                 "TPX_TIKZ_FIXTURE": str(source),
                 "TPX_TIKZ_FRAGMENT_FIXTURE": str(fragment),
             })
+
+    def test_untitled_recovery_survives_restart_and_requires_choice(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-autosave-restart-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
+            env = {"HOME": str(home), "USERPROFILE": str(home),
+                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                   "LOCALAPPDATA": str(config)}
+            self.run_scenario("autosave-recovery-create", env)
+            self.run_scenario("autosave-recovery-restore", env)
+
+    def test_dirty_empty_draft_survives_restart_without_source_write(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-autosave-empty-restart-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
+            env = {"HOME": str(home), "USERPROFILE": str(home),
+                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                   "LOCALAPPDATA": str(config),
+                   "TPX_AUTOSAVE_EMPTY_SOURCE": str(root / "empty.tpx")}
+            self.run_scenario("autosave-empty-recovery-create", env)
+            self.run_scenario("autosave-empty-recovery-restore", env)
+
+    def test_recovery_warns_about_unresolved_bitmap_links(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-autosave-warning-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
+            env = {"HOME": str(home), "USERPROFILE": str(home),
+                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                   "LOCALAPPDATA": str(config)}
+            self.run_scenario("autosave-unresolved-image-warning", env)
+
+    def test_named_bitmap_recovery_gates_source_autosave_until_manual_save(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-autosave-named-restart-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
+            env = {"HOME": str(home), "USERPROFILE": str(home),
+                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                   "LOCALAPPDATA": str(config),
+                   "TPX_AUTOSAVE_NAMED_SOURCE": str(root / "named.tpx")}
+            self.run_scenario("autosave-named-recovery-create", env)
+            self.run_scenario("autosave-named-recovery-restore", env)
+
+    def test_recovery_retires_old_source_watch_only_after_commit(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-autosave-watch-restore-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
+            env = {"HOME": str(home), "USERPROFILE": str(home),
+                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                   "LOCALAPPDATA": str(config),
+                   "TPX_AUTOSAVE_WATCH_SOURCE": str(root / "active.tpx")}
+            self.run_scenario("autosave-recovery-watch-binding", env)
+
+    def test_source_autosave_undo_picture_properties_and_conflict(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-autosave-source-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
+            env = {"HOME": str(home), "USERPROFILE": str(home),
+                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
+                   "LOCALAPPDATA": str(config)}
+            self.run_scenario("autosave-integration", env)
 
     @unittest.skipUnless(shutil.which("latex") and
                          (shutil.which("dvipng") or

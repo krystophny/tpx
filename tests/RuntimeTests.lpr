@@ -7,10 +7,11 @@ uses
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, Pieces, TikZImport, TikZImportDrawing;
+  Settings0, MainUnit, Propert, Options, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, AutoSaveStore, Pieces, TikZImport, TikZImportDrawing;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
+{$R ../src/Options.lfm}
 
 type
   {$IFDEF LCLgtk2}TNativeWidgetSet = TGtk2WidgetSet;{$ENDIF}
@@ -59,6 +60,9 @@ begin
     Inc(PromptCount);
     Exit(idButtonYes);
   end;
+  if (ParamStr(1) = 'autosave-recovery-watch-binding') and
+    (Pos('Could not recover the selected draft', Message) > 0) then
+    Exit(idButtonOK);
   if (ParamStr(1) = 'bitmap-eps') and
     (Pos('Conversion of bitmap to EPS failed:', Message) > 0) then begin
     Inc(PromptCount);
@@ -105,6 +109,7 @@ end;
 {$I DocumentIOScenarios.inc}
 {$I AutoReloadScenarios.inc}
 {$I TikZImportScenarios.inc}
+{$I AutoSaveScenarios.inc}
 
 procedure RunBitmapFixtureConverter;
 var
@@ -1313,6 +1318,15 @@ begin
     else if ParamStr(1) = 'document-io' then TestDocumentIO
     else if ParamStr(1) = 'pstoedit-import' then TestPstoeditEmfImport
     else if ParamStr(1) = 'auto-reload-integration' then TestAutoReloadIntegration
+    else if ParamStr(1) = 'autosave-integration' then TestAutoSaveIntegration
+    else if ParamStr(1) = 'autosave-recovery-create' then TestAutoSaveRecoveryCreate
+    else if ParamStr(1) = 'autosave-empty-recovery-create' then TestAutoSaveEmptyRecoveryCreate
+    else if ParamStr(1) = 'autosave-empty-recovery-restore' then TestAutoSaveEmptyRecoveryRestore
+    else if ParamStr(1) = 'autosave-unresolved-image-warning' then TestAutoSaveUnresolvedImageWarning
+    else if ParamStr(1) = 'autosave-recovery-restore' then TestAutoSaveRecoveryRestore
+    else if ParamStr(1) = 'autosave-named-recovery-create' then TestAutoSaveNamedRecoveryCreate
+    else if ParamStr(1) = 'autosave-named-recovery-restore' then TestAutoSaveNamedRecoveryRestore
+    else if ParamStr(1) = 'autosave-recovery-watch-binding' then TestAutoSaveRecoveryWatchBinding
     else if ParamStr(1) = 'color-box-custom-state' then TestColorBoxCustomState
     else if ParamStr(1) = 'shape-snap' then TestShapeSnap
     else if Pos('draw-', ParamStr(1)) = 1 then TestDrawing(ParamStr(1))

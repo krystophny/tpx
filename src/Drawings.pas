@@ -893,6 +893,7 @@ type
       Aperture: Word): Integer;
     procedure ClearBitmapRegistry;
     function RegisterBitmap(ImageLink: string): TBitmapEntry;
+    procedure SetFileNameKeepingBitmapParents(const NewFileName: string);
     procedure RebindFileNameAfterAssetCommit(const NewFileName: string);
     procedure PickUpProperties(Obj: TGraphicObject);
     procedure ApplyProperties(Obj: TGraphicObject);
@@ -2535,11 +2536,23 @@ begin
   fFileName := NewFileName;
 end;
 
+procedure TDrawing2D.SetFileNameKeepingBitmapParents(
+  const NewFileName: string);
+var I: Integer; BE: TBitmapEntry;
+begin
+  if fFileName = Drawing_NewFileName then fFileName := '';
+  fFileName := NewFileName;
+  for I := 0 to BitmapRegistry.Count - 1 do
+  begin
+    BE := BitmapRegistry.Objects[I] as TBitmapEntry;
+    BitmapRegistry[I] := BE.GetFullLink;
+  end;
+end;
+
 procedure TDrawing2D.RebindFileNameAfterAssetCommit(
   const NewFileName: string);
 var I: Integer; BE: TBitmapEntry;
 begin
-  if NewFileName = fFileName then Exit;
   if fFileName = Drawing_NewFileName then fFileName := '';
   for I := 0 to BitmapRegistry.Count - 1 do
   begin
