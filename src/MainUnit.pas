@@ -192,6 +192,7 @@ type
     AreaSelectInsideAction: TAction;
     Areaselectinsideonly1: TMenuItem;
     ClipboardCopy: TAction;
+    CopyAsTikZ: TAction;
     ClipboardPaste: TAction;
     ClipboardCut: TAction;
     Cut1: TMenuItem;
@@ -555,6 +556,7 @@ type
       Rect: TRect; State: TOwnerDrawState);
     procedure ShowPropertiesToolbar1Execute(Sender: TObject);
     procedure ShowPropertiesToolbar2Execute(Sender: TObject);
+    procedure CopyAsTikZExecute(Sender: TObject);
   private
     { Private declarations }
 {$IFDEF FPC}
@@ -769,6 +771,9 @@ uses Output, Input, Settings0, ColorEtc, Geometry, Options,
   Preview,
 {$IFDEF FPC}  LiveTeX,{$ENDIF}
   SysBasic, Modify, Propert
+{$IFDEF FPC}
+  , TikZDocumentWriter
+{$ENDIF}
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
   , DocumentIO, FileWatchNative
@@ -1537,6 +1542,7 @@ begin
       ((Shortcut = Undo.ShortCut) or
        (Shortcut = Redo.ShortCut) or
        (Shortcut = ClipboardCopy.ShortCut) or
+       (Shortcut = CopyAsTikZ.ShortCut) or
        (Shortcut = ClipboardCut.ShortCut) or
        (Shortcut = ClipboardPaste.ShortCut) or
        (Shortcut = SelectAll.ShortCut) or
@@ -1547,11 +1553,17 @@ begin
 end;
 {$ENDIF}
 
+{$IFDEF CPUWASM32}
+function BrowserCopyTikZ(Source: PChar; Count: LongInt): LongInt;
+  external 'tpx' name 'tpx_copy_text';
+{$ENDIF}
+
 procedure TMainForm.UpdatePlatformShortcuts;
 begin
   Undo.ShortCut := StandardShortcut(Ord('Z'), []);
   Redo.ShortCut := StandardShortcut(Ord('Z'), [ssShift]);
   ClipboardCopy.ShortCut := StandardShortcut(Ord('C'), []);
+  CopyAsTikZ.ShortCut := StandardShortcut(Ord('C'), [ssShift]);
   ClipboardCut.ShortCut := StandardShortcut(Ord('X'), []);
   ClipboardPaste.ShortCut := StandardShortcut(Ord('V'), []);
   SelectAll.ShortCut := StandardShortcut(Ord('A'), []);
@@ -1560,6 +1572,30 @@ begin
   SaveDoc.ShortCut := StandardShortcut(Ord('S'), []);
   SaveAs.ShortCut := StandardShortcut(Ord('S'), [ssShift]);
   Print.ShortCut := StandardShortcut(Ord('P'), []);
+end;
+
+procedure TMainForm.CopyAsTikZExecute(Sender: TObject);
+var
+  Source: RawByteString;
+begin
+{$IFDEF FPC}
+  if not TrySettleEditSession then Exit;
+  try
+    Source := GenerateTikZPictureFragment(TheDrawing);
+{$IFDEF CPUWASM32}
+    if BrowserCopyTikZ(PChar(Source), Length(Source)) = 0 then
+      StatusBar1.Panels[0].Text := 'TikZ source is ready in the copy panel'
+    else
+      StatusBar1.Panels[0].Text := 'Copying TikZ source';
+{$ELSE}
+    Clipboard.AsText := string(Source);
+    StatusBar1.Panels[0].Text := 'TikZ source copied';
+{$ENDIF}
+  except
+    on E: Exception do
+      StatusBar1.Panels[0].Text := 'Could not copy TikZ: ' + E.Message;
+  end;
+{$ENDIF}
 end;
 
 procedure TMainForm.UserEventExecute(Sender: TObject);
