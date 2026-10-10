@@ -114,10 +114,14 @@ type
 
   T_SVG_Export = class(T_Device_Export)
   protected
+    fUseSourceViewport: Boolean;
+    fSourceViewBoxY, fSourceViewBoxHeight: TRealType;
     function GetTransform: TTransf2D; override;
   public
     constructor Create(Drawing: TDrawing2D); override;
     destructor Destroy; override;
+    procedure SetSourceViewport(const PageWidthMM, PageHeightMM,
+      ViewBoxLeft, ViewBoxTop, ViewBoxWidth, ViewBoxHeight: TRealType);
     procedure WriteHeader; override;
   end;
 
@@ -1765,6 +1769,19 @@ begin
   inherited Destroy;
 end;
 
+procedure T_SVG_Export.SetSourceViewport(const PageWidthMM, PageHeightMM,
+  ViewBoxLeft, ViewBoxTop, ViewBoxWidth, ViewBoxHeight: TRealType);
+begin
+  if fDevice is TSvgDevice then
+    TSvgDevice(fDevice).SetViewportOverride(PageWidthMM, PageHeightMM,
+      ViewBoxLeft, ViewBoxTop, ViewBoxWidth, ViewBoxHeight)
+  else
+    raise Exception.Create('SVG exporter has no SVG device');
+  fUseSourceViewport := True;
+  fSourceViewBoxY := ViewBoxTop;
+  fSourceViewBoxHeight := ViewBoxHeight;
+end;
+
 function T_SVG_Export.GetTransform: TTransf2D;
 begin
   Result := IdentityTransf2D;
@@ -1775,6 +1792,8 @@ begin
   Result[2, 2] := -fFactorT;
   Result[3, 2] := fExtTop * fFactorT;}
   Result[2, 2] := -1;
+  if fUseSourceViewport then
+    Result[3, 2] := fSourceViewBoxY + fSourceViewBoxHeight;
 end;
 
 procedure T_SVG_Export.WriteHeader;
