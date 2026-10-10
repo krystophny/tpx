@@ -79,6 +79,18 @@ begin
     Expected + '", got "' + Node.AttributeValueSt[Name] + '"');
 end;
 
+procedure CheckUtf8Attribute(Node: TXmlDElement; const Name: string;
+  const Expected: UTF8String);
+var
+  Actual: string;
+begin
+  Actual := Node.AttributeValueSt[Name];
+  CheckCore((Length(Actual) = Length(Expected)) and
+    ((Length(Actual) = 0) or
+     CompareMem(@Actual[1], @Expected[1], Length(Actual))),
+    '<' + Node.NodeName + '> attribute ' + Name + ' UTF-8 value changed');
+end;
+
 procedure TestIndependentTpXXmlCodecStructure;
 var
   Document: TXmlDDocument;
@@ -118,7 +130,7 @@ begin
     CheckCore(Nested.NodeName = 'group', 'nested group order changed');
     TextObject := ElementChild(Nested, 0);
     CheckCore(TextObject.NodeName = 'text', 'nested text object missing');
-    CheckAttribute(TextObject, 't', 'Café α');
+    CheckUtf8Attribute(TextObject, 't', 'Café α');
     CheckAttribute(TextObject, 'tex', '\alpha_i^2');
     CheckNearCore(AttributeNumber(TextObject, 'rotdeg'), 30, 1e-6,
       'text rotation');

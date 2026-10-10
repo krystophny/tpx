@@ -74,10 +74,12 @@ end;
 function JsonEscape(const Value: string): string;
 var
   I: Integer;
+  WideValue: WideString;
 begin
+  WideValue := Value;
   Result := '"';
-  for I := 1 to Length(Value) do
-    case Value[I] of
+  for I := 1 to Length(WideValue) do
+    case WideValue[I] of
       '"': Result := Result + '\"';
       '\': Result := Result + '\\';
       #8: Result := Result + '\b';
@@ -86,10 +88,12 @@ begin
       #12: Result := Result + '\f';
       #13: Result := Result + '\r';
       else
-        if Ord(Value[I]) < 32 then
-          Result := Result + '\u00' + IntToHex(Ord(Value[I]), 2)
+        if Ord(WideValue[I]) < 32 then
+          Result := Result + '\u' + IntToHex(Ord(WideValue[I]), 4)
+        else if Ord(WideValue[I]) > 126 then
+          Result := Result + '\u' + IntToHex(Ord(WideValue[I]), 4)
         else
-          Result := Result + Value[I];
+          Result := Result + WideValue[I];
     end;
   Result := Result + '"';
 end;
