@@ -1065,9 +1065,6 @@ end;
 
 function SerializeNewObject(Obj: TObject2D; Drawing: TDrawing2D): RawByteString;
 begin
-  if Obj is TBitmap2D then
-    raise EWriteError.Create(
-      'TikZ copy cannot embed bitmap assets; copy or export the linked image separately');
   if not (Obj is TPrimitive2D) then
     raise EWriteError.CreateFmt(
       'Only standalone primitive objects can be inserted into a TikZ picture (%s)',
@@ -1112,7 +1109,20 @@ begin
 end;
 
 function GenerateTikZPictureFragment(Drawing: TDrawing2D): RawByteString;
+var
+  Obj: TObject2D;
 begin
+  if Drawing <> nil then
+  begin
+    Obj := Drawing.ObjectList.FirstObj as TObject2D;
+    while Obj <> nil do
+    begin
+      if Obj is TBitmap2D then
+        raise EWriteError.Create(
+          'TikZ copy cannot embed bitmap assets; copy or export the linked image separately');
+      Obj := Drawing.ObjectList.NextObj as TObject2D;
+    end;
+  end;
   Result := '% Generated from the current TpX drawing; this is regenerated TikZ.' +
     RawByteString(LineEnding) +
     '% Requires \usepackage{tikz}; TeX labels may need their own packages or macros.' +
