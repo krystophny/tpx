@@ -653,6 +653,7 @@ type
     fDrawing: TDrawing2D;
     fPosition: Integer;
     fCheckSum, fSavedCheckSum: TCheckSum;
+    fForcedDirty: Boolean;
     function GetCanUndo: Boolean;
     function GetCanRedo: Boolean;
     function GetIsChanged: Boolean;
@@ -665,6 +666,7 @@ type
     procedure Redo;
     procedure Clear; override;
     procedure SaveCheckSum;
+    procedure MarkDirty;
     procedure SetPropertiesChanged;
     property CanUndo: Boolean read GetCanUndo;
     property CanRedo: Boolean read GetCanRedo;
@@ -687,6 +689,8 @@ type
     fFileName: string;
     function GetExtension: TRect2D;
     procedure SetFileName(const NewFileName: string);
+    procedure InitializeDrawing(const WriteHelp: Boolean);
+    procedure FillOptionsListInternal(const WriteHelp: Boolean);
   public
     TeXFormat: TeXFormatKind;
     PdfTeXFormat: PdfTeXFormatKind;
@@ -748,10 +752,12 @@ type
     procedure PasteFromClipboard;
     procedure FillOptionsList;
     constructor Create(AOwner: TComponent); override;
+    constructor CreateDetached;
     destructor Destroy; override;
     procedure SetDefaults; virtual;
     procedure SetDefaultProperties;
     procedure Clear; virtual;
+    procedure ReplaceContentFrom(Candidate: TDrawing2D);
     // Fills all object pieces, updates drawing extension and repaints viewports
     procedure Update; virtual;
     {: This method loads the blocks definitions (see <See Class=TSourceBlock2D>) from a drawing.
@@ -887,6 +893,7 @@ type
       Aperture: Word): Integer;
     procedure ClearBitmapRegistry;
     function RegisterBitmap(ImageLink: string): TBitmapEntry;
+    procedure RebindFileNameAfterAssetCommit(const NewFileName: string);
     procedure PickUpProperties(Obj: TGraphicObject);
     procedure ApplyProperties(Obj: TGraphicObject);
     {: This property contains the extension of the drawing.
@@ -1489,7 +1496,7 @@ end;
 
 function TDrawHistory.GetIsChanged: Boolean;
 begin
-  Result := not MD5Match(fCheckSum, fSavedCheckSum);
+  Result := fForcedDirty or not MD5Match(fCheckSum, fSavedCheckSum);
 end;
 
 constructor TDrawHistory.Create(ADrawing: TDrawing2D);
@@ -1500,6 +1507,7 @@ begin
   fPosition := 0;
   fCheckSum := MD5String('');
   fSavedCheckSum := fCheckSum;
+  fForcedDirty := False;
 end;
 
 procedure TDrawHistory.Truncate(Index: Integer);
@@ -1570,11 +1578,18 @@ begin
   fPosition := 0;
   fCheckSum := MD5String('');
   fSavedCheckSum := fCheckSum;
+  fForcedDirty := False;
 end;
 
 procedure TDrawHistory.SaveCheckSum;
 begin
   fSavedCheckSum := fCheckSum;
+  fForcedDirty := False;
+end;
+
+procedure TDrawHistory.MarkDirty;
+begin
+  fForcedDirty := True;
 end;
 
 procedure TDrawHistory.SetPropertiesChanged;
@@ -1590,15 +1605,31 @@ end;
 constructor TDrawing2D.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  InitializeDrawing(True);
+end;
+
+constructor TDrawing2D.CreateDetached;
+begin
+  inherited Create(nil);
+  InitializeDrawing(False);
+end;
+
+procedure TDrawing2D.InitializeDrawing(const WriteHelp: Boolean);
+begin
   SetDefaults;
   History := nil;
   OnPasteMetafileFromClipboard := nil;
   OptionsList := TOptionsList.Create;
   BitmapRegistry := TStringList.Create;
-  FillOptionsList;
+  FillOptionsListInternal(WriteHelp);
 end;
 
 procedure TDrawing2D.FillOptionsList;
+begin
+  FillOptionsListInternal(True);
+end;
+
+procedure TDrawing2D.FillOptionsListInternal(const WriteHelp: Boolean);
 var
   Strings: TStringList;
 begin
@@ -1724,8 +1755,7 @@ begin
     ' (or default font size of MetaPost drawing)');
   OptionsList.AddBoolean('MetaPostTeXText',
     @(MetaPostTeXText), 'Use TeX text in MetaPost files');
-  if not OutHelp then Exit;
-  // Save drawing options hints for help
+  if not OutHelp or not WriteHelp then Exit;
   Strings := TStringList.Create;
   try
     Strings.Text := OptionsList.HintsText;
@@ -1789,6 +1819,121 @@ begin
   DeleteSavedSourceBlocks;
   SetDefaults;
   ClearBitmapRegistry;
+end;
+
+procedure TDrawing2D.ReplaceContentFrom(Candidate: TDrawing2D);
+var
+  CandidateOptions, PreviousOptions: TMemoryStream;
+  procedure PrepareExtensions(const List: TGraphicObjList);
+  var Obj: TGraphicObject;
+  begin
+    Obj := List.FirstObj;
+    while Obj <> nil do
+    begin
+      Obj.OwnerDrawing := Candidate;
+      Obj.UpdateExtension(Candidate);
+      if Obj is TGroup2D then
+        PrepareExtensions((Obj as TGroup2D).Objects);
+      Obj := List.NextObj;
+    end;
+  end;
+  procedure SetOwners(const List: TGraphicObjList; Owner: TDrawing2D);
+  var Obj: TGraphicObject;
+  begin
+    Obj := List.FirstObj;
+    while Obj <> nil do
+    begin
+      Obj.OwnerDrawing := Owner;
+      if Obj is TGroup2D then
+        SetOwners((Obj as TGroup2D).Objects, Owner);
+      Obj := List.NextObj;
+    end;
+  end;
+  procedure SwapContents;
+  var
+    TmpObjects, TmpBlocks, TmpSelected: TGraphicObjList;
+    TmpLayers: TLayers;
+    TmpBitmaps: TStringList;
+    TmpHistory: TDrawHistory;
+    TmpNextID, TmpNextBlockID: Integer;
+    TmpCurrentLayer: Word;
+    TmpFileName: string;
+  begin
+    TmpObjects := fListOfObjects;
+    fListOfObjects := Candidate.fListOfObjects;
+    Candidate.fListOfObjects := TmpObjects;
+    TmpBlocks := fListOfBlocks;
+    fListOfBlocks := Candidate.fListOfBlocks;
+    Candidate.fListOfBlocks := TmpBlocks;
+    TmpSelected := fSelectedObjs;
+    fSelectedObjs := Candidate.fSelectedObjs;
+    Candidate.fSelectedObjs := TmpSelected;
+    TmpHistory := History;
+    History := Candidate.History;
+    Candidate.History := TmpHistory;
+    TmpLayers := fLayers;
+    fLayers := Candidate.fLayers;
+    Candidate.fLayers := TmpLayers;
+    TmpBitmaps := BitmapRegistry;
+    BitmapRegistry := Candidate.BitmapRegistry;
+    Candidate.BitmapRegistry := TmpBitmaps;
+    TmpNextID := fNextID;
+    fNextID := Candidate.fNextID;
+    Candidate.fNextID := TmpNextID;
+    TmpNextBlockID := fNextBlockID;
+    fNextBlockID := Candidate.fNextBlockID;
+    Candidate.fNextBlockID := TmpNextBlockID;
+    TmpCurrentLayer := fCurrentLayer;
+    fCurrentLayer := Candidate.fCurrentLayer;
+    Candidate.fCurrentLayer := TmpCurrentLayer;
+    TmpFileName := fFileName;
+    fFileName := Candidate.fFileName;
+    Candidate.fFileName := TmpFileName;
+  end;
+begin
+  if (Candidate = nil) or (Candidate = Self) then
+    raise Exception.Create('A separate candidate drawing is required');
+  { Geometry caches depend on candidate options such as font and symbol sizes.
+    Recompute them while every object still resolves those candidate options. }
+  PrepareExtensions(Candidate.fListOfObjects);
+  PrepareExtensions(Candidate.fListOfBlocks);
+  if Candidate.History = nil then
+    Candidate.History := TDrawHistory.Create(Candidate)
+  else
+    Candidate.History.Clear;
+  Candidate.History.Save;
+  Candidate.History.SaveCheckSum;
+  CandidateOptions := TMemoryStream.Create;
+  PreviousOptions := TMemoryStream.Create;
+  try
+    Candidate.OptionsList.SaveToStream(CandidateOptions);
+    OptionsList.SaveToStream(PreviousOptions);
+    CandidateOptions.Position := 0;
+    PreviousOptions.Position := 0;
+    SwapContents;
+    try
+      OptionsList.LoadFromStream(CandidateOptions);
+    except
+      try
+        PreviousOptions.Position := 0;
+        OptionsList.LoadFromStream(PreviousOptions);
+      finally
+        SwapContents;
+      end;
+      raise;
+    end;
+    SetOwners(fListOfObjects, Self);
+    SetOwners(fListOfBlocks, Self);
+    SetOwners(Candidate.fListOfObjects, Candidate);
+    SetOwners(Candidate.fListOfBlocks, Candidate);
+    if History <> nil then History.fDrawing := Self;
+    if Candidate.History <> nil then Candidate.History.fDrawing := Candidate;
+    { Candidate now owns the former live lists, selection, bitmaps, settings,
+      and history. Its caller frees it after the stable live drawing is redrawn. }
+  finally
+    CandidateOptions.Free;
+    PreviousOptions.Free;
+  end;
 end;
 
 procedure TDrawing2D.SetDefaultProperties;
@@ -2386,6 +2531,21 @@ begin
   begin
     BE := BitmapRegistry.Objects[I] as TBitmapEntry;
     BE.RefreshParentFileName(NewFileName);
+  end;
+  fFileName := NewFileName;
+end;
+
+procedure TDrawing2D.RebindFileNameAfterAssetCommit(
+  const NewFileName: string);
+var I: Integer; BE: TBitmapEntry;
+begin
+  if NewFileName = fFileName then Exit;
+  if fFileName = Drawing_NewFileName then fFileName := '';
+  for I := 0 to BitmapRegistry.Count - 1 do
+  begin
+    BE := BitmapRegistry.Objects[I] as TBitmapEntry;
+    BE.RebindParentFileName(NewFileName);
+    BitmapRegistry[I] := BE.GetFullLink;
   end;
   fFileName := NewFileName;
 end;

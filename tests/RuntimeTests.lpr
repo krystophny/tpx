@@ -57,6 +57,10 @@ begin
     Inc(PromptCount);
     Exit(idButtonOK);
   end;
+  if (ParamStr(1) = 'tpx-staged-sidecars') and
+    ((Pos('MPS file not created', Message) > 0) or
+     (Pos('PDF file not created', Message) > 0)) then
+    Exit(idButtonOK);
   if (ParamStr(1) = 'property-dimensions') and
     ((Pos('Line width must', Message) > 0) or (Pos('Text height must', Message) > 0)) then
     Exit(idButtonOK);
@@ -85,6 +89,7 @@ end;
 
 {$I ViewportScenarios.inc}
 {$I PlaytestScenarios.inc}
+{$I TpXStagedSaveScenarios.inc}
 
 procedure RunBitmapFixtureConverter;
 var
@@ -1204,6 +1209,12 @@ begin
       RunBitmapFixtureConverter;
       Halt(0);
     end;
+    if SameText(ChangeFileExt(ExtractFileName(ParamStr(0)), ''), 'mpost-fixture')
+      or SameText(ChangeFileExt(ExtractFileName(ParamStr(0)), ''), 'gs-fixture') then
+    begin
+      RunStagedToolFixture;
+      Halt(7);
+    end;
     if (ParamStr(1) <> 'clipboard-format-width') and
       (ParamStr(1) <> 'clipboard-roundtrip') then
       WidgetSet := TTestWidgetSet.Create;
@@ -1241,6 +1252,7 @@ begin
     else if ParamStr(1) = 'font-choice' then TestFontChoice
     else if ParamStr(1) = 'conversion-save' then TestConversionSave
     else if ParamStr(1) = 'unsupported-exports' then TestUnsupportedExports
+    else if ParamStr(1) = 'tpx-staged-sidecars' then TestTpXStagedSidecars
     else if ParamStr(1) = 'bitmap-eps' then TestBitmapEps
     else if ParamStr(1) = 'labeled-preview' then TestLabeledPreview
 {$IFDEF DARWIN}

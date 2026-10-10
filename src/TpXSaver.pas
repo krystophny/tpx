@@ -110,12 +110,18 @@ end;
 procedure T_TpX_Saver.WriteAllToStream;
 var
   St: string;
+  PicScale0: TRealType;
 begin
   if fStream = nil then Exit;
   fXML.SetStream(fStream, 0);
   St := '%';
   fStream.WriteBuffer(St[1], 1);
-  WriteAll0;
+  PicScale0 := fDrawing2D.PicScale;
+  try
+    WriteAll0;
+  finally
+    fDrawing2D.PicScale := PicScale0;
+  end;
   fStream.WriteBuffer(EOL[1], Length(EOL));
 end;
 
