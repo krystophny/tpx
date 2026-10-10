@@ -26,6 +26,8 @@ begin
     'TPX_TIKZ_FIXTURE must name the copied independent TeX scene');
   Check(IsDocumentCodecRegistered('tikz'),
     'The TikZ loader was not registered at startup');
+  Check(Pos('TikZ source (.tikz;.tex)', BuildOpenFileFilter(False)) > 0,
+    'Registered TikZ sources are missing from the normal Open dialog filter');
   Check(MainForm.EventManager.Mode is TTpXMode,
     'The normal drawing mode is not active');
   Mode := MainForm.EventManager.Mode as TTpXMode;
@@ -71,6 +73,7 @@ begin
   Point := Primitive.Points[0];
   Near(Point.X, 10.25, 'rectangle first corner x (mm)');
   Near(Point.Y, 5.5, 'rectangle first corner y (mm)');
+  Near(Point.W, 1, 'rectangle first corner homogeneous coordinate');
   Point := Primitive.Points[1];
   Near(Point.X, 10.25 + 8.5 * Cos(Angle) - 4.25 * Sin(Angle),
     'rectangle rotated corner x (mm)');
