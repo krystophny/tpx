@@ -1099,8 +1099,6 @@ begin
       Transaction.Accept(TpX_Manager.DocumentSession);
       Result := True;
       try
-        TpX_Manager.DocumentSession.Diagnostics.Assign(
-          Transaction.Diagnostics);
         MainForm.RefreshSourceStatus;
         Drawing.History.SaveCheckSum;
 {$IFDEF FPC}
