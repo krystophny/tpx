@@ -7,12 +7,18 @@ uses
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, Pieces, TikZImport, TikZImportDrawing;
+  Settings0, MainUnit, Propert, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, TikZImport, TikZImportDrawing, SvgCodec, DocumentFormats, DocumentIO, Pieces, gzio;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
 
 type
+  TTestBitmapEntry = class(TBitmapEntry)
+  public
+    procedure ConfigureLinkedPng(const AssetFileName,
+      ParentFileName: string);
+  end;
+
   {$IFDEF LCLgtk2}TNativeWidgetSet = TGtk2WidgetSet;{$ENDIF}
   {$IFDEF LCLcocoa}TNativeWidgetSet = TCocoaWidgetSet;{$ENDIF}
   {$IFDEF LCLwin32}TNativeWidgetSet = TWin32WidgetSet;{$ENDIF}
@@ -33,9 +39,23 @@ var
   ShortcutModifierSimulation: Boolean = False;
   ShortcutModifiers: TShiftState = [];
 
+{$IFDEF FPC}{$IFDEF WINDOWS}
+function TpxCreateHardLinkW(NewFileName, ExistingFileName: PWideChar;
+  SecurityAttributes: Pointer): LongBool; stdcall;
+  external 'kernel32' name 'CreateHardLinkW';
+{$ENDIF}{$ENDIF}
+
 procedure Check(Condition: Boolean; const Message: string);
 begin
   if not Condition then raise Exception.Create(Message);
+end;
+
+procedure TTestBitmapEntry.ConfigureLinkedPng(const AssetFileName,
+  ParentFileName: string);
+begin
+  fParentFileName := ParentFileName;
+  fImageLink := ExtractFileName(AssetFileName);
+  fKind := bek_PNG;
 end;
 
 procedure TObserver.Closing(Sender: TObject; var Action: TCloseAction);
@@ -105,6 +125,7 @@ end;
 {$I DocumentIOScenarios.inc}
 {$I AutoReloadScenarios.inc}
 {$I TikZImportScenarios.inc}
+{$I SvgCodecScenarios.inc}
 
 procedure RunBitmapFixtureConverter;
 var
@@ -161,6 +182,98 @@ begin
     GetEnvironmentVariable('TPX_EPS_OUTPUT'));
   Check(Converted = Expected, 'BitmapToEps returned ' + BoolToStr(Converted, True));
   Check(PromptCount = Ord(not Expected), 'Unexpected bitmap conversion error count');
+end;
+
+procedure TestSvgLinkedImageCopy;
+const
+  Payload: RawByteString = 'linked image bytes'#0'preserve exactly';
+var
+  AssetName, AliasName, MissingName, SourceName, SvgName, SvgText: string;
+  Asset, SavedAsset: TMemoryStream;
+  Drawing: TDrawing2D;
+  Entry: TTestBitmapEntry;
+  Objects: TStringList;
+{$IFDEF FPC}{$IFDEF WINDOWS}
+  CopySucceeded: Boolean;
+  WideAliasName, WideAssetName: UnicodeString;
+{$ENDIF}{$ENDIF}
+begin
+  AssetName := ExpandFileName('linked-image.png');
+  SourceName := ExpandFileName('source.tpx');
+  SvgName := ExpandFileName('export.svg');
+{$IFDEF WINDOWS}
+  AliasName := ExpandFileName('linked-image-hardlink-' +
+    UTF8Encode(UnicodeString(WideChar($00E4))) + '.png');
+{$ELSE}
+  AliasName := ExpandFileName('linked-image-hardlink.png');
+{$ENDIF}
+  MissingName := ExpandFileName('missing-copy-source.png');
+  Asset := TMemoryStream.Create;
+  SavedAsset := TMemoryStream.Create;
+  Drawing := nil;
+  Entry := nil;
+  Objects := TStringList.Create;
+  try
+    DeleteFile(MissingName);
+    Check(not CopyFile(MissingName, MissingName),
+      'CopyFile reported success for a missing same-path source');
+    Asset.WriteBuffer(Payload[1], Length(Payload));
+    Asset.SaveToFile(AssetName);
+    Entry := TTestBitmapEntry.Create('', '');
+    Entry.ConfigureLinkedPng(AssetName, SourceName);
+    Drawing := TDrawing2D.Create(nil);
+    Drawing.FileName := SourceName;
+    Drawing.AddObject(-1, TBitmap2D.CreateSpec(-1,
+      Point2D(0, 0), Point2D(10, 10), Entry));
+    ExportToFile(Drawing, SvgName, export_SVG);
+
+    SavedAsset.LoadFromFile(AssetName);
+    Check(SavedAsset.Size = Length(Payload),
+      'SVG export truncated its same-directory linked image');
+    Check((SavedAsset.Size = Length(Payload)) and
+      CompareMem(SavedAsset.Memory, @Payload[1], Length(Payload)),
+      'SVG export changed same-directory linked image bytes');
+    Objects.LoadFromFile(SvgName);
+    SvgText := Objects.Text;
+    Check(Pos('xlink:href="linked-image.png"', SvgText) > 0,
+      'SVG export did not retain the linked image reference');
+{$IFDEF UNIX}
+    if fpLink(PChar(AssetName), PChar(AliasName)) = 0 then
+    begin
+      Check(Entry.CopyImage(AssetName, AliasName),
+        'CopyImage rejected a hard-link alias to the source');
+      SavedAsset.Clear;
+      SavedAsset.LoadFromFile(AssetName);
+      Check((SavedAsset.Size = Length(Payload)) and
+        CompareMem(SavedAsset.Memory, @Payload[1], Length(Payload)),
+        'CopyImage truncated a hard-link alias to the source');
+    end;
+{$ENDIF}
+{$IFDEF FPC}{$IFDEF WINDOWS}
+    WideAliasName := UTF8Decode(AliasName);
+    WideAssetName := UTF8Decode(AssetName);
+    Check(TpxCreateHardLinkW(PWideChar(WideAliasName),
+      PWideChar(WideAssetName), nil),
+      'Could not create Windows hard-link test alias');
+    CopySucceeded := Entry.CopyImage(AssetName, AliasName);
+    SavedAsset.Clear;
+    SavedAsset.LoadFromFile(AssetName);
+    Check((SavedAsset.Size = Length(Payload)) and
+      CompareMem(SavedAsset.Memory, @Payload[1], Length(Payload)),
+      'CopyImage truncated a Windows hard-link alias to the source');
+    Check(CopySucceeded,
+      'CopyImage rejected a Windows hard-link alias to the source');
+{$ENDIF}{$ENDIF}
+  finally
+    Objects.Free;
+    Drawing.Free;
+    Entry.Free;
+    Asset.Free;
+    SavedAsset.Free;
+    DeleteFile(AssetName);
+    DeleteFile(AliasName);
+    DeleteFile(SvgName);
+  end;
 end;
 
 procedure TestLiveTeXMissingTool;
@@ -1330,6 +1443,8 @@ begin
     else if ParamStr(1) = 'tpx-staged-sidecars' then TestTpXStagedSidecars
     else if ParamStr(1) = 'tikz-import-native' then TestTikZImportNativeScene
     else if ParamStr(1) = 'bitmap-eps' then TestBitmapEps
+    else if ParamStr(1) = 'svg-linked-image-copy' then TestSvgLinkedImageCopy
+    else if ParamStr(1) = 'svg-codec' then TestSvgCodec
     else if ParamStr(1) = 'labeled-preview' then TestLabeledPreview
 {$IFDEF DARWIN}
     else if ParamStr(1) = 'mac-settings' then TestMacSettings

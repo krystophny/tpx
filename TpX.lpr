@@ -56,6 +56,7 @@ uses
   DevPSTr in 'src\DevPSTr.pas',
   DevMP in 'src\DevMP.pas',
   MprtSVG in 'src\MprtSVG.pas',
+  SvgCodec in 'src\SvgCodec.pas',
   Modify in 'src\Modify.pas',
   GObjBase in 'src\GObjBase.pas',
   Bitmaps in 'src\Bitmaps.pas',
