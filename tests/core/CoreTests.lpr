@@ -6,8 +6,8 @@ uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   SysUtils, CoreTestSupport, CoreXmlFixtureTests, CoreFileWatchTests,
   TikZSyntaxTests, TikZSemanticAcceptanceTests, TikZImportTests,
-  CoreAutoReloadTests, TikZWriterTests,
-  CoreAutoSaveTests, CoreAutoSaveStoreTests;
+  CoreAutoReloadTests, TikZWriterTests, CoreAutoSaveTests,
+  CoreAutoSaveStoreTests, CorePropertyEditTests;
 
 var
   ExitStatus: Integer;

@@ -12,7 +12,7 @@ uses
 {$ELSE}
   LCLIntf, LCLType, LMessages, LResources,
 {$ENDIF}
-  Devices, Modes, PlatformShortcuts
+  Devices, Modes, PlatformShortcuts, EditSessions
 {$IFDEF FPC}
   , LazFileUtils, DocumentFormats, FileWatch, AutoReload
 {$IFNDEF CPUWASM32}
@@ -34,6 +34,8 @@ type
     LocalRevision, WatchGeneration: QWord; Dirty: Boolean) of object;
   TRecoveryRestoreCommittedEvent = procedure(Sender: TObject;
     LocalRevision, WatchGeneration: QWord) of object;
+  TRecoveryEditSessionRestoredEvent = procedure(Sender: TObject;
+    Session: TObjectEditSession) of object;
 {$ENDIF}
 
 //  TRealTypeX = Double;
@@ -597,6 +599,7 @@ type
     FOnExternalReloadKeepLocal: TExternalReloadKeepLocalEvent;
     FOnLocalEditCommitted: TLocalEditCommittedEvent;
     FOnRecoveryRestoreCommitted: TRecoveryRestoreCommittedEvent;
+    FOnRecoveryEditSessionRestored: TRecoveryEditSessionRestoredEvent;
     FSaveRuntime: TAutoSaveRuntime;
     FAutoSaveTimer: TTimer;
     FAutoSaveMenu: TMenuItem;
@@ -610,6 +613,17 @@ type
 {$ENDIF}
 {$ENDIF}
     ScrollPos0: Integer;             
+    FEditSession: TObjectEditSession;
+    FEditSessionGateActive: Boolean;
+    function GetCurrentDocumentEpoch: QWord;
+    function GetHasActiveEditSession: Boolean;
+    function BeforeSelectionChange(Sender: TObject): Boolean;
+    function SendSettledMessage(Msg: TEventMessage;
+      Sender: TObject): Boolean;
+    function SendToolMessage(Msg: TEventMessage;
+      Sender: TObject): Boolean;
+    procedure EditSessionChanged(Sender: TObject;
+      Change: TEditSessionChange);
 {$IFDEF FPC}
     procedure InitializeEmptyView(Data: PtrInt);
 {$IFNDEF CPUWASM32}
@@ -648,6 +662,7 @@ type
     procedure RecoverDraftsClick(Sender: TObject);
     procedure OfferRecoveryDrafts(Data: PtrInt);
     procedure RestoreRecoveryDraft(const FileName: string);
+    procedure RefreshRecoveryAfterEditSessionEnd;
     procedure NotifyAutoSaveConflict;
     procedure NotifyAutoSaveLocalEdit(LocalRevision,
       WatchGeneration: QWord; Dirty: Boolean);
@@ -687,6 +702,11 @@ type
       const HasObject, HasSelection, IsOnObject,
       IsOnPoint, CanDeletePoints: Boolean);
     procedure SetCurrentProperties;
+    function RegisterEditSession(Session: TObjectEditSession): Boolean;
+    procedure UnregisterEditSession(Session: TObjectEditSession);
+    function TrySettleEditSession: Boolean;
+    property CurrentDocumentEpoch: QWord read GetCurrentDocumentEpoch;
+    property HasActiveEditSession: Boolean read GetHasActiveEditSession;
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
     function BeginDocumentWatchBinding(const Path: TDocumentPath;
@@ -720,6 +740,10 @@ type
       read FOnLocalEditCommitted write FOnLocalEditCommitted;
     property OnRecoveryRestoreCommitted: TRecoveryRestoreCommittedEvent
       read FOnRecoveryRestoreCommitted write FOnRecoveryRestoreCommitted;
+    property OnRecoveryEditSessionRestored:
+      TRecoveryEditSessionRestoredEvent
+      read FOnRecoveryEditSessionRestored
+      write FOnRecoveryEditSessionRestored;
 {$ENDIF}
 {$ENDIF}
 {$IFDEF FPC}
@@ -945,6 +969,9 @@ begin
   TheDrawing := TDrawing2D.Create(Self);
   LocalView := TViewport2D.Create(Panel1);
   EventManager := TTpXManager.Create(TheDrawing, LocalView);
+  TheDrawing.OnBeforeSelectionChange := BeforeSelectionChange;
+  FEditSession := nil;
+  FEditSessionGateActive := False;
   EventManager.OnExit := OnExit;
   EventManager.PushMode(BaseMode);
   EventManager.RecentFiles.OnChange := RecentChanged;
@@ -1159,16 +1186,140 @@ begin
 {$ENDIF}
 end;
 
+function TMainForm.GetCurrentDocumentEpoch: QWord;
+begin
+{$IFDEF FPC}
+  if EventManager = nil then Result := 0
+  else Result := EventManager.DocumentSession.WatchGeneration;
+{$ELSE}
+  if TheDrawing = nil then Result := 0
+  else Result := TheDrawing.ModelGeneration;
+{$ENDIF}
+end;
+
+function TMainForm.GetHasActiveEditSession: Boolean;
+begin
+  Result := (FEditSession <> nil) and FEditSession.IsActive;
+end;
+
+function TMainForm.RegisterEditSession(
+  Session: TObjectEditSession): Boolean;
+begin
+  Result := False;
+  if (Session = nil) or not Session.IsActive then Exit;
+  if FEditSession = Session then Exit(True);
+  if (FEditSession <> nil) and (FEditSession <> Session) and
+    FEditSession.IsActive and not TrySettleEditSession then Exit;
+  FEditSession := Session;
+  Session.OnInteractionChanged := EditSessionChanged;
+  FEditSessionGateActive := True;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  if FSaveRuntime <> nil then FSaveRuntime.Coordinator.BeginEditSession;
+{$ENDIF}
+{$ENDIF}
+  Result := True;
+end;
+
+procedure TMainForm.UnregisterEditSession(Session: TObjectEditSession);
+begin
+  if Session = nil then Exit;
+  if (FEditSession = Session) and Session.IsActive then
+    Session.Cancel(CurrentDocumentEpoch);
+  Session.OnInteractionChanged := nil;
+  if FEditSession = Session then FEditSession := nil;
+end;
+
+function TMainForm.TrySettleEditSession: Boolean;
+var ErrorText: string; Session: TObjectEditSession;
+begin
+  Session := FEditSession;
+  if (Session = nil) or not Session.IsActive then
+  begin
+    FEditSession := nil;
+    Exit(True);
+  end;
+  Result := Session.Commit(CurrentDocumentEpoch, ErrorText);
+  if Result and (FEditSession = Session) then FEditSession := nil;
+end;
+
+function TMainForm.BeforeSelectionChange(Sender: TObject): Boolean;
+begin
+  Result := (Sender <> TheDrawing) or TrySettleEditSession;
+end;
+
+procedure TMainForm.EditSessionChanged(Sender: TObject;
+  Change: TEditSessionChange);
+var Session: TObjectEditSession;
+begin
+  if not (Sender is TObjectEditSession) then Exit;
+  Session := Sender as TObjectEditSession;
+  if not Session.IsActive and (FEditSession = Session) then
+    FEditSession := nil;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  if Change = escDraftChanged then
+    NotifyDocumentEdited;
+  if (Change = escCancelled) or
+    ((Change = escCommitted) and
+      (not Session.LastCommitChanged or
+       ((TheDrawing <> nil) and
+        not Assigned(TheDrawing.OnChangeDrawing)))) then
+    NotifyDocumentEdited;
+  if not Session.IsActive and FEditSessionGateActive then
+  begin
+    FEditSessionGateActive := False;
+    if FSaveRuntime <> nil then
+      FSaveRuntime.Coordinator.EndEditSession(GetTickCount64);
+  end;
+  if (Change in [escCancelled, escCommitted]) and not Session.IsActive then
+    RefreshRecoveryAfterEditSessionEnd;
+  if not Session.IsActive and FDeferredReload then
+    Application.QueueAsyncCall(TryApplyDeferredReload, 0);
+{$ENDIF}
+{$ENDIF}
+end;
+
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+procedure TMainForm.RefreshRecoveryAfterEditSessionEnd;
+begin
+  if FSaveRuntime = nil then Exit;
+  FSaveRuntime.UpdateRecoveryAfterEditSessionEnd(
+    EventManager.DocumentSession, TheDrawing, CurrentDocumentDirty);
+  ArmAutoSaveTimer;
+  UpdateAutoSaveUi;
+end;
+{$ENDIF}
+{$ENDIF}
+
+function TMainForm.SendSettledMessage(Msg: TEventMessage;
+  Sender: TObject): Boolean;
+begin
+  Result := False;
+  if (Msg <> Msg_Escape) and not TrySettleEditSession then Exit;
+  EventManager.SendMessage(Msg, Sender);
+  Result := True;
+end;
+
+function TMainForm.SendToolMessage(Msg: TEventMessage;
+  Sender: TObject): Boolean;
+begin
+  Result := False;
+  if not TrySettleEditSession then Exit;
+  EventManager.SendMessage(Msg_Escape, Self);
+  EventManager.SendMessage(Msg, Sender);
+  Result := True;
+end;
+
 procedure TMainForm.AreaSelectExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_AreaSelect, AreaSelectBtn);
+  SendToolMessage(Msg_AreaSelect, AreaSelectBtn);
 end;
 
 procedure TMainForm.HandToolExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_Panning, PanningBtn);
+  SendToolMessage(Msg_Panning, PanningBtn);
 end;
 
 procedure TMainForm.LiveTeXPreviewExecute(Sender: TObject);
@@ -1412,11 +1563,13 @@ begin
 end;
 
 procedure TMainForm.UserEventExecute(Sender: TObject);
+var MessageID: Integer;
 begin
-  if (Sender as TAction).Tag = Msg_Exit then
+  MessageID := (Sender as TAction).Tag;
+  if MessageID = Msg_Exit then
     Close
   else
-    EventManager.SendMessage((Sender as TAction).Tag, Sender);
+    SendSettledMessage(MessageID, Sender);
 end;
 
 procedure TMainForm.BasicModeExecute(Sender: TObject);
@@ -1427,11 +1580,18 @@ end;
 procedure TMainForm.FormCloseQuery(Sender: TObject; var
   CanClose: Boolean);
 begin
-  CanClose := BaseMode.AskSaveCurrentDrawing <> mrCancel;
+  CanClose := TrySettleEditSession and
+    (BaseMode.AskSaveCurrentDrawing <> mrCancel);
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
+  if FEditSession <> nil then
+  begin
+    UnregisterEditSession(FEditSession);
+  end;
+  if TheDrawing <> nil then
+    TheDrawing.OnBeforeSelectionChange := nil;
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
   ShutdownAutoSave;
@@ -1688,7 +1848,7 @@ begin
   if FAutoSaveTimer <> nil then FAutoSaveTimer.Enabled := False;
   if (FSaveRuntime = nil) or FClosingReload then Exit;
   FSaveRuntime.ProcessDue(EventManager.DocumentSession, TheDrawing,
-    GetTickCount64, SourceSaved);
+    FEditSession, GetTickCount64, SourceSaved);
   if SourceSaved then AcceptSavedDocumentRevision;
   if FSaveRuntime.Coordinator.Conflict then
     ScheduleSourceReconciliation;
@@ -1839,15 +1999,20 @@ var
   Snapshot: TDocumentSnapshot;
   CurrentRevision: TDiskRevision;
   SourcePath, FormatId, CandidatePath: TDocumentPath;
-  PayloadBytes: RawByteString;
+  PayloadBytes, AuxiliaryState: RawByteString;
   RecoveryAssets: TRecoveryAssetContext;
+  RestoredEditSession: TObjectEditSession;
   UnresolvedLinks: LongWord;
-  RecoveryNotice: string;
+  RecoveryNotice, AuxiliaryError: string;
   ErrorText: string;
 begin
+  if not TrySettleEditSession then Exit;
   Candidate := nil;
   CandidateContext := nil;
   RecoveryAssets := nil;
+  RestoredEditSession := nil;
+  AuxiliaryState := '';
+  AuxiliaryError := '';
   Diagnostics := TStringList.Create;
   WatchGeneration := 0;
   SubscriptionID := 0;
@@ -1882,7 +2047,7 @@ begin
     if Entry.PayloadFormatId = 'tpx-assets' then
     begin
       FSaveRuntime.UnpackTpXRecoveryPayload(Entry.Payload,
-        FSaveRuntime.Store.Root, PayloadBytes,
+        FSaveRuntime.Store.Root, PayloadBytes, AuxiliaryState,
         RecoveryAssets, UnresolvedLinks);
       CandidatePath := RecoveryAssets.CandidatePath;
     end;
@@ -1947,6 +2112,53 @@ begin
       FOnRecoveryRestoreCommitted(Self,
         EventManager.DocumentSession.LocalRevision,
         EventManager.DocumentSession.WatchGeneration);
+    if AuxiliaryState <> '' then
+    begin
+      if TObjectEditSession.RestoreRecoveryState(TheDrawing,
+        CurrentDocumentEpoch, AuxiliaryState, RestoredEditSession,
+        AuxiliaryError) then
+      begin
+        if not RegisterEditSession(RestoredEditSession) then
+        begin
+          AuxiliaryError := 'The recovered edit session could not be registered';
+          RestoredEditSession.Cancel(CurrentDocumentEpoch);
+          FreeAndNil(RestoredEditSession);
+        end
+        else if Assigned(FOnRecoveryEditSessionRestored) then
+        begin
+          try
+            FOnRecoveryEditSessionRestored(Self, RestoredEditSession);
+            { Ownership transfers to the callback after it returns. }
+            RestoredEditSession := nil;
+          except
+            on E: Exception do
+              AuxiliaryError := 'The recovered edit session could not be opened: ' +
+                E.Message;
+          end;
+          if RestoredEditSession <> nil then
+          begin
+            UnregisterEditSession(RestoredEditSession);
+            FreeAndNil(RestoredEditSession);
+          end;
+        end
+        else
+        begin
+          AuxiliaryError := 'No editor is available for the recovered draft';
+          UnregisterEditSession(RestoredEditSession);
+          FreeAndNil(RestoredEditSession);
+        end;
+      end;
+      if AuxiliaryError <> '' then
+      begin
+        { Discard only the invalid auxiliary editor state. Keep the restored
+          committed scene recoverable, and retire the stale sidecar now. }
+        FSaveRuntime.UpdateRecoveryAfterEditSessionEnd(
+          EventManager.DocumentSession, TheDrawing, CurrentDocumentDirty);
+        FSaveRuntime.SetRecoveryWarning(
+          'The drawing was recovered, but its pending editor draft was discarded: ' +
+          AuxiliaryError);
+      end;
+    end;
     TheDrawing.RepaintViewports;
     ArmAutoSaveTimer;
     UpdateAutoSaveUi;
@@ -1963,6 +2175,7 @@ begin
     CancelDocumentWatchBinding(WatchGeneration, SubscriptionID);
   Candidate.Free;
   CandidateContext.Free;
+  RestoredEditSession.Free;
   RecoveryAssets.Free;
   Diagnostics.Free;
 end;
@@ -2263,7 +2476,8 @@ end;
 function TMainForm.CurrentDocumentDirty: Boolean;
 begin
   Result := Assigned(TheDrawing) and Assigned(TheDrawing.History) and
-    TheDrawing.History.IsChanged;
+    (TheDrawing.History.IsChanged or
+    ((FEditSession <> nil) and FEditSession.HasUncommittedWork));
 end;
 
 procedure TMainForm.ScheduleSourceReconciliation;
@@ -2281,7 +2495,8 @@ end;
 
 function TMainForm.SceneInteractionActive: Boolean;
 begin
-  Result := FPointerDown or (FModalDepth > 0);
+  Result := FPointerDown or (FModalDepth > 0) or
+    ((FEditSession <> nil) and FEditSession.IsActive);
 end;
 
 procedure TMainForm.NotifyDocumentEdited;
@@ -2414,6 +2629,7 @@ end;
 procedure TMainForm.ReloadDiskClick(Sender: TObject);
 var Session: TDocumentSession; Answer: Integer;
 begin
+  if not TrySettleEditSession then Exit;
   Session := EventManager.DocumentSession;
   if Session.SourcePath = '' then Exit;
   if CurrentDocumentDirty then
@@ -2433,6 +2649,7 @@ end;
 procedure TMainForm.KeepLocalClick(Sender: TObject);
 var Session: TDocumentSession;
 begin
+  if not TrySettleEditSession then Exit;
   Session := EventManager.DocumentSession;
   FReloadCoordinator.KeepLocal;
   NotifyAutoSaveConflict;
@@ -2444,6 +2661,7 @@ end;
 
 procedure TMainForm.SaveCopyClick(Sender: TObject);
 begin
+  if not TrySettleEditSession then Exit;
   EventManager.SendMessage(Msg_SaveAs, Sender);
 end;
 
@@ -3036,7 +3254,7 @@ end;
 procedure TMainForm.DoConvertToExecute(Sender: TObject);
 begin
   if not (Sender is TMenuItem) then Exit;
-  EventManager.SendMessage((Sender as TMenuItem).Tag, Sender);
+  SendSettledMessage((Sender as TMenuItem).Tag, Sender);
 end;
 
 procedure TMainForm.OpenRecentExecute(Sender: TObject);
@@ -3044,7 +3262,8 @@ var
   I: Integer;
 begin
   if not (Sender is TMenuItem) then Exit;
-  EventManager.SendMessage(Msg_Escape, Self);
+  if not TrySettleEditSession then Exit;
+  SendSettledMessage(Msg_Escape, Self);
   I := (Sender as TMenuItem).Tag;
   OpenRecentMode.Index := I;
   EventManager.PushMode(OpenRecentMode);
@@ -3287,8 +3506,7 @@ end;
 
 procedure TMainForm.ZoomAreaExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_ZoomArea, ZoomAreaBtn);
+  SendToolMessage(Msg_ZoomArea, ZoomAreaBtn);
 end;
 
 procedure TMainForm.RecentChanged(Sender: TObject);
@@ -3309,120 +3527,101 @@ end;
 
 procedure TMainForm.InsertLineExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertLine, InsertLineBtn);
+  SendToolMessage(Msg_InsertLine, InsertLineBtn);
 end;
 
 procedure TMainForm.InsertRectangleExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertRectangle,
+  SendToolMessage(Msg_InsertRectangle,
     InsertRectangleBtn);
 end;
 
 procedure TMainForm.InsertCircleExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertCircle, InsertCircleBtn);
+  SendToolMessage(Msg_InsertCircle, InsertCircleBtn);
 end;
 
 procedure TMainForm.InsertEllipseExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertEllipse, InsertEllipseBtn);
+  SendToolMessage(Msg_InsertEllipse, InsertEllipseBtn);
 end;
 
 procedure TMainForm.InsertArcExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertArc, InsertArcBtn);
+  SendToolMessage(Msg_InsertArc, InsertArcBtn);
 end;
 
 procedure TMainForm.InsertSectorExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertSector, InsertSectorBtn);
+  SendToolMessage(Msg_InsertSector, InsertSectorBtn);
 end;
 
 procedure TMainForm.InsertSegmentExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertSegment, InsertSegmentBtn);
+  SendToolMessage(Msg_InsertSegment, InsertSegmentBtn);
 end;
 
 procedure TMainForm.InsertPolylineExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertPolyline, InsertPolylineBtn);
+  SendToolMessage(Msg_InsertPolyline, InsertPolylineBtn);
 end;
 
 procedure TMainForm.InsertPolygonExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertPolygon, InsertPolygonBtn);
+  SendToolMessage(Msg_InsertPolygon, InsertPolygonBtn);
 end;
 
 procedure TMainForm.InsertCurveExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertCurve, InsertCurveBtn);
+  SendToolMessage(Msg_InsertCurve, InsertCurveBtn);
 end;
 
 procedure TMainForm.InsertClosedCurveExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertClosedCurve,
+  SendToolMessage(Msg_InsertClosedCurve,
     InsertClosedCurveBtn);
 end;
 
 procedure TMainForm.InsertBezierPathExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertBezier, InsertBezierPathBtn);
+  SendToolMessage(Msg_InsertBezier, InsertBezierPathBtn);
 end;
 
 procedure TMainForm.InsertClosedBezierPathExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertClosedBezier,
+  SendToolMessage(Msg_InsertClosedBezier,
     InsertClosedBezierPathBtn);
 end;
 
 procedure TMainForm.InsertTextExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertText, InsertTextBtn);
+  SendToolMessage(Msg_InsertText, InsertTextBtn);
 end;
 
 procedure TMainForm.InsertStarExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertStar, InsertStarBtn);
+  SendToolMessage(Msg_InsertStar, InsertStarBtn);
 end;
 
 procedure TMainForm.InsertSymbolExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertSymbol, InsertSymbolBtn);
+  SendToolMessage(Msg_InsertSymbol, InsertSymbolBtn);
 end;
 
 procedure TMainForm.InsertBitmapExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_InsertBitmap, InsertBitmapBtn);
+  SendToolMessage(Msg_InsertBitmap, InsertBitmapBtn);
 end;
 
 procedure TMainForm.FreehandPolylineExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_FreehandPolyline,
+  SendToolMessage(Msg_FreehandPolyline,
     FreehandPolylineBtn);
 end;
 
 procedure TMainForm.FreehandBezierExecute(Sender: TObject);
 begin
-  EventManager.SendMessage(Msg_Escape, Self);
-  EventManager.SendMessage(Msg_FreehandBezier,
+  SendToolMessage(Msg_FreehandBezier,
     FreehandBezierBtn);
 end;
 

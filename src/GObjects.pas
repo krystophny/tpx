@@ -935,34 +935,41 @@ var
   Cont: Integer;
   TmpPt: TPoint2D;
   TmpBoolean: Boolean;
+  Remaining: Int64;
 begin
   { Load the standard properties }
   inherited CreateFromStream(Stream);
   WhenCreated;
-  Stream.Read(TmpN, SizeOf(TmpN));
+  if Stream.Read(TmpN, SizeOf(TmpN)) <> SizeOf(TmpN) then
+    raise EReadError.Create('Incomplete primitive point count');
+  if TmpN < 0 then
+    raise EReadError.Create('Invalid primitive point count');
+  Remaining := Stream.Size - Stream.Position;
+  if Int64(TmpN) > Remaining div SizeOf(TPoint2D) then
+    raise EReadError.Create('Primitive point data is incomplete');
   if not Assigned(fPoints) then
     fPoints := CreateVect(TmpN)
   else fPoints.Expand(TmpN);
      { Read all the points. }
   for Cont := 0 to TmpN - 1 do
   begin
-    Stream.Read(TmpPt, SizeOf(TmpPt));
+    Stream.ReadBuffer(TmpPt, SizeOf(TmpPt));
     fPoints.Points[Cont] := TmpPt;
   end;
-  Stream.Read(TmpBoolean, SizeOf(TmpBoolean));
+  Stream.ReadBuffer(TmpBoolean, SizeOf(TmpBoolean));
   fPoints.GrowingEnabled := TmpBoolean;
-  Stream.Read(fHatching, SizeOf(fHatching));
-  Stream.Read(fLineStyle, SizeOf(fLineStyle));
-  Stream.Read(fLineWidth, SizeOf(fLineWidth));
-  Stream.Read(fLineColor, SizeOf(fLineColor));
-  Stream.Read(fHatchColor, SizeOf(fHatchColor));
-  Stream.Read(fFillColor, SizeOf(fFillColor));
-  Stream.Read(fCanDeletePoints, SizeOf(fCanDeletePoints));
-  Stream.Read(fDrawPathBezier, SizeOf(fDrawPathBezier));
-  Stream.Read(fOwnsInterior, SizeOf(fOwnsInterior));
-  Stream.Read(fBeginArrowKind, SizeOf(fBeginArrowKind));
-  Stream.Read(fEndArrowKind, SizeOf(fEndArrowKind));
-  Stream.Read(fArrowSizeFactor, SizeOf(fArrowSizeFactor));
+  Stream.ReadBuffer(fHatching, SizeOf(fHatching));
+  Stream.ReadBuffer(fLineStyle, SizeOf(fLineStyle));
+  Stream.ReadBuffer(fLineWidth, SizeOf(fLineWidth));
+  Stream.ReadBuffer(fLineColor, SizeOf(fLineColor));
+  Stream.ReadBuffer(fHatchColor, SizeOf(fHatchColor));
+  Stream.ReadBuffer(fFillColor, SizeOf(fFillColor));
+  Stream.ReadBuffer(fCanDeletePoints, SizeOf(fCanDeletePoints));
+  Stream.ReadBuffer(fDrawPathBezier, SizeOf(fDrawPathBezier));
+  Stream.ReadBuffer(fOwnsInterior, SizeOf(fOwnsInterior));
+  Stream.ReadBuffer(fBeginArrowKind, SizeOf(fBeginArrowKind));
+  Stream.ReadBuffer(fEndArrowKind, SizeOf(fEndArrowKind));
+  Stream.ReadBuffer(fArrowSizeFactor, SizeOf(fArrowSizeFactor));
   fPoints.OnChange := UpdateExtension;
 end;
 
@@ -3880,7 +3887,7 @@ end;
 function TText2D.GetWideText: WideString;
 var
   St, StCode: string;
-  I: Integer;
+  I, Semi, Code: Integer;
 begin
   St := fText;
   Result := '';
@@ -3889,13 +3896,30 @@ begin
   begin
     Result := Result + Copy(St, 1, I - 1);
     Delete(St, 1, I + 1);
-    I := Pos(';', St);
-    if I = 0 then I := Length(St) + 1;
-    StCode := Copy(St, 1, I - 1);
-    if (StCode <> '') and (StCode[1] = 'x') then
-      StCode[1] := '$';
-    Result := Result + Widechar(StrToInt(StCode));
-    Delete(St, 1, I);
+    Semi := Pos(';', St);
+    if Semi = 0 then
+      Result := Result + '&#'
+    else
+    begin
+      StCode := Copy(St, 1, Semi - 1);
+      if (StCode <> '') and (StCode[1] = 'x') then
+        StCode[1] := '$';
+      if TryStrToInt(StCode, Code) and (Code >= 0) and
+        (Code <= $10FFFF) then
+      begin
+        if Code <= $FFFF then
+          Result := Result + WideChar(Code)
+        else
+        begin
+          Dec(Code, $10000);
+          Result := Result + WideChar($D800 + (Code shr 10)) +
+            WideChar($DC00 + (Code and $3FF));
+        end;
+        Delete(St, 1, Semi);
+      end
+      else
+        Result := Result + '&#';
+    end;
     I := Pos('&#', St);
   end;
   Result := Result + St;
@@ -3934,28 +3958,35 @@ constructor TText2D.CreateFromStream(const Stream: TStream);
 var
   TmpInt: Integer;
   TmpSt: string;
+  procedure ReadBoundedString(var Value: string; const FieldName: string);
+  var Remaining: Int64;
+  begin
+    if Stream.Read(TmpInt, SizeOf(TmpInt)) <> SizeOf(TmpInt) then
+      raise EReadError.Create('Incomplete text object ' + FieldName + ' length');
+    if TmpInt < 0 then
+      raise EReadError.Create('Invalid text object ' + FieldName + ' length');
+    Remaining := Stream.Size - Stream.Position;
+    if Int64(TmpInt) > Remaining then
+      raise EReadError.Create('Incomplete text object ' + FieldName);
+    SetLength(Value, TmpInt);
+    if TmpInt > 0 then Stream.ReadBuffer(Value[1], TmpInt);
+  end;
 begin
   { Load the standard properties }
   inherited CreateFromStream(Stream);
-  Stream.Read(TmpInt, SizeOf(TmpInt));
-  SetString(fText, nil, TmpInt);
-  Stream.Read(Pointer(fText)^, TmpInt);
-  Stream.Read(TmpInt, SizeOf(TmpInt));
-  SetString(fTeXText, nil, TmpInt);
-  Stream.Read(Pointer(fTeXText)^, TmpInt);
-  Stream.Read(fHeight, SizeOf(fHeight));
-  Stream.Read(fRot, SizeOf(fRot));
-  Stream.Read(fHAlignment, SizeOf(fHAlignment));
+  ReadBoundedString(fText, 'Text');
+  ReadBoundedString(fTeXText, 'TeX text');
+  Stream.ReadBuffer(fHeight, SizeOf(fHeight));
+  Stream.ReadBuffer(fRot, SizeOf(fRot));
+  Stream.ReadBuffer(fHAlignment, SizeOf(fHAlignment));
   Font := TFont.Create;
-  Stream.Read(TmpInt, SizeOf(TmpInt));
-  SetString(TmpSt, nil, TmpInt);
-  Stream.Read(Pointer(TmpSt)^, TmpInt);
+  ReadBoundedString(TmpSt, 'font name');
   Font.Name := TmpSt;
-  Stream.Read(TmpInt, SizeOf(TmpInt));
+  Stream.ReadBuffer(TmpInt, SizeOf(TmpInt));
   if TmpInt = 1 then Font.Style := Font.Style + [fsItalic];
-  Stream.Read(TmpInt, SizeOf(TmpInt));
+  Stream.ReadBuffer(TmpInt, SizeOf(TmpInt));
   if TmpInt = 1 then Font.Style := Font.Style + [fsBold];
-  Stream.Read(TmpInt, SizeOf(TmpInt));
+  Stream.ReadBuffer(TmpInt, SizeOf(TmpInt));
   Font.Charset := TmpInt;
 end;
 
