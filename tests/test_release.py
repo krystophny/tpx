@@ -84,7 +84,7 @@ class ReleasePolicyTests(unittest.TestCase):
             git("add", ".")
             git("commit", "-qm", "base 1.6.0")
             base = git("rev-parse", "HEAD")
-            git("switch", "-c", "master")
+            git("switch", "-c", "integration-2.0")
             (root / "feature.txt").write_text("2.0 feature\n")
             git("add", ".")
             git("commit", "-qm", "2.0 feature")
@@ -98,7 +98,7 @@ class ReleasePolicyTests(unittest.TestCase):
             self.assertTrue(release_policy.linear_history(base, head, cwd=root))
             self.assertTrue((root / "bugfix.txt").exists())
             self.assertFalse((root / "feature.txt").exists())
-            git("merge", "--no-ff", "master", "-m", "merge 2.0 features")
+            git("merge", "--no-ff", "integration-2.0", "-m", "merge 2.0 features")
             self.assertFalse(release_policy.linear_history(
                 base, git("rev-parse", "HEAD"), cwd=root))
 
