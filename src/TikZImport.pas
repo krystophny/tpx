@@ -2188,11 +2188,11 @@ var
     Result := True;
   end;
 
-  procedure ParseNode(IsAttached: Boolean);
+  procedure ParseNode(IsAttached: Boolean; NodeStartToken: SizeInt);
   var
     Cursor, NodeStyle, NodeBodyGroup, IncludeStyle, IncludeFileGroup: SizeInt;
     NodePoint: TTikZPoint;
-    NodeSpan, NXSpan, NYSpan, BodySpan: TTikZSourceSpan;
+    NodeSpan, NXSpan, NYSpan, BodySpan, NodeSourceSpan: TTikZSourceSpan;
     Relative: Boolean;
     UpdatesBase: Boolean;
     BodyBytes, FileBytes: RawByteString;
@@ -2439,7 +2439,11 @@ var
       Unsupported(TokenSpan(CommandIndex), 'Node is missing its text body');
       Exit;
     end;
-    Obj.SourceSpan := SpanBetween(CommandIndex, Limit);
+    if IsAttached then
+      NodeSourceSpan := SpanBetween(NodeStartToken, Cursor)
+    else
+      NodeSourceSpan := SpanBetween(NodeStartToken, Limit + 1);
+    Obj.SourceSpan := NodeSourceSpan;
     Obj.TextBody := BodyBytes;
     Obj.TextContent := BodyBytes;
     Obj.TextHeightMM := FResult.Scene.TextSizeMM;
@@ -2512,7 +2516,7 @@ var
       end;
     end;
     if not FoundImage then Obj.Kind := tsoText;
-    StatementSpan := SpanBetween(CommandIndex, Limit);
+    StatementSpan := NodeSourceSpan;
     AddSemanticObject(Obj, StatementSpan);
     if IsAttached then Obj := ResumeObj else Obj := nil;
     I := Cursor;
@@ -2671,7 +2675,7 @@ begin
   CurrentPoint.Y := 0;
   if Command = 'node' then
   begin
-    ParseNode(False);
+    ParseNode(False, CommandIndex);
     Exit;
   end;
   Obj := MakeStyledObject;
@@ -2971,7 +2975,7 @@ begin
     begin
       if PathHasSegment then
         FlushPath(True);
-      ParseNode(True);
+      ParseNode(True, I - 1);
       Continue;
     end;
     if ConsumeLiteral(I, '--') then
