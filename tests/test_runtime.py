@@ -112,16 +112,19 @@ class RuntimeTests(unittest.TestCase):
             root = Path(directory).resolve()
             home = root / "home"
             config = root / "config"
+            work = root / "work"
             home.mkdir()
             config.mkdir()
+            work.mkdir()
             env = os.environ.copy()
             env.update({"TMPDIR": str(root), "TMP": str(root), "TEMP": str(root),
                         "HOME": str(home), "USERPROFILE": str(home),
                         "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
                         "LOCALAPPDATA": str(config)})
             env.update(extra_env or {})
-            result = subprocess.run([str(BINARY), scenario], cwd=directory,
-                                    env=env, capture_output=True, text=True, timeout=40)
+            result = subprocess.run([str(BINARY), scenario], cwd=work,
+                                    env=env, capture_output=True, text=True,
+                                    encoding="utf-8", errors="replace", timeout=40)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("PASS " + scenario, result.stdout, result.stderr)
 
@@ -172,13 +175,18 @@ class RuntimeTests(unittest.TestCase):
     def test_untitled_recovery_survives_restart_and_requires_choice(self):
         with tempfile.TemporaryDirectory(prefix="tpx-autosave-restart-") as directory:
             root = Path(directory).resolve()
-            home = root / "home"
-            config = root / "config"
+            # The recovery bundle and bitmap conversion stage live under the
+            # profile path. Exercise UTF-8 process launch there and GetTempPath.
+            home = root / "home-Καλημέρα-ß"
+            config = root / "config-Καλημέρα-ß"
+            temp = root / "temp-Καλημέρα-ß"
             home.mkdir()
             config.mkdir()
+            temp.mkdir()
             env = {"HOME": str(home), "USERPROFILE": str(home),
                    "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
-                   "LOCALAPPDATA": str(config)}
+                   "LOCALAPPDATA": str(config), "TMPDIR": str(temp),
+                   "TMP": str(temp), "TEMP": str(temp)}
             self.run_scenario("autosave-recovery-create", env)
             self.run_scenario("autosave-recovery-restore", env)
 

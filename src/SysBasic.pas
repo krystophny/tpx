@@ -78,6 +78,11 @@ uses
   MainUnit, Math{$IFDEF FPC}, Classes, {$IFDEF WINDOWS}Windows,{$ENDIF}
   {$IFNDEF WASI}Process,{$ENDIF} ExtCtrls{$ENDIF};
 
+{$IF DEFINED(FPC) AND DEFINED(MSWINDOWS)}
+function c_GetTempPathW(BufferLength: Cardinal; Buffer: PWideChar): Cardinal;
+  stdcall; external 'kernel32' name 'GetTempPathW';
+{$ENDIF}
+
 {$IF DEFINED(FPC) AND NOT DEFINED(WASI)}
 type
   TBackgroundTool = class(TComponent)
@@ -526,14 +531,35 @@ end;
 
 function GetTempDir: string;
 var
+{$IF DEFINED(FPC) AND DEFINED(MSWINDOWS)}
+  WidePath: UnicodeString;
+  BufferLength, PathLength: Cardinal;
+{$ELSE}
   Buffer: array[0..1023] of Char;
+{$ENDIF}
 begin
 {$IFNDEF FPC}
   GetTempPath(SizeOf(Buffer) - 1, Buffer);
   SetString(Result, Buffer, StrLen(Buffer));
   Result := GetLongPath(Result);
 {$ELSE}
+{$IFDEF MSWINDOWS}
+  BufferLength := 260;
+  repeat
+    SetLength(WidePath, BufferLength);
+    PathLength := c_GetTempPathW(BufferLength, PWideChar(WidePath));
+    if PathLength = 0 then
+      raise EInOutError.Create('Windows could not determine the temporary directory');
+    if PathLength < BufferLength then Break;
+    if PathLength >= 32767 then
+      raise EInOutError.Create('Windows temporary directory path is too long');
+    BufferLength := PathLength + 1;
+  until False;
+  SetLength(WidePath, PathLength);
+  Result := UTF8Encode(WidePath);
+{$ELSE}
   Result := SysUtils.GetTempDir;
+{$ENDIF}
 {$ENDIF}
   Result := IncludeTrailingPathDelimiter(Result);
 end;
