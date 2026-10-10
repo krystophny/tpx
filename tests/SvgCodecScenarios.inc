@@ -181,6 +181,51 @@ begin
   end;
 end;
 
+procedure CheckSvgHatchPatternReference;
+var
+  Drawing: TDrawing2D;
+  Rectangle: TRectangle2D;
+  Exporter: T_SVG_Export;
+  Stream: TMemoryStream;
+  Svg, PatternId: string;
+  StartPos, EndPos: SizeInt;
+begin
+  Drawing := TDrawing2D.Create(nil);
+  Rectangle := TRectangle2D.Create(-1);
+  Exporter := nil;
+  Stream := TMemoryStream.Create;
+  try
+    Rectangle.Points[0] := Point2D(2, 2);
+    Rectangle.Points[1] := Point2D(10, 10);
+    Rectangle.Points[2] := Point2D(2, 10);
+    Rectangle.Hatching := haDiagCross;
+    Rectangle.HatchColor := RGBToColor(204, 34, 0);
+    Rectangle.FillColor := RGBToColor(221, 238, 255);
+    Drawing.AddObject(-1, Rectangle);
+    Exporter := T_SVG_Export.Create(Drawing);
+    Exporter.WriteToTpX(Stream, 'hatch-pattern.svg');
+    SetLength(Svg, Stream.Size);
+    Stream.Position := 0;
+    Stream.ReadBuffer(Svg[1], Stream.Size);
+
+    StartPos := Pos('<pattern id="', Svg);
+    Check(StartPos > 0, 'hatch export omitted its pattern definition');
+    Inc(StartPos, Length('<pattern id="'));
+    EndPos := StartPos;
+    while (EndPos <= Length(Svg)) and (Svg[EndPos] <> '"') do Inc(EndPos);
+    Check(EndPos <= Length(Svg), 'hatch pattern id was unterminated');
+    PatternId := Copy(Svg, StartPos, EndPos - StartPos);
+    Check((PatternId <> '') and (Pos('#', PatternId) = 0),
+      'hatch pattern id contains an invalid fragment delimiter');
+    Check(Pos('fill="url(#' + PatternId + ')"', Svg) > 0,
+      'hatch fill does not reference its emitted pattern definition');
+  finally
+    Exporter.Free;
+    Stream.Free;
+    Drawing.Free;
+  end;
+end;
+
 procedure TestSvgCodec;
 const
   Source: RawByteString =
@@ -708,6 +753,7 @@ var
 begin
   Check(IsDocumentCodecRegistered('svg'), 'SVG codec was not registered');
   Check(IsDocumentCodecRegistered('svgz'), 'SVGZ import codec was not registered');
+  CheckSvgHatchPatternReference;
   Diagnostics := TStringList.Create;
   Drawing := nil;
   Reloaded := nil;

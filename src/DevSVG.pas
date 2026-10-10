@@ -102,8 +102,6 @@ end;
 
 function GetPattID(Hatching: THatching;
   HatchColor, FillColor: TColor): string;
-var
-  J: Integer;
 begin
   case Hatching of
     haHorizontal: Result := 'haH';
@@ -116,11 +114,11 @@ begin
     Result := 'haNone';
   end;
   if HatchColor <> clDefault then
-    Result := Result + ColorToHtml(HatchColor);
-  J := Pos('#', Result);
-  if J > 0 then Delete(Result, J, J);
+    Result := Result + StringReplace(ColorToHtml(HatchColor), '#', '',
+      [rfReplaceAll]);
   if FillColor <> clDefault then
-    Result := Result + 'F' + ColorToHtml(FillColor);
+    Result := Result + 'F' + StringReplace(ColorToHtml(FillColor), '#', '',
+      [rfReplaceAll]);
 end;
 
 // =====================================================================
