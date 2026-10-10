@@ -471,7 +471,7 @@ const Drag_Aperture = 4;
 
 implementation
 
-uses MainUnit, SysBasic, Propert, Options, TransForm, PreView,
+uses MainUnit, SysBasic, Options, TransForm, PreView,
 {$IFDEF FPC}  LiveTeX,{$ENDIF}
 {$IFNDEF FPC}
   EMF_Unit, WinBasic, ClpbrdOp,
@@ -811,26 +811,14 @@ end;
 procedure TTpXMode.ChangeObjectProperties(
   Obj: TObject2D);
 begin
-  PropertiesForm.PObject := Obj;
-  if PropertiesForm.ShowModal = mrOK then
-  begin
-    Drawing.NotifyChanged;
-    Obj.UpdateExtension(nil);
-    Drawing.RepaintViewports;
-{$IFDEF FPC}
-    FlushLiveTeX;
-{$ENDIF}
-  end;
-//  Parent.SetFocus;
-//  SetFocus;
+  MainForm.ShowInspector;
+  MainForm.Inspector.FocusObject(Obj);
 end;
 
 procedure TTpXMode.ChangeSelectedProperties;
-var
-  Obj: TObject2D;
 begin
-  Obj := Drawing.SelectionFirst as TObject2D;
-  if Assigned(Obj) then ChangeObjectProperties(Obj);
+  MainForm.ShowInspector;
+  MainForm.RefreshInspectorSelection;
 end;
 
 procedure TTpXMode.PictureProperties;
