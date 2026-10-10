@@ -35,10 +35,10 @@ test-tex: build
 	python3 tests/check_tex_tools.py
 	TPX_BINARY="$(CURDIR)/$(TPX_BINARY)" python3 tests/test_tex.py
 
-# The first production watcher cases arrive with issue #63. Until then, a
-# zero-match result is a failure instead of a green empty watcher job.
+# Run the common watcher contract case and the native inotify conformance suite.
 test-watch:
 	python3 tests/test_core.py --compiler "$(FPC)" --build-dir "$(CORE_BUILD_DIR)" --filter=watch
+	python3 tests/test_filewatch_linux.py -v
 
 # Browser (WASI) target. Toolchain pins and locations: web/pins.env, web/README.md.
 web:
