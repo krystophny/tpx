@@ -1332,15 +1332,15 @@ begin
       Parts.Free;
     end;
   end;
-  if SameText(Name, 'black') then RGB := $000000
-  else if SameText(Name, 'white') then RGB := $FFFFFF
-  else if SameText(Name, 'red') then RGB := $FF0000
-  else if SameText(Name, 'green') then RGB := $008000
-  else if SameText(Name, 'blue') then RGB := $0000FF
-  else if SameText(Name, 'gray') or SameText(Name, 'grey') then RGB := $808080
-  else if SameText(Name, 'cyan') then RGB := $00FFFF
-  else if SameText(Name, 'magenta') then RGB := $FF00FF
-  else if SameText(Name, 'yellow') then RGB := $FFFF00
+  if Name = 'black' then RGB := $000000
+  else if Name = 'white' then RGB := $FFFFFF
+  else if Name = 'red' then RGB := $FF0000
+  else if Name = 'green' then RGB := $00FF00
+  else if Name = 'blue' then RGB := $0000FF
+  else if Name = 'gray' then RGB := $808080
+  else if Name = 'cyan' then RGB := $00FFFF
+  else if Name = 'magenta' then RGB := $FF00FF
+  else if Name = 'yellow' then RGB := $FFFF00
   else Exit;
   Result := True;
 end;

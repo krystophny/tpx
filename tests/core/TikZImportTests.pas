@@ -226,6 +226,45 @@ begin
   end;
 end;
 
+procedure TestExactXColorGreen;
+const
+  GreenSource = '\begin{tikzpicture}' +
+    '\path[fill=green] (0,0) rectangle +(1,1);' +
+    '\end{tikzpicture}';
+  WrongCaseSource = '\begin{tikzpicture}' +
+    '\path[fill=Green] (0,0) rectangle +(1,1);' +
+    '\end{tikzpicture}';
+var
+  Syntax: TTikZSyntaxResult;
+  Evaluated: TTikZSemanticResult;
+  Obj: TTikZSceneObject;
+begin
+  Evaluated := ParseAndEvaluate(GreenSource, Syntax);
+  try
+    CheckCore((Syntax.Outcome = tpoAccepted) and
+      (Evaluated.Outcome = tsoAccepted) and
+      (Evaluated.Scene.ObjectCount = 1),
+      'the standard xcolor green fill should import as one object');
+    Obj := Evaluated.Scene.ObjectAt(0);
+    CheckCore(Obj.FillEnabled and (Obj.FillRGB = $00FF00),
+      'xcolor green (rgb 0,1,0) must map to RGB $00FF00');
+  finally
+    Evaluated.Free;
+    Syntax.Free;
+  end;
+
+  Evaluated := ParseAndEvaluate(WrongCaseSource, Syntax);
+  try
+    CheckCore(Syntax.Outcome = tpoAccepted,
+      'case-sensitive color rejection should remain a semantic diagnostic');
+    CheckCore(Evaluated.Outcome = tsoUnsupported,
+      'undefined xcolor name Green must not alias lowercase green');
+  finally
+    Evaluated.Free;
+    Syntax.Free;
+  end;
+end;
+
 procedure TestOwnedStatementBindingSpans;
 const
   Source = '\begin{tikzpicture}' +
@@ -390,6 +429,7 @@ initialization
     TestArcSectorAndCircleMaterializationProfile);
   RegisterCoreTest('tikz-bare-drawing-style-flags',
     TestBareDrawingStyleFlags);
+  RegisterCoreTest('tikz-exact-xcolor-green', TestExactXColorGreen);
   RegisterCoreTest('tikz-owned-statement-binding-spans',
     TestOwnedStatementBindingSpans);
   RegisterCoreTest('tikz-relative-coordinate-bases',
