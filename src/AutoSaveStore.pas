@@ -19,7 +19,7 @@ type
   TAutoSaveStoredRecord = record
     Kind: TAutoSaveRecordKind;
     DocumentKey: string;
-    SourcePath: string;
+    SourcePath: TDocumentPath;
     SourceFormatId: string;
     PayloadFormatId: string;
     BaseRevision: TDiskRevision;
@@ -32,31 +32,33 @@ type
     the application's config directory, never beside the document. }
   TAutoSaveStore = class
   private
-    FRoot: string;
+    FRoot: TDocumentPath;
     procedure CleanAbandonedTemporaryFiles;
-    function DraftFile(const DocumentKey: string): string;
-    function NewVersionFile(const DocumentKey: string): string;
+    function DraftFile(const DocumentKey: string): TDocumentPath;
+    function NewVersionFile(const DocumentKey: string): TDocumentPath;
     procedure CheckDraftCapacity(NewSize: Int64;
-      const ReplacingFile: string);
-    procedure MakeRoom(NewSize: Int64; const ReplacingFile: string);
-    procedure WriteRecord(const FileName: string;
+      const ReplacingFile: TDocumentPath);
+    procedure MakeRoom(NewSize: Int64; const ReplacingFile: TDocumentPath);
+    procedure WriteRecord(const FileName: TDocumentPath;
       const Entry: TAutoSaveStoredRecord);
   public
-    constructor Create(const Root: string);
-    procedure SaveDraft(const DocumentKey, SourcePath, SourceFormatId,
+    constructor Create(const Root: TDocumentPath);
+    procedure SaveDraft(const DocumentKey: string; const SourcePath: TDocumentPath;
+      const SourceFormatId,
       PayloadFormatId: string; const BaseRevision: TDiskRevision;
       const BaseSourceBytes: RawByteString; LocalRevision: QWord;
       const DraftBytes: RawByteString);
-    function SavePriorVersion(const DocumentKey, SourcePath,
+    function SavePriorVersion(const DocumentKey: string;
+      const SourcePath: TDocumentPath;
       SourceFormatId: string; const BaseRevision: TDiskRevision;
       LocalRevision: QWord;
-      const SourceBytes: RawByteString): string;
+      const SourceBytes: RawByteString): TDocumentPath;
     procedure DeleteDraft(const DocumentKey: string);
     procedure ListDrafts(Files: TStrings);
     procedure ListPriorVersions(const DocumentKey: string; Files: TStrings);
-    function LoadRecord(const FileName: string;
+    function LoadRecord(const FileName: TDocumentPath;
       out Entry: TAutoSaveStoredRecord): Boolean;
-    property Root: string read FRoot;
+    property Root: TDocumentPath read FRoot;
   end;
 
 implementation
@@ -69,6 +71,137 @@ uses
 const
   RecordMagic = 'TPXREC03';
   RecordHeaderBytes = 8 + 1 + 4 + 4 + 4 + 4 + 4 + 4 + 8 + 8 + 1 + 8 + 8 + 8;
+{$IFDEF MSWINDOWS}
+  AutoSaveMoveFileWriteThrough = $00000008;
+{$ENDIF}
+
+type
+  TStoreFileInfo = record
+    Name: TDocumentPath;
+    Size: Int64;
+    Modified: TDateTime;
+    IsDirectory: Boolean;
+  end;
+  TStoreFileInfoArray = array of TStoreFileInfo;
+{$IFDEF MSWINDOWS}
+  TOwnedHandleStream = class(THandleStream)
+  public
+    destructor Destroy; override;
+  end;
+{$ENDIF}
+
+{$IFDEF MSWINDOWS}
+function WideStorePath(const FileName: TDocumentPath): UnicodeString;
+begin
+  Result := UTF8Decode(FileName);
+  if Length(Result) < MAX_PATH then Exit;
+  if Copy(Result, 1, 4) = '\\?\' then Exit;
+  if Copy(Result, 1, 2) = '\\' then
+    Result := '\\?\UNC\' + Copy(Result, 3, MaxInt)
+  else
+    Result := '\\?\' + Result;
+end;
+
+destructor TOwnedHandleStream.Destroy;
+begin
+  if Handle <> INVALID_HANDLE_VALUE then Windows.CloseHandle(Handle);
+  inherited Destroy;
+end;
+{$ENDIF}
+
+function OpenStoreFile(const FileName: TDocumentPath;
+  ForWrite: Boolean): TStream;
+{$IFDEF MSWINDOWS}
+var Handle: THandle; Access, ShareMode, Creation: DWORD; WideName: UnicodeString;
+{$ENDIF}
+begin
+{$IFDEF MSWINDOWS}
+  if ForWrite then
+  begin
+    Access := GENERIC_WRITE;
+    ShareMode := 0;
+    Creation := CREATE_NEW;
+  end
+  else
+  begin
+    Access := GENERIC_READ;
+    ShareMode := FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE;
+    Creation := OPEN_EXISTING;
+  end;
+  WideName := WideStorePath(FileName);
+  Handle := Windows.CreateFileW(PWideChar(WideName), Access, ShareMode, nil,
+    Creation, FILE_ATTRIBUTE_NORMAL, 0);
+  if Handle = INVALID_HANDLE_VALUE then RaiseLastOSError;
+  try
+    Result := TOwnedHandleStream.Create(Handle);
+  except
+    Windows.CloseHandle(Handle);
+    raise;
+  end;
+{$ELSE}
+  if ForWrite then Result := TFileStream.Create(FileName, fmCreate)
+  else Result := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
+{$ENDIF}
+end;
+
+function StoreFiles(const Pattern: TDocumentPath): TStoreFileInfoArray;
+{$IFDEF MSWINDOWS}
+var Search: WIN32_FIND_DATAW; SearchHandle: THandle; WidePattern: UnicodeString;
+  Item: TStoreFileInfo; SystemTime: TSystemTime;
+{$ELSE}
+var Search: TSearchRec; Item: TStoreFileInfo;
+{$ENDIF}
+begin
+  Result := nil;
+{$IFDEF MSWINDOWS}
+  WidePattern := WideStorePath(Pattern);
+  SearchHandle := Windows.FindFirstFileW(PWideChar(WidePattern), Search);
+  if SearchHandle = INVALID_HANDLE_VALUE then Exit;
+  try
+    repeat
+      Item.Name := UTF8Encode(UnicodeString(PWideChar(@Search.cFileName[0])));
+      Item.Size := (Int64(Search.nFileSizeHigh) shl 32) or Search.nFileSizeLow;
+      if Windows.FileTimeToSystemTime(Search.ftLastWriteTime, SystemTime) then
+        Item.Modified := SystemTimeToDateTime(SystemTime)
+      else
+        Item.Modified := 0;
+      Item.IsDirectory := (Search.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY) <> 0;
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := Item;
+    until not Windows.FindNextFileW(SearchHandle, Search);
+  finally
+    Windows.FindClose(SearchHandle);
+  end;
+{$ELSE}
+  if FindFirst(Pattern, faAnyFile, Search) <> 0 then Exit;
+  try
+    repeat
+      Item.Name := UTF8String(Search.Name);
+      Item.Size := Search.Size;
+      Item.Modified := Search.TimeStamp;
+      Item.IsDirectory := (Search.Attr and faDirectory) <> 0;
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := Item;
+    until FindNext(Search) <> 0;
+  finally
+    FindClose(Search);
+  end;
+{$ENDIF}
+end;
+
+function HasPathSeparator(const FileName: TDocumentPath): Boolean;
+begin
+  Result := (Pos('/', FileName) > 0) or (Pos('\', FileName) > 0);
+{$IFDEF MSWINDOWS}
+  Result := Result or ((Length(FileName) >= 2) and (FileName[2] = ':'));
+{$ENDIF}
+end;
+
+function FullStoreFileName(const Root, FileName: TDocumentPath): TDocumentPath;
+begin
+  if HasPathSeparator(FileName) then Result := NormalizeDocumentPath(FileName)
+  else Result := Root + FileName;
+end;
 
 function SafeKey(const Value: string): Boolean;
 var
@@ -80,9 +213,9 @@ begin
       Exit(False);
 end;
 
-function EncodedStringSize(const Value: string): Int64;
+function EncodedStringSize(const Value: UTF8String): Int64;
 begin
-  Result := 4 + Length(UTF8Encode(Value));
+  Result := 4 + Length(Value);
 end;
 
 function EncodedRecordSize(const Entry: TAutoSaveStoredRecord): Int64;
@@ -96,18 +229,16 @@ begin
     Length(Entry.BaseSourceBytes) + Length(Entry.Payload);
 end;
 
-procedure WriteUtf8(Stream: TStream; const Value: string);
+procedure WriteUtf8(Stream: TStream; const Value: UTF8String);
 var
-  Encoded: UTF8String;
   Len: Longint;
 begin
-  Encoded := UTF8Encode(Value);
-  Len := Length(Encoded);
+  Len := Length(Value);
   Stream.WriteBuffer(Len, SizeOf(Len));
-  if Len > 0 then Stream.WriteBuffer(Encoded[1], Len);
+  if Len > 0 then Stream.WriteBuffer(Value[1], Len);
 end;
 
-function ReadUtf8(Stream: TStream): string;
+function ReadUtf8(Stream: TStream): UTF8String;
 var
   Encoded: UTF8String;
   Len: Longint;
@@ -118,17 +249,17 @@ begin
     raise Exception.Create('Invalid AutoSave record string length');
   SetLength(Encoded, Len);
   if Len > 0 then Stream.ReadBuffer(Encoded[1], Len);
-  Result := string(UTF8Decode(Encoded));
+  Result := Encoded;
 end;
 
 procedure WriteDiskRevision(Stream: TStream; const Revision: TDiskRevision);
 var
   ExistsByte: Byte;
 begin
-  WriteUtf8(Stream, Revision.ContentDigest);
+  WriteUtf8(Stream, UTF8String(Revision.ContentDigest));
   Stream.WriteBuffer(Revision.Size, SizeOf(Revision.Size));
   Stream.WriteBuffer(Revision.ModifiedUTC, SizeOf(Revision.ModifiedUTC));
-  WriteUtf8(Stream, Revision.Identity);
+  WriteUtf8(Stream, UTF8String(Revision.Identity));
   if Revision.Exists then ExistsByte := 1 else ExistsByte := 0;
   Stream.WriteBuffer(ExistsByte, SizeOf(ExistsByte));
 end;
@@ -147,19 +278,19 @@ begin
   Revision.Exists := ExistsByte = 1;
 end;
 
-procedure FlushStream(Stream: TFileStream);
+procedure FlushStream(Stream: TStream);
 begin
   {$IFDEF UNIX}{$IFNDEF WASI}
-  if fpfsync(Stream.Handle) <> 0 then
+  if fpfsync(TFileStream(Stream).Handle) <> 0 then
     raise Exception.Create('Could not flush AutoSave recovery data');
   {$ENDIF}{$ENDIF}
   {$IFDEF MSWINDOWS}
-  if not FlushFileBuffers(Stream.Handle) then
+  if not FlushFileBuffers(THandleStream(Stream).Handle) then
     RaiseLastOSError;
   {$ENDIF}
 end;
 
-procedure FlushDirectory(const DirectoryName: string);
+procedure FlushDirectory(const DirectoryName: TDocumentPath);
 {$IFDEF UNIX}{$IFNDEF WASI}
 var
   Handle: cint;
@@ -178,7 +309,7 @@ begin
   {$ENDIF}{$ENDIF}
 end;
 
-procedure ReplaceFile(const SourceName, DestName: string);
+procedure ReplaceFile(const SourceName, DestName: TDocumentPath);
 begin
   {$IFDEF UNIX}
   {$IFNDEF WASI}
@@ -190,8 +321,9 @@ begin
   {$ENDIF}
   {$ELSE}
   {$IFDEF MSWINDOWS}
-  if not MoveFileEx(PChar(SourceName), PChar(DestName),
-    MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH) then
+  if not MoveFileExW(PWideChar(WideStorePath(SourceName)),
+    PWideChar(WideStorePath(DestName)),
+    MOVEFILE_REPLACE_EXISTING or AutoSaveMoveFileWriteThrough) then
     RaiseLastOSError;
   {$ELSE}
   if FileExists(DestName) and not DeleteFile(DestName) then
@@ -202,7 +334,7 @@ begin
   {$ENDIF}
 end;
 
-function NewTemporaryName(const DestName: string): string;
+function NewTemporaryName(const DestName: TDocumentPath): TDocumentPath;
 var
   ID: TGUID;
 begin
@@ -213,16 +345,20 @@ begin
     '.tmp';
 end;
 
-constructor TAutoSaveStore.Create(const Root: string);
+constructor TAutoSaveStore.Create(const Root: TDocumentPath);
+var NormalizedRoot: TDocumentPath;
 begin
   inherited Create;
   if Trim(Root) = '' then
     raise Exception.Create('AutoSave recovery directory is required');
-  FRoot := IncludeTrailingPathDelimiter(ExpandFileName(Root));
-  if not ForceDirectories(FRoot) and not DirectoryExists(FRoot) then
+  NormalizedRoot := NormalizeDocumentPath(Root);
+  FRoot := NormalizedRoot;
+  if (FRoot <> '') and not (FRoot[Length(FRoot)] in ['/', '\']) then
+    FRoot := FRoot + PathDelim;
+  if not EnsureDocumentDirectoryExists(NormalizedRoot) then
     raise Exception.Create('Could not create AutoSave recovery directory');
   {$IFDEF UNIX}{$IFNDEF WASI}
-  if fpChmod(PChar(FRoot), &700) <> 0 then
+  if fpChmod(PChar(NormalizedRoot), &700) <> 0 then
     raise Exception.Create('Could not protect AutoSave recovery directory');
   {$ENDIF}{$ENDIF}
   CleanAbandonedTemporaryFiles;
@@ -230,31 +366,32 @@ end;
 
 procedure TAutoSaveStore.CleanAbandonedTemporaryFiles;
 var
-  Search: TSearchRec;
+  Files: TStoreFileInfoArray;
+  FileName: TDocumentPath;
+  I: Integer;
   Changed: Boolean;
 begin
   Changed := False;
-  if FindFirst(FRoot + '*.tmp', faAnyFile, Search) <> 0 then Exit;
-  try
-    repeat
-      if (Search.Attr and faDirectory) <> 0 then Continue;
-      if (Now - Search.TimeStamp > 1) and DeleteFile(FRoot + Search.Name) then
+  Files := StoreFiles(FRoot + '*.tmp');
+  for I := 0 to High(Files) do
+  begin
+    if Files[I].IsDirectory then Continue;
+    FileName := FRoot + Files[I].Name;
+    if (Now - Files[I].Modified) > 1 then
+      if DeleteDocumentFile(FileName) then
         Changed := True;
-    until FindNext(Search) <> 0;
-  finally
-    FindClose(Search);
   end;
   if Changed then FlushDirectory(FRoot);
 end;
 
-function TAutoSaveStore.DraftFile(const DocumentKey: string): string;
+function TAutoSaveStore.DraftFile(const DocumentKey: string): TDocumentPath;
 begin
   if not SafeKey(DocumentKey) then
     raise Exception.Create('Invalid AutoSave document key');
   Result := FRoot + DocumentKey + '.draft';
 end;
 
-function TAutoSaveStore.NewVersionFile(const DocumentKey: string): string;
+function TAutoSaveStore.NewVersionFile(const DocumentKey: string): TDocumentPath;
 var
   ID: TGUID;
   Token: string;
@@ -267,11 +404,11 @@ begin
   Result := FRoot + DocumentKey + '.' + Token + '.version';
 end;
 
-procedure TAutoSaveStore.WriteRecord(const FileName: string;
+procedure TAutoSaveStore.WriteRecord(const FileName: TDocumentPath;
   const Entry: TAutoSaveStoredRecord);
 var
-  TempName: string;
-  Stream: TFileStream;
+  TempName: TDocumentPath;
+  Stream: TStream;
   KindByte: Byte;
   PayloadSize: QWord;
 begin
@@ -282,7 +419,7 @@ begin
   TempName := NewTemporaryName(FileName);
   Stream := nil;
   try
-    Stream := TFileStream.Create(TempName, fmCreate);
+    Stream := OpenStoreFile(TempName, True);
     Stream.WriteBuffer(RecordMagic[1], Length(RecordMagic));
     if Entry.Kind = asrDraft then KindByte := 1 else KindByte := 2;
     Stream.WriteBuffer(KindByte, SizeOf(KindByte));
@@ -303,21 +440,21 @@ begin
     FlushStream(Stream);
     FreeAndNil(Stream);
     ReplaceFile(TempName, FileName);
-    FlushDirectory(ExtractFileDir(FileName));
+    FlushDirectory(DocumentPathDirectory(FileName));
   finally
     Stream.Free;
-    if FileExists(TempName) then DeleteFile(TempName);
+    if DocumentFileExists(TempName) then DeleteDocumentFile(TempName);
   end;
 end;
 
-procedure TAutoSaveStore.SaveDraft(const DocumentKey, SourcePath,
-  SourceFormatId, PayloadFormatId: string;
+procedure TAutoSaveStore.SaveDraft(const DocumentKey: string;
+  const SourcePath: TDocumentPath; const SourceFormatId, PayloadFormatId: string;
   const BaseRevision: TDiskRevision;
   const BaseSourceBytes: RawByteString; LocalRevision: QWord;
   const DraftBytes: RawByteString);
 var
   Entry: TAutoSaveStoredRecord;
-  Target: string;
+  Target: TDocumentPath;
 begin
   Entry.Kind := asrDraft;
   Entry.DocumentKey := DocumentKey;
@@ -334,10 +471,11 @@ begin
   MakeRoom(EncodedRecordSize(Entry), Target);
 end;
 
-function TAutoSaveStore.SavePriorVersion(const DocumentKey, SourcePath,
-  SourceFormatId: string; const BaseRevision: TDiskRevision;
+function TAutoSaveStore.SavePriorVersion(const DocumentKey: string;
+  const SourcePath: TDocumentPath; SourceFormatId: string;
+  const BaseRevision: TDiskRevision;
   LocalRevision: QWord;
-  const SourceBytes: RawByteString): string;
+  const SourceBytes: RawByteString): TDocumentPath;
 var
   Entry: TAutoSaveStoredRecord;
 begin
@@ -357,24 +495,24 @@ begin
 end;
 
 procedure TAutoSaveStore.CheckDraftCapacity(NewSize: Int64;
-  const ReplacingFile: string);
+  const ReplacingFile: TDocumentPath);
 var
-  Search: TSearchRec;
+  Files: TStoreFileInfoArray;
+  FileName: TDocumentPath;
+  I: Integer;
   Count: Integer;
   TotalSize: Int64;
 begin
   Count := 0;
   TotalSize := 0;
-  if FindFirst(FRoot + '*.draft', faAnyFile, Search) = 0 then
-  try
-    repeat
-      if (Search.Attr and faDirectory) <> 0 then Continue;
-      if (FRoot + Search.Name) = ReplacingFile then Continue;
-      Inc(Count);
-      Inc(TotalSize, Search.Size);
-    until FindNext(Search) <> 0;
-  finally
-    FindClose(Search);
+  Files := StoreFiles(FRoot + '*.draft');
+  for I := 0 to High(Files) do
+  begin
+    if Files[I].IsDirectory then Continue;
+    FileName := FRoot + Files[I].Name;
+    if FileName = ReplacingFile then Continue;
+    Inc(Count);
+    Inc(TotalSize, Files[I].Size);
   end;
   if (Count + 1 > AutoSaveMaxRetainedRecords) or
     (TotalSize + NewSize > AutoSaveMaxRetainedBytes) then
@@ -382,39 +520,37 @@ begin
 end;
 
 procedure TAutoSaveStore.MakeRoom(NewSize: Int64;
-  const ReplacingFile: string);
+  const ReplacingFile: TDocumentPath);
 var
-  Search: TSearchRec;
+  Files: TStoreFileInfoArray;
+  FileName: TDocumentPath;
+  I: Integer;
   Count: Integer;
   TotalSize: Int64;
-  OldestName: string;
+  OldestName: TDocumentPath;
   OldestTime: TDateTime;
   FoundVersion: Boolean;
   OldestSize: Int64;
 begin
   Count := 0;
   TotalSize := 0;
-  if FindFirst(FRoot + '*.draft', faAnyFile, Search) = 0 then
-  try
-    repeat
-      if (Search.Attr and faDirectory) <> 0 then Continue;
-      if (FRoot + Search.Name) = ReplacingFile then Continue;
-      Inc(Count);
-      Inc(TotalSize, Search.Size);
-    until FindNext(Search) <> 0;
-  finally
-    FindClose(Search);
+  Files := StoreFiles(FRoot + '*.draft');
+  for I := 0 to High(Files) do
+  begin
+    if Files[I].IsDirectory then Continue;
+    FileName := FRoot + Files[I].Name;
+    if FileName = ReplacingFile then Continue;
+    Inc(Count);
+    Inc(TotalSize, Files[I].Size);
   end;
-  if FindFirst(FRoot + '*.version', faAnyFile, Search) = 0 then
-  try
-    repeat
-      if (Search.Attr and faDirectory) <> 0 then Continue;
-      if (FRoot + Search.Name) = ReplacingFile then Continue;
-      Inc(Count);
-      Inc(TotalSize, Search.Size);
-    until FindNext(Search) <> 0;
-  finally
-    FindClose(Search);
+  Files := StoreFiles(FRoot + '*.version');
+  for I := 0 to High(Files) do
+  begin
+    if Files[I].IsDirectory then Continue;
+    FileName := FRoot + Files[I].Name;
+    if FileName = ReplacingFile then Continue;
+    Inc(Count);
+    Inc(TotalSize, Files[I].Size);
   end;
   while (Count + 1 > AutoSaveMaxRetainedRecords) or
     (TotalSize + NewSize > AutoSaveMaxRetainedBytes) do
@@ -422,25 +558,23 @@ begin
     OldestName := '';
     OldestTime := High(Longint);
     FoundVersion := False;
-    if FindFirst(FRoot + '*.version', faAnyFile, Search) = 0 then
-    try
-      repeat
-        if (Search.Attr and faDirectory) <> 0 then Continue;
-        if (FRoot + Search.Name) = ReplacingFile then Continue;
-        if (not FoundVersion) or (Search.TimeStamp < OldestTime) then
-        begin
-          FoundVersion := True;
-          OldestTime := Search.TimeStamp;
-          OldestName := FRoot + Search.Name;
-          OldestSize := Search.Size;
-        end;
-      until FindNext(Search) <> 0;
-    finally
-      FindClose(Search);
+    Files := StoreFiles(FRoot + '*.version');
+    for I := 0 to High(Files) do
+    begin
+      if Files[I].IsDirectory then Continue;
+      FileName := FRoot + Files[I].Name;
+      if FileName = ReplacingFile then Continue;
+      if (not FoundVersion) or (Files[I].Modified < OldestTime) then
+      begin
+        FoundVersion := True;
+        OldestTime := Files[I].Modified;
+        OldestName := FileName;
+        OldestSize := Files[I].Size;
+      end;
     end;
     if not FoundVersion then
       raise Exception.Create('AutoSave recovery storage limit reached; existing drafts were kept');
-    if not DeleteFile(OldestName) then
+    if not DeleteDocumentFile(OldestName) then
       raise Exception.Create('Could not trim an old AutoSave version');
     FlushDirectory(FRoot);
     Dec(Count);
@@ -450,54 +584,46 @@ end;
 
 procedure TAutoSaveStore.DeleteDraft(const DocumentKey: string);
 var
-  FileName: string;
+  FileName: TDocumentPath;
 begin
   FileName := DraftFile(DocumentKey);
-  if FileExists(FileName) and not DeleteFile(FileName) then
+  if DocumentFileExists(FileName) and not DeleteDocumentFile(FileName) then
     raise Exception.Create('Could not remove saved AutoSave draft');
   FlushDirectory(FRoot);
 end;
 
 procedure TAutoSaveStore.ListDrafts(Files: TStrings);
 var
-  Search: TSearchRec;
+  StoredFiles: TStoreFileInfoArray;
+  I: Integer;
 begin
   Files.Clear;
-  if FindFirst(FRoot + '*.draft', faAnyFile, Search) <> 0 then Exit;
-  try
-    repeat
-      if (Search.Attr and faDirectory) = 0 then
-        Files.Add(FRoot + Search.Name);
-    until FindNext(Search) <> 0;
-  finally
-    FindClose(Search);
-  end;
+  StoredFiles := StoreFiles(FRoot + '*.draft');
+  for I := 0 to High(StoredFiles) do
+    if not StoredFiles[I].IsDirectory then
+      Files.Add(string(StoredFiles[I].Name));
 end;
 
 procedure TAutoSaveStore.ListPriorVersions(const DocumentKey: string;
   Files: TStrings);
 var
-  Search: TSearchRec;
+  StoredFiles: TStoreFileInfoArray;
+  I: Integer;
 begin
   if not SafeKey(DocumentKey) then
     raise Exception.Create('Invalid AutoSave document key');
   Files.Clear;
-  if FindFirst(FRoot + DocumentKey + '.*.version', faAnyFile,
-    Search) <> 0 then Exit;
-  try
-    repeat
-      if (Search.Attr and faDirectory) = 0 then
-        Files.Add(FRoot + Search.Name);
-    until FindNext(Search) <> 0;
-  finally
-    FindClose(Search);
-  end;
+  StoredFiles := StoreFiles(FRoot + DocumentKey + '.*.version');
+  for I := 0 to High(StoredFiles) do
+    if not StoredFiles[I].IsDirectory then
+      Files.Add(string(StoredFiles[I].Name));
 end;
 
-function TAutoSaveStore.LoadRecord(const FileName: string;
+function TAutoSaveStore.LoadRecord(const FileName: TDocumentPath;
   out Entry: TAutoSaveStoredRecord): Boolean;
 var
-  Stream: TFileStream;
+  Stream: TStream;
+  FullName: TDocumentPath;
   Magic: array[0..7] of Char;
   KindByte: Byte;
   PayloadSize: QWord;
@@ -519,7 +645,8 @@ begin
   Stream := nil;
   try
     try
-      Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
+      FullName := FullStoreFileName(FRoot, FileName);
+      Stream := OpenStoreFile(FullName, False);
       if Stream.Size < RecordHeaderBytes then Exit;
       Stream.ReadBuffer(Magic, SizeOf(Magic));
       if not CompareMem(@Magic[0], @RecordMagic[1], SizeOf(Magic)) then Exit;

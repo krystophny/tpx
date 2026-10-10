@@ -8,6 +8,13 @@ implementation
 
 uses SysUtils, Classes, AutoSaveStore, DocumentFormats, CoreTestSupport;
 
+function Utf8Bytes(First, Second: Byte): TDocumentPath;
+begin
+  SetLength(Result, 2);
+  Result[1] := AnsiChar(First);
+  Result[2] := AnsiChar(Second);
+end;
+
 function EmptyRevision: TDiskRevision;
 begin
   Result.ContentDigest := '';
@@ -189,10 +196,48 @@ begin
   end;
 end;
 
+procedure TestUnicodeDirectoryAndSourcePath;
+var
+  Root, SourcePath: TDocumentPath;
+  ID: TGUID;
+  Token: string;
+  Store: TAutoSaveStore;
+  Files: TStringList;
+  Entry: TAutoSaveStoredRecord;
+begin
+  CheckCore(CreateGUID(ID) = 0, 'could not create Unicode-path test id');
+  Token := StringReplace(StringReplace(GUIDToString(ID), '{', '', []), '}', '', []);
+  Root := TDocumentPath(GetTempDir(False)) + 'tpx-autosave-' +
+    Utf8Bytes($CE, $B1) + '-' + Token;
+  SourcePath := Root + PathDelim + 'source-' + Utf8Bytes($CE, $B2) + '.tpx';
+  CheckCore(UTF8Encode(UTF8Decode(Root)) = Root,
+    'the Unicode config directory must round-trip as UTF-8');
+  Store := TAutoSaveStore.Create(Root);
+  Files := TStringList.Create;
+  try
+    Store.SaveDraft('unicode_path', SourcePath, 'tpx', 'tpx', EmptyRevision,
+      'baseline', 11, 'draft');
+    Store.ListDrafts(Files);
+    CheckCore((Files.Count = 1) and Store.LoadRecord(Files[0], Entry),
+      'a record under a Unicode directory should survive list and reload');
+    CheckCore((Entry.SourcePath = SourcePath) and
+      (UTF8Encode(UTF8Decode(Entry.SourcePath)) = SourcePath),
+      'the source identity inside a record must preserve non-ACP UTF-8');
+    Store.DeleteDraft('unicode_path');
+  finally
+    Files.Free;
+    Store.Free;
+    CheckCore(RemoveDocumentStagingDirectory(Root),
+      'the Unicode recovery directory should be removable after cleanup');
+  end;
+end;
+
 initialization
   RegisterCoreTest('autosave-store-roundtrip-restart',
     @TestDraftAndPriorVersionRoundTrip);
   RegisterCoreTest('autosave-store-retention-failure',
     @TestRetentionKeepsLatestAndProtectsDrafts);
+  RegisterCoreTest('autosave-store-unicode-paths',
+    @TestUnicodeDirectoryAndSourcePath);
 
 end.

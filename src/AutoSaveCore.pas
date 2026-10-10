@@ -23,7 +23,6 @@ type
     FLocalRevision: QWord;
     FWatchGeneration: QWord;
     FDocumentOpen: Boolean;
-    FTransitionPending: Boolean;
     FCanSaveBack: Boolean;
     FAutoSaveEnabled: Boolean;
     FRecoveryEnabled: Boolean;
@@ -48,8 +47,6 @@ type
       CanSaveBack, AutoSaveEnabled, RecoveryEnabled, Dirty: Boolean;
       NowMS: QWord);
     procedure CloseDocument;
-    procedure BeginDocumentTransition;
-    procedure CancelDocumentTransition(NowMS: QWord);
     procedure BeginInteraction;
     procedure EndInteraction(NowMS: QWord);
     procedure NotifyLocalEdit(LocalRevision, NowMS: QWord;
@@ -119,7 +116,7 @@ end;
 
 procedure TAutoSaveCoordinator.ScheduleSourceSave(NowMS: QWord);
 begin
-  if not FDocumentOpen or FTransitionPending or (FInteractionDepth > 0) then
+  if not FDocumentOpen or (FInteractionDepth > 0) then
     Exit;
   if FDirty and FAutoSaveEnabled and FCanSaveBack and not FConflict then
   begin
@@ -130,7 +127,7 @@ end;
 
 procedure TAutoSaveCoordinator.ScheduleRecoveryDraft(NowMS: QWord);
 begin
-  if not FDocumentOpen or FTransitionPending or (FInteractionDepth > 0) then
+  if not FDocumentOpen or (FInteractionDepth > 0) then
     Exit;
   if FDirty and FRecoveryEnabled then
   begin
@@ -151,7 +148,6 @@ procedure TAutoSaveCoordinator.BindDocument(LocalRevision,
 begin
   AdvanceDocumentGeneration;
   FDocumentOpen := True;
-  FTransitionPending := False;
   FLocalRevision := LocalRevision;
   FWatchGeneration := WatchGeneration;
   FCanSaveBack := CanSaveBack;
@@ -170,7 +166,6 @@ procedure TAutoSaveCoordinator.CloseDocument;
 begin
   AdvanceDocumentGeneration;
   FDocumentOpen := False;
-  FTransitionPending := False;
   FCanSaveBack := False;
   FAutoSaveEnabled := False;
   FDirty := False;
@@ -179,22 +174,6 @@ begin
   FSaveDueSet := False;
   FRecoveryDueSet := False;
   FLastFailure := '';
-end;
-
-procedure TAutoSaveCoordinator.BeginDocumentTransition;
-begin
-  if not FDocumentOpen then Exit;
-  AdvanceDocumentGeneration;
-  FTransitionPending := True;
-  FSaveDueSet := False;
-  FRecoveryDueSet := False;
-end;
-
-procedure TAutoSaveCoordinator.CancelDocumentTransition(NowMS: QWord);
-begin
-  if not FDocumentOpen or not FTransitionPending then Exit;
-  FTransitionPending := False;
-  SchedulePending(NowMS);
 end;
 
 procedure TAutoSaveCoordinator.BeginInteraction;
@@ -215,7 +194,7 @@ end;
 procedure TAutoSaveCoordinator.NotifyLocalEdit(LocalRevision,
   NowMS: QWord; Dirty: Boolean);
 begin
-  if not FDocumentOpen or FTransitionPending then Exit;
+  if not FDocumentOpen then Exit;
   FLocalRevision := LocalRevision;
   FDirty := Dirty;
   CancelSourceSave;
@@ -232,7 +211,6 @@ begin
   FWatchGeneration := WatchGeneration;
   FDirty := False;
   FConflict := False;
-  FTransitionPending := False;
   FInteractionDepth := 0;
   FSaveDueSet := False;
   FRecoveryDueSet := False;
@@ -281,7 +259,7 @@ var
   Due: QWord;
 begin
   Result := -1;
-  if not FDocumentOpen or FTransitionPending or (FInteractionDepth > 0) then
+  if not FDocumentOpen or (FInteractionDepth > 0) then
     Exit;
   if FSaveDueSet then Due := FSaveDueMS
   else if FRecoveryDueSet then Due := FRecoveryDueMS
@@ -307,7 +285,7 @@ begin
   Ticket.LocalRevision := FLocalRevision;
   Ticket.WatchGeneration := FWatchGeneration;
   Result := False;
-  if not FDocumentOpen or FTransitionPending or (FInteractionDepth > 0) then
+  if not FDocumentOpen or (FInteractionDepth > 0) then
     Exit;
   if FSaveDueSet and (FSaveDueMS <= NowMS) then
   begin
@@ -325,7 +303,7 @@ end;
 function TAutoSaveCoordinator.IsTicketCurrent(
   const Ticket: TAutoSaveTicket): Boolean;
 begin
-  Result := FDocumentOpen and not FTransitionPending and
+  Result := FDocumentOpen and
     (Ticket.DocumentGeneration = FDocumentGeneration) and
     (Ticket.LocalRevision = FLocalRevision) and
     (Ticket.WatchGeneration = FWatchGeneration);

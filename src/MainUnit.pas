@@ -14,9 +14,9 @@ uses
 {$ENDIF}
   Devices, Modes, PlatformShortcuts
 {$IFDEF FPC}
-  , DocumentFormats, FileWatch, AutoReload
+  , LazFileUtils, DocumentFormats, FileWatch, AutoReload
 {$IFNDEF CPUWASM32}
-  , SyncObjs
+  , SyncObjs, AutoSaveRuntime, AutoSaveStore, AutoSavePreferences
 {$ENDIF}
 {$ENDIF}
   ;
@@ -32,6 +32,8 @@ type
     LocalRevision, WatchGeneration: QWord) of object;
   TLocalEditCommittedEvent = procedure(Sender: TObject;
     LocalRevision, WatchGeneration: QWord; Dirty: Boolean) of object;
+  TRecoveryRestoreCommittedEvent = procedure(Sender: TObject;
+    LocalRevision, WatchGeneration: QWord) of object;
 {$ENDIF}
 
 //  TRealTypeX = Double;
@@ -592,6 +594,17 @@ type
     FOnExternalReloadConflict: TExternalReloadConflictEvent;
     FOnExternalReloadKeepLocal: TExternalReloadKeepLocalEvent;
     FOnLocalEditCommitted: TLocalEditCommittedEvent;
+    FOnRecoveryRestoreCommitted: TRecoveryRestoreCommittedEvent;
+    FSaveRuntime: TAutoSaveRuntime;
+    FAutoSaveTimer: TTimer;
+    FAutoSaveMenu: TMenuItem;
+    FCrashRecoveryMenu: TMenuItem;
+    FRecoverDraftsMenu: TMenuItem;
+    FAutoSaveCheck: TCheckBox;
+    FAutoSaveStatusPanel: TStatusPanel;
+    FRecoveryOfferQueued: Boolean;
+    FRecoveryKey: string;
+    FAutoSavePreferenceEnabled: Boolean;
 {$ENDIF}
 {$ENDIF}
     ScrollPos0: Integer;             
@@ -623,6 +636,19 @@ type
     function CurrentDocumentDirty: Boolean;
     procedure ScheduleSourceReconciliation;
     procedure RestoreExistingWatch;
+    procedure InitializeAutoSave;
+    procedure ShutdownAutoSave;
+    procedure ArmAutoSaveTimer;
+    procedure ProcessAutoSaveDeadline(Sender: TObject);
+    procedure UpdateAutoSaveUi;
+    procedure AutoSaveClick(Sender: TObject);
+    procedure CrashRecoveryClick(Sender: TObject);
+    procedure RecoverDraftsClick(Sender: TObject);
+    procedure OfferRecoveryDrafts(Data: PtrInt);
+    procedure RestoreRecoveryDraft(const FileName: string);
+    procedure NotifyAutoSaveConflict;
+    procedure NotifyAutoSaveLocalEdit(LocalRevision,
+      WatchGeneration: QWord; Dirty: Boolean);
 {$ENDIF}
 {$ENDIF}
 {$IFDEF VER140}
@@ -673,6 +699,13 @@ type
     procedure EndSceneInteraction;
     procedure ProcessPendingReload(NowMS: QWord);
     procedure ApplyAutoReloadSettings;
+    procedure BindAutoSaveForCurrentDocument(const RecoveryKey: string = '');
+    function CurrentAutoSaveEnabled: Boolean;
+    function CurrentAutoSaveKey: string;
+    function AutoSaveConflict: Boolean;
+    procedure AcceptSaveAsAutoSavePreference(Enabled: Boolean;
+      const PreviousKey: string);
+    procedure ApplyAutoSavePreference(Value: Boolean);
     property AutoReloadState: TReloadCoordinator read FReloadCoordinator;
     property OnExternalReloadCommitted: TExternalReloadCommittedEvent
       read FOnExternalReloadCommitted write FOnExternalReloadCommitted;
@@ -682,6 +715,8 @@ type
       read FOnExternalReloadKeepLocal write FOnExternalReloadKeepLocal;
     property OnLocalEditCommitted: TLocalEditCommittedEvent
       read FOnLocalEditCommitted write FOnLocalEditCommitted;
+    property OnRecoveryRestoreCommitted: TRecoveryRestoreCommittedEvent
+      read FOnRecoveryRestoreCommitted write FOnRecoveryRestoreCommitted;
 {$ENDIF}
 {$ENDIF}
 {$IFDEF FPC}
@@ -896,6 +931,9 @@ end;
 
 
 procedure TMainForm.FormCreate(Sender: TObject);
+{$IFDEF FPC}{$IFDEF CPUWASM32}
+var InfoMenu: TMenuItem;
+{$ENDIF}{$ENDIF}
 begin
   FormPos_Left := MainForm.Left;
   FormPos_Top := MainForm.Top;
@@ -924,6 +962,13 @@ begin
   InitializeLiveTeX(LiveTeXChanged);
 {$IFNDEF CPUWASM32}
   InitializeAutoReload;
+  InitializeAutoSave;
+{$ELSE}
+  InfoMenu := TMenuItem.Create(Self);
+  InfoMenu.Caption := 'Persistent AutoSave and recovery unavailable in browser builds';
+  InfoMenu.Enabled := False;
+  InfoMenu.Hint := 'Browser downloads are temporary snapshots and do not track desktop files';
+  File1.Add(InfoMenu);
 {$ENDIF}
 {$ENDIF}
   LocalView.OnDblClick := LocalViewDblClick;
@@ -1330,6 +1375,7 @@ procedure TMainForm.FormDestroy(Sender: TObject);
 begin
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
+  ShutdownAutoSave;
   ShutdownAutoReload;
 {$ENDIF}
   ShutdownLiveTeX;
@@ -1400,6 +1446,464 @@ begin
   FDocumentPaused := False;
   UpdateReloadUi;
 end;
+
+procedure TMainForm.InitializeAutoSave;
+begin
+  FSaveRuntime := TAutoSaveRuntime.Create(
+    TDocumentPath(UTF8String(IncludeTrailingPathDelimiter(
+      GetAppConfigDirUTF8(False)) + 'AutoSaveRecovery')));
+  FAutoSaveTimer := TTimer.Create(Self);
+  FAutoSaveTimer.Enabled := False;
+  FAutoSaveTimer.OnTimer := ProcessAutoSaveDeadline;
+  FAutoSaveMenu := TMenuItem.Create(Self);
+  FAutoSaveMenu.Caption := 'AutoSave this document';
+  FAutoSaveMenu.OnClick := AutoSaveClick;
+  File1.Add(FAutoSaveMenu);
+  FCrashRecoveryMenu := TMenuItem.Create(Self);
+  FCrashRecoveryMenu.Caption := 'Crash recovery drafts';
+  FCrashRecoveryMenu.OnClick := CrashRecoveryClick;
+  File1.Add(FCrashRecoveryMenu);
+  FRecoverDraftsMenu := TMenuItem.Create(Self);
+  FRecoverDraftsMenu.Caption := 'Recover drafts...';
+  FRecoverDraftsMenu.OnClick := RecoverDraftsClick;
+  File1.Add(FRecoverDraftsMenu);
+  FAutoSaveCheck := TCheckBox.Create(Self);
+  FAutoSaveCheck.Parent := Panel30;
+  FAutoSaveCheck.Caption := 'AutoSave';
+  FAutoSaveCheck.Hint := 'Save this document after completed edits';
+  FAutoSaveCheck.ShowHint := True;
+  FAutoSaveCheck.AutoSize := True;
+  FAutoSaveCheck.Anchors := [akTop, akRight];
+  FAutoSaveCheck.Top := 3;
+  FAutoSaveCheck.Left := Panel30.ClientWidth - FAutoSaveCheck.Width - 10;
+  FAutoSaveCheck.OnClick := AutoSaveClick;
+  FAutoSaveStatusPanel := StatusBar1.Panels.Add;
+  FAutoSaveStatusPanel.Width := 360;
+  UpdateAutoSaveUi;
+end;
+
+procedure TMainForm.ShutdownAutoSave;
+begin
+  if FAutoSaveTimer <> nil then FAutoSaveTimer.Enabled := False;
+  if FSaveRuntime <> nil then FSaveRuntime.CloseDocument;
+  FreeAndNil(FAutoSaveTimer);
+  FreeAndNil(FSaveRuntime);
+end;
+
+procedure TMainForm.BindAutoSaveForCurrentDocument(
+  const RecoveryKey: string);
+var Session: TDocumentSession; Preference: Boolean;
+begin
+  if FSaveRuntime = nil then Exit;
+  Session := EventManager.DocumentSession;
+  ReadDocumentAutoSavePreference(DocumentAutoSavePreferences,
+    Session.SourcePath, Preference);
+  FAutoSavePreferenceEnabled := Preference;
+  FSaveRuntime.BindDocument(Session, TheDrawing, Preference,
+    CrashRecoveryEnabled, CurrentDocumentDirty, GetTickCount64, RecoveryKey);
+  FRecoveryKey := FSaveRuntime.DocumentKey;
+  ArmAutoSaveTimer;
+  UpdateAutoSaveUi;
+end;
+
+function TMainForm.CurrentAutoSaveEnabled: Boolean;
+begin
+  Result := FAutoSavePreferenceEnabled;
+end;
+
+function TMainForm.CurrentAutoSaveKey: string;
+begin
+  if FSaveRuntime = nil then Result := ''
+  else Result := FSaveRuntime.DocumentKey;
+end;
+
+function TMainForm.AutoSaveConflict: Boolean;
+begin
+  Result := (FSaveRuntime <> nil) and FSaveRuntime.Coordinator.Conflict;
+end;
+
+procedure TMainForm.AcceptSaveAsAutoSavePreference(Enabled: Boolean;
+  const PreviousKey: string);
+var NewKey: string;
+begin
+  if FSaveRuntime = nil then Exit;
+  WriteDocumentAutoSavePreference(DocumentAutoSavePreferences,
+    EventManager.DocumentSession.SourcePath, Enabled);
+  SaveSettings;
+  BindAutoSaveForCurrentDocument;
+  NewKey := FSaveRuntime.DocumentKey;
+  if (PreviousKey <> '') and (PreviousKey <> NewKey) then
+    try
+      FSaveRuntime.Store.DeleteDraft(PreviousKey);
+    except
+      on E: Exception do
+        FSaveRuntime.SetStatus('Save As succeeded, but the old recovery draft remains: ' +
+          E.Message);
+    end;
+  UpdateAutoSaveUi;
+end;
+
+procedure TMainForm.ApplyAutoSavePreference(Value: Boolean);
+var Session: TDocumentSession;
+begin
+  if FSaveRuntime = nil then Exit;
+  Session := EventManager.DocumentSession;
+  if Value and not FSaveRuntime.Coordinator.CanSaveBack then
+  begin
+    FSaveRuntime.SetAutoSaveEnabled(True, GetTickCount64);
+    UpdateAutoSaveUi;
+    Exit;
+  end;
+  FAutoSavePreferenceEnabled := Value;
+  if Session.SourcePath <> '' then
+  begin
+    WriteDocumentAutoSavePreference(DocumentAutoSavePreferences,
+      Session.SourcePath, Value);
+    SaveSettings;
+  end;
+  FSaveRuntime.SetAutoSaveEnabled(Value, GetTickCount64);
+  ArmAutoSaveTimer;
+  UpdateAutoSaveUi;
+end;
+
+procedure TMainForm.AutoSaveClick(Sender: TObject);
+var Value: Boolean;
+begin
+  if Sender = FAutoSaveCheck then
+    Value := FAutoSaveCheck.Checked
+  else
+    Value := not FAutoSavePreferenceEnabled;
+  ApplyAutoSavePreference(Value);
+end;
+
+procedure TMainForm.CrashRecoveryClick(Sender: TObject);
+begin
+  CrashRecoveryEnabled := not CrashRecoveryEnabled;
+  SaveSettings;
+  if FSaveRuntime <> nil then
+    FSaveRuntime.SetRecoveryEnabled(CrashRecoveryEnabled, GetTickCount64);
+  ArmAutoSaveTimer;
+  UpdateAutoSaveUi;
+end;
+
+procedure TMainForm.RecoverDraftsClick(Sender: TObject);
+begin
+  OfferRecoveryDrafts(1);
+end;
+
+procedure TMainForm.NotifyAutoSaveLocalEdit(LocalRevision,
+  WatchGeneration: QWord; Dirty: Boolean);
+begin
+  if FSaveRuntime = nil then Exit;
+  FSaveRuntime.RefreshCapability(EventManager.DocumentSession,
+    TheDrawing, GetTickCount64);
+  FSaveRuntime.NotifyLocalEdit(LocalRevision, GetTickCount64, Dirty);
+  ArmAutoSaveTimer;
+  UpdateAutoSaveUi;
+end;
+
+procedure TMainForm.NotifyAutoSaveConflict;
+begin
+  if FSaveRuntime = nil then Exit;
+  FSaveRuntime.SetConflict;
+  ArmAutoSaveTimer;
+  UpdateAutoSaveUi;
+end;
+
+procedure TMainForm.ArmAutoSaveTimer;
+var Delay: Integer;
+begin
+  if FAutoSaveTimer = nil then Exit;
+  FAutoSaveTimer.Enabled := False;
+  if (FSaveRuntime = nil) or FClosingReload then Exit;
+  Delay := FSaveRuntime.NextDelayMS(GetTickCount64);
+  if Delay < 0 then Exit;
+  if Delay < 1 then Delay := 1;
+  FAutoSaveTimer.Interval := Delay;
+  FAutoSaveTimer.Enabled := True;
+end;
+
+procedure TMainForm.ProcessAutoSaveDeadline(Sender: TObject);
+var SourceSaved: Boolean;
+begin
+  if FAutoSaveTimer <> nil then FAutoSaveTimer.Enabled := False;
+  if (FSaveRuntime = nil) or FClosingReload then Exit;
+  FSaveRuntime.ProcessDue(EventManager.DocumentSession, TheDrawing,
+    GetTickCount64, SourceSaved);
+  if SourceSaved then AcceptSavedDocumentRevision;
+  if FSaveRuntime.Coordinator.Conflict then
+    ScheduleSourceReconciliation;
+  UpdateAutoSaveUi;
+  ArmAutoSaveTimer;
+end;
+
+procedure TMainForm.UpdateAutoSaveUi;
+var Enabled: Boolean; Text: string;
+begin
+  if FSaveRuntime = nil then Exit;
+  FSaveRuntime.RefreshCapability(EventManager.DocumentSession,
+    TheDrawing, GetTickCount64);
+  Enabled := FSaveRuntime.Coordinator.CanSaveBack;
+  if FAutoSaveMenu <> nil then
+  begin
+    FAutoSaveMenu.Checked := FAutoSavePreferenceEnabled;
+    FAutoSaveMenu.Enabled := Enabled;
+    if not Enabled then FAutoSaveMenu.Hint := FSaveRuntime.AvailabilityReason
+    else FAutoSaveMenu.Hint := 'Save this document after completed edits';
+  end;
+  if FAutoSaveCheck <> nil then
+  begin
+    FAutoSaveCheck.Checked := FAutoSavePreferenceEnabled;
+    FAutoSaveCheck.Enabled := Enabled;
+    if not Enabled then FAutoSaveCheck.Hint := FSaveRuntime.AvailabilityReason
+    else FAutoSaveCheck.Hint := 'Save this document after completed edits';
+  end;
+  if FCrashRecoveryMenu <> nil then
+    FCrashRecoveryMenu.Checked := CrashRecoveryEnabled;
+  if FAutoSaveStatusPanel <> nil then
+  begin
+    Text := FSaveRuntime.LastStatus;
+    if (Text = '') and FSaveRuntime.Coordinator.Conflict then
+      Text := 'AutoSave suspended by external conflict';
+    if FSaveRuntime.RecoveryWarning <> '' then
+    begin
+      if Text <> '' then Text := Text + '; ';
+      Text := Text + FSaveRuntime.RecoveryWarning;
+    end;
+    FAutoSaveStatusPanel.Text := Text;
+  end;
+end;
+
+procedure TMainForm.OfferRecoveryDrafts(Data: PtrInt);
+var
+  Dialog: TForm;
+  Prompt: TLabel;
+  DraftList: TListBox;
+  RecoverButton, CancelButton: TButton;
+  Files, DisplayItems: TStringList;
+  Entry: TAutoSaveStoredRecord;
+  I: Integer;
+  ItemCaption: string;
+begin
+  if FSaveRuntime = nil then Exit;
+  Files := TStringList.Create;
+  DisplayItems := TStringList.Create;
+  try
+    FSaveRuntime.Store.ListDrafts(Files);
+    for I := Files.Count - 1 downto 0 do
+    begin
+      if not FSaveRuntime.Store.LoadRecord(Files[I], Entry) or
+        (Entry.Kind <> asrDraft) or
+        not ((Entry.PayloadFormatId = 'tpx') or
+          (Entry.PayloadFormatId = 'tpx-assets')) then
+      begin
+        Files.Delete(I);
+        Continue;
+      end;
+      if Entry.SourcePath = '' then
+        ItemCaption := 'Untitled drawing'
+      else
+        ItemCaption := string(DocumentPathFileName(Entry.SourcePath));
+      ItemCaption := ItemCaption + ' - recovery draft';
+      DisplayItems.Insert(0, ItemCaption);
+    end;
+    if Files.Count = 0 then
+    begin
+      if Data <> 0 then ShowMessage('No recovery drafts are available.');
+      Exit;
+    end;
+    Dialog := TForm.Create(Self);
+    try
+      Dialog.Caption := 'Recover a drawing';
+      Dialog.Position := poScreenCenter;
+      Dialog.BorderStyle := bsDialog;
+      Dialog.ClientWidth := 560;
+      Dialog.ClientHeight := 340;
+      Prompt := TLabel.Create(Dialog);
+      Prompt.Parent := Dialog;
+      Prompt.Left := 12;
+      Prompt.Top := 12;
+      Prompt.Caption := 'Choose a local draft to restore. The disk source is left unchanged.';
+      DraftList := TListBox.Create(Dialog);
+      DraftList.Parent := Dialog;
+      DraftList.Left := 12;
+      DraftList.Top := 40;
+      DraftList.Width := Dialog.ClientWidth - 24;
+      DraftList.Height := Dialog.ClientHeight - 94;
+      DraftList.Anchors := [akLeft, akTop, akRight, akBottom];
+      DraftList.Items.Assign(DisplayItems);
+      DraftList.ItemIndex := 0;
+      RecoverButton := TButton.Create(Dialog);
+      RecoverButton.Parent := Dialog;
+      RecoverButton.Caption := 'Recover';
+      RecoverButton.ModalResult := mrOK;
+      RecoverButton.Default := True;
+      RecoverButton.Left := Dialog.ClientWidth - 180;
+      RecoverButton.Top := Dialog.ClientHeight - 42;
+      RecoverButton.Anchors := [akRight, akBottom];
+      CancelButton := TButton.Create(Dialog);
+      CancelButton.Parent := Dialog;
+      CancelButton.Caption := 'Cancel';
+      CancelButton.ModalResult := mrCancel;
+      CancelButton.Left := Dialog.ClientWidth - 90;
+      CancelButton.Top := Dialog.ClientHeight - 42;
+      CancelButton.Anchors := [akRight, akBottom];
+      if Dialog.ShowModal = mrOK then
+      begin
+        I := DraftList.ItemIndex;
+        if (I >= 0) and (I < Files.Count) then
+        begin
+          if CurrentDocumentDirty and
+            (MessageDlg('Recovering this draft will replace the current drawing. Continue?',
+              mtConfirmation, [mbYes, mbNo], 0) <> mrYes) then Exit;
+          RestoreRecoveryDraft(Files[I]);
+        end;
+      end;
+    finally
+      Dialog.Free;
+    end;
+  finally
+    Files.Free;
+    DisplayItems.Free;
+  end;
+end;
+
+procedure TMainForm.RestoreRecoveryDraft(const FileName: string);
+var
+  Entry: TAutoSaveStoredRecord;
+  Candidate: TDrawing2D;
+  CandidateContext: TObject;
+  Diagnostics: TStringList;
+  CanSaveBack, SafeSourceSave: Boolean;
+  WatchGeneration, SubscriptionID: QWord;
+  WatchStarted, WatchAccepted, SourceDiverged: Boolean;
+  Snapshot: TDocumentSnapshot;
+  CurrentRevision: TDiskRevision;
+  SourcePath, FormatId, CandidatePath: TDocumentPath;
+  PayloadBytes: RawByteString;
+  RecoveryAssets: TRecoveryAssetContext;
+  UnresolvedLinks: LongWord;
+  RecoveryNotice: string;
+  ErrorText: string;
+begin
+  Candidate := nil;
+  CandidateContext := nil;
+  RecoveryAssets := nil;
+  Diagnostics := TStringList.Create;
+  WatchGeneration := 0;
+  SubscriptionID := 0;
+  WatchStarted := False;
+  WatchAccepted := False;
+  SourceDiverged := False;
+  try
+    if not FSaveRuntime.Store.LoadRecord(FileName, Entry) or
+      (Entry.Kind <> asrDraft) or
+      not ((Entry.PayloadFormatId = 'tpx') or
+        (Entry.PayloadFormatId = 'tpx-assets')) then
+      raise EReadError.Create('The selected recovery draft is invalid');
+    if (Entry.SourcePath <> '') and
+      (Entry.DocumentKey <> DocumentPreferenceKey(Entry.SourcePath)) then
+      raise EReadError.Create('The recovery draft source identity is invalid');
+    SourcePath := TDocumentPath(Entry.SourcePath);
+    if SourcePath <> '' then
+    begin
+      try
+        CurrentRevision := ReadDocumentRevision(SourcePath);
+        SourceDiverged := not SameDiskRevision(CurrentRevision,
+          Entry.BaseRevision);
+      except
+        SourceDiverged := True;
+      end;
+      CandidatePath := SourcePath;
+    end
+    else
+      CandidatePath := 'recovered.tpx';
+    PayloadBytes := Entry.Payload;
+    UnresolvedLinks := 0;
+    if Entry.PayloadFormatId = 'tpx-assets' then
+    begin
+      FSaveRuntime.UnpackTpXRecoveryPayload(Entry.Payload,
+        TDocumentPath(UTF8String(GetTempDir)), PayloadBytes,
+        RecoveryAssets, UnresolvedLinks);
+      CandidatePath := RecoveryAssets.CandidatePath;
+    end;
+    Candidate := LoadDocumentCandidate('tpx', CandidatePath,
+      PayloadBytes, CanSaveBack, CandidateContext, Diagnostics);
+    if Candidate = nil then
+      raise EReadError.Create('The recovery draft could not be parsed');
+    if RecoveryAssets <> nil then
+      RecoveryAssets.AdoptDrawingFiles(Candidate);
+    SafeSourceSave := (SourcePath <> '') and
+      SameText(Entry.SourceFormatId, 'tpx') and CanSaveBack and
+      CanSerializeTpXDocumentWithoutSidecars(Candidate);
+    { Recovery contains the native model, not the imported format's parser
+      context. Do not arm a source watcher unless the restored candidate can
+      also be safely saved back to that same source. }
+    if SafeSourceSave then
+    begin
+      BeginDocumentWatchBinding(SourcePath, WatchGeneration,
+        SubscriptionID);
+      WatchStarted := True;
+    end;
+    CommitDocumentCandidate(TheDrawing, Candidate);
+    BeginLiveTeXDocument(False);
+    FormatId := Entry.SourceFormatId;
+    if FormatId = '' then FormatId := 'tpx';
+    EventManager.DocumentSession.AcceptSourceNormalized(SourcePath,
+      FormatId, Entry.BaseSourceBytes, Entry.BaseRevision,
+      SafeSourceSave, RecoveryAssets);
+    RecoveryAssets := nil;
+    if SourcePath = '' then
+      TheDrawing.SetFileNameKeepingBitmapParents(Drawing_NewFileName)
+    else
+      TheDrawing.SetFileNameKeepingBitmapParents(SourcePath);
+    TheDrawing.History.MarkDirty;
+    EventManager.DocumentSession.AdvanceLocalRevision;
+    if WatchStarted then
+    begin
+      Snapshot.SourceBytes := Entry.BaseSourceBytes;
+      Snapshot.Revision := Entry.BaseRevision;
+      AcceptDocumentWatchBinding(Snapshot, WatchGeneration,
+        SubscriptionID);
+      WatchAccepted := True;
+    end;
+    BindAutoSaveForCurrentDocument(Entry.DocumentKey);
+    if SourceDiverged then NotifyAutoSaveConflict;
+    if UnresolvedLinks > 0 then
+    begin
+      RecoveryNotice := Format(
+        'Recovery draft omits %d linked image(s)', [UnresolvedLinks]);
+      FSaveRuntime.SetRecoveryWarning(RecoveryNotice);
+      if SourceDiverged then
+        FSaveRuntime.SetStatus(
+          'AutoSave paused: external changes conflict with local edits');
+    end;
+    Caption := ExtractFileName(TheDrawing.FileName);
+    if SourcePath = '' then Caption := Drawing_NewFileName;
+    if Assigned(FOnRecoveryRestoreCommitted) then
+      FOnRecoveryRestoreCommitted(Self,
+        EventManager.DocumentSession.LocalRevision,
+        EventManager.DocumentSession.WatchGeneration);
+    TheDrawing.RepaintViewports;
+    ArmAutoSaveTimer;
+    UpdateAutoSaveUi;
+  except
+    on E: Exception do
+    begin
+      ErrorText := E.Message;
+      if Diagnostics.Count > 0 then ErrorText := ErrorText + LineEnding + Diagnostics.Text;
+      MessageDlg('Could not recover the selected draft: ' + ErrorText,
+        mtError, [mbOK], 0);
+    end;
+  end;
+  if WatchStarted and not WatchAccepted then
+    CancelDocumentWatchBinding(WatchGeneration, SubscriptionID);
+  Candidate.Free;
+  CandidateContext.Free;
+  RecoveryAssets.Free;
+  Diagnostics.Free;
+end;
+
 
 procedure TMainForm.ShutdownAutoReload;
 begin
@@ -1645,6 +2149,8 @@ begin
   FLastReloadErrorText := '';
   FConflictSnapshot.SourceBytes := '';
   if FReloadCoordinator <> nil then FReloadCoordinator.Close;
+  if FSaveRuntime <> nil then FSaveRuntime.CloseDocument;
+  FRecoveryKey := '';
   UpdateReloadUi;
 end;
 
@@ -1673,6 +2179,9 @@ end;
 
 procedure TMainForm.AcceptSavedDocumentRevision;
 begin
+  if FSaveRuntime <> nil then
+    FSaveRuntime.AcceptSavedRevision(
+      EventManager.DocumentSession.WatchGeneration);
   if FReloadCoordinator <> nil then
   begin
     FReloadCoordinator.AcceptSavedRevision(
@@ -1683,6 +2192,8 @@ begin
       CurrentDocumentDirty);
     FReloadCoordinator.Paused := not AutoRefreshEnabled or FDocumentPaused;
   end;
+  ArmAutoSaveTimer;
+  UpdateAutoSaveUi;
   UpdateReloadUi;
 end;
 
@@ -1730,11 +2241,14 @@ begin
       FOnLocalEditCommitted(Self, Session.LocalRevision,
         Session.WatchGeneration, CurrentDocumentDirty);
   end;
+  NotifyAutoSaveLocalEdit(Session.LocalRevision, Session.WatchGeneration,
+    CurrentDocumentDirty);
 end;
 
 procedure TMainForm.BeginSceneInteraction;
 begin
   if FPointerDown then Exit;
+  if FSaveRuntime <> nil then FSaveRuntime.Coordinator.BeginInteraction;
   FPointerDown := True;
   FInteractionEditNotified := False;
   FInteractionHistoryCount := TheDrawing.History.Count;
@@ -1762,6 +2276,14 @@ begin
         FOnLocalEditCommitted(Self, Session.LocalRevision,
           Session.WatchGeneration, CurrentDocumentDirty);
     end;
+    NotifyAutoSaveLocalEdit(Session.LocalRevision, Session.WatchGeneration,
+      CurrentDocumentDirty);
+  end;
+  if FSaveRuntime <> nil then
+  begin
+    FSaveRuntime.Coordinator.EndInteraction(GetTickCount64);
+    ArmAutoSaveTimer;
+    UpdateAutoSaveUi;
   end;
   if FDeferredReload then
     Application.QueueAsyncCall(TryApplyDeferredReload, 0);
@@ -1770,11 +2292,17 @@ end;
 procedure TMainForm.ApplicationModalBegin(Sender: TObject);
 begin
   Inc(FModalDepth);
+  if FSaveRuntime <> nil then FSaveRuntime.Coordinator.BeginInteraction;
 end;
 
 procedure TMainForm.ApplicationModalEnd(Sender: TObject);
 begin
   if FModalDepth > 0 then Dec(FModalDepth);
+  if FSaveRuntime <> nil then
+  begin
+    FSaveRuntime.Coordinator.EndInteraction(GetTickCount64);
+    ArmAutoSaveTimer;
+  end;
   if (FModalDepth = 0) and FDeferredReload then
     Application.QueueAsyncCall(TryApplyDeferredReload, 0);
 end;
@@ -1844,6 +2372,7 @@ var Session: TDocumentSession;
 begin
   Session := EventManager.DocumentSession;
   FReloadCoordinator.KeepLocal;
+  NotifyAutoSaveConflict;
   if Assigned(FOnExternalReloadKeepLocal) then
     FOnExternalReloadKeepLocal(Self, Session.LocalRevision,
       Session.WatchGeneration);
@@ -2103,6 +2632,7 @@ begin
           if FLastConflictRevisionKey <> DiskKey then
           begin
             FLastConflictRevisionKey := DiskKey;
+            NotifyAutoSaveConflict;
             if Assigned(FOnExternalReloadConflict) then
               FOnExternalReloadConflict(Self, FConflictSnapshot);
           end;
@@ -2130,6 +2660,7 @@ begin
         if FLastConflictRevisionKey <> DiskKey then
         begin
           FLastConflictRevisionKey := DiskKey;
+          NotifyAutoSaveConflict;
           if Assigned(FOnExternalReloadConflict) then
             FOnExternalReloadConflict(Self, FConflictSnapshot);
         end;
@@ -2176,6 +2707,9 @@ begin
       CandidateContext := nil;
       Session.CanSaveBack := CandidateCanSaveBack;
       BeginLiveTeXDocument(False);
+      if FSaveRuntime <> nil then
+        FSaveRuntime.NotifyReloadCommitted(Session.LocalRevision,
+          Session.WatchGeneration);
       if Assigned(FOnExternalReloadCommitted) then
         FOnExternalReloadCommitted(Self, Session.LocalRevision,
           Session.WatchGeneration);
@@ -2362,6 +2896,13 @@ begin
     InitialViewQueued := True;
     Application.QueueAsyncCall(InitializeEmptyView, 0);
   end;
+{$IFNDEF CPUWASM32}
+  if not FRecoveryOfferQueued then
+  begin
+    FRecoveryOfferQueued := True;
+    Application.QueueAsyncCall(OfferRecoveryDrafts, 0);
+  end;
+{$ENDIF}
 {$ENDIF}
   //Scalephysicalunits1.Checked := ScalePhysical.Checked;
 end;
@@ -2588,6 +3129,15 @@ begin
   TheDrawing.TeXFormat := TeXFormatKind((Sender as
     TMenuItem).MenuIndex);
   TheDrawing.History.SetPropertiesChanged;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  NotifyDocumentEdited;
+{$ELSE}
+  EventManager.DocumentSession.AdvanceLocalRevision;
+{$ENDIF}
+{$ELSE}
+  EventManager.DocumentSession.AdvanceLocalRevision;
+{$ENDIF}
   //SaveDoc.Enabled := TheDrawing.History.IsChanged;
 end;
 
@@ -2606,6 +3156,15 @@ begin
   TheDrawing.PdfTeXFormat := PdfTeXFormatKind((Sender as
     TMenuItem).MenuIndex);
   TheDrawing.History.SetPropertiesChanged;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  NotifyDocumentEdited;
+{$ELSE}
+  EventManager.DocumentSession.AdvanceLocalRevision;
+{$ENDIF}
+{$ELSE}
+  EventManager.DocumentSession.AdvanceLocalRevision;
+{$ENDIF}
   //SaveDoc.Enabled := TheDrawing.History.IsChanged;
 end;
 

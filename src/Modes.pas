@@ -907,7 +907,15 @@ begin
     begin
       if Drawing.PicScale <= 0 then Drawing.PicScale := 1;
       Drawing.History.SetPropertiesChanged;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+      MainForm.NotifyDocumentEdited;
+{$ELSE}
       TpX_Manager.DocumentSession.AdvanceLocalRevision;
+{$ENDIF}
+{$ELSE}
+      TpX_Manager.DocumentSession.AdvanceLocalRevision;
+{$ENDIF}
       //MainForm.SaveDoc.Enabled := TheDrawing.History.IsChanged;
       Drawing.Update;
     end;
@@ -1011,6 +1019,7 @@ begin
 {$IFNDEF CPUWASM32}
       MainForm.AcceptDocumentWatchBinding(Snapshot, WatchGeneration,
         SubscriptionID);
+      MainForm.BindAutoSaveForCurrentDocument;
       WatchBindingAccepted := True;
 {$ENDIF}
 {$ENDIF}
@@ -1079,6 +1088,8 @@ var
   WatchGeneration, SubscriptionID: QWord;
   WatchBindingStarted, WatchBindingAccepted: Boolean;
   SavedSnapshot: TDocumentSnapshot;
+  AutoSaveWasEnabled: Boolean;
+  PreviousAutoSaveKey: string;
 {$ENDIF}
 {$ENDIF}
 begin
@@ -1095,6 +1106,8 @@ begin
   SubscriptionID := 0;
   WatchBindingStarted := False;
   WatchBindingAccepted := False;
+  AutoSaveWasEnabled := MainForm.CurrentAutoSaveEnabled;
+  PreviousAutoSaveKey := MainForm.CurrentAutoSaveKey;
 {$ENDIF}
 {$ENDIF}
   StagedAssets := TStringList.Create;
@@ -1181,6 +1194,7 @@ begin
       RebindDocumentCodecContext(Format.Id, Drawing, Candidate, CodecContext);
       WriteDocumentBundleAtomically(Path, Bytes, ExpectedRevision, True,
         StagedAssets, FinalAssets, NewRevision, BackupFileName);
+      Drawing.RebindFileNameAfterAssetCommit(Path);
 
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
@@ -1204,7 +1218,6 @@ begin
       Result := True;
       try
         TpX_Manager.DocumentSession.Diagnostics.Assign(Diagnostics);
-        if not SameSource then Drawing.RebindFileNameAfterAssetCommit(Path);
         Drawing.History.SaveCheckSum;
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
@@ -1217,6 +1230,8 @@ begin
           MainForm.AcceptDocumentWatchBinding(SavedSnapshot,
             WatchGeneration, SubscriptionID);
           WatchBindingAccepted := True;
+          MainForm.AcceptSaveAsAutoSavePreference(AutoSaveWasEnabled,
+            PreviousAutoSaveKey);
         end;
 {$ENDIF}
 {$ENDIF}
@@ -1428,6 +1443,11 @@ begin
   if FileName <> Drawing_NewFileName then
     TpX_Manager.RecentFiles.Update(FileName);
   Drawing.History.SaveCheckSum;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  MainForm.BindAutoSaveForCurrentDocument;
+{$ENDIF}
+{$ENDIF}
   //SaveDoc.Enabled := TheDrawing.History.IsChanged;
 end;
 
