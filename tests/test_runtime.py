@@ -32,7 +32,7 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "edit-session-form-destroy",
              "property-dimensions", "font-choice", "conversion-save",
              "unsupported-exports", "live-tex-missing-tool", "clipboard-format-width",
-             "clipboard-roundtrip", "color-box-custom-state",
+             "clipboard-roundtrip", "color-box-custom-state", "open-examples",
              "platform-shortcuts", "svg-linked-image-copy", "svg-codec")
 
 
@@ -233,7 +233,8 @@ class RuntimeTests(unittest.TestCase):
             runtime_binary = runtime_dir / BINARY.name
             if not runtime_binary.exists():
                 shutil.copy2(BINARY, runtime_binary)
-            for resource_name in ("preview.tex.inc", "metapost.tex.inc", "help", "Help"):
+            for resource_name in ("preview.tex.inc", "metapost.tex.inc",
+                                  "help", "Help", "examples"):
                 source = BINARY.parent / resource_name
                 if not source.exists():
                     source = Path(__file__).resolve().parents[1] / "ci" / resource_name
@@ -839,10 +840,16 @@ class RuntimeTests(unittest.TestCase):
                     "metapost.tex.inc": b"% packaged MetaPost default\n",
                     "help/tpx_tpxabout_tpx_drawing_tool.htm":
                         b"<html>packaged TpX help</html>\n",
+                    "examples/quadratic-function.TpX":
+                        b"\\begin{picture}(0,0)\n%<TpX v=\"5\"/>\n%</TpX>\n\\end{picture}\n",
                 }
                 for name, contents in resources.items():
-                    source_dir = help_source_dir if name.startswith("help/") else template_dir
-                    (source_dir / name).write_bytes(contents)
+                    source_dir = (help_source_dir
+                                  if name.startswith(("help/", "examples/"))
+                                  else template_dir)
+                    destination = source_dir / name
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    destination.write_bytes(contents)
 
                 home = root / "home"
                 config_home = root / "config"
@@ -863,7 +870,9 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn("PASS mac-resources", result.stdout, result.stderr)
                 for name, original in resources.items():
-                    source_dir = help_source_dir if name.startswith("help/") else template_dir
+                    source_dir = (help_source_dir
+                                  if name.startswith(("help/", "examples/"))
+                                  else template_dir)
                     self.assertEqual((source_dir / name).read_bytes(), original,
                                      f"Packaged resource changed: {name}")
                 template_paths = [line.split("=", 2)[2]

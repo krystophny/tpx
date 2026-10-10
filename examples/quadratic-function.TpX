@@ -1,0 +1,20 @@
+\begin{picture}(0,0)
+%<TpX v="5" PicScale="1.25" TeXFormat="tikz" PdfTeXFormat="tikz" FontName="Latin Modern">
+%<caption label="fig:quadratic-function">A quadratic function and its minimum</caption>
+%<comment>All geometry and labels are native TpX objects.</comment>
+%<line x1="6" y1="18" x2="64" y2="18" arr2="h40" lw="0.65" lc="#333333"/>
+%<line x1="34" y1="6" x2="34" y2="47" arr2="h40" lw="0.65" lc="#333333"/>
+%<curve lc="#0072B2" lw="1.1">10,42 16,28 22,18 28,12 34,10 40,12 46,18 52,28 58,42</curve>
+%<line x1="34" y1="10" x2="34" y2="18" li="dash" lw="0.55" lc="#777777"/>
+%<line x1="10" y1="16.5" x2="10" y2="19.5" lw="0.55" lc="#333333"/>
+%<line x1="22" y1="16.5" x2="22" y2="19.5" lw="0.55" lc="#333333"/>
+%<line x1="46" y1="16.5" x2="46" y2="19.5" lw="0.55" lc="#333333"/>
+%<line x1="58" y1="16.5" x2="58" y2="19.5" lw="0.55" lc="#333333"/>
+%<circle x="34" y="10" d="1.8" lc="#0072B2" fill="#0072B2"/>
+%<text x="40" y="35" h="3.4" t="f(x)=x^2-1" tex="$f(x)=x^2-1$"/>
+%<text x="36" y="7" h="3.0" t="minimum" tex="$f(0)=-1$"/>
+%<text x="62" y="15" h="3.0" t="x" tex="$x$"/>
+%<text x="35" y="45" h="3.0" t="f(x)" tex="$f(x)$"/>
+%<text x="32" y="14" h="2.5" t="0" tex="$0$"/>
+%</TpX>
+\end{picture}

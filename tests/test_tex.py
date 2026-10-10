@@ -182,6 +182,30 @@ class TeXTests(unittest.TestCase):
         self.assertIn(r"Price \$5 \& tax", exported)
         self.assertIn(r"$x^2$", exported)
 
+    def test_scientific_examples_compile_with_tikz(self):
+        examples = Path(__file__).resolve().parents[1] / "examples"
+        expected_math = {
+            "quadratic-function.TpX": r"$f(x)=x^2-1$",
+            "vector-addition.TpX": r"$\vec{R}=\vec{A}+\vec{B}$",
+            "double-slit.TpX": r"$\Delta r=0$",
+        }
+        for filename, formula in expected_math.items():
+            with self.subTest(example=filename):
+                stem = Path(filename).stem
+                self.run_command([BINARY, "-f", examples / filename,
+                                  "-x", "pdflatexsrc", "-o", stem])
+                source = self.root / (stem + ".tex")
+                tex = source.read_text()
+                self.assertIn(r"\usepackage{tikz}", tex)
+                figure = self.root / (stem + "(TpX).tpx")
+                drawing = figure.read_text()
+                self.assertIn(r"\begin{tikzpicture}", drawing)
+                self.assertIn(formula, drawing)
+                self.run_command(["pdflatex", "-halt-on-error",
+                                  "-interaction=nonstopmode", source.name])
+                self.assertGreater((self.root / (stem + ".pdf")).stat().st_size,
+                                   1000)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

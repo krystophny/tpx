@@ -147,10 +147,14 @@ var
   LineOne, LineTwo: TLine2D;
   Session: TObjectEditSession;
   Patch: TObjectPropertyPatch;
+  RawDraft: TEditUtf8Text;
+  ExampleMenu, ExampleItem: TMenuItem;
   PropertyValue: TPropertyValue;
   ErrorText, OriginalText: string;
+  FileNameBefore: string;
   OriginalStoredText: AnsiString;
-  FirstID, SecondID, HistoryCount, ProvisionalID, PromptCountBefore: Integer;
+  FirstID, SecondID, HistoryCount, ProvisionalID, PromptCountBefore,
+    ObjectCountBefore: Integer;
   LineOneID, LineTwoID: Integer;
   LineIDs: array[0..1] of Integer;
   Epoch: QWord;
@@ -182,6 +186,23 @@ begin
       'a changed raw draft must count as unsaved work');
     Check(not MainForm.TrySettleEditSession,
       'settlement must reject an incomplete numeric draft');
+    ExampleMenu := FindMenuCaption(MainForm.MainMenu1.Items, 'Open Example');
+    Check(ExampleMenu <> nil,
+      'the File menu has no Open Example command');
+    ExampleItem := FindMenuCaption(ExampleMenu, 'Vector addition');
+    Check(ExampleItem <> nil,
+      'Open Example has no Vector addition command');
+    FileNameBefore := Drawing.FileName;
+    ObjectCountBefore := Drawing.ObjectsCount;
+    PromptCountBefore := PromptCount;
+    ExampleItem.Click;
+    Check(Session.IsActive and Session.HasRawDraftPending and
+      Session.HasRawDraft(opfTextHeight, RawDraft) and
+      (string(RawDraft) = '1e') and (MainForm.TheDrawing = Drawing) and
+      (Drawing.FileName = FileNameBefore) and
+      (Drawing.ObjectsCount = ObjectCountBefore) and
+      (PromptCount = PromptCountBefore),
+      'Open Example must preserve an invalid draft and leave its document open');
     PromptCountBefore := PromptCount;
     MainForm.UserEventExecute(MainForm.SaveDoc);
     Check(Session.IsActive and (PromptCount = PromptCountBefore),

@@ -17,13 +17,45 @@ changes. Export TikZ or SVG for use elsewhere. Writing TikZ source does not
 require TeX; typeset previews and LaTeX-derived PDF exports do. Install TeX
 and any required external converters separately, then configure their paths
 and preview viewers in Settings.</p>
+<h2>First scientific figure</h2>
+<ol>
+<li>Choose <b>File → New</b>. Draw axes with <b>Insert → Insert line</b> and a
+curve with <b>Insert → Insert curve</b>; click its points and double-click to
+finish.</li>
+<li>Place a label with <b>Insert → Insert text</b>. Select it, open
+<b>Object properties</b>, and enter a formula such as
+<code>$f(x)=x^2-1$</code> in <b>TeX text</b>.</li>
+<li>Select objects to inspect their position, size and style in the
+<b>Inspector</b>.</li>
+<li>Use <b>File → Save as…</b>, choose <b>TikZ source</b>, and save
+<code>figure.tikz</code>. Keep the <code>.TpX</code> document for native editing.
+TikZ save-back accepts supported edits and reports unsupported ones.</li>
+<li>Include the snippet in LaTeX with <code>\usepackage{tikz}</code> and
+<code>\input{figure.tikz}</code>, then compile with <code>pdflatex</code>.
+Debian/Ubuntu packages are <code>texlive-latex-base</code> and
+<code>texlive-pictures</code>.</li>
+</ol>
+<p>Imported or refreshed TeX stays inert until <b>View → Trust TeX preview for
+this document</b>. Review native TeX source before trusting it: preview uses
+local LaTeX and <code>dvipng</code>; <code>dvisvgm</code> enables reusable SVG.
+The browser uses bundled MathJax for supported math text and does not invoke
+local tools. TikZ import is limited to 4 MiB, 500,000 tokens and 256 nested
+groups.</p>
+<p>Bundled drawings:
+<a href="../examples/quadratic-function.TpX">quadratic function</a> ·
+<a href="../examples/vector-addition.TpX">vector addition</a> ·
+<a href="../examples/double-slit.TpX">double slit</a>.
+Browser documents use a temporary file system in the current tab; Save
+downloads a copy. Desktop <b>File → Open Example</b> opens an unsaved drawing,
+so Save asks for a destination and leaves the bundled example unchanged.</p>
 <h2>Keyboard and installation</h2>
 <p>Menus show the current shortcuts. On macOS, editing commands use Command;
 on Windows and Linux, they use Control. Text fields apply editing shortcuts
 to their text; return focus to the canvas to edit drawing objects.</p>
 <p>The package's INSTALL.md explains installation, dependencies and Mac first
 launch. README.md contains drawing defaults, tool prerequisites and source
-build instructions.</p>
+build instructions. The bundled <code>examples/README.md</code> gives the full
+figure tutorial.</p>
 <p><a href="https://github.com/krystophny/tpx/issues">Report a problem</a> with
 the platform, source commit from BUILD.json and steps to reproduce it.</p>
 </html>

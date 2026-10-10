@@ -570,6 +570,7 @@ type
     FSourceStatusPanel: TStatusPanel;
     FSourceStatusHint: string;
 {$IFNDEF CPUWASM32}
+    FOpenExampleMenu: TMenuItem;
     FFileChangeSource: TFileChangeSource;
     FWatchDispatcher: TThread;
     FWatchEventQueue: TObject;
@@ -638,6 +639,8 @@ type
     procedure InitializeEmptyView(Data: PtrInt);
 {$IFNDEF CPUWASM32}
     procedure InitializeAutoReload;
+    procedure BuildExampleMenu;
+    procedure OpenExampleClick(Sender: TObject);
     procedure ShutdownAutoReload;
     procedure ProcessFileWatchEvents(Data: PtrInt);
     procedure ProcessReloadDeadline(Sender: TObject);
@@ -1055,6 +1058,11 @@ begin
   OnDropFiles := OpenRequestedDocuments;
   EventManager.PushMode(BaseMode);
   EventManager.RecentFiles.OnChange := RecentChanged;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  BuildExampleMenu;
+{$ENDIF}
+{$ENDIF}
   Ruler1 := TRuler.Create(Panel2);
   Ruler2 := TRuler.Create(Panel3);
   LocalView.Parent := Panel1;
@@ -1402,6 +1410,60 @@ begin
   EventManager.SendMessage(Msg, Sender);
   Result := True;
 end;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+procedure TMainForm.BuildExampleMenu;
+const
+  ExampleCaptions: array[0..2] of string =
+    ('Quadratic function', 'Vector addition', 'Double-slit interference');
+  ExampleFiles: array[0..2] of string =
+    ('quadratic-function.TpX', 'vector-addition.TpX', 'double-slit.TpX');
+var
+  I: Integer;
+  Item: TMenuItem;
+begin
+  FOpenExampleMenu := TMenuItem.Create(Self);
+  FOpenExampleMenu.Caption := 'Open Example';
+  File1.Insert(OpenDoc1.MenuIndex + 1, FOpenExampleMenu);
+  for I := Low(ExampleCaptions) to High(ExampleCaptions) do
+  begin
+    Item := TMenuItem.Create(FOpenExampleMenu);
+    Item.Caption := ExampleCaptions[I];
+    Item.Hint := ExampleFiles[I];
+    Item.OnClick := OpenExampleClick;
+    FOpenExampleMenu.Add(Item);
+  end;
+end;
+
+procedure TMainForm.OpenExampleClick(Sender: TObject);
+var
+  Path, ErrorText: string;
+begin
+  if not (Sender is TMenuItem) then Exit;
+  Path := TpXResourcePath('examples/' + (Sender as TMenuItem).Hint);
+  if not FileExists(Path) then
+  begin
+    MessageBoxError('Bundled example could not be found: ' + Path);
+    Exit;
+  end;
+  if not TrySettleEditSession then Exit;
+  EventManager.SendMessage(Msg_Escape, Self);
+  if BaseMode.AskSaveCurrentDrawing = mrCancel then Exit;
+  if not BaseMode.OpenDocumentFromPath(TDocumentPath(Path), ErrorText) then
+    MessageBoxError('Can not open example ' +
+      (Sender as TMenuItem).Caption + ': ' + ErrorText)
+  else
+  begin
+    EventManager.RecentFiles.Remove(Path);
+    ClearDocumentWatchBinding;
+    EventManager.DocumentSession.Clear;
+    TheDrawing.FileName := Drawing_NewFileName;
+    Caption := (Sender as TMenuItem).Caption + ' (example)';
+    UpdateReloadUi;
+  end;
+end;
+{$ENDIF}
+{$ENDIF}
 
 procedure TMainForm.AreaSelectExecute(Sender: TObject);
 begin

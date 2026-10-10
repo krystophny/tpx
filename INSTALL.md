@@ -5,6 +5,15 @@ Download the package for your computer from the
 The packages include the editor, TeX preambles, offline help, source and licenses.
 You do not need Lazarus or Free Pascal to run them.
 
+## Try a scientific figure
+
+On Windows, macOS or Linux, choose **File → Open Example** and select a bundled
+quadratic, vector-addition or double-slit drawing. To start from a blank page,
+follow the five steps in [README.md#first-scientific-figure](README.md#first-scientific-figure). The browser
+build links to the same three `.TpX` files above its canvas; download one and
+open it with **File → Open**. Browser edits are temporary until **Save**
+downloads a copy.
+
 ## Windows
 
 Download `tpx-1.6.0-windows-x86_64.zip`. Extract the whole ZIP into a folder

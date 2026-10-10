@@ -311,6 +311,41 @@ def drawing_xml(path):
     raise AssertionError('saved file has no TpX drawing')
 
 
+def same_drawing_xml(left, right):
+    import math
+
+    if len(left) != len(right):
+        return False
+    for original, reopened in zip(left, right):
+        if original.tag != reopened.tag:
+            return False
+        if (original.text or '').strip() != (reopened.text or '').strip():
+            return False
+        names = original.attrib.keys() | reopened.attrib.keys()
+        for name in names:
+            value = original.get(name, '1' if name == 'lw' else None)
+            actual = reopened.get(name, '1' if name == 'lw' else None)
+            if value is None or actual is None:
+                return False
+            try:
+                left_value, right_value = float(value), float(actual)
+                if original.tag == 'arc' and name in ('a1', 'a2'):
+                    equal = math.isclose(math.remainder(left_value - right_value, math.tau),
+                                         0.0, rel_tol=1e-9, abs_tol=1e-5)
+                else:
+                    equal = math.isclose(left_value, right_value, rel_tol=1e-9, abs_tol=1e-9)
+            except ValueError:
+                equal = value == actual
+            if not equal:
+                return False
+        if original.tag == 'arc':
+            left_sweep = float(original.get('a2')) - float(original.get('a1'))
+            right_sweep = float(reopened.get('a2')) - float(reopened.get('a1'))
+            if not math.isclose(left_sweep, right_sweep, rel_tol=1e-9, abs_tol=1e-9):
+                return False
+    return True
+
+
 def _ink(pixels, w):
     """Centroid and count of non-white pixels in an RGBA row-major region."""
     sx = sy = n = 0
@@ -429,6 +464,52 @@ def s_open_roundtrip(app):
         raise AssertionError('failed document open changed the current drawing')
     return ('ordinary saves after Save As stay conflict-free; uploaded drawings '
             'reopen unchanged and malformed uploads preserve the accepted scene')
+
+
+def s_open_examples(app):
+    examples = (
+        ('Quadratic function', 'quadratic-function.TpX', 16, '$f(x)=x^2-1$'),
+        ('Vector addition', 'vector-addition.TpX', 14, r'$\vec{A}$'),
+        ('Double-slit diagram', 'double-slit.TpX', 27, r'$\Delta r=0$'),
+    )
+    blank = app.pixels()
+    for title, filename, expected_count, formula in examples:
+        link = app.page.get_by_role('link', name=title, exact=True)
+        with app.page.expect_download(timeout=5000) as downloaded:
+            link.click()
+        source = app.output / filename
+        downloaded.value.save_as(source)
+        document = drawing_xml(source)
+        if len(document) != expected_count:
+            raise AssertionError(f'{filename} has {len(document)} scene objects')
+        if not any(item.tag == 'text' and item.get('tex') == formula for item in document):
+            raise AssertionError(f'{filename} lost its math source label')
+        if any(item.tag == 'bitmap' for item in document):
+            raise AssertionError(f'{filename} depends on a bitmap')
+
+        app.menu('File', 'Open')
+        dialog = app.page.get_by_role('dialog')
+        dialog.get_by_label('Choose file').set_input_files(source)
+        dialog.get_by_role('button', name='OK', exact=True).click()
+        app.page.wait_for_timeout(300)
+        after = app.pixels()
+        if diff(blank, after) < 100:
+            raise AssertionError(f'{filename} did not render a scene on the canvas')
+        fallback = after
+        app.menu('View', 'Trust TeX preview for this document')
+        app.page.wait_for_function(
+            "performance.getEntriesByType('resource').some(e=>e.name.endsWith('/tex-svg.bundle.js'))",
+            timeout=10000)
+        app.page.wait_for_timeout(500)
+        if diff(fallback, app.pixels()) < 10:
+            raise AssertionError(f'{filename} trusted TeX preview did not replace fallback labels')
+        saved = drawing_xml(app.save('opened-' + filename))
+        if len(saved) != expected_count:
+            raise AssertionError(f'{filename} changed during browser open/save')
+        if not same_drawing_xml(document, saved):
+            raise AssertionError(f'{filename} geometry changed during browser open/save')
+        blank = after
+    return 'all three downloads open through File → Open, render, and save with their scene geometry and TeX labels intact'
 
 
 def s_export_formats(app):
@@ -930,6 +1011,7 @@ SCENARIOS = [
     ('edit-move-delete', s_edit_move_delete),
     ('area-select', s_area_select),
     ('open-roundtrip', s_open_roundtrip),
+    ('open-examples', s_open_examples),
     ('clipboard-roundtrip', s_clipboard_roundtrip),
     ('copy-as-tikz', s_copy_as_tikz),
     ('export-formats', s_export_formats),

@@ -92,6 +92,8 @@ done
   cat "$BUILD/pas2js.log" >&2; exit 1; }
 "$ESBUILD" "$DIST/jobhost.js" --minify --outfile="$DIST/jobhost.js" --allow-overwrite --log-level=warning
 cp "$ROOT/web/index.html" "$ROOT/web/host.js" "$DIST/"
+mkdir -p "$DIST/examples"
+cp "$ROOT/examples/README.md" "$ROOT/examples/"*.TpX "$DIST/examples/"
 if ! cmp -s "$ROOT/web/package-lock.json" "$ROOT/web/node_modules/.tpx-package-lock.json"; then
   (cd "$ROOT/web" && npm ci --ignore-scripts --no-audit --no-fund)
   cp "$ROOT/web/package-lock.json" "$ROOT/web/node_modules/.tpx-package-lock.json"

@@ -54,6 +54,7 @@ def isolated_environment(build_dir):
         env.pop(name, None)
     env.update(PATH=str(empty_path), TPX_CORE_FIXTURE_DIR=str(FIXTURES),
                TPX_ACCEPTANCE_FIXTURE_DIR=str(FIXTURES / "tikz"),
+               TPX_EXAMPLE_DIR=str(ROOT / "examples"),
                TMPDIR=str(run_dir), TMP=str(run_dir), TEMP=str(run_dir),
                HOME=str(run_dir / "home"), USERPROFILE=str(run_dir / "home"))
     return run_dir, work_dir, env

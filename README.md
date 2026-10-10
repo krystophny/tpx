@@ -39,8 +39,50 @@ paths in use.
 
 [![Linux tests](https://github.com/krystophny/tpx/actions/workflows/test.yml/badge.svg)](https://github.com/krystophny/tpx/actions/workflows/test.yml)
 
-This is a screenshot of the v1.6.alpha.1 on Linux/GTK2
-![Screenshot](/doc/screenshot_v1.6alpha1.png?raw=true "Screenshot")
+## First scientific figure
+
+The desktop **File → Open Example** menu opens three bundled drawings as new
+unsaved documents, so Save asks where to write your copy. In the browser,
+download one of the examples linked above the canvas, then choose
+**File → Open** and select that file. The examples use native vector objects
+and TeX labels; they have no linked image assets.
+
+To build a figure from a blank page:
+
+1. Choose **File → New**. Draw axes with **Insert → Insert line**, then use
+   **Insert → Insert curve** for a plotted trace; click to place its points and
+   double-click to finish.
+2. Add a label with **Insert → Insert text**. Select it, open **Object
+   properties**, and enter a formula such as `$f(x)=x^2-1$` in **TeX text**.
+   TpX keeps ordinary fallback text editable on the canvas.
+3. Select objects to inspect their positions, dimensions, and styles in the
+   **Inspector**. Use **Object properties** to edit all properties.
+4. Choose **File → Save as…**, select **TikZ source**, and save `figure.tikz`.
+   Keep the `.TpX` file for native editing; TikZ save-back supports a defined
+   subset and refuses edits it cannot represent safely.
+5. Include the TikZ snippet in LaTeX:
+
+   ```tex
+   \usepackage{tikz}
+   ...
+   \input{figure.tikz}
+   ```
+
+   Compile with `pdflatex`. Debian/Ubuntu need `texlive-latex-base` and
+   `texlive-pictures` for the engine and PGF/TikZ. The snippet carries a
+   bounding rectangle based on the figure's drawing extent.
+
+Imported or refreshed TeX source stays inert until **View → Trust TeX preview
+for this document** is chosen. Review the source first: desktop previews pass
+it to the local LaTeX and `dvipng` tools; installing `dvisvgm` enables reusable
+SVG previews. The browser uses bundled MathJax for supported math text and
+does not run a local TeX engine or external programs. TikZ import is bounded
+to 4 MiB, 500,000 tokens, and 256 nested groups.
+
+Browser documents live in a temporary virtual file system for the current
+tab. **File → Open** copies the selected file into that space, and **Save**
+downloads a copy; closing or reloading the tab discards unsaved browser edits.
+See [INSTALL.md](INSTALL.md) for platform setup.
 
 ## Build and run on Linux
 

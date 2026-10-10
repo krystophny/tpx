@@ -1,3 +1,9 @@
+## Unreleased
+
+- Added three self-contained scientific figure examples, desktop **File → Open
+  Example**, browser downloads, and a first-figure tutorial covering TeX labels,
+  object inspection and TikZ inclusion in LaTeX.
+
 TpX 1.6.0 brings the Lazarus drawing editor to Windows, Linux and Apple Silicon
 macOS, with fixes from automated checks and native GUI playtesting.
 

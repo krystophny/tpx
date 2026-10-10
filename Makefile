@@ -17,6 +17,8 @@ all: build
 
 build:
 	$(LAZBUILD) $(BUILD_OPTIONS) TpX.lpi
+	mkdir -p "$(dir $(TPX_BINARY))examples"
+	cp examples/*.TpX "$(dir $(TPX_BINARY))examples/"
 
 run: build
 	"$(TPX_BINARY)"
