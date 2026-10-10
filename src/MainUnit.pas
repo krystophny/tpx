@@ -772,6 +772,8 @@ uses Output, Input, Settings0, ColorEtc, Geometry, Options,
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
   , DocumentIO, FileWatchNative
+{$ELSE}
+  , BrowserDocumentStatus
 {$ENDIF}
 {$ENDIF}
   ;
@@ -1276,6 +1278,11 @@ begin
     RefreshRecoveryAfterEditSessionEnd;
   if not Session.IsActive and FDeferredReload then
     Application.QueueAsyncCall(TryApplyDeferredReload, 0);
+{$ELSE}
+  BrowserDocumentDidChange(Assigned(TheDrawing) and
+    Assigned(TheDrawing.History) and
+    (TheDrawing.History.IsChanged or
+    ((FEditSession <> nil) and FEditSession.HasUncommittedWork)));
 {$ENDIF}
 {$ENDIF}
 end;

@@ -6,15 +6,28 @@ interface
 
 uses DocumentFormats;
 
+type
+  TBrowserDocumentLifecycleEvent = procedure of object;
+
 procedure SetBrowserDocumentDirty(Value: Boolean);
 procedure SetBrowserDocumentSource(Value: Boolean);
 procedure SetBrowserDocumentError(const MessageText: string);
 procedure ResetBrowserDocumentStatus;
+procedure SetBrowserDocumentLifecycleCallbacks(const OnEdited, OnReplaced,
+  OnDownloadRequested: TBrowserDocumentLifecycleEvent);
+procedure BrowserDocumentDidChange(IsDirty: Boolean);
+procedure ReplaceBrowserDocument(HasSource: Boolean);
+procedure BrowserDocumentDownloadRequested;
 function BeginBrowserDownloadBundle(const MainPath: TDocumentPath): Boolean;
 function AddBrowserDownloadPath(const Path: TDocumentPath): Boolean;
 function FinishBrowserDownloadBundle(Success: Boolean): Boolean;
 
 implementation
+
+var
+  BrowserDocumentEditedHandler: TBrowserDocumentLifecycleEvent = nil;
+  BrowserDocumentReplacedHandler: TBrowserDocumentLifecycleEvent = nil;
+  BrowserDocumentDownloadHandler: TBrowserDocumentLifecycleEvent = nil;
 
 {$IFDEF CPUWASM32}
 procedure BrowserSetDocumentDirty(Value: LongInt);
@@ -61,6 +74,36 @@ begin
 {$IFDEF CPUWASM32}
   BrowserResetDocumentStatus;
 {$ENDIF}
+end;
+
+procedure SetBrowserDocumentLifecycleCallbacks(const OnEdited, OnReplaced,
+  OnDownloadRequested: TBrowserDocumentLifecycleEvent);
+begin
+  BrowserDocumentEditedHandler := OnEdited;
+  BrowserDocumentReplacedHandler := OnReplaced;
+  BrowserDocumentDownloadHandler := OnDownloadRequested;
+end;
+
+procedure BrowserDocumentDidChange(IsDirty: Boolean);
+begin
+  SetBrowserDocumentDirty(IsDirty);
+  if Assigned(BrowserDocumentEditedHandler) then
+    BrowserDocumentEditedHandler;
+end;
+
+procedure ReplaceBrowserDocument(HasSource: Boolean);
+begin
+  ResetBrowserDocumentStatus;
+  SetBrowserDocumentSource(HasSource);
+  SetBrowserDocumentDirty(False);
+  if Assigned(BrowserDocumentReplacedHandler) then
+    BrowserDocumentReplacedHandler;
+end;
+
+procedure BrowserDocumentDownloadRequested;
+begin
+  if Assigned(BrowserDocumentDownloadHandler) then
+    BrowserDocumentDownloadHandler;
 end;
 
 function BeginBrowserDownloadBundle(const MainPath: TDocumentPath): Boolean;
