@@ -618,12 +618,6 @@ type
     FBrowserRecoveryEnabled: Boolean;
     FBrowserRecoveryDocumentID: string;
     FBrowserRecoveryRevision: QWord;
-    procedure ProcessBrowserRecoveryDeadline(Sender: TObject);
-    procedure SetBrowserRecoveryEnabled(Value: Boolean);
-    procedure RestoreBrowserRecoverySelection(PayloadLength,
-      MetadataLength: LongInt);
-  procedure BrowserRecoveryDocumentEdited;
-  procedure BrowserRecoveryDownloadRequested;
 {$ENDIF}
 {$ENDIF}
     ScrollPos0: Integer;             
@@ -641,9 +635,17 @@ type
 {$IFDEF FPC}
     procedure InitializeEmptyView(Data: PtrInt);
 {$IFDEF CPUWASM32}
+    procedure NotifyBrowserDocumentEdited;
     procedure InitializeBrowserRecovery;
     procedure BrowserRecoveryCheckpoint;
     procedure UpdateBrowserDocumentDirty;
+    procedure ProcessBrowserRecoveryDeadline(Sender: TObject);
+    procedure SetBrowserRecoveryEnabled(Value: Boolean);
+    procedure ResetBrowserRecoveryDocument;
+    procedure BrowserRecoveryDocumentEdited;
+    procedure BrowserRecoveryDownloadRequested;
+    procedure RestoreBrowserRecoverySelection(PayloadLength,
+      MetadataLength: LongInt);
 {$ENDIF}
 {$IFNDEF CPUWASM32}
     procedure InitializeAutoReload;
@@ -727,10 +729,6 @@ type
     property CurrentDocumentEpoch: QWord read GetCurrentDocumentEpoch;
     property HasActiveEditSession: Boolean read GetHasActiveEditSession;
 {$IFDEF FPC}
-{$IFDEF CPUWASM32}
-    procedure NotifyBrowserDocumentEdited;
-    procedure ResetBrowserRecoveryDocument;
-{$ENDIF}
 {$IFNDEF CPUWASM32}
     function BeginDocumentWatchBinding(const Path: TDocumentPath;
       out WatchGeneration, SubscriptionID: QWord): TFileWatchStatus;
