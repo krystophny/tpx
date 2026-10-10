@@ -13,6 +13,8 @@ function DrawWebTeX(const Canvas: TCanvas; const ObjectKey: PtrUInt;
   const HAlign: THAlignment; const VAlign: TVAlignment;
   const Color: TColor): Boolean;
 procedure SetWebTeXEnabled(Value: Boolean);
+procedure ResetWebTeXDocument;
+procedure SetWebSourceSnapshotStatus(Visible: Boolean);
 procedure ForgetWebTeXObject(ObjectKey: PtrUInt);
 procedure BrowserTeXReady;
 
@@ -25,6 +27,9 @@ function BrowserDrawTeX(Data: Pointer; Width, Height, Key: LongInt;
   Color, Left, Top, Right, Bottom: LongInt): LongInt;
   external 'tpx' name 'tex_draw';
 procedure BrowserEnableTeX(Value: LongInt); external 'tpx' name 'tex_enable';
+procedure BrowserResetTeXDocument; external 'tpx' name 'tex_reset';
+procedure BrowserSourceSnapshotStatus(Visible: LongInt);
+  external 'tpx' name 'source_snapshot';
 procedure BrowserForgetTeX(Key: PtrUInt); external 'tpx' name 'tex_forget';
 
 function DrawWebTeX(const Canvas: TCanvas; const ObjectKey: PtrUInt;
@@ -55,6 +60,16 @@ end;
 procedure SetWebTeXEnabled(Value: Boolean);
 begin
   BrowserEnableTeX(Ord(Value));
+end;
+
+procedure ResetWebTeXDocument;
+begin
+  BrowserResetTeXDocument;
+end;
+
+procedure SetWebSourceSnapshotStatus(Visible: Boolean);
+begin
+  BrowserSourceSnapshotStatus(Ord(Visible));
 end;
 
 procedure BrowserTeXReady;

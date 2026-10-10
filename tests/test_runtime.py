@@ -20,6 +20,7 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "document-io",
              "canvas-focus-transfer",
              "auto-reload-integration",
+             "autosave-source-formats",
              "property-dimensions", "font-choice", "conversion-save",
              "unsupported-exports", "live-tex-missing-tool", "clipboard-format-width",
              "clipboard-roundtrip", "color-box-custom-state",
