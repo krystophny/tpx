@@ -14,6 +14,11 @@ var
   SettingsList: TOptionsList;
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
+  StorageStartupDiagnostic: string;
+{$ENDIF}
+{$ENDIF}
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
   AutoRefreshEnabled: Boolean = True;
   CrashRecoveryEnabled: Boolean = True;
   DocumentAutoSavePreferences: TStringList;
@@ -27,15 +32,24 @@ uses Output, Input, Drawings, Preview,
 {$IFNDEF FPC}
   EMF_Unit,
 {$ENDIF}
-  Modes, Bitmaps, SysBasic;
+  Modes, Bitmaps, SysBasic
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  , UserStorage
+{$ENDIF}
+{$ENDIF}
+  ;
 
 const
   IniFileName0 = 'TpX.ini';
 
 var
   IniFileName: string = IniFileName0;
-{$IFDEF DARWIN}
-  LegacyIniFileName: string = '';
+  IniFileToLoad: string = '';
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  StoragePathDiagnostic: string = '';
+{$ENDIF}
 {$ENDIF}
 
 procedure LoadSettings;
@@ -44,36 +58,48 @@ var
   Strings: TStringList;
   St: string;
   FileToLoad: string;
+  SafeFileToLoad, Diagnostic: string;
 begin
-  FileToLoad := IniFileName;
-  if not FileExists(FileToLoad) then
+  FileToLoad := IniFileToLoad;
+  if (FileToLoad = '') or not FileExists(FileToLoad) then Exit;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  if not PrepareSettingsFile(FileToLoad, '', SafeFileToLoad, Diagnostic) then
   begin
-{$IFDEF DARWIN}
-    if not FileExists(LegacyIniFileName) then Exit;
-    FileToLoad := LegacyIniFileName;
-{$ELSE}
+    StorageStartupDiagnostic := Diagnostic;
     Exit;
-{$ENDIF}
   end;
+  if SafeFileToLoad = '' then Exit;
+  FileToLoad := SafeFileToLoad;
+{$ENDIF}
+{$ENDIF}
   Strings := TStringList.Create;
   try
-    Strings.LoadFromFile(FileToLoad);
-    for I := 0 to SettingsList.Count - 1 do
-    begin
-      St := Strings.Values[(SettingsList[I] as TOptionData).Key];
-      // Temporary fix against saving of bad settings
-      if (SettingsList[I] as TOptionData).Key = 'LineWidth_Default'
-        then
+    try
+      Strings.LoadFromFile(FileToLoad);
+      for I := 0 to SettingsList.Count - 1 do
       begin
-        if StrToFloat(St) <= 0
-          then St := FloatToStr(LineWidthBase_Default);
+        St := Strings.Values[(SettingsList[I] as TOptionData).Key];
+        // Temporary fix against saving of bad settings
+        if (SettingsList[I] as TOptionData).Key = 'LineWidth_Default' then
+          if StrToFloat(St) <= 0 then
+            St := FloatToStr(LineWidthBase_Default);
+        if St <> '' then
+          (SettingsList[I] as TOptionData).AsString := St;
       end;
-      if St <> '' then
-        (SettingsList[I] as TOptionData).AsString := St;
+    except
+      on E: Exception do
+        StoragePathDiagnostic := 'Could not read preferences from ' +
+          FileToLoad + ': ' + E.Message;
     end;
   finally
     Strings.Free;
   end;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  StorageStartupDiagnostic := StoragePathDiagnostic;
+{$ENDIF}
+{$ENDIF}
 end;
 
 function FillSettings(Strings: TStrings): Boolean;
@@ -103,45 +129,136 @@ end;
 procedure SaveSettings;
 var
   Strings: TStringList;
+  ErrorText: string;
 begin
   Strings := TStringList.Create;
   try
     if FillSettings(Strings) then
     begin
-{$IFDEF DARWIN}
-      ForceDirectories(ExtractFileDir(IniFileName));
-{$ENDIF}
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+      if not EnsureUserStorageDirectory(usaConfig, ErrorText) then
+        StoragePathDiagnostic := 'Could not save preferences to ' + IniFileName +
+          ': ' + ErrorText
+      else if not SaveSettingsFileSafely(IniFileName, Strings, ErrorText) then
+        StoragePathDiagnostic := ErrorText
+      else
+        StoragePathDiagnostic := '';
+      if StoragePathDiagnostic <> '' then
+        MessageBoxError(StoragePathDiagnostic);
+{$ELSE}
       Strings.SaveToFile(IniFileName);
+{$ENDIF}
+{$ELSE}
+      Strings.SaveToFile(IniFileName);
+{$ENDIF}
     end;
   finally
     Strings.Free;
   end;
-{$IFDEF DARWIN}
-  Exit;
-{$ELSE}
   if not OutHelp then Exit;
   // Save drawing options hints for help
   Strings := TStringList.Create;
   try
     Strings.Text := SettingsList.HintsText;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+    if not EnsureUserStorageDirectory(usaConfig, ErrorText) then
+      StoragePathDiagnostic := 'Could not save help settings: ' + ErrorText
+    else if not SaveSettingsFileSafely(IncludeTrailingPathDelimiter(
+      UserStorageDirectory(usaConfig)) + 'program_settings.inc', Strings,
+      ErrorText) then
+      StoragePathDiagnostic := ErrorText
+    else
+      StoragePathDiagnostic := '';
+    if StoragePathDiagnostic <> '' then
+      MessageBoxError(StoragePathDiagnostic);
+{$ELSE}
+    Strings.SaveToFile(ExtractFilePath(ParamStr(0)) +
+      'Help' + PathDelim + 'program_settings.inc');
+{$ENDIF}
+{$ELSE}
     Strings.SaveToFile(ExtractFilePath(ParamStr(0))
       + '\Help\program_settings.inc');
+{$ENDIF}
   finally
     Strings.Free;
   end;
-{$ENDIF}
 end;
 
 procedure Initialize;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+var
+  CandidateFile, LegacyFile, Diagnostic: string;
+  InvalidSettingsPath: Boolean;
+{$ENDIF}
+{$ENDIF}
 begin
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  IniFileName := IncludeTrailingPathDelimiter(
+    UserStorageDirectory(usaConfig)) + IniFileName0;
+  IniFileToLoad := '';
+  StoragePathDiagnostic := '';
+  StorageStartupDiagnostic := '';
+  InvalidSettingsPath := False;
 {$IFDEF DARWIN}
-  LegacyIniFileName := IncludeTrailingPathDelimiter(
+  LegacyFile := IncludeTrailingPathDelimiter(GetAppConfigDir(False)) +
+    IniFileName0;
+  if not SameText(ExpandFileName(LegacyFile), ExpandFileName(IniFileName)) then
+  begin
+    if not PrepareSettingsFile(IniFileName, LegacyFile, CandidateFile,
+      Diagnostic) then
+    begin
+      InvalidSettingsPath := True;
+      StoragePathDiagnostic := Diagnostic;
+    end
+    else
+    begin
+      IniFileToLoad := CandidateFile;
+      StoragePathDiagnostic := Diagnostic;
+    end;
+  end;
+{$ENDIF}
+  if (IniFileToLoad = '') and not InvalidSettingsPath then
+  begin
+    LegacyFile := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) +
+      IniFileName0;
+    if not PrepareSettingsFile(IniFileName, LegacyFile, CandidateFile,
+      Diagnostic) then
+    begin
+      InvalidSettingsPath := True;
+      StoragePathDiagnostic := Diagnostic;
+    end
+    else
+    begin
+      IniFileToLoad := CandidateFile;
+      if Diagnostic <> '' then
+      begin
+        if StoragePathDiagnostic <> '' then
+          StoragePathDiagnostic := StoragePathDiagnostic + LineEnding;
+        StoragePathDiagnostic := StoragePathDiagnostic + Diagnostic;
+      end;
+    end;
+  end;
+  if (IniFileToLoad = '') and not InvalidSettingsPath then
+    IniFileToLoad := IniFileName;
+  StorageStartupDiagnostic := StoragePathDiagnostic;
+{$ELSE}
+  IniFileName := IncludeTrailingPathDelimiter(
     ExtractFilePath(ParamStr(0))) + IniFileName0;
+  IniFileToLoad := IniFileName;
+{$ENDIF}
+{$ELSE}
+{$IFDEF DARWIN}
   IniFileName := IncludeTrailingPathDelimiter(GetAppConfigDir(False))
     + IniFileName0;
 {$ELSE}
   IniFileName := IncludeTrailingPathDelimiter(
     ExtractFilePath(ParamStr(0))) + IniFileName0;
+{$ENDIF}
+  IniFileToLoad := IniFileName;
 {$ENDIF}
   SettingsList := TOptionsList.Create;
 {$IFDEF FPC}

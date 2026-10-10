@@ -7,7 +7,7 @@ uses
   SysUtils, CoreTestSupport, CoreXmlFixtureTests, CoreFileWatchTests,
   TikZSyntaxTests, TikZSemanticAcceptanceTests, TikZImportTests,
   CoreAutoReloadTests, TikZWriterTests, CoreAutoSaveTests,
-  CoreAutoSaveStoreTests, CorePropertyEditTests;
+  CoreAutoSaveStoreTests, CorePropertyEditTests, CoreUserStorageTests;
 
 var
   ExitStatus: Integer;

@@ -39,7 +39,7 @@ implementation
 uses WebTeXPreview;
 {$ELSE}
 uses SysUtils, Math, Forms, ExtCtrls, MD5, FileUtil, LazFileUtils,
-  SysBasic, Preview, TeXPreviewWorker, TeXPreviewCache;
+  SysBasic, Preview, TeXPreviewWorker, TeXPreviewCache, UserStorage;
 {$ENDIF}
 
 var
@@ -151,7 +151,7 @@ type
     FTimer: TTimer;
     FWorker: TTeXPreviewWorker;
     FChanged: TNotifyEvent;
-    FDirectory, FPreamble, FPackages: string;
+    FDirectory, FPreamble, FPackages, FSetupError: string;
     FFigurePrologue, FFigureEpilogue, FPicturePrologue, FPictureEpilogue: string;
     FTeXFormat, FTeXFigure: Integer;
     FCache: TTeXPreviewCache;
@@ -191,6 +191,7 @@ begin
 end;
 
 constructor TTeXPreviewManager.Create(const Changed: TNotifyEvent);
+var ErrorText, CachePath: string;
 begin
   inherited Create;
   FChanged := Changed;
@@ -205,13 +206,41 @@ begin
   FTimer.Enabled := False;
   FTimer.Interval := 180;
   FTimer.OnTimer := Schedule;
-  FCache := TTeXPreviewCache.Create(
-    IncludeTrailingPathDelimiter(GetAppConfigDir(False))+'preview-cache');
-  FDirectory := FCache.Directory;
+  CachePath := IncludeTrailingPathDelimiter(UserStorageDirectory(usaCache)) +
+    'preview-cache';
+  try
+    if not EnsureUserStorageDirectory(usaCache, ErrorText) then
+      raise Exception.Create(ErrorText);
+    FCache := TTeXPreviewCache.Create(CachePath);
+    FDirectory := FCache.Directory;
+  except
+    on E: Exception do
+    begin
+      FreeAndNil(FCache);
+      FDirectory := '';
+      LiveTeXEnabled := False;
+      FSetupError := 'Live TeX preview is unavailable at ' + CachePath +
+        ': ' + E.Message;
+      LiveTeXStatus := FSetupError;
+      MessageBoxError(LiveTeXStatus);
+    end;
+  end;
   FPreambleAge := -2;
   FTeXFormat := -1;
   FTeXFigure := -1;
-  ReadPreamble;
+  if FCache <> nil then
+    try
+      ReadPreamble;
+    except
+      on E: Exception do
+      begin
+        LiveTeXEnabled := False;
+        FSetupError := 'Live TeX preview could not load its user template: ' +
+          E.Message;
+        LiveTeXStatus := FSetupError;
+        MessageBoxError(LiveTeXStatus);
+      end;
+    end;
 end;
 
 destructor TTeXPreviewManager.Destroy;
@@ -408,6 +437,11 @@ var
   I: Integer;
 begin
   FTimer.Enabled := False;
+  if Value and (FSetupError <> '') then begin
+    LiveTeXEnabled := False;
+    LiveTeXStatus := FSetupError;
+    Exit;
+  end;
   if not Value then begin
     if Assigned(FWorker) then begin
       FWorkerCancelled := True;

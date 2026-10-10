@@ -512,7 +512,7 @@ end;
 
 function AutoSaveRecoveryRoot: string;
 begin
-  Result := IncludeTrailingPathDelimiter(GetAppConfigDir(False)) +
+  Result := IncludeTrailingPathDelimiter(UserStorageDirectory(usaState)) +
     'AutoSaveRecovery';
 end;
 

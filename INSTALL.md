@@ -9,8 +9,12 @@ You do not need Lazarus or Free Pascal to run them.
 
 Download `tpx-1.6.0-windows-x86_64.zip`. Extract the whole ZIP into a folder
 owned by your user, such as `Documents\TpX`, then double-click `TpX.exe`.
-You can create a desktop shortcut to it. This is a portable 64-bit application;
-its preferences are saved beside the executable. Avoid `Program Files`.
+You can create a desktop shortcut to it. TpX stores preferences in your user
+profile, so the application can run from a read-only install such as
+`Program Files`.
+Preferences live in `%APPDATA%\TpX\TpX.ini`; recovery drafts live in
+`%LOCALAPPDATA%\TpX\AutoSaveRecovery`, and the live TeX preview cache lives in
+`%LOCALAPPDATA%\TpX\preview-cache`.
 The release is tested on Windows Server 2025 with Desktop Experience.
 Windows may ask you to review this download because it is not Authenticode-signed.
 
@@ -29,11 +33,13 @@ then go to **System Settings → Privacy & Security → Open Anyway** and confir
 See [Apple's instructions](https://support.apple.com/en-us/102445).
 A managed Mac may prevent this exception.
 
-Keep the app bundle intact. Preferences are saved in your user configuration
-folder. Bundled defaults and help are sealed in `Contents/Resources`.
-The template-editing menu opens writable copies in your configuration folder;
-changes there preserve the app signature. Editing files inside the app
-invalidates its signature.
+Keep the app bundle intact. Preferences are saved in
+`~/Library/Preferences/TpX/TpX.ini`, recovery drafts in
+`~/Library/Application Support/TpX/AutoSaveRecovery`, and the live TeX preview
+cache in `~/Library/Caches/TpX/preview-cache`. Bundled defaults and help are
+sealed in `Contents/Resources`. The template-editing menu opens writable copies in your
+preferences folder; changes there preserve the app signature. Editing files
+inside the app invalidates its signature.
 
 ## Linux
 
@@ -53,9 +59,29 @@ cd tpx-1.6.0-linux-x86_64
 ./TpX
 ```
 
-Keep the folder writable: preferences are saved beside the executable. Keep
-`preview.tex.inc`, `metapost.tex.inc` and `help/` there too. Other distributions
-may need a source build; see [README.md](README.md).
+TpX stores preferences in `${XDG_CONFIG_HOME:-~/.config}/TpX/TpX.ini`, recovery
+drafts in `${XDG_STATE_HOME:-~/.local/state}/TpX/AutoSaveRecovery`, and the
+live TeX preview cache in `${XDG_CACHE_HOME:-~/.cache}/TpX/preview-cache`.
+Packaged templates and help remain beside the executable and are never edited
+in place. Other distributions may need a source build; see
+[README.md](README.md).
+
+An existing per-user `TpX.ini` takes precedence. On first use, TpX imports the
+historical `TpX.ini` beside the executable, or the previous macOS settings
+file, only when no per-user preferences exist. It keeps the original file.
+
+## Portable mode
+
+To keep all TpX files with an extracted copy, pass `--portable` when starting
+it or place an empty `TpX.portable` file beside the executable. Portable data
+goes into `TpX-portable-data/config`, `TpX-portable-data/state` and
+`TpX-portable-data/cache`. On macOS, place the sentinel beside `TpX.app`; the
+data folder is created beside the app bundle so its sealed resources stay
+untouched. Portable mode requires that data folder to be writable.
+
+Choose **Help → Storage locations** to see the active paths. If TpX cannot
+create recovery storage, it reports the path and keeps the editor open; crash
+recovery is unavailable until that location is writable.
 
 ## TeX and converters
 
