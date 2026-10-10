@@ -165,9 +165,21 @@ var
   HeightEditor, WidthEditor: TEdit;
   ErrorLabel, SelectionLabel: TLabel;
   LineStyleEditor: TComboBox;
+  MemoEditor: TCompositionAwareMemo;
   Key: Word;
   Shift: TShiftState;
 begin
+  MemoEditor := TCompositionAwareMemo.Create(nil);
+  try
+    MemoEditor.Lines.Add('alpha');
+    Check(MemoEditor.EditText = 'alpha',
+      'Memo edit text retained its synthetic final line ending');
+    MemoEditor.Lines.Add('');
+    Check(MemoEditor.EditText = 'alpha' + LineEnding,
+      'Memo edit text discarded an explicitly entered trailing newline');
+  finally
+    MemoEditor.Free;
+  end;
   MainForm.Show;
   Application.ProcessMessages;
   MainForm.RefreshInspectorSelection;
@@ -207,6 +219,21 @@ begin
       'Invalid width preview changed stroke properties');
     MainForm.Inspector.CancelActiveEdit;
   end;
+  HistoryCount := MainForm.TheDrawing.History.Count;
+  MainForm.Inspector.FocusField(opfLineWidth);
+  WidthEditor.Text := '-';
+  Check(not MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+    'Invalid width draft unexpectedly committed before changing fields');
+  HeightEditor.SetFocus;
+  Application.ProcessMessages;
+  HeightEditor.Text := '9';
+  Application.ProcessMessages;
+  Check(MainForm.Inspector.HasActiveEdit and (WidthEditor.Text = '-') and
+    (HeightEditor.Text = '7') and (TextObj.LineWidth = 1) and
+    (TextObj.Height = 7) and
+    (MainForm.TheDrawing.History.Count = HistoryCount),
+    'Entering another field lost the active invalid draft or exposed an untracked value');
+  MainForm.Inspector.CancelActiveEdit;
   HistoryCount := MainForm.TheDrawing.History.Count;
   MainForm.Inspector.FocusField(opfTextHeight);
   HeightEditor.Text := '7.5';
