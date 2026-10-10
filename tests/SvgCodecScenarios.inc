@@ -865,6 +865,22 @@ begin
     Check(Drawing.ObjectsCount = BeforeCount,
       'invalid UTF-8 changed the caller drawing');
 
+    BadInput.Clear;
+    Deep := '<?xml version="1.0" encoding="ISO-8859-1"?>' +
+      '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" ' +
+      'height="10mm" viewBox="0 0 10 10"><text>beta</text></svg>';
+    BadInput.WriteBuffer(Deep[1], Length(Deep));
+    BadInput.Position := 0;
+    Failed := False;
+    try
+      LoadSvgFromStream(BadInput, Drawing, False, Profile, Detail);
+    except
+      on E: ESvgCodec do Failed := True;
+    end;
+    Check(Failed, 'SVG accepted a non-UTF-8 encoding declaration');
+    Check(Drawing.ObjectsCount = BeforeCount,
+      'non-UTF-8 declaration changed the caller drawing');
+
     CheckInvalidXmlCodepoint('xFFFE');
     CheckInvalidXmlCodepoint('xFFFF');
     CheckManySmallComments;
