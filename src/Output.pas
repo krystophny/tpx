@@ -2398,7 +2398,7 @@ begin
   if not Run_LaTeX_Temp(Drawing, ltxview_Dvi, TempDvi, True,
     True) then Exit;
   TempEPS := ChangeFileExt(TempDvi, '.eps');
-  if not OutputDeleteFile(TempEPS) then
+  if not OutputTryDeleteFile(TempEPS) then
   begin
     MessageBoxError('Can not delete EPS file');
     Exit;
