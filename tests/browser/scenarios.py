@@ -398,12 +398,10 @@ def s_open_roundtrip(app):
     app.menu('File', 'Open')
     dialog = app.page.get_by_role('dialog')
     dialog.get_by_label('Choose file').set_input_files(invalid)
-    with app.page.expect_event('dialog') as error_event:
-        dialog.get_by_role('button', name='OK', exact=True).click()
-    error_dialog = error_event.value
-    if 'Can not open' not in error_dialog.message:
-        raise AssertionError('malformed upload did not report an open error')
-    error_dialog.accept()
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    error_dialog = app.page.locator('dialog').filter(has_text='Can not open')
+    error_dialog.wait_for()
+    error_dialog.get_by_role('button', name='OK', exact=True).click()
     after_failure = drawing_xml(app.save('open-invalid-preserved.tpx'))
     if [c.attrib for c in after_failure] != [c.attrib for c in before]:
         raise AssertionError('failed document open changed the current drawing')
