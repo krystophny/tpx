@@ -53,6 +53,21 @@ begin
   Result := EvaluateTikZ(Syntax, DefaultTikZImportOptions);
 end;
 
+function ExpectedUtf8BetaLabel: RawByteString;
+begin
+  { TextBody preserves source bytes. Build its UTF-8 oracle explicitly so the
+    host ANSI code page cannot transcode the non-ASCII suffix. }
+  SetLength(Result, 8);
+  Result[1] := AnsiChar(Ord('L'));
+  Result[2] := AnsiChar(Ord('a'));
+  Result[3] := AnsiChar(Ord('b'));
+  Result[4] := AnsiChar(Ord('e'));
+  Result[5] := AnsiChar(Ord('l'));
+  Result[6] := AnsiChar(Ord(' '));
+  Result[7] := AnsiChar($CE);
+  Result[8] := AnsiChar($B2);
+end;
+
 procedure TestIndependentTikZSemanticScene;
 var
   Source: TBytes;
@@ -162,7 +177,7 @@ begin
     Obj := Scene.ObjectAt(3);
     CheckCore((Obj.Kind = tsoText) and (Obj.TextAnchor = 'base west'),
       'West text anchor was not preserved');
-    CheckCore(Obj.TextBody = 'Label ' + UTF8Encode(WideChar($03B2)),
+    CheckCore(Obj.TextBody = ExpectedUtf8BetaLabel,
       'First Unicode text body was altered');
     CheckNearCore(Obj.Center.X, 1.25, 0.0001, 'west text x');
     CheckNearCore(Obj.Center.Y, 10.5, 0.0001, 'west text y');
