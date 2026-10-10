@@ -71,9 +71,6 @@ type
       const Ticket: TAutoSaveTicket);
     procedure WorkFailed(const Kind: TAutoSaveWorkKind;
       const Ticket: TAutoSaveTicket; const ErrorText: string);
-    procedure SourceSaveFailed(const Ticket: TAutoSaveTicket;
-      const ErrorText: string);
-    procedure ClearFailure;
     property DocumentGeneration: QWord read FDocumentGeneration;
     property LocalRevision: QWord read FLocalRevision;
     property WatchGeneration: QWord read FWatchGeneration;
@@ -357,17 +354,6 @@ begin
   FLastFailureKind := Kind;
   if Kind = aswSourceSave then CancelSourceSave
   else CancelRecovery;
-end;
-
-procedure TAutoSaveCoordinator.SourceSaveFailed(
-  const Ticket: TAutoSaveTicket; const ErrorText: string);
-begin
-  WorkFailed(aswSourceSave, Ticket, ErrorText);
-end;
-
-procedure TAutoSaveCoordinator.ClearFailure;
-begin
-  FLastFailure := '';
 end;
 
 end.
