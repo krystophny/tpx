@@ -144,7 +144,8 @@ begin
   ExpectedExtension := GetEnvironmentVariable('TPX_EPS_EXPECT_INPUT_EXT');
   if (ExpectedExtension <> '') and
     (LowerCase(ExtractFileExt(ParamStr(1))) <> ExpectedExtension) then Halt(8);
-  Source := TFileStream.Create(GetEnvironmentVariable('TPX_EPS_FIXTURE'), fmOpenRead);
+  Source := TFileStream.Create(
+    GetEnvironmentVariableUTF8('TPX_EPS_FIXTURE'), fmOpenRead);
   try
     Destination := TFileStream.Create(ParamStr(2), fmCreate);
     try Destination.CopyFrom(Source, 0) finally Destination.Free end;
@@ -186,10 +187,10 @@ var
   Converted, Expected: Boolean;
 begin
   PromptCount := 0;
-  Bitmap2EpsPath := GetEnvironmentVariable('TPX_EPS_CONVERTER');
+  Bitmap2EpsPath := GetEnvironmentVariableUTF8('TPX_EPS_CONVERTER');
   Expected := GetEnvironmentVariable('TPX_EPS_EXPECT_SUCCESS') = '1';
-  Converted := BitmapToEps(GetEnvironmentVariable('TPX_EPS_INPUT'),
-    GetEnvironmentVariable('TPX_EPS_OUTPUT'));
+  Converted := BitmapToEps(GetEnvironmentVariableUTF8('TPX_EPS_INPUT'),
+    GetEnvironmentVariableUTF8('TPX_EPS_OUTPUT'));
   Check(Converted = Expected, 'BitmapToEps returned ' + BoolToStr(Converted, True));
   Check(PromptCount = Ord(not Expected), 'Unexpected bitmap conversion error count');
 end;
