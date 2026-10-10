@@ -675,10 +675,8 @@ def s_bitmap_roundtrip(app):
     if b'colorimage' not in eps.read_bytes():
         raise AssertionError('EPS export omitted the bitmap image data')
 
-    unload_prompts = []
     def accept_unload_prompt(dialog):
         if dialog.type == 'beforeunload':
-            unload_prompts.append(True)
             dialog.accept()
         else:
             dialog.dismiss()
