@@ -1402,6 +1402,11 @@ var
   FirstPath, SecondPath: string;
   Marker: string;
   Deadline: QWord;
+  DraftText: TEditUtf8Text;
+  ErrorText: string;
+  TextObj: TText2D;
+  Session: TObjectEditSession;
+  Epoch: QWord;
 begin
   FirstPath := GetEnvironmentVariableUTF8('TPX_OS_OPEN_FIRST');
   SecondPath := GetEnvironmentVariableUTF8('TPX_OS_OPEN_SECOND');
@@ -1411,6 +1416,34 @@ begin
   Check(SameDocumentPath(TDocumentPath(SecondPath),
     TDocumentPath(MainForm.TheDrawing.FileName)),
     'Initial process did not open the requested second document');
+
+  TextObj := TText2D.CreateSpec(-1, Point2D(2, 3), 7, 'OS open draft');
+  MainForm.TheDrawing.AddObject(-1, TextObj);
+  MainForm.TheDrawing.History.Save;
+  MainForm.TheDrawing.History.SaveCheckSum;
+  Epoch := MainForm.CurrentDocumentEpoch;
+  Session := TObjectEditSession.Create(MainForm.TheDrawing, Epoch,
+    [TextObj.ID]);
+  try
+    Check(MainForm.RegisterEditSession(Session),
+      'OS-open draft session did not register');
+    Check(Session.TrySetRawDraft(opfTextHeight, '1e', ErrorText),
+      'OS-open invalid raw draft setup failed: ' + ErrorText);
+    MainForm.IntfDropFiles([FirstPath, SecondPath]);
+    Check(SameDocumentPath(TDocumentPath(SecondPath),
+      TDocumentPath(MainForm.TheDrawing.FileName)),
+      'OS open replaced the active document while its edit draft was invalid');
+    Check(Session.IsActive and Session.HasRawDraft(opfTextHeight, DraftText) and
+      (DraftText = '1e') and (TextObj.Height = 7),
+      'OS open discarded or committed the invalid edit draft');
+    Check(not FileExistsUTF8(Marker),
+      'OS open started another window while its edit draft was invalid');
+    Check(Session.Cancel(Epoch), 'OS-open invalid draft could not be canceled');
+  finally
+    MainForm.UnregisterEditSession(Session);
+    Session.Free;
+  end;
+
   MainForm.IntfDropFiles([FirstPath, SecondPath]);
   Check(SameDocumentPath(TDocumentPath(FirstPath),
     TDocumentPath(MainForm.TheDrawing.FileName)),
