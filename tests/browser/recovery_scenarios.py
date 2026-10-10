@@ -474,7 +474,7 @@ def s_recovery_opt_out_keeps_drafts_and_ignores_stale_reads(app):
     }''')
     app.page.wait_for_function('window.tpxHeldDraftReads.length === 1')
     app.page.locator('#tpx-recovery-enabled').uncheck()
-    app.page.wait_for_function('!document.querySelector("#tpx-recovery-enabled").checked && document.querySelector("#tpx-recovery-drafts").children.length === 0')
+    app.page.wait_for_function('!document.querySelector("#tpx-recovery-enabled").checked && document.querySelector("#tpx-recovery-state").textContent.startsWith("Off.") && document.querySelector("#tpx-recovery-drafts").children.length === 0')
     app.page.evaluate('''async () => {
       window.tpxHoldDraftReads = false;
       IDBObjectStore.prototype.getAll = window.tpxOriginalDraftGetAll;
