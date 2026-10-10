@@ -36,6 +36,7 @@ type
     FontFamily: string;
     FontStyle: TFontStyles;
     HAlignment: THAlignment;
+    TextPreserve: Boolean;
     TextPos: TPoint2D;
     Text: string;
     GradientColor: TColor;
@@ -63,6 +64,7 @@ type
     fNamedObjects: TStringList;
     fInvisibleList: TGraphicObjList;
     fGradientColors: TStringList;
+    fIgnoreUseReferences: Boolean;
     procedure StartElement(var E: TPrimElement);
     procedure SAX_Comment(const Comment: string);
     //function TransfPoint(P: TPoint2D): TPoint2D;
@@ -112,6 +114,8 @@ type
     destructor Destroy; override;
     procedure ParseFromStream(const Stream: TStream);
     procedure ParseFromFile(const FileName: string);
+    property IgnoreUseReferences: Boolean read fIgnoreUseReferences
+      write fIgnoreUseReferences;
   end;
 
 implementation
@@ -192,6 +196,7 @@ begin
   FontFamily := State.FontFamily;
   FontStyle := State.FontStyle;
   HAlignment := State.HAlignment;
+  TextPreserve := State.TextPreserve;
   TextPos := State.TextPos;
   Text := State.Text;
 end;
@@ -310,6 +315,7 @@ function GetRealTypeAttr(Value: Variant; const Default: TRealType;
 var
   St, Units, NumSt: string;
   Len, Index: Integer;
+  Settings: TFormatSettings;
 const Data: array[0..9] of Single =
   (1, 3.5, 3.5, 1, 0.352777777777778, 4.23333333333333, 10, 1,
     25.4, 0.01);
@@ -339,7 +345,9 @@ begin
     NumSt := LeftStr(NumSt, Pos(' ', NumSt) - 1);
   if Pos(',', NumSt) > 0 then
     NumSt := LeftStr(NumSt, Pos(',', NumSt) - 1);
-  Result := StrToFloat(NumSt);
+  Settings := DefaultFormatSettings;
+  Settings.DecimalSeparator := '.';
+  Result := StrToFloat(NumSt, Settings);
   Result := Data[Index] * Result;
   if Index in [1, 2, 4, 5, 6, 7, 8] then Result := Result / Scale
   else if (Index = 9) and (Default <> 0)
@@ -377,20 +385,22 @@ begin
   fCurrState := T_SVG_Import_State.Create;
   fCurrState.IsInDefs := False;
   fCurrState.IsInStyle := False;
+  fCurrState.Scale := 25.4 / 96;
   fCurrState.ID := '';
   fCurrState.LineColor := Graphics.clNone; //Graphics.clDefault;
   fCurrState.LineWidth := -1; //1
   fCurrState.LineStyle := liSolid; //liNone;
   fCurrState.Hatching := haNone;
   fCurrState.HatchColor := Graphics.clDefault; // Graphics.clNone;
-  fCurrState.FillColor := Graphics.clNone; // Graphics.clBlack;
+  fCurrState.FillColor := Graphics.clBlack;
   fCurrState.FillOpacity := 1;
     //clBlack; //clSilver;Graphics.clDefault;
   fCurrState.T := IdentityTransf2D;
-  fCurrState.FontHeight := 10;
+  fCurrState.FontHeight := 16;
   fCurrState.FontFamily := '';
   fCurrState.FontStyle := [];
   fCurrState.HAlignment := ahLeft;
+  fCurrState.TextPreserve := False;
   fCurrState.TextPos := Point2D(0, 0);
   fCurrState.Text := '';
   fStack.Push(fCurrState);
@@ -411,17 +421,11 @@ begin
   Y := 0;
   W := 100;
   H := 100;
-  VB := AnsiReplaceStr(VB, ',', ' ');
-  VB := AnsiReplaceStr(VB, '#10', ' ');
-  VB := AnsiReplaceStr(VB, '#13', ' ');
-  VB := AnsiReplaceStr(VB, '   ', ' ');
-  VB := AnsiReplaceStr(VB, '  ', ' ');
-  VB := AnsiReplaceStr(VB, '  ', ' ');
   List := TStringList.Create;
   try
-    List.Delimiter := ' ';
-    List.DelimitedText := VB;
-    if List.Count < 4 then Exit;
+    ExtractStrings([',', ' ', #9, #10, #13], [], PChar(VB), List);
+    if List.Count <> 4 then
+      raise EConvertError.Create('SVG viewBox must contain four values');
     X := GetRealTypeAttr(List[0], 0, 1);
     Y := GetRealTypeAttr(List[1], 0, 1);
     W := GetRealTypeAttr(List[2], 0, 1);
@@ -539,7 +543,7 @@ end;
 procedure T_SVG_Import.SVGProc(var E: TPrimElement);
 const
   Default_Size = 150; // Assume that "screen size" is approx. 150mm
-  Default_px = 0.2; // Assume that pixel (px) is 0.2mm
+  Default_px = 25.4 / 96; // CSS/SVG pixels use 96 dpi
 begin
   StoreAttributes(E.Attributes, 'svg');
   if E.Attributes.IndexOfName('viewBox') >= 0 then
@@ -556,8 +560,6 @@ begin
     fCurrState.W_MM := GetRealTypeAttr(
       E.Attributes.Values['width'], fCurrState.viewBox_W,
       Default_px) * Default_px;
-    if Abs(fCurrState.W_MM / Default_px - 1) < 1E-4 then
-      fCurrState.W_MM := Default_Size;
   end
   else fCurrState.W_MM := Default_Size;
   if E.Attributes.IndexOfName('height') >= 0 then
@@ -565,8 +567,6 @@ begin
     fCurrState.H_MM := GetRealTypeAttr(
       E.Attributes.Values['height'], fCurrState.viewBox_H,
       Default_px) * Default_px;
-    if Abs(fCurrState.H_MM / Default_px - 1) < 1E-4 then
-      fCurrState.H_MM := Default_Size;
   end
   else fCurrState.H_MM := Default_Size;
   if (fCurrState.viewBox_W > 0) and (fCurrState.viewBox_H > 0) then
@@ -675,6 +675,7 @@ var
     end;
   end;
 begin
+  if fIgnoreUseReferences then Exit;
   if E.Attributes.IndexOfName('xlink:href') >= 0
     then ID := E.Attributes.Values['xlink:href']
   else Exit;
@@ -908,8 +909,10 @@ end;
 
 procedure T_SVG_Import.TextEndProc(var E: TPrimElement);
 begin
-  fCurrState.Text :=
-    fCurrState.Text + ReplaceEntities(Trim(E.Text));
+  if fCurrState.TextPreserve then
+    fCurrState.Text := fCurrState.Text + ReplaceEntities(E.Text)
+  else
+    fCurrState.Text := fCurrState.Text + ReplaceEntities(Trim(E.Text));
   if fCurrState.Text = '' then
   begin
     EndStateProc(E);
@@ -919,7 +922,7 @@ begin
     fCurrState.FontHeight, fCurrState.Text);
   (fCurrObj as TText2D).HAlignment :=
     fCurrState.HAlignment;
-  if HasFontFamily(fCurrState.FontFamily) then
+  if fCurrState.FontFamily <> '' then
   begin
     (fCurrObj as TText2D).Font.Name := fCurrState.FontFamily;
     (fCurrObj as TText2D).Font.style := fCurrState.FontStyle;
@@ -949,8 +952,10 @@ end;
 
 procedure T_SVG_Import.TSpanEndProc(var E: TPrimElement);
 begin
-  fCurrState.Text :=
-    fCurrState.Text + ReplaceEntities(Trim(E.Text));
+  if fCurrState.TextPreserve then
+    fCurrState.Text := fCurrState.Text + ReplaceEntities(E.Text)
+  else
+    fCurrState.Text := fCurrState.Text + ReplaceEntities(Trim(E.Text));
   if fCurrState.Text = '' then
   begin
     EndStateProc(E);
@@ -960,7 +965,7 @@ begin
     fCurrState.FontHeight, fCurrState.Text);
   (fCurrObj as TText2D).HAlignment :=
     fCurrState.HAlignment;
-  if HasFontFamily(fCurrState.FontFamily) then
+  if fCurrState.FontFamily <> '' then
   begin
     (fCurrObj as TText2D).Font.Name := fCurrState.FontFamily;
     (fCurrObj as TText2D).Font.style := fCurrState.FontStyle;
@@ -1178,6 +1183,8 @@ var
   I: Integer;
 begin
   CreateNewState;
+  if Attributes.IndexOfName('xml:space') >= 0 then
+    fCurrState.TextPreserve := Attributes.Values['xml:space'] = 'preserve';
   if Attributes.IndexOfName('id') >= 0 then
     fCurrState.ID := Attributes.Values['id']
   else fCurrState.ID := '';
@@ -1291,8 +1298,14 @@ begin
       GetRealTypeAttr(Attributes.Values['font-size'], 3.5278,
       fCurrState.Scale);
   if Attributes.IndexOfName('font-family') >= 0 then
-    fCurrState.FontFamily :=
-      CSV_Item(Attributes.Values['font-family'], 1);
+  begin
+    St := Trim(Attributes.Values['font-family']);
+    if (Length(St) >= 2) and
+      (((St[1] = '''') and (St[Length(St)] = '''')) or
+       ((St[1] = '"') and (St[Length(St)] = '"'))) then
+      St := Copy(St, 2, Length(St) - 2);
+    fCurrState.FontFamily := CSV_Item(St, 1);
+  end;
   if Attributes.IndexOfName('font-weight') >= 0 then
     if Attributes.Values['font-weight'] = 'bold' then
       fCurrState.FontStyle := fCurrState.FontStyle + [fsBold];
