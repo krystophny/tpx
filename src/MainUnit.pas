@@ -1551,8 +1551,9 @@ begin
   end
 {$IFDEF LCLCOCOA}
   else
-    RestoreInlineStableTextState;
+    RestoreInlineStableTextState
 {$ENDIF}
+  ;
   FInlineCompositionActive := False;
   FInlineCompositionHadTextChange := False;
   FInlineSession.SetCompositionPending(False);
