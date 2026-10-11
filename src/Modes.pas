@@ -1554,24 +1554,6 @@ procedure TBaseMode.OnInsertGrObj(Msg: TEventMessage;
 var
   IMode: TInsertGrObjMode;
   NPoints: Integer;
-  function InsertText: Boolean;
-  var
-    TmpText: TText2D;
-    TmpStr: string;
-  begin
-    Result := False;
-    TmpStr := '';
-    if not InputQuery('Add Text', 'String', TmpStr)
-      or (TmpStr = '') then
-    begin
-      MainForm.PressModeButton(Sender, False);
-      Exit;
-    end;
-    TmpText := TText2D.CreateSpec(-1, Point2D(1, 1),
-      Drawing.DefaultFontHeight, TmpStr);
-    IMode.Obj := TmpText;
-    Result := True;
-  end;
   function InsertBitmap: Boolean;
   begin
     Result := False;
@@ -1664,7 +1646,9 @@ begin
         IMode.Obj
           := TClosedBezierPath2D.CreateSpec(-1, [Point2D(0, 0)]);
       end;
-    Msg_InsertText: if not InsertText then Exit;
+    Msg_InsertText:
+      IMode.Obj := TText2D.CreateSpec(-1, Point2D(0, 0),
+        Drawing.DefaultFontHeight, '');
     Msg_InsertStar:
       IMode.Obj := TStar2D.CreateSpec(-1, Point2D(0, 0));
     Msg_InsertSymbol:
@@ -1975,6 +1959,11 @@ begin
     {FirstFound} False, OnObjectIndex);
   if OnObjectIndex < PICK_INOBJECT
     then TmpObj := nil;
+  if TmpObj is TText2D then
+  begin
+    MainForm.BeginInlineTextEdit(TmpObj);
+    Exit;
+  end;
   if TmpObj is TObject2D then
     ChangeObjectProperties(TmpObj as TObject2D);
 end;
@@ -2272,6 +2261,10 @@ end;
 
 procedure TInsertSimpleGrObjMode.OnMouseUp(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  Target: TObject2D;
+  OnObjectIndex: Integer;
+  ClickPoint: TPoint2D;
 begin
   if Assigned(Obj) then
   begin
@@ -2279,6 +2272,32 @@ begin
       ViewPort.GetSnappedPoint(
       ViewPort.ScreenToViewport(Point2D(X, Y)));
     Obj.ParentDrawing := nil;
+    if Obj is TText2D then
+    begin
+      ClickPoint := ViewPort.ScreenToViewport(Point2D(X, Y));
+      Target := Drawing.PickObject_PreferSelected(
+        ClickPoint,
+        ViewPort.PixelSize * PixelApertureCoefficient,
+        ViewPort.VisualRect, TpX_Manager.PickFilter,
+        {FirstFound} False, OnObjectIndex);
+      if OnObjectIndex < PICK_INOBJECT then Target := nil;
+      if Target is TText2D then
+      begin
+        if MainForm.BeginInlineTextEdit(Target) then
+        begin
+          FreeAndNil(Obj);
+          PopSelf;
+          Exit;
+        end;
+      end
+      else if MainForm.BeginNewInlineTextEdit(Obj as TText2D) then
+      begin
+        Obj := nil;
+        PopSelf;
+        Exit;
+      end;
+      Exit;
+    end;
     Drawing.AddObject(-1, Obj);
     Drawing.SelectionAdd(Obj);
     Obj := nil;
