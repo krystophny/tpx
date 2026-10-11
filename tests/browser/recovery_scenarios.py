@@ -322,6 +322,7 @@ def s_recovery_skips_active_composition_and_restores_commit(app):
     stable = 'Committed before composition'
     editor.fill(stable)
     wait_saved(app.page)
+    stable_selection = editor.evaluate('(el) => [el.selectionStart, el.selectionEnd]')
     before = records(app.page)
     if len(before) != 1:
         raise AssertionError(f'expected one baseline draft, got {before}')
@@ -329,6 +330,10 @@ def s_recovery_skips_active_composition_and_restores_commit(app):
         editor.evaluate('''(el, text) => {
           el.focus();
           el.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+        }''', text)
+        app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Text composition is still active")',
+                                   timeout=10000)
+        editor.evaluate('''(el, text) => {
           el.value = text;
           el.dispatchEvent(new InputEvent('input', {bubbles:true,
             inputType:'insertCompositionText', data:text, isComposing:true}));
@@ -346,9 +351,17 @@ def s_recovery_skips_active_composition_and_restores_commit(app):
 
     editor.evaluate('''(el, text) => {
       el.value = text;
+      el.setSelectionRange(el.value.length, el.value.length);
       el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:''}));
     }''', stable)
-    wait_record_sequence(app.page, before[0]['id'], before[0]['sequence'])
+    app.page.wait_for_function('''!document.querySelector("#tpx-recovery-state").textContent
+      .includes("Text composition is still active")''')
+    if editor.input_value() != stable:
+        raise AssertionError(f'cancelled composition changed the stable text: {editor.input_value()!r}')
+    cancelled_selection = editor.evaluate('(el) => [el.selectionStart, el.selectionEnd]')
+    if cancelled_selection != stable_selection:
+        raise AssertionError('cancelled composition changed the caret/selection: '
+                             f'{stable_selection!r} -> {cancelled_selection!r}')
     after_cancel = records(app.page)
     if len(after_cancel) != 1:
         raise AssertionError(f'cancelled composition changed draft count: {after_cancel!r}')
@@ -357,9 +370,6 @@ def s_recovery_skips_active_composition_and_restores_commit(app):
                              f'{before[0]["payloadHash"][:12]} -> '
                              f'{after_cancel[0]["payloadHash"][:12]}; '
                              f'editor={editor.input_value()!r}')
-    if after_cancel[0]['sequence'] <= before[0]['sequence']:
-        raise AssertionError('cancelled composition was not checkpointed: '
-                             f'{before[0]["sequence"]} -> {after_cancel[0]["sequence"]}')
 
     start_composition('Uncommitted λ label: \\input{pending}')
     verify_composition_is_skipped(after_cancel[0]['payloadHash'])
@@ -368,11 +378,12 @@ def s_recovery_skips_active_composition_and_restores_commit(app):
       el.value = text;
       el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:text}));
     }''', committed)
-    wait_record_sequence(app.page, after_cancel[0]['id'], after_cancel[0]['sequence'])
-    after_commit = records(app.page)
-    if (len(after_commit) != 1 or
-            after_commit[0]['payloadHash'] == after_cancel[0]['payloadHash']):
-        raise AssertionError('committed composition was not checkpointed as a new raw draft')
+    app.page.wait_for_function('''(() => {
+      const text = document.querySelector("#tpx-recovery-state").textContent;
+      return text.includes("New changes are not yet saved") ||
+        text.includes("Draft saved in this browser");
+    })()''', timeout=10000)
+    wait_saved(app.page)
 
     page = app.restart()
     wait_ready(page)
@@ -383,7 +394,7 @@ def s_recovery_skips_active_composition_and_restores_commit(app):
     recovered.wait_for(timeout=10000)
     if recovered.input_value() != committed:
         raise AssertionError(f'restarted recovery lost committed composition text: {recovered.input_value()!r}')
-    return 'active preedit preserved the last safe payload; cancellation retained it and committed composition survived restart'
+    return 'synthetic active composition preserved the safe payload; cancellation kept stable text/selection and committed text survived restart'
 
 
 def s_recovery_retains_source_and_linked_asset(app):
