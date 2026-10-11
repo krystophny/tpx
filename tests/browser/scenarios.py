@@ -13,12 +13,12 @@ def diff(a, b):
                if abs(a[i] - b[i]) > 8 or abs(a[i+1] - b[i+1]) > 8 or abs(a[i+2] - b[i+2]) > 8)
 
 
-# Left tool window, measured in client/canvas space. x=13 is the button centre.
-# Row 104 is the select/area tool; the insert tools begin one pitch lower,
-# verified by the responsive-button sweep and clean draw+undo at y=126.
+# Left tool window. Coordinates include Panel31's form offset; app.at converts
+# them through the live canvas size before dispatching browser input.
 TOOL_X = 13
 TOOL_PITCH = 22
-TOOL_FIRST = 126         # InsertLine
+# ToolBar2 starts at y=71 in Panel31; its first button center is y=83.
+TOOL_FIRST = 83          # InsertLine
 
 
 def tool(name):
@@ -269,7 +269,58 @@ def s_text_input(app):
 
     v, cx, cy = box(app)
     text = 'WASM Grüße λ 漢字 🐈 & &#946;'
+    browser_dialogs = []
+
+    def dismiss_and_record(dialog):
+        browser_dialogs.append(dialog.type)
+        dialog.dismiss()
+
+    app.page.on('dialog', dismiss_and_record)
+
+    def rendered_text_point():
+        paper = app.viewport()
+        pixels = app.pixels([paper['x'], paper['y'], paper['w'], paper['h']])
+        width, height = paper['w'], paper['h']
+        dark = bytearray(width * height)
+        for pixel in range(0, len(pixels), 4):
+            if (pixels[pixel] < 96 and pixels[pixel + 1] < 96 and
+                    pixels[pixel + 2] < 96):
+                dark[pixel // 4] = 1
+        seen = bytearray(len(dark))
+        largest = []
+        for first, value in enumerate(dark):
+            if not value or seen[first]:
+                continue
+            component = [first]
+            seen[first] = 1
+            for current in component:
+                x, y = current % width, current // width
+                for next_y in range(max(0, y - 1), min(height, y + 2)):
+                    for next_x in range(max(0, x - 1), min(width, x + 2)):
+                        neighbor = next_y * width + next_x
+                        if dark[neighbor] and not seen[neighbor]:
+                            seen[neighbor] = 1
+                            component.append(neighbor)
+            if len(component) > len(largest):
+                largest = component
+        if len(largest) < 20:
+            raise AssertionError('reopened text has no glyph-sized rendered component')
+        center_x = sum(index % width for index in largest) // len(largest)
+        center_y = sum(index // width for index in largest) // len(largest)
+        return paper['x'] + center_x, paper['y'] + center_y
+
+    def reopen_existing_text():
+        app.page.mouse.dblclick(*app.at(*rendered_text_point()), delay=80)
+
+    before_prompt_controls = app.page.locator(
+        '#lcl-dom input, #lcl-dom textarea').count()
     app.menu('Insert', 'Insert text')
+    after_prompt_controls = app.page.locator(
+        '#lcl-dom input, #lcl-dom textarea').count()
+    if (browser_dialogs or app.page.get_by_role('dialog').count() or
+            app.page.locator('dialog[open]').count() or
+            after_prompt_controls > before_prompt_controls):
+        raise AssertionError('Insert text opened a modal dialog or prompt control')
     app.click(cx-60, cy-20)
     editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
     editor.wait_for()
@@ -305,16 +356,17 @@ def s_text_input(app):
     if tag is None or 't=' not in tag.group(0):
         raise AssertionError('saved drawing has no text object')
 
+    saved_objects = drawing_xml(saved)
+    saved_texts = [obj for obj in saved_objects if obj.tag == 'text']
+    if (len(saved_texts) != 1 or
+            decode_tpx_text_once(saved_texts[0].attrib.get('t', '')) != text):
+        raise AssertionError('saved TpX Text value changed before reload')
+
     app.menu('File', 'Open')
     dialog = app.page.get_by_role('dialog')
     dialog.get_by_label('Choose file').set_input_files(saved)
     dialog.get_by_role('button', name='OK', exact=True).click()
     app.page.wait_for_timeout(300)
-    def reopen_existing_text():
-        v2, x2, y2 = box(app)
-        px, py = app.at(x2 + 40, y2 + 250)
-        app.page.mouse.dblclick(px, py)
-
     reopen_existing_text()
     editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
     editor.wait_for()
@@ -328,9 +380,8 @@ def s_text_input(app):
         raise AssertionError('native text editing changed Unicode caret content')
 
     app.page.get_by_role('button', name='Done', exact=True).click()
-    v2, x2, y2 = box(app)
     app.click(TOOL_X, tool('text'))
-    app.click(x2 + 40, y2 + 250)
+    app.click(*rendered_text_point())
     editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
     editor.wait_for()
     if editor.input_value() != text:
@@ -438,15 +489,40 @@ def s_title_tracks_document(app):
     return app.title()
 
 
+def decode_tpx_text_once(value):
+    """Decode TpX character references after the XML parser's one pass."""
+    import re
+
+    def decode(match):
+        codepoint = int(match.group(1))
+        return chr(codepoint) if codepoint <= 0x10FFFF else match.group(0)
+
+    decoded = re.sub(r'&#([0-9]+);', decode, value)
+    scalars = []
+    index = 0
+    while index < len(decoded):
+        codepoint = ord(decoded[index])
+        if (0xD800 <= codepoint <= 0xDBFF and index + 1 < len(decoded) and
+                0xDC00 <= ord(decoded[index + 1]) <= 0xDFFF):
+            low = ord(decoded[index + 1])
+            scalars.append(chr(0x10000 + ((codepoint - 0xD800) << 10) +
+                               (low - 0xDC00)))
+            index += 2
+        else:
+            scalars.append(decoded[index])
+            index += 1
+    return ''.join(scalars)
+
+
 def drawing_xml(path):
     import xml.etree.ElementTree as ET
-    lines = path.read_text().splitlines()
     xml = []
-    for line in lines:
-        if line.startswith('%'):
+    for line in path.read_bytes().splitlines():
+        if line.startswith(b'%'):
             xml.append(line[1:])
-            if line.startswith('%</TpX>') or (line.startswith('%<TpX ') and line.endswith('/>')):
-                return ET.fromstring('\n'.join(xml))
+            if line.startswith(b'%</TpX>') or (
+                    line.startswith(b'%<TpX ') and line.endswith(b'/>')):
+                return ET.fromstring(b'\n'.join(xml))
     raise AssertionError('saved file has no TpX drawing')
 
 
@@ -623,12 +699,16 @@ def s_download_status_and_unload(app):
     app.key('Escape')
     phrase = 'Browser Ω 🐈'
     app.menu('Insert', 'Insert text')
-    app.page.wait_for_function('document.querySelector("#lcl").width < 500')
-    app.type(phrase)
-    app.key('Enter')
-    app.page.wait_for_function('document.querySelector("#lcl").width > 500')
     app.click(cx+90, cy-30)
-    app.key('Escape')
+    editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    editor.wait_for()
+    editor.fill(phrase)
+    app.page.get_by_role('button', name='Done', exact=True).click()
+    app.page.wait_for_timeout(150)
+    if editor.count():
+        raise AssertionError('Done did not settle the inline text session')
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('creating or committing text opened a dialog')
     status.wait_for(state='visible')
     app.page.wait_for_function('document.querySelector("#document-status").dataset.state === "unsaved"')
     if not unload_is_blocked():
@@ -653,7 +733,8 @@ def s_download_status_and_unload(app):
         raise AssertionError(f'download used an unexpected filename: {saved.name}')
     objects = drawing_xml(saved)
     if (len(objects) != 2 or objects[0].tag != 'rect' or
-            not any(obj.tag == 'text' and phrase in obj.attrib.get('t', '')
+            not any(obj.tag == 'text' and
+                    phrase in decode_tpx_text_once(obj.attrib.get('t', ''))
                     for obj in objects)):
         raise AssertionError('download did not retain the geometry and Unicode text')
     app.page.wait_for_function('document.querySelector("#document-status").dataset.state === "unconfirmed"')
