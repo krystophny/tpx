@@ -47,6 +47,15 @@ type
     FSession: TObjectEditSession;
     FSessionField: TObjectPropertyField;
     FHasSessionField: Boolean;
+    FCompositionTextChanged: set of TObjectPropertyField;
+    FCompositionBaselineValid: set of TObjectPropertyField;
+    FCompositionBaselineText: array[TObjectPropertyField] of string;
+    FCompositionBaselineSelStart: array[TObjectPropertyField] of Integer;
+    FCompositionBaselineSelLength: array[TObjectPropertyField] of Integer;
+    FStableFieldTextValid: set of TObjectPropertyField;
+    FStableFieldText: array[TObjectPropertyField] of string;
+    FStableFieldSelStart: array[TObjectPropertyField] of Integer;
+    FStableFieldSelLength: array[TObjectPropertyField] of Integer;
     FRefreshing: Integer;
     FHasSelection: Boolean;
     FOnEditCommitted: TNotifyEvent;
@@ -64,6 +73,9 @@ type
     procedure FieldEnter(Sender: TObject);
     procedure FieldChanged(Sender: TObject);
     procedure CompositionChanged(Sender: TObject; Composing: Boolean);
+    procedure CaptureStableField(Field: TObjectPropertyField);
+    function EditorText(Field: TObjectPropertyField): string;
+    procedure RestoreCompositionBaseline(Field: TObjectPropertyField);
     procedure FieldKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
     procedure CoordinatesClick(Sender: TObject);
@@ -799,6 +811,7 @@ begin
       end;
   end;
   SetFieldError(Field, '');
+  CaptureStableField(Field);
 end;
 
 procedure TObjectInspector.RefreshDefaults;
@@ -1258,6 +1271,7 @@ var
   Patch: TObjectPropertyPatch;
   ErrorText: string;
   Raw: string;
+  Composing: Boolean;
 begin
   if FRefreshing > 0 then Exit;
   Field := FieldFromControl(Sender);
@@ -1270,16 +1284,31 @@ begin
       SetFieldError(Field, 'Finish or cancel the active edit first');
     Exit;
   end;
+  Composing := False;
   if FWidgets[Field].Editor is TCompositionAwareEdit then
   begin
     if (FWidgets[Field].Editor as TCompositionAwareEdit).
-      SampleCompositionState then FSession.SetCompositionPending(True);
+      SampleCompositionState then
+    begin
+      FSession.SetCompositionPending(True);
+      Composing := True;
+    end;
+    if FSession.CompositionPending then
+      Composing := True;
   end
   else if FWidgets[Field].Editor is TCompositionAwareMemo then
   begin
     if (FWidgets[Field].Editor as TCompositionAwareMemo).
-      SampleCompositionState then FSession.SetCompositionPending(True);
+      SampleCompositionState then
+    begin
+      FSession.SetCompositionPending(True);
+      Composing := True;
+    end;
+    if FSession.CompositionPending then
+      Composing := True;
   end;
+  if Composing then Include(FCompositionTextChanged, Field)
+  else CaptureStableField(Field);
   if FWidgets[Field].Editor is TEdit then
     Raw := (FWidgets[Field].Editor as TEdit).Text
   else if FWidgets[Field].Editor is TCompositionAwareMemo then
@@ -1333,6 +1362,10 @@ procedure TObjectInspector.CompositionChanged(Sender: TObject;
   Composing: Boolean);
 var
   Field: TObjectPropertyField;
+  HadTextChange: Boolean;
+  CompositionCommitted: Boolean;
+  CancelUncommitted: Boolean;
+  Value: TPropertyValue;
 begin
   Field := FieldFromControl(Sender);
   if Composing then
@@ -1346,13 +1379,110 @@ begin
         SetFieldError(Field, 'Finish or cancel the active property edit first');
       Exit;
     end;
+    Exclude(FCompositionTextChanged, Field);
+    Include(FCompositionBaselineValid, Field);
+    if Field in FStableFieldTextValid then
+    begin
+      FCompositionBaselineText[Field] := FStableFieldText[Field];
+      FCompositionBaselineSelStart[Field] := FStableFieldSelStart[Field];
+      FCompositionBaselineSelLength[Field] := FStableFieldSelLength[Field];
+    end
+    else
+    begin
+      FCompositionBaselineText[Field] := '';
+      FCompositionBaselineSelStart[Field] := 0;
+      FCompositionBaselineSelLength[Field] := 0;
+      if FDrawing <> nil then
+      begin
+        Value := ReadObjectProperty(FDrawing, FTargetIDs, Field);
+        if Value.State = pvsUniform then
+          FCompositionBaselineText[Field] :=
+            DisplayValue(Field, Value.Value);
+      end;
+    end;
     if FSession <> nil then FSession.SetCompositionPending(True);
     Exit;
   end;
   if (FSession = nil) or not FSession.IsActive or
     (FSessionField <> Field) then Exit;
+  HadTextChange := Field in FCompositionTextChanged;
+  Exclude(FCompositionTextChanged, Field);
+  if FWidgets[Field].Editor is TCompositionAwareEdit then
+    CompositionCommitted :=
+      (FWidgets[Field].Editor as TCompositionAwareEdit).
+        CompositionCommitted
+  else
+    CompositionCommitted :=
+      (FWidgets[Field].Editor as TCompositionAwareMemo).
+        CompositionCommitted;
+  {$IFDEF LCLCOCOA}
+  CancelUncommitted := not CompositionCommitted;
+  {$ELSE}
+  CancelUncommitted := not CompositionCommitted and not HadTextChange and
+    (EditorText(Field) = FCompositionBaselineText[Field]);
+  {$ENDIF}
   FSession.SetCompositionPending(False);
-  FieldChanged(Sender);
+  if not CancelUncommitted then
+  begin
+    Exclude(FCompositionBaselineValid, Field);
+    FieldChanged(Sender);
+  end
+  else
+  begin
+    RestoreCompositionBaseline(Field);
+    if HadTextChange then FieldChanged(Sender);
+  end;
+end;
+
+function TObjectInspector.EditorText(Field: TObjectPropertyField): string;
+var
+  Editor: TWinControl;
+begin
+  Editor := FWidgets[Field].Editor;
+  if Editor is TCustomEdit then Result := (Editor as TCustomEdit).Text
+  else Result := '';
+end;
+
+procedure TObjectInspector.CaptureStableField(Field: TObjectPropertyField);
+var
+  Editor: TWinControl;
+begin
+  Editor := FWidgets[Field].Editor;
+  if not (Editor is TCustomEdit) then Exit;
+  FStableFieldText[Field] := (Editor as TCustomEdit).Text;
+  FStableFieldSelStart[Field] := (Editor as TCustomEdit).SelStart;
+  FStableFieldSelLength[Field] := (Editor as TCustomEdit).SelLength;
+  Include(FStableFieldTextValid, Field);
+end;
+
+procedure TObjectInspector.RestoreCompositionBaseline(
+  Field: TObjectPropertyField);
+begin
+  if not (Field in FCompositionBaselineValid) then Exit;
+  Exclude(FCompositionBaselineValid, Field);
+  Inc(FRefreshing);
+  try
+    if FWidgets[Field].Editor is TEdit then
+    begin
+      (FWidgets[Field].Editor as TEdit).Text :=
+        FCompositionBaselineText[Field];
+      (FWidgets[Field].Editor as TEdit).SelStart :=
+        FCompositionBaselineSelStart[Field];
+      (FWidgets[Field].Editor as TEdit).SelLength :=
+        FCompositionBaselineSelLength[Field];
+    end
+    else if FWidgets[Field].Editor is TCompositionAwareMemo then
+    begin
+      (FWidgets[Field].Editor as TCompositionAwareMemo).Text :=
+        FCompositionBaselineText[Field];
+      (FWidgets[Field].Editor as TCompositionAwareMemo).SelStart :=
+        FCompositionBaselineSelStart[Field];
+      (FWidgets[Field].Editor as TCompositionAwareMemo).SelLength :=
+        FCompositionBaselineSelLength[Field];
+    end;
+  finally
+    Dec(FRefreshing);
+  end;
 end;
 
 procedure TObjectInspector.FieldKeyDown(Sender: TObject;

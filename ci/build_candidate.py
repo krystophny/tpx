@@ -205,7 +205,8 @@ def build_and_package():
                              "lazarus-4.8-cocoa-font-cancel.patch",
                              "lazarus-4.8-cocoa-text-shortcuts.patch",
                              "lazarus-4.8-gtk2-text-composition.patch",
-                             "lazarus-4.8-cocoa-text-composition.patch")
+                             "lazarus-4.8-cocoa-text-composition.patch",
+                             "lazarus-4.8-cocoa-field-editor-ime.patch")
             } if operating_system != "win64" else {},
             "fpc_source": os.environ.get("FPC_SOURCE", "3.2.2 distribution"),
             "sam2p_source": os.environ.get("SAM2P_SOURCE"),

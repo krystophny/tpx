@@ -456,6 +456,36 @@ begin
     EmptyText, NSMakeRange(0, 0), NSMakeRange(NSNotFound, 0));
 end;
 
+  procedure CocoaSetFieldMarkedText(Edit: TCompositionAwareEdit;
+    const Value: string);
+  var
+    NativeText: NSString;
+    FieldEditor: NSTextInputClientProtocol;
+  begin
+    FieldEditor := NSTextInputClientProtocol(
+      NSTextField(Edit.Handle).currentEditor);
+    Check(Assigned(FieldEditor),
+      'Focused Cocoa TEdit has no native field editor');
+    NativeText := NSStringUtf8(Value);
+    FieldEditor.setMarkedText_selectedRange_replacementRange(NativeText,
+      NSMakeRange(NativeText.length, 0), NSMakeRange(NSNotFound, 0));
+    NativeText.release;
+  end;
+
+  procedure CocoaCancelFieldMarkedText(Edit: TCompositionAwareEdit);
+  var
+    EmptyText: NSString;
+    FieldEditor: NSTextInputClientProtocol;
+  begin
+    FieldEditor := NSTextInputClientProtocol(
+      NSTextField(Edit.Handle).currentEditor);
+    Check(Assigned(FieldEditor),
+      'Focused Cocoa TEdit lost its native field editor');
+    EmptyText := NSString.string_;
+    FieldEditor.setMarkedText_selectedRange_replacementRange(EmptyText,
+      NSMakeRange(0, 0), NSMakeRange(NSNotFound, 0));
+  end;
+
 procedure CocoaDrainTextInputQueue;
 var
   I: Integer;
@@ -549,6 +579,36 @@ var
       'Native Cocoa END without text change left the inspector memo pending');
     Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
       'Canceled native composition still blocked inspector settlement: ' +
+      ErrorText);
+  end;
+
+  procedure CheckFieldEditorCompositionEndWithoutTextChange;
+  var
+    InspectorEdit: TCompositionAwareEdit;
+    OriginalText: string;
+    OriginalRadius: TRealType;
+  begin
+    MainForm.Inspector.FocusField(opfRectangleRX);
+    InspectorEdit := MainForm.Inspector.EditorFor(opfRectangleRX) as
+      TCompositionAwareEdit;
+    InspectorEdit.HandleNeeded;
+    OriginalText := InspectorEdit.Text;
+    OriginalRadius := RectObj.RX;
+    CocoaSetFieldMarkedText(InspectorEdit, 'unfinished composition');
+    Check(InspectorEdit.CompositionPending and
+      MainForm.Inspector.HasActiveEdit,
+      'Native Cocoa field-editor marked text did not hold the inspector gate');
+    CocoaCancelFieldMarkedText(InspectorEdit);
+    CocoaDrainTextInputQueue;
+    Check(not InspectorEdit.CompositionPending,
+      'Native Cocoa field-editor END without text change left TEdit pending');
+    Check(InspectorEdit.Text = OriginalText,
+      'Canceling native field-editor composition changed the TEdit value (' +
+      OriginalText + ' -> ' + InspectorEdit.Text + ')');
+    Check(Abs(RectObj.RX - OriginalRadius) < 0.0001,
+      'Uncommitted field-editor composition changed the rectangle radius');
+    Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+      'Canceled field-editor composition still blocked inspector settlement: ' +
       ErrorText);
   end;
   {$ENDIF}
@@ -713,6 +773,8 @@ begin
   RoundTripText('alpha' + LineEnding);
   {$IFDEF LCLCOCOA}
   CheckCompositionEndWithoutTextChange;
+  SelectObject(RectObj);
+  CheckFieldEditorCompositionEndWithoutTextChange;
   {$ENDIF}
 
   StarObj := TStar2D.CreateSpec(-1, Point2D(8, 9));

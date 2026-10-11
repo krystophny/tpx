@@ -3380,6 +3380,7 @@ begin
         if (Obj <> nil) and (Obj.ClassType = SelectedClasses[I]) then
           TheDrawing.SelectionAdd(Obj);
       end;
+      RefreshInspectorSelection;
       LocalView.VisualRect := OldViewRect;
       Undo.Enabled := TheDrawing.History.CanUndo;
       Redo.Enabled := TheDrawing.History.CanRedo;
