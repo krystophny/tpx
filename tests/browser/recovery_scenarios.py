@@ -142,6 +142,10 @@ def s_recovery_survives_application_restart(app):
     button.click()
     app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Draft recovered as a new TpX drawing")',
                                timeout=10000)
+    status = app.page.locator('#document-status')
+    if (status.get_attribute('data-state') != 'unsaved' or
+            'original file is unchanged' not in status.inner_text()):
+        raise AssertionError('recovered geometry was represented as synchronized with an original file')
     app.page.wait_for_timeout(200)
     ink = diff(blank, app.pixels(area))
     if ink < 100:
@@ -315,11 +319,12 @@ def s_recovery_retains_source_and_linked_asset(app):
 
     source_text = source.read_text()
     match = re.search(r'<text\b[^>]*>', source_text)
-    if match:
-        tag = match.group(0)
-        updated = tag[:-1] + ' tex="\\input{browser-recovery-must-not-compile}">'
-        source_text = source_text[:match.start()] + updated + source_text[match.end():]
-        source.write_text(source_text)
+    if not match or not match.group(0).endswith('/>'):
+        raise AssertionError('source fixture did not contain a self-closing text element')
+    tag = match.group(0)
+    updated = tag[:-2] + ' tex="\\input{browser-recovery-must-not-compile}"/>'
+    source_text = source_text[:match.start()] + updated + source_text[match.end():]
+    source.write_text(source_text)
     original_source = source.read_bytes()
     original_asset = asset_copy.read_bytes()
 
@@ -350,6 +355,10 @@ def s_recovery_retains_source_and_linked_asset(app):
     app.page.get_by_role('button', name='Recover as new drawing', exact=True).click()
     app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Draft recovered as a new TpX drawing")',
                                timeout=10000)
+    status = app.page.locator('#document-status')
+    if (status.get_attribute('data-state') != 'unsaved' or
+            'original file is unchanged' not in status.inner_text()):
+        raise AssertionError('recovered source snapshot was represented as synchronized with its original file')
     app.page.wait_for_function('''() => {
       const c = document.querySelector('#lcl');
       const pixels = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
