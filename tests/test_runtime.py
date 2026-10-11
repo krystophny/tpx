@@ -276,15 +276,17 @@ class RuntimeTests(unittest.TestCase):
             root = Path(directory).resolve()
             home = root / "home"
             config = root / "config"
-            home.mkdir()
-            config.mkdir()
+            state = root / "state"
+            cache = root / "cache"
+            for path in (home, config, state, cache):
+                path.mkdir()
             source = root / "nested-recovery.tpx"
             shutil.copy2(fixture, source)
             original_source = source.read_bytes()
             ready_path = root / "draft-ready"
             env = os.environ.copy()
-            env.update(HOME=str(home), USERPROFILE=str(home), APPDATA=str(config),
-                       XDG_CONFIG_HOME=str(config), TMPDIR=str(root),
+            env.update(storage_environment(home, config, state, cache))
+            env.update(TMPDIR=str(root), TEMP=str(root), TMP=str(root),
                        TPX_NONMODAL_RECOVERY_SOURCE=str(source),
                        TPX_NONMODAL_RECOVERY_OLD_ID="30000",
                        TPX_NONMODAL_RECOVERY_READY_FILE=str(ready_path))
