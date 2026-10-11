@@ -309,10 +309,10 @@ def s_recovery_retains_source_and_linked_asset(app):
     app.drag(cx - 70, cy - 50, cx + 70, cy + 50)
     app.key('Escape')
     app.menu('Insert', 'Insert text')
-    text_prompt = app.page.get_by_role('dialog')
+    text_prompt = app.page.locator('#lcl-dom input[aria-label="Edit text"]:visible')
     if text_prompt.count():
-        text_prompt.get_by_label('String', exact=True).fill('Uploaded source label')
-        text_prompt.get_by_role('button', name='OK', exact=True).click()
+        text_prompt.fill('Uploaded source label')
+        text_prompt.press('Enter')
         app.click(cx - 40, cy + 65)
     else:
         app.click(cx - 40, cy + 65)
