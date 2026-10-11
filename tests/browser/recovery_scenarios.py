@@ -299,7 +299,7 @@ def s_recovery_skips_active_composition_and_restores_commit(app):
     _, cx, cy = box(app)
     app.menu('Insert', 'Insert text')
     app.click(cx - 60, cy - 20)
-    editor = app.page.locator('#lcl-dom textarea')
+    editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
     editor.wait_for()
     stable = 'Committed before composition'
     editor.fill(stable)
@@ -310,14 +310,13 @@ def s_recovery_skips_active_composition_and_restores_commit(app):
     hold_recovery_checkpoint_timer(app.page, before[0]['id'])
 
     def start_composition(text):
-        app.page.evaluate('''({text}) => {
-          const el = document.querySelector('#lcl-dom textarea');
+        editor.evaluate('''(el, text) => {
           el.focus();
           el.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
           el.value = text;
           el.dispatchEvent(new InputEvent('input', {bubbles:true,
             inputType:'insertCompositionText', data:text, isComposing:true}));
-        }''', {'text': text})
+        }''', text)
 
     def force_composition_checkpoint():
         generation = app.page.evaluate('window.tpxRecoveryTimerCreated')
@@ -334,8 +333,7 @@ def s_recovery_skips_active_composition_and_restores_commit(app):
     start_composition('Uncommitted preedit')
     force_composition_checkpoint()
 
-    app.page.evaluate('''(text) => {
-      const el = document.querySelector('#lcl-dom textarea');
+    editor.evaluate('''(el, text) => {
       el.value = text;
       el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:''}));
     }''', stable)
@@ -353,8 +351,7 @@ def s_recovery_skips_active_composition_and_restores_commit(app):
     start_composition('Uncommitted λ label: \\input{pending}')
     force_composition_checkpoint()
     committed = 'Committed λ label: \\input{pending}'
-    app.page.evaluate('''(text) => {
-      const el = document.querySelector('#lcl-dom textarea');
+    editor.evaluate('''(el, text) => {
       el.value = text;
       el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:text}));
     }''', committed)
@@ -373,7 +370,7 @@ def s_recovery_skips_active_composition_and_restores_commit(app):
     page.get_by_role('button', name='Recover as new drawing', exact=True).click()
     page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Draft recovered as a new TpX drawing")',
                            timeout=10000)
-    recovered = page.locator('#lcl-dom textarea')
+    recovered = page.get_by_role('textbox', name='Text (canvas)', exact=True)
     recovered.wait_for(timeout=10000)
     if recovered.input_value() != committed:
         raise AssertionError(f'restarted recovery lost committed composition text: {recovered.input_value()!r}')
