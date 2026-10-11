@@ -71,3 +71,14 @@ memo backport and derived from merged provider fix
 inspector scenario also marks and cancels text through a focused native field
 editor, checking that the edit value stays unchanged and the composition gate
 releases.
+
+`lazarus-4.8-cocoa-focus-handoff.patch` prevents an older queued Cocoa first-
+responder request from overriding a newer focus choice, and cancels pending
+requests when the window closes. This Lazarus 4.8 backport is commit
+`75bb9453a768a79c4a998fb3ed6b488d6f87451d` on the pinned
+`lazarus_4_8` commit `62c14a4d18c81f222127d42ce9b89b922c63fcbf`; it carries
+the behavior of merged owning fix `7756423568b59f61be14acfac40c8e6f8f9dd687`.
+Its SHA-256 is
+`ec4daefa0ef36fda258086e246ef5e350be98941a0ecca626709b840b2fb0f75`. Native
+regressions check deferred focus, newer-request supersession, and cancellation
+when the target is destroyed before delivery.
