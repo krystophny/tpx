@@ -1146,9 +1146,7 @@ begin
   InspectorPanelVisible := True;
   BuildObjectInspector;
 {$IFDEF FPC}
-{$IFNDEF CPUWASM32}
   OnRecoveryEditSessionRestored := RecoveryEditSessionRestored;
-{$ENDIF}
 {$ENDIF}
   FInlineSession := nil;
   FInlineTextMemo := nil;
