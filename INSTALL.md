@@ -9,10 +9,10 @@ You do not need Lazarus or Free Pascal to run them.
 
 On Windows, macOS or Linux, choose **File → Open Example** and select a bundled
 quadratic, vector-addition or double-slit drawing. To start from a blank page,
-follow the five steps in [README.md#first-scientific-figure](README.md#first-scientific-figure). The browser
-build links to the same three `.TpX` files above its canvas; download one and
-open it with **File → Open**. Browser edits are temporary until **Save**
-downloads a copy.
+follow the five steps in [README.md#first-scientific-figure](README.md#first-scientific-figure).
+In the browser, download an example from the README and open it with
+**File → Open**. Browser edits stay in the current tab until **File → Download
+a copy** downloads them to your computer.
 
 ## Windows
 

@@ -8,7 +8,7 @@ cancel a drawing operation. Use the selection tool to select and move objects.</
 <h2>Properties and text</h2>
 <p>Select an object and open its properties to change line width, colors, fill,
 font size and alignment. Enter a complete math expression such as
-<code>$(a+b)$</code> in a text object's text field, or use its TeX text field for
+<code>$(a+b)$</code> in a text object's text field, or use its TeX source field for
 other LaTeX code. The canvas displays editable text; LaTeX previews and exports
 typeset it.</p>
 <h2>Documents and export</h2>
@@ -22,12 +22,15 @@ and preview viewers in Settings.</p>
 <li>Choose <b>File → New</b>. Draw axes with <b>Insert → Insert line</b> and a
 curve with <b>Insert → Insert curve</b>; click its points and double-click to
 finish.</li>
-<li>Place a label with <b>Insert → Insert text</b>. Select it, open
-<b>Object properties</b>, and enter a formula such as
-<code>$f(x)=x^2-1$</code> in <b>TeX text</b>.</li>
-<li>Select objects to inspect their position, size and style in the
-<b>Inspector</b>.</li>
-<li>Use <b>File → Save as…</b>, choose <b>TikZ source</b>, and save
+<li>Place a label with <b>Insert → Insert text</b>. Select it to edit its
+caption and enter a formula such as
+<code>$f(x)=x^2-1$</code> as its <b>TeX source</b>. The caption remains editable
+on the canvas.</li>
+<li>Select an object to inspect its style and text properties in the
+<b>Inspector</b>. Choose <b>Point coordinates…</b> for point geometry;
+<b>Object properties</b> focuses the Inspector on the selection.</li>
+<li>Use <b>File → Save as…</b> (<b>File → Download a copy as…</b> in the browser),
+choose <b>TikZ source</b>, and save
 <code>figure.tikz</code>. Keep the <code>.TpX</code> document for native editing.
 TikZ save-back accepts supported edits and reports unsupported ones.</li>
 <li>Include the snippet in LaTeX with <code>\usepackage{tikz}</code> and
@@ -45,8 +48,8 @@ groups.</p>
 <a href="../examples/quadratic-function.TpX">quadratic function</a> ·
 <a href="../examples/vector-addition.TpX">vector addition</a> ·
 <a href="../examples/double-slit.TpX">double slit</a>.
-Browser documents use a temporary file system in the current tab; Save
-downloads a copy. Desktop <b>File → Open Example</b> opens an unsaved drawing,
+Browser documents use a temporary file system in the current tab; <b>File →
+Download a copy</b> downloads a copy. Desktop <b>File → Open Example</b> opens an unsaved drawing,
 so Save asks for a destination and leaves the bundled example unchanged.</p>
 <h2>Keyboard and installation</h2>
 <p>Menus show the current shortcuts. On macOS, editing commands use Command;

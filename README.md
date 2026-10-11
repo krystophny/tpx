@@ -42,21 +42,25 @@ paths in use.
 ## First scientific figure
 
 The desktop **File → Open Example** menu opens three bundled drawings as new
-unsaved documents, so Save asks where to write your copy. In the browser,
-download one of the examples linked above the canvas, then choose
-**File → Open** and select that file. The examples use native vector objects
-and TeX labels; they have no linked image assets.
+unsaved documents, so **Save** asks where to write your copy. In the browser,
+download the [quadratic function](examples/quadratic-function.TpX),
+[vector addition](examples/vector-addition.TpX), or
+[double-slit](examples/double-slit.TpX) example, then choose **File → Open**.
+Choose **File → Download a copy** to keep browser edits outside the current
+tab. The examples use native vector objects and TeX labels; they have no linked
+image assets.
 
 To build a figure from a blank page:
 
 1. Choose **File → New**. Draw axes with **Insert → Insert line**, then use
    **Insert → Insert curve** for a plotted trace; click to place its points and
    double-click to finish.
-2. Add a label with **Insert → Insert text**. Select it, open **Object
-   properties**, and enter a formula such as `$f(x)=x^2-1$` in **TeX text**.
-   TpX keeps ordinary fallback text editable on the canvas.
-3. Select objects to inspect their positions, dimensions, and styles in the
-   **Inspector**. Use **Object properties** to edit all properties.
+2. Add a label with **Insert → Insert text**. Select it to edit its caption and
+   **TeX source**; for example, enter `$f(x)=x^2-1$` as the TeX source. The
+   caption remains editable on the canvas.
+3. Select an object to inspect its style and text properties in the
+   **Inspector**. Choose **Point coordinates…** for point geometry;
+   **Object properties** focuses the Inspector on the selection.
 
    ![A scientific curve in TpX with the selected line's properties open in the Inspector](doc/first-scientific-figure-inspector.png)
 
@@ -86,8 +90,9 @@ does not run a local TeX engine or external programs. TikZ import is bounded
 to 4 MiB, 500,000 tokens, and 256 nested groups.
 
 Browser documents live in a temporary virtual file system for the current
-tab. **File → Open** copies the selected file into that space, and **Save**
-downloads a copy; closing or reloading the tab discards unsaved browser edits.
+tab. **File → Open** copies the selected file into that space, and **File →
+Download a copy** downloads a copy; closing or reloading the tab discards
+unsaved browser edits.
 See [INSTALL.md](INSTALL.md) for platform setup.
 
 ## Build and run on Linux
@@ -178,7 +183,7 @@ points farther away still use the grid when it is enabled.
 
 Text can be selected across its visible area. Text properties offer left,
 center, and right alignment. Enter a complete math expression such as
-`$(a+b)$` in the text field, or use the TeX text field for other LaTeX code.
+`$(a+b)$` in the text field, or use the **TeX source** field for other LaTeX code.
 Desktop live previews typeset TeX text in the canvas using LaTeX and `dvipng`,
 with reusable SVG output when `dvisvgm` is available. **View → Live LaTeX
 Preview** toggles this behavior; it is enabled by default. Without the tools,
