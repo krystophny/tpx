@@ -1,7 +1,7 @@
 """Browser-local recovery behavior in real browser storage and WASM sessions."""
 
 from harness import App
-from scenarios import box, diff, park, region
+from scenarios import box, diff, drawing_xml, park, region
 
 
 DB_NAME = 'tpx-browser-local-recovery'
@@ -10,6 +10,17 @@ DB_NAME = 'tpx-browser-local-recovery'
 def wait_ready(page):
     page.wait_for_selector('#status[data-state=ready]', timeout=30000)
     page.wait_for_function('Number(document.querySelector("#lcl").dataset.frames)>0')
+
+
+def decode_tpx_text_once(value):
+    """Decode TpX text references after XML parsing, preserving literal entities."""
+    import re
+
+    def decode(match):
+        codepoint = int(match.group(1))
+        return chr(codepoint) if codepoint <= 0x10FFFF else match.group(0)
+
+    return re.sub(r'&#([0-9]+);', decode, value)
 
 
 def opt_in(page):
@@ -253,12 +264,9 @@ def s_recovery_noop_download_keeps_previous_draft(app):
 
 
 def s_recovery_restores_raw_inline_label_after_restart(app):
-    import html
-    import re
-
     opt_in(app.page)
     _, cx, cy = box(app)
-    raw_label = 'Uncommitted λ label: \\input{must-not-run}'
+    raw_label = 'Uncommitted λ label: \\input{must-not-run}; literal &#955;'
     app.menu('Insert', 'Insert text')
     app.click(cx - 60, cy - 20)
     editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
@@ -276,10 +284,10 @@ def s_recovery_restores_raw_inline_label_after_restart(app):
     if editor.input_value() != raw_label:
         raise AssertionError(f'recovered inline editor lost raw label text: {editor.input_value()!r}')
     page.get_by_role('button', name='Done', exact=True).click()
-    saved = app.save('recovered-raw-label.tpx').read_text()
-    match = re.search(r'<text\b[^>]*>', saved)
-    attrs = dict(re.findall(r'([A-Za-z][A-Za-z0-9]*)="([^"]*)"', match.group(0))) if match else {}
-    if html.unescape(attrs.get('t', '')) != raw_label:
+    saved = drawing_xml(app.save('recovered-raw-label.tpx'))
+    labels = [decode_tpx_text_once(node.attrib['t']) for node in saved.iter('text')
+              if 't' in node.attrib]
+    if raw_label not in labels:
         raise AssertionError('committed recovered label is missing from the downloaded TpX source')
     return 'a browser process restart restores the exact uncommitted Unicode label and its later TpX source'
 
