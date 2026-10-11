@@ -1611,6 +1611,7 @@ begin
       FreeAndNil(ProbeSession);
     end;
     RecoveryAssets.AdoptDrawingFiles(Candidate);
+    RecoveryAssets.InstallBrowserAssets(Candidate);
     CommitDocumentCandidate(TheDrawing, Candidate);
     BeginLiveTeXDocument(False);
     FormatId := Entry.SourceFormatId;
