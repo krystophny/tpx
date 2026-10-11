@@ -29,6 +29,11 @@ shows the active paths.
   It is ad hoc signed and unnotarized; see `INSTALL.md` for first-launch
   instructions.
 
+The Mac bundle declares native `.tpx` drawings and includes the TpX document
+icon. Linux packages include `install-linux-desktop-entry.sh` for optional
+per-user MIME and launcher registration. Windows Open With instructions are in
+`INSTALL.md`; no association is written when a package is extracted.
+
 Install TeX and the desired external converters separately; see `README.md`
 for prerequisites. Record operating system, candidate commit, display scaling,
 and any failing steps when reporting a playtest result.

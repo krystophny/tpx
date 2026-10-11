@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=TpX
+Comment=Create and edit TpX drawings
+Exec=@TPX_EXECUTABLE@ -f %f
+Path=@TPX_PACKAGE_DIR@
+Icon=org.tpx.TpX
+Terminal=false
+Categories=Graphics;VectorGraphics;
+MimeType=application/x-tpx;
+StartupNotify=true

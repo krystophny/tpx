@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import os
+import plistlib
 from pathlib import Path
 import subprocess
 import sys
@@ -208,7 +209,8 @@ class ReleaseArtifactTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def create_artifacts(self, *, wrong_sha=None, missing_check=None,
-                         binary_version="2.0.0-beta.1", help_version="2.0.0-beta.1"):
+                         binary_version="2.0.0-beta.1", help_version="2.0.0-beta.1",
+                         bundle_short_version="2.0.0", document_extensions=("tpx",)):
         version = "2.0.0-beta.1"
         source = subprocess.check_output(["git", "archive", "--format=zip", self.commit], cwd=ROOT)
         for platform, suffix in verify_release.PLATFORMS:
@@ -221,10 +223,12 @@ class ReleaseArtifactTests(unittest.TestCase):
                 location = ""
             checks = sorted(verify_release.BASE_CHECKS)
             if platform.startswith("linux-"):
-                checks += ["TeX compilation", "packaged TeX compilation"]
+                checks += ["Linux desktop MIME and user registration",
+                           "TeX compilation", "packaged TeX compilation"]
             if platform.startswith("macos-"):
                 checks += ["native Cocoa font cancellation", "native Cocoa text shortcuts",
-                           "ad hoc signature verification", "signature tamper detection"]
+                           "ad hoc signature verification", "signature tamper detection",
+                           "Cocoa document type and app icon"]
             if missing_check and platform == missing_check[0]:
                 checks.remove(missing_check[1])
             manifest = {"status": "release", "release_status": "prerelease",
@@ -245,6 +249,31 @@ class ReleaseArtifactTests(unittest.TestCase):
                      "licenses/Lazarus-COPYING": b"license", "source.zip": source}
             if platform.startswith("macos-"):
                 files["TpX.app/Contents/_CodeSignature/CodeResources"] = b"signature"
+                files["TpX.app/Contents/Resources/TpX.icns"] = b"icon"
+                files["TpX.app/Contents/Info.plist"] = plistlib.dumps({
+                    "CFBundleIdentifier": "org.tpx.TpX",
+                    "CFBundleShortVersionString": bundle_short_version,
+                    "CFBundleVersion": "2.0.0",
+                    "CFBundleIconFile": "TpX.icns",
+                    "UTExportedTypeDeclarations": [{
+                        "UTTypeIdentifier": "org.tpx.TpX.drawing",
+                        "UTTypeTagSpecification": {
+                            "public.filename-extension": list(document_extensions),
+                            "public.mime-type": "application/x-tpx",
+                        },
+                    }],
+                    "CFBundleDocumentTypes": [{
+                        "LSItemContentTypes": ["org.tpx.TpX.drawing"],
+                        "CFBundleTypeRole": "Editor",
+                        "CFBundleTypeIconFile": "TpX.icns",
+                        "LSHandlerRank": "Owner",
+                    }],
+                })
+            if platform.startswith("linux-"):
+                files.update({"tpx.svg": b"svg",
+                              "org.tpx.TpX.desktop.in": b"desktop",
+                              "org.tpx.TpX.xml": b"mime",
+                              "install-linux-desktop-entry.sh": b"installer"})
             archive = self.directory / (name + suffix)
             with tempfile.TemporaryDirectory() as package_root:
                 package = Path(package_root) / name
@@ -304,6 +333,12 @@ class ReleaseArtifactTests(unittest.TestCase):
 
     def test_rejects_wrong_help_version(self):
         self.verify_fails(help_version="2.0.0")
+
+    def test_rejects_prerelease_suffix_in_macos_short_version(self):
+        self.verify_fails(bundle_short_version="2.0.0-beta.1")
+
+    def test_rejects_generic_macos_document_associations(self):
+        self.verify_fails(document_extensions=("tpx", "tex"))
 
     def test_rejects_incorrect_archive_version_names(self):
         self.create_artifacts()

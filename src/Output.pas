@@ -366,6 +366,9 @@ uses Math, StrUtils, ColorEtc, Preview,
   DevCanvas, DevSVG, DevTikZ, DevPS, DevPDF, DevPSTr, DevMP
 {$IFDEF FPC}
   , LazFileUtils, LazUTF8
+{$IFDEF WINDOWS}
+  , Windows
+{$ENDIF}
 {$ENDIF}
   ;
 
@@ -479,6 +482,17 @@ begin
   end;
 {$ENDIF}
 end;
+
+{$IFDEF FPC}{$IFDEF WINDOWS}
+function OutputCommandLineUTF8: UTF8String;
+var
+  WideCommandLine: PWideChar;
+begin
+  WideCommandLine := Windows.GetCommandLineW;
+  if WideCommandLine = nil then Exit('');
+  Result := UTF8Encode(UnicodeString(WideCommandLine));
+end;
+{$ENDIF}{$ENDIF}
 
 function CreateOutputFileStream(const FileName: TOutputPath): TStream;
 {$IFDEF FPC}
@@ -2580,7 +2594,13 @@ begin
   TeXFileName := '';
   OptList := TStringList.Create;
   try
+{$IFDEF FPC}{$IFDEF WINDOWS}
+    ParseCmdLine(OutputCommandLineUTF8, OptList);
+{$ELSE}
     ParseCmdLine(System.CmdLine, OptList);
+{$ENDIF}{$ELSE}
+    ParseCmdLine(System.CmdLine, OptList);
+{$ENDIF}
     for I := 1 to High(ShortOpt) do
       if OptList.IndexOfName(LongOpt[I]) >= 0 then
         OptList[I] := ShortOpt[I] + '=' +
@@ -2588,7 +2608,7 @@ begin
     FileName := OptList.Values['f'];
     if FileName = '' then
       FileName := OptList.Values['$FileName'];
-    if FileName <> '' then FileName := ExpandFileName(FileName);
+    if FileName <> '' then FileName := OutputExpandFileName(FileName);
     if OptList.IndexOfName('i') >= 0 then
       TeXFileName := OptList.Values['i'];
     if OptList.IndexOfName('l') >= 0 then

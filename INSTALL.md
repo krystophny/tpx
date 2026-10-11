@@ -18,6 +18,24 @@ Preferences live in `%APPDATA%\TpX\TpX.ini`; recovery drafts live in
 The release is tested on Windows Server 2025 with Desktop Experience.
 Windows may ask you to review this download because it is not Authenticode-signed.
 
+To add TpX to **Open with** for native `.tpx` drawings in your user account,
+run this once from the extracted folder in PowerShell:
+
+```powershell
+$exe = (Resolve-Path .\TpX.exe).Path
+$app = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Software\Classes\Applications\TpX.exe')
+$command = $app.CreateSubKey('shell\open\command')
+$command.SetValue('', ('"{0}" -f "%1"' -f $exe))
+$supported = $app.CreateSubKey('SupportedTypes')
+$supported.SetValue('.tpx', '')
+$command.Dispose(); $supported.Dispose(); $app.Dispose()
+```
+
+This adds an Open With entry without changing the default app for `.tpx` or
+other file types. Windows passes the quoted filename to TpX, including paths
+with spaces and Unicode characters. To remove the entry, run
+`Remove-Item 'HKCU:\Software\Classes\Applications\TpX.exe' -Recurse`.
+
 ## macOS
 
 Download `tpx-1.6.0-macos-aarch64.zip` for an Apple Silicon Mac. Extract it and
@@ -37,9 +55,10 @@ Keep the app bundle intact. Preferences are saved in
 `~/Library/Preferences/TpX/TpX.ini`, recovery drafts in
 `~/Library/Application Support/TpX/AutoSaveRecovery`, and the live TeX preview
 cache in `~/Library/Caches/TpX/preview-cache`. Bundled defaults and help are
-sealed in `Contents/Resources`. The template-editing menu opens writable copies in your
-preferences folder; changes there preserve the app signature. Editing files
-inside the app invalidates its signature.
+sealed in `Contents/Resources`. The template-editing menu opens writable copies
+in your preferences folder; changes there preserve the app signature. Editing
+files inside the app invalidates its signature. Finder and Open With can open
+native `.tpx` drawings with the TpX document icon.
 
 ## Linux
 
@@ -82,6 +101,12 @@ untouched. Portable mode requires that data folder to be writable.
 Choose **Help → Storage locations** to see the active paths. If TpX cannot
 create recovery storage, it reports the path and keeps the editor open; crash
 recovery is unavailable until that location is writable.
+
+To add an optional per-user launcher and make TpX the default opener for native
+`.tpx` drawings, run `./install-linux-desktop-entry.sh` from the extracted
+folder. This registers only `application/x-tpx`; portable execution remains
+available without running the script. The script writes under
+`$XDG_DATA_HOME` (or `~/.local/share`) and does not need administrator access.
 
 ## TeX and converters
 

@@ -632,6 +632,8 @@ type
       Sender: TObject): Boolean;
     procedure EditSessionChanged(Sender: TObject;
       Change: TEditSessionChange);
+    procedure OpenRequestedDocuments(Sender: TObject;
+      const FileNames: array of string);
 {$IFDEF FPC}
     procedure InitializeEmptyView(Data: PtrInt);
 {$IFNDEF CPUWASM32}
@@ -970,6 +972,68 @@ end;
 
 
 
+{$IFDEF FPC}
+procedure TMainForm.OpenRequestedDocuments(Sender: TObject;
+  const FileNames: array of string);
+var
+  I, J: Integer;
+  FileName: TDocumentPath;
+  CommandLine, ErrorText: string;
+  PrimaryWindowAssigned, Duplicate: Boolean;
+begin
+  PrimaryWindowAssigned := False;
+  for I := Low(FileNames) to High(FileNames) do
+  begin
+    if not SameText(ExtractFileExt(FileNames[I]), '.tpx') then Continue;
+    FileName := UTF8String(FileNames[I]);
+    Duplicate := False;
+    if TheDrawing.FileName <> '' then
+      Duplicate := SameDocumentPath(FileName,
+        TDocumentPath(TheDrawing.FileName));
+    if Duplicate then
+    begin
+      PrimaryWindowAssigned := True;
+      if not Visible then Show;
+      BringToFront;
+      Continue;
+    end;
+    for J := Low(FileNames) to I - 1 do
+      if SameText(ExtractFileExt(FileNames[J]), '.tpx') and
+        SameDocumentPath(FileName, TDocumentPath(FileNames[J])) then
+      begin
+        Duplicate := True;
+        Break;
+      end;
+    if Duplicate then Continue;
+
+    { Do not replace this drawing or start another window while the active
+      property editor still owns an uncommitted or composing draft. }
+    if not TrySettleEditSession then Exit;
+
+    if not PrimaryWindowAssigned then
+    begin
+      if BaseMode.AskSaveCurrentDrawing = mrCancel then Exit;
+      PrimaryWindowAssigned := True;
+      if not BaseMode.OpenDocumentFromPath(FileName, ErrorText) then
+        MessageBoxError('Can not open ' + string(FileName) + ': ' + ErrorText);
+    end
+    else
+    begin
+      CommandLine := QuoteShellArg(Application.ExeName) + ' -f ' +
+        QuoteShellArg(string(FileName));
+      if not FileExec(CommandLine, '', '', '', False, False) then
+        MessageBoxError('Could not open another TpX window for ' +
+          string(FileName));
+    end;
+  end;
+  if PrimaryWindowAssigned then
+  begin
+    if not Visible then Show;
+    BringToFront;
+  end;
+end;
+{$ENDIF}
+
 procedure TMainForm.FormCreate(Sender: TObject);
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
@@ -988,6 +1052,7 @@ begin
   FEditSession := nil;
   FEditSessionGateActive := False;
   EventManager.OnExit := OnExit;
+  OnDropFiles := OpenRequestedDocuments;
   EventManager.PushMode(BaseMode);
   EventManager.RecentFiles.OnChange := RecentChanged;
   Ruler1 := TRuler.Create(Panel2);
@@ -3808,7 +3873,6 @@ end;
 
 initialization
 {$IFDEF FPC}
-{$I MainUnit.lrs}
   DecimalSeparator := '.';
 {$ELSE}
 {$R *.dfm}

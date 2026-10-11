@@ -30,9 +30,16 @@ type
   end;
   TObserver = class
     CloseRequests: Integer;
+    OSOpenFirst, OSOpenSecond, OSOpenMarkerFirst,
+      OSOpenMarkerSecond: string;
+    OSOpenDeadline: QWord;
+    OSOpenTimer: TTimer;
+    OSOpenStage: Integer;
+    OSOpenSucceeded: Boolean;
     procedure Closing(Sender: TObject; var Action: TCloseAction);
     procedure ClosingDefault(Sender: TObject; var Action: TCloseAction);
     procedure RunClipboardScenarioInEventLoop(Sender: TObject);
+    procedure CheckOSOpenLaunchServices(Sender: TObject);
   end;
   TSourceWorkflowTimerObserver = class
     Timer: TTimer;
@@ -68,6 +75,23 @@ begin
   if not Condition then raise Exception.Create(Message);
 end;
 
+function WriteUTF8Marker(const FileName, Value: string): Boolean;
+var
+  Handle: THandle;
+  Data: AnsiString;
+begin
+  Result := False;
+  Handle := FileCreateUTF8(FileName);
+  if Handle = THandle(-1) then Exit;
+  Data := Value;
+  try
+    Result := (Length(Data) > 0) and
+      (FileWrite(Handle, Data[1], Length(Data)) = Length(Data));
+  finally
+    FileClose(Handle);
+  end;
+end;
+
 procedure TTestBitmapEntry.ConfigureLinkedPng(const AssetFileName,
   ParentFileName: string);
 begin
@@ -91,6 +115,39 @@ procedure TSourceWorkflowTimerObserver.TimerTick(Sender: TObject);
 begin
   Inc(Ticks);
   if Assigned(Previous) then Previous(Sender);
+end;
+
+procedure TObserver.CheckOSOpenLaunchServices(Sender: TObject);
+var
+  OpenedPath: TDocumentPath;
+begin
+  if GetTickCount64 >= OSOpenDeadline then
+  begin
+    OSOpenTimer.Enabled := False;
+    Application.Terminate;
+    Exit;
+  end;
+  OpenedPath := TDocumentPath(MainForm.TheDrawing.FileName);
+  if (OSOpenStage = 0) and
+    SameDocumentPath(TDocumentPath(OSOpenFirst), OpenedPath) then
+  begin
+    OSOpenSucceeded := WriteUTF8Marker(OSOpenMarkerFirst, 'FIRST');
+    if not OSOpenSucceeded then
+    begin
+      OSOpenTimer.Enabled := False;
+      Application.Terminate;
+      Exit;
+    end;
+    OSOpenStage := 1;
+    OSOpenDeadline := GetTickCount64 + 15000;
+  end
+  else if (OSOpenStage = 1) and
+    SameDocumentPath(TDocumentPath(OSOpenSecond), OpenedPath) then
+  begin
+    OSOpenSucceeded := WriteUTF8Marker(OSOpenMarkerSecond, 'PASS');
+    OSOpenTimer.Enabled := False;
+    Application.Terminate;
+  end;
 end;
 
 function AnswerPrompt(const Caption, Message: string; DialogType: LongInt;
@@ -1318,9 +1375,10 @@ var
   Expected: string;
   ExpectedCount: Integer;
   Line: TLine2D;
+  Marker: string;
 begin
-  Expected := GetEnvironmentVariable('TPX_STARTUP_EXPECTED');
-  ExpectedCount := StrToInt(GetEnvironmentVariable('TPX_STARTUP_OBJECTS'));
+  Expected := GetEnvironmentVariableUTF8('TPX_STARTUP_EXPECTED');
+  ExpectedCount := StrToInt(GetEnvironmentVariableUTF8('TPX_STARTUP_OBJECTS'));
   Check(MainForm.TheDrawing.FileName = Expected,
     'Startup document filename differs: ' + MainForm.TheDrawing.FileName);
   if ExpectedCount = 0 then
@@ -1334,6 +1392,66 @@ begin
     Check((Line.Points[1].X = 20) and (Line.Points[1].Y = 10),
       'Startup changed loaded line geometry');
   end;
+  Marker := GetEnvironmentVariableUTF8('TPX_STARTUP_MARKER');
+  if Marker <> '' then
+    Check(WriteUTF8Marker(Marker, 'PASS'), 'Could not write startup marker');
+end;
+
+procedure TestOSDocumentOpen;
+var
+  FirstPath, SecondPath: string;
+  Marker: string;
+  Deadline: QWord;
+  DraftText: TEditUtf8Text;
+  ErrorText: string;
+  TextObj: TText2D;
+  Session: TObjectEditSession;
+  Epoch: QWord;
+begin
+  FirstPath := GetEnvironmentVariableUTF8('TPX_OS_OPEN_FIRST');
+  SecondPath := GetEnvironmentVariableUTF8('TPX_OS_OPEN_SECOND');
+  Marker := GetEnvironmentVariableUTF8('TPX_STARTUP_MARKER');
+  Check((FirstPath <> '') and (SecondPath <> '') and (Marker <> ''),
+    'OS open fixture paths or child marker are missing');
+  Check(SameDocumentPath(TDocumentPath(SecondPath),
+    TDocumentPath(MainForm.TheDrawing.FileName)),
+    'Initial process did not open the requested second document');
+
+  TextObj := TText2D.CreateSpec(-1, Point2D(2, 3), 7, 'OS open draft');
+  MainForm.TheDrawing.AddObject(-1, TextObj);
+  MainForm.TheDrawing.History.Save;
+  MainForm.TheDrawing.History.SaveCheckSum;
+  Epoch := MainForm.CurrentDocumentEpoch;
+  Session := TObjectEditSession.Create(MainForm.TheDrawing, Epoch,
+    [TextObj.ID]);
+  try
+    Check(MainForm.RegisterEditSession(Session),
+      'OS-open draft session did not register');
+    Check(Session.TrySetRawDraft(opfTextHeight, '1e', ErrorText),
+      'OS-open invalid raw draft setup failed: ' + ErrorText);
+    MainForm.IntfDropFiles([FirstPath, SecondPath]);
+    Check(SameDocumentPath(TDocumentPath(SecondPath),
+      TDocumentPath(MainForm.TheDrawing.FileName)),
+      'OS open replaced the active document while its edit draft was invalid');
+    Check(Session.IsActive and Session.HasRawDraft(opfTextHeight, DraftText) and
+      (DraftText = '1e') and (TextObj.Height = 7),
+      'OS open discarded or committed the invalid edit draft');
+    Check(not FileExistsUTF8(Marker),
+      'OS open started another window while its edit draft was invalid');
+    Check(Session.Cancel(Epoch), 'OS-open invalid draft could not be canceled');
+  finally
+    MainForm.UnregisterEditSession(Session);
+    Session.Free;
+  end;
+
+  MainForm.IntfDropFiles([FirstPath, SecondPath]);
+  Check(SameDocumentPath(TDocumentPath(FirstPath),
+    TDocumentPath(MainForm.TheDrawing.FileName)),
+    'The running process did not open its first requested document');
+  Deadline := GetTickCount64 + 10000;
+  while not FileExistsUTF8(Marker) and (GetTickCount64 < Deadline) do Sleep(10);
+  Check(FileExistsUTF8(Marker),
+    'The second requested document did not open in a new process');
 end;
 
 {$IFDEF DARWIN}
@@ -1645,7 +1763,29 @@ begin
       WriteLn('PASS ', ParamStr(1));
       Halt(0);
     end;
-    if GetEnvironmentVariable('TPX_STARTUP_EXPECTED') <> '' then TestStartupFileName
+    if GetEnvironmentVariableUTF8('TPX_OS_OPEN_LS_FIRST') <> '' then
+    begin
+      Observer.OSOpenFirst := GetEnvironmentVariableUTF8('TPX_OS_OPEN_LS_FIRST');
+      Observer.OSOpenSecond := GetEnvironmentVariableUTF8('TPX_OS_OPEN_LS_SECOND');
+      Observer.OSOpenMarkerFirst :=
+        GetEnvironmentVariableUTF8('TPX_OS_OPEN_LS_MARKER_FIRST');
+      Observer.OSOpenMarkerSecond :=
+        GetEnvironmentVariableUTF8('TPX_OS_OPEN_LS_MARKER_SECOND');
+      Check((Observer.OSOpenSecond <> '') and
+        (Observer.OSOpenMarkerFirst <> '') and
+        (Observer.OSOpenMarkerSecond <> ''),
+        'LaunchServices test paths or markers are missing');
+      Observer.OSOpenDeadline := GetTickCount64 + 15000;
+      Observer.OSOpenTimer := TTimer.Create(nil);
+      Observer.OSOpenTimer.Interval := 20;
+      Observer.OSOpenTimer.OnTimer := Observer.CheckOSOpenLaunchServices;
+      Observer.OSOpenTimer.Enabled := True;
+      Application.Run;
+      Check(Observer.OSOpenSucceeded,
+        'LaunchServices did not open both requested documents');
+    end
+    else if ParamStr(1) = 'external-open' then TestOSDocumentOpen
+    else if GetEnvironmentVariableUTF8('TPX_STARTUP_EXPECTED') <> '' then TestStartupFileName
     else if Pos('viewport-', ParamStr(1)) = 1 then TestViewport(ParamStr(1))
     else if ParamStr(1) = 'live-tex-missing-tool' then TestLiveTeXMissingTool
     else if ParamStr(1) = 'live-tex' then TestLiveTeX
@@ -1719,7 +1859,11 @@ begin
     else if ParamStr(1) = 'mac-resources' then TestMacResourcePaths
 {$ENDIF}
     else TestExit(ParamStr(1));
-    if GetEnvironmentVariable('TPX_STARTUP_EXPECTED') <> '' then
+    if GetEnvironmentVariableUTF8('TPX_OS_OPEN_LS_FIRST') <> '' then
+      WriteLn('PASS launchservices-open')
+    else if ParamStr(1) = 'external-open' then
+      WriteLn('PASS external-open')
+    else if GetEnvironmentVariableUTF8('TPX_STARTUP_EXPECTED') <> '' then
       WriteLn('PASS startup-file')
     else WriteLn('PASS ', ParamStr(1));
   except

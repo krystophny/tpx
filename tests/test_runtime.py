@@ -2,11 +2,13 @@
 """Run native behavioral scenarios with bounded execution on Linux and macOS."""
 import os
 from pathlib import Path
+import plistlib
 import subprocess
 import shutil
 import struct
 import sys
 import tempfile
+import time
 import uuid
 import unittest
 
@@ -489,7 +491,7 @@ class RuntimeTests(unittest.TestCase):
         # Keep scenario selection out of argv so production startup sees real input.
         with tempfile.TemporaryDirectory(prefix="tpx startup-") as directory:
             root = Path(directory).resolve()
-            source = root / "drawing with spaces.tpx"
+            source = root / "drawing – β with spaces.tpx"
             source.write_text('%<TpX v="5">\n'
                               '%<line x1="0" y1="0" x2="20" y2="10"/>\n'
                               '%</TpX>\n')
@@ -510,6 +512,121 @@ class RuntimeTests(unittest.TestCase):
                                             text=True, timeout=40)
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                     self.assertIn("PASS startup-file", result.stdout, result.stderr)
+
+    @unittest.skipUnless(sys.platform == "darwin" and shutil.which("open"),
+                         "macOS LaunchServices is required")
+    def test_launchservices_opens_native_documents_when_closed_and_running(self):
+        with tempfile.TemporaryDirectory(prefix="tpx launchservices ") as temporary:
+            root = Path(temporary).resolve()
+            app = root / "TpX LaunchServices Test.app"
+            contents = app / "Contents"
+            executable_dir = contents / "MacOS"
+            resources = contents / "Resources"
+            executable_dir.mkdir(parents=True)
+            resources.mkdir()
+            executable = executable_dir / "RuntimeTests"
+            shutil.copy2(BINARY, executable)
+            for name in ("preview.tex.inc", "metapost.tex.inc", "help", "Help"):
+                source = BINARY.parent / name
+                destination = executable_dir / name
+                if source.is_dir():
+                    shutil.copytree(source, destination)
+                elif source.is_file():
+                    shutil.copy2(source, destination)
+            info = {
+                "CFBundleIdentifier": "org.tpx.TpX.launchservices-test",
+                "CFBundleExecutable": "RuntimeTests",
+                "CFBundleName": "TpX LaunchServices Test",
+                "CFBundlePackageType": "APPL",
+                "CFBundleShortVersionString": "1.0",
+                "CFBundleVersion": "1",
+                "UTExportedTypeDeclarations": [{
+                    "UTTypeIdentifier": "org.tpx.TpX.launchservices-test-drawing",
+                    "UTTypeConformsTo": ["public.data"],
+                    "UTTypeTagSpecification": {
+                        "public.filename-extension": ["tpx"],
+                        "public.mime-type": "application/x-tpx",
+                    },
+                }],
+                "CFBundleDocumentTypes": [{
+                    "CFBundleTypeName": "TpX drawing test",
+                    "CFBundleTypeRole": "Editor",
+                    "LSHandlerRank": "Owner",
+                    "LSItemContentTypes": [
+                        "org.tpx.TpX.launchservices-test-drawing"],
+                }],
+            }
+            with (contents / "Info.plist").open("wb") as stream:
+                plistlib.dump(info, stream)
+            first = root / "Dessin – β.tpx"
+            second = root / "図面 with spaces.tpx"
+            drawing = ('%<TpX v="5">\n'
+                       '%<line x1="0" y1="0" x2="20" y2="10"/>\n'
+                       '%</TpX>\n')
+            first.write_text(drawing, encoding="utf-8")
+            second.write_text(drawing, encoding="utf-8")
+            home = root / "home"
+            config = root / "config"
+            temp = root / "temp"
+            for directory in (home, config, temp):
+                directory.mkdir()
+            marker_first = root / "first-opened"
+            marker_second = root / "second-opened"
+            environment = [
+                ("TPX_OS_OPEN_LS_FIRST", first),
+                ("TPX_OS_OPEN_LS_SECOND", second),
+                ("TPX_OS_OPEN_LS_MARKER_FIRST", marker_first),
+                ("TPX_OS_OPEN_LS_MARKER_SECOND", marker_second),
+                ("HOME", home), ("USERPROFILE", home),
+                ("XDG_CONFIG_HOME", config), ("APPDATA", config),
+                ("TMPDIR", temp), ("TMP", temp), ("TEMP", temp),
+            ]
+            launch = ["open", "-n", "-a", str(app)]
+            for name, value in environment:
+                launch.extend(("--env", f"{name}={value}"))
+            first_result = subprocess.run(launch + [str(first)], capture_output=True,
+                                          text=True, timeout=20)
+            self.assertEqual(first_result.returncode, 0,
+                             first_result.stdout + first_result.stderr)
+            deadline = time.monotonic() + 16
+            while not marker_first.exists() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertTrue(marker_first.exists(),
+                            "LaunchServices did not open the closed app's document")
+            self.assertEqual(marker_first.read_text(encoding="ascii"), "FIRST")
+
+            second_result = subprocess.run(["open", "-a", str(app), str(second)],
+                                            capture_output=True, text=True, timeout=20)
+            self.assertEqual(second_result.returncode, 0,
+                             second_result.stdout + second_result.stderr)
+            deadline = time.monotonic() + 16
+            while not marker_second.exists() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertTrue(marker_second.exists(),
+                            "LaunchServices did not forward the document to the running app")
+            self.assertEqual(marker_second.read_text(encoding="ascii"), "PASS")
+
+    def test_os_open_event_handles_two_unicode_documents(self):
+        with tempfile.TemporaryDirectory(prefix="tpx OS open ") as directory:
+            root = Path(directory).resolve()
+            first = root / "Dessin – β.tpx"
+            second = root / "図形 with spaces.tpx"
+            contents = ('%<TpX v="5">\n'
+                        '%<line x1="0" y1="0" x2="20" y2="10"/>\n'
+                        '%</TpX>\n')
+            first.write_text(contents, encoding="utf-8")
+            second.write_text(contents, encoding="utf-8")
+            marker = root / "second-opened"
+            env = os.environ.copy()
+            env.update(TPX_STARTUP_EXPECTED=str(second), TPX_STARTUP_OBJECTS="1",
+                       TPX_STARTUP_MARKER=str(marker),
+                       TPX_OS_OPEN_FIRST=str(first), TPX_OS_OPEN_SECOND=str(second))
+            result = subprocess.run([str(BINARY), "external-open", "-f", str(second)],
+                                    cwd=root, env=env, capture_output=True,
+                                    text=True, timeout=40)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("PASS external-open", result.stdout, result.stderr)
+            self.assertEqual(marker.read_text(encoding="ascii"), "PASS")
 
     @unittest.skipUnless(shutil.which("pdflatex"), "pdflatex is not installed")
     def test_standalone_labeled_previews(self):
