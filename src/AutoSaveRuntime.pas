@@ -29,6 +29,7 @@ type
       const Assets: TRecoveryAssetArray);
     destructor Destroy; override;
     procedure AdoptDrawingFiles(Drawing: TDrawing2D);
+    procedure InstallBrowserAssets(Drawing: TDrawing2D);
     function CandidatePath: TDocumentPath;
     function HasOwnedAssets: Boolean;
   end;
@@ -274,6 +275,79 @@ begin
     if SameDocumentPath(DocumentPathDirectory(FileName), AssetDirectory) and
       DocumentFileExists(FileName) then OwnFile(FileName);
   end;
+end;
+
+procedure TRecoveryAssetContext.InstallBrowserAssets(Drawing: TDrawing2D);
+var I, J, Suffix: Integer; Entry: TBitmapEntry; SourcePath, TargetPath,
+  AssetDirectory: TDocumentPath; Snapshot, Existing: TDocumentSnapshot;
+  SourcePaths, TargetPaths, CreatedPaths: TStringList;
+begin
+{$IFNDEF CPUWASM32}
+  { Native recovery keeps the private asset directory with its codec context. }
+  Exit;
+{$ELSE}
+  if Drawing = nil then Exit;
+  AssetDirectory := IncludeTrailingPathDelimiter(FRootPath) + 'bitmaps';
+  SourcePaths := TStringList.Create;
+  TargetPaths := TStringList.Create;
+  CreatedPaths := TStringList.Create;
+  try
+    { Copy every recovery-owned bitmap to a safe root-level VFS path. Browser
+      downloads can bundle root files, while the private recovery tree is not
+      part of the browser host's download namespace. Reuse an existing file
+      only when its bytes match, so an original user asset is never replaced. }
+    for I := 0 to Drawing.BitmapRegistry.Count - 1 do
+    begin
+      Entry := Drawing.BitmapRegistry.Objects[I] as TBitmapEntry;
+      SourcePath := TDocumentPath(Entry.GetFullLink);
+      if not SameDocumentPath(DocumentPathDirectory(SourcePath),
+        AssetDirectory) or not DocumentFileExists(SourcePath) then Continue;
+      J := SourcePaths.IndexOf(string(SourcePath));
+      if J >= 0 then Continue;
+      Snapshot := ReadDocumentSnapshot(SourcePath);
+      Suffix := 1;
+      repeat
+        TargetPath := TDocumentPath('/tpx-recovery-asset-' +
+          Format('%.6d', [Suffix]) +
+          DocumentPathExtension(SourcePath));
+        if not DocumentFileExists(TargetPath) then
+        begin
+          WriteDocumentStagingFile(TargetPath, Snapshot.SourceBytes);
+          CreatedPaths.Add(string(TargetPath));
+          Break;
+        end;
+        Existing := ReadDocumentSnapshot(TargetPath);
+        if Existing.SourceBytes = Snapshot.SourceBytes then Break;
+        Inc(Suffix);
+        if Suffix > 1000000 then
+          raise EWriteError.Create('No safe browser path is available for a recovery bitmap');
+      until False;
+      SourcePaths.Add(string(SourcePath));
+      TargetPaths.Add(string(TargetPath));
+    end;
+    { Change links only after every copy succeeds, leaving the parsed candidate
+      and private assets intact if the browser VFS cannot accept a file. }
+    for I := 0 to Drawing.BitmapRegistry.Count - 1 do
+    begin
+      Entry := Drawing.BitmapRegistry.Objects[I] as TBitmapEntry;
+      SourcePath := TDocumentPath(Entry.GetFullLink);
+      if not SameDocumentPath(DocumentPathDirectory(SourcePath),
+        AssetDirectory) then Continue;
+      J := SourcePaths.IndexOf(string(SourcePath));
+      if J >= 0 then Entry.SetImageLink(string(TargetPaths[J]));
+    end;
+  except
+    for I := 0 to CreatedPaths.Count - 1 do
+      DeleteDocumentFile(TDocumentPath(CreatedPaths[I]));
+    CreatedPaths.Free;
+    TargetPaths.Free;
+    SourcePaths.Free;
+    raise;
+  end;
+  CreatedPaths.Free;
+  TargetPaths.Free;
+  SourcePaths.Free;
+{$ENDIF}
 end;
 
 function TRecoveryAssetContext.CandidatePath: TDocumentPath;
