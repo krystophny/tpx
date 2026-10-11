@@ -320,12 +320,20 @@ def s_recovery_skips_active_composition_and_restores_commit(app):
 
     def force_composition_checkpoint():
         generation = app.page.evaluate('window.tpxRecoveryTimerCreated')
-        app.page.wait_for_function('(old) => window.tpxRecoveryTimerCreated > old', arg=generation,
-                                   timeout=10000)
+        try:
+            app.page.wait_for_function('(old) => window.tpxRecoveryTimerCreated > old', arg=generation,
+                                       timeout=10000)
+        except Exception as exc:
+            raise AssertionError('composition did not arm recovery timer: ' +
+                                 app.page.locator('#tpx-recovery-state').inner_text()) from exc
         app.page.evaluate('window.tpxRecoveryCheckpointCommitted = false')
         app.page.evaluate('window.tpxRecoveryTimerCallback()')
-        app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Text composition is still active")',
-                                   timeout=10000)
+        try:
+            app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Text composition is still active")',
+                                       timeout=10000)
+        except Exception as exc:
+            raise AssertionError('forced composition checkpoint did not report pending composition: ' +
+                                 app.page.locator('#tpx-recovery-state').inner_text()) from exc
         rows = records(app.page)
         if len(rows) != 1 or rows[0]['payloadHash'] != before[0]['payloadHash']:
             raise AssertionError('an active composition replaced the last safe recovery payload')
