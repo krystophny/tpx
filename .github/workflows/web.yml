@@ -28,7 +28,6 @@ jobs:
       WASM_FPC: ${{ github.workspace }}/toolchain/fpc-lcl-wasm
       WASM_PAS2JS: ${{ github.workspace }}/toolchain/pas2js
       WASM_BIN: ${{ github.workspace }}/toolchain/bin
-      CHROMIUM: ${{ runner.temp }}/chromium/chrome-linux64/chrome
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -68,7 +67,9 @@ jobs:
                   if mode and path.exists():
                       path.chmod(mode)
           PY
-          "$CHROMIUM" --version
+          chromium="$RUNNER_TEMP/chromium/chrome-linux64/chrome"
+          "$chromium" --version
+          echo "CHROMIUM=$chromium" >> "$GITHUB_ENV"
 
       - name: Read toolchain cache pins
         id: pins
