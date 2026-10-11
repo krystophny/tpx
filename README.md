@@ -187,10 +187,25 @@ center, and right alignment. Enter a complete math expression such as
 `$(a+b)$` in the text field, or use the **TeX source** field for other LaTeX code.
 Choose the Text tool and click the canvas to type at a new label's position;
 click an existing label with that tool or double-click it in selection mode to
-edit it. Enter inserts a line break, while
+edit it. With a text label selected, **Edit → Edit text** also opens the
+canvas editor. Enter inserts a line break, while
 Ctrl+Enter (or Command+Enter on macOS), Tab, or **Done** finishes the edit.
 Escape cancels the uncommitted edit after any active input-method composition
 ends.
+
+Use **Edit → Object properties** to open the Object Inspector on the right;
+**View → Object inspector** toggles it, and its splitter can be dragged to
+resize the panel. Collapse a section to make room for the drawing. When a
+selection contains different values for a field, the Inspector shows **Mixed**;
+editing that field applies only that property to the selected objects and
+preserves their other individual values. Coordinates, transforms, scale and
+preferences keep their dedicated dialogs. File pickers and explicit
+discard/replacement confirmations remain dialogs as well.
+
+For a short desktop workflow check, draw a line and rectangle, create a canvas
+label, change line width and text height in the Inspector, and edit the label's
+TeX source in place. Use Tab, undo/redo, resize or collapse the Inspector, then
+save and reopen; check that the geometry, anchor, Text and TeX source remain.
 Desktop live previews typeset TeX text in the canvas using LaTeX and `dvipng`,
 with reusable SVG output when `dvisvgm` is available. **View → Live LaTeX
 Preview** toggles this behavior; it is enabled by default. Without the tools,
@@ -280,6 +295,10 @@ cd ~/code/lazarus
 git apply ~/code/tpx/ci/patches/lazarus-4.8-opendocument.patch
 git apply ~/code/tpx/ci/patches/lazarus-4.8-cocoa-font-cancel.patch
 git apply ~/code/tpx/ci/patches/lazarus-4.8-cocoa-text-shortcuts.patch
+git apply ~/code/tpx/ci/patches/lazarus-4.8-gtk2-text-composition.patch
+git apply ~/code/tpx/ci/patches/lazarus-4.8-cocoa-text-composition.patch
+git apply ~/code/tpx/ci/patches/lazarus-4.8-cocoa-field-editor-ime.patch
+git apply ~/code/tpx/ci/patches/lazarus-4.8-cocoa-focus-handoff.patch
 make lazbuild LCL_PLATFORM=cocoa CPU_TARGET=aarch64 FPC="$HOME/.local/tpx-fpc/bin/fpc"
 cd ~/code/tpx
 make test WIDGETSET=cocoa LAZBUILD="$HOME/code/lazarus/lazbuild" \

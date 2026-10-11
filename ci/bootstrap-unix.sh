@@ -42,6 +42,7 @@ git -C "$tpx_lazarus" apply "$GITHUB_WORKSPACE/ci/patches/lazarus-4.8-cocoa-text
 git -C "$tpx_lazarus" apply "$GITHUB_WORKSPACE/ci/patches/lazarus-4.8-gtk2-text-composition.patch"
 git -C "$tpx_lazarus" apply "$GITHUB_WORKSPACE/ci/patches/lazarus-4.8-cocoa-text-composition.patch"
 git -C "$tpx_lazarus" apply "$GITHUB_WORKSPACE/ci/patches/lazarus-4.8-cocoa-field-editor-ime.patch"
+git -C "$tpx_lazarus" apply "$GITHUB_WORKSPACE/ci/patches/lazarus-4.8-cocoa-focus-handoff.patch"
 make -C "$tpx_lazarus" lazbuild LCL_PLATFORM="$WIDGETSET" FPC="$tpx_compiler"
 echo "LAZARUS_DIR=$tpx_lazarus" >> "$GITHUB_ENV"
 echo "LAZBUILD=$tpx_lazarus/lazbuild" >> "$GITHUB_ENV"

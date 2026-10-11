@@ -59,7 +59,7 @@ def focus_document(app, v):
     Clicking a toolbar button must not take that focus away (fixed in the WASI
     CustomDrawn backend), which is what makes Ctrl+Z and Escape work here.
     """
-    app.click(v['x'] + v['w'] - 60, v['y'] + 40)
+    app.click(v['x'] + v['w'] - 60, v['y'] + v['h'] - 60)
     app.page.wait_for_timeout(200)
 
 
@@ -1238,7 +1238,76 @@ def s_nested_coordinates(app):
     app.key('Escape')
     app.menu('Edit', 'Select all')
     app.menu('Edit', 'Object properties')
-    app.page.get_by_role('button', name='Point coordinates…', exact=True).click()
+    coordinates = app.page.get_by_role('button', name='Point coordinates…', exact=True)
+    initial = coordinates.bounding_box()
+    if initial is None:
+        raise AssertionError('coordinate editor action has no rendered bounds')
+    canvas = app.box()
+    # Wheel over the right-side Inspector gutter; its event can target either
+    # the painted LCL surface or one of its DOM overlays while it scrolls.
+    page_x = canvas['x'] + canvas['w'] - 6
+    page_y = canvas['y'] + canvas['h'] * 0.55
+    wheel_x = (page_x - canvas['x']) * canvas['nw'] / canvas['w']
+    wheel_y = (page_y - canvas['y']) * canvas['nh'] / canvas['h']
+    wheel_point = {'x': page_x, 'y': page_y}
+    in_app_surface = '''p => {
+      const surface=document.querySelector('#lcl-surface');
+      const target=document.elementFromPoint(p.x,p.y);
+      return !!surface && !!target && (target === surface || surface.contains(target));
+    }'''
+    if not app.page.evaluate(in_app_surface, wheel_point):
+        raise AssertionError('Inspector wheel point is outside the application surface')
+    page_scroll = app.page.evaluate('window.scrollY')
+    shown = None
+    last_y = initial['y']
+    stable_ticks = 0
+    moved = False
+    for _ in range(256):
+        if not app.page.evaluate(in_app_surface, wheel_point):
+            raise AssertionError('Inspector wheel point left the application surface')
+        app.wheel(wheel_x, wheel_y, 120)
+        shown = coordinates.bounding_box()
+        if shown and shown['y'] < last_y - 0.5:
+            moved = True
+        if shown and abs(shown['y'] - last_y) < 0.5:
+            stable_ticks += 1
+        else:
+            stable_ticks = 0
+        if shown:
+            last_y = shown['y']
+        if (shown and stable_ticks >= 2 and canvas['y'] <= shown['y']
+                and shown['y'] + shown['height'] <= canvas['y'] + canvas['h']):
+            break
+    canvas_after = app.box()
+    if (shown is None or not moved or stable_ticks < 2
+            or shown['x'] < canvas['x']
+            or shown['x'] + shown['width'] > canvas['x'] + canvas['w']
+            or shown['y'] < canvas['y'] or shown['y'] >= initial['y']
+            or shown['y'] + shown['height'] > canvas['y'] + canvas['h']
+            or app.page.evaluate('window.scrollY') != page_scroll
+            or any(canvas_after[key] != canvas[key] for key in ('x', 'y', 'w', 'h'))):
+        raise AssertionError(
+            'real Inspector wheel input did not reveal the coordinate action '
+            f'without scrolling the page (y {initial["y"]:.0f} → '
+            f'{shown["y"] if shown else "missing"})')
+    paper_before = app.pixels(region(cx, cy, 240, 180))
+    if not app.page.evaluate(in_app_surface, wheel_point):
+        raise AssertionError('Inspector boundary wheel point left the application surface')
+    app.wheel(wheel_x, wheel_y, 120)
+    boundary = coordinates.bounding_box()
+    if (boundary is None or abs(boundary['y'] - shown['y']) >= 0.5
+            or diff(paper_before, app.pixels(region(cx, cy, 240, 180))) != 0
+            or app.page.evaluate('window.scrollY') != page_scroll
+            or any(app.box()[key] != canvas[key] for key in ('x', 'y', 'w', 'h'))):
+        raise AssertionError('Inspector boundary wheel changed the paper or page position')
+    hit_button = coordinates.evaluate('''(button,p) => {
+      const hit=document.elementFromPoint(p.x,p.y);
+      return hit === button || button.contains(hit);
+    }''', {'x': shown['x'] + shown['width'] / 2,
+           'y': shown['y'] + shown['height'] / 2})
+    if not hit_button:
+        raise AssertionError('coordinate action is not the hit target after scrolling')
+    coordinates.click()
     app.page.wait_for_function('document.querySelector("#lcl").width === 530')
     app.click(155, 55)  # First x-coordinate cell in the fixed-size Table LFM
     app.key('F2')
@@ -1372,6 +1441,475 @@ def s_tex_preview(app):
     return f'lazy MathJax changed {changed} pixels; toggle/cache/save/fallback and idle verified'
 
 
+
+def s_nonmodal_editing_workflow(app):
+    """Keep canvas geometry and both text sources through an integrated edit."""
+    import copy
+    import math
+    import re
+    from playwright.sync_api import expect
+
+    native_dialogs = []
+    popups = []
+
+    def dismiss_and_record(dialog):
+        native_dialogs.append(dialog.type)
+        dialog.dismiss()
+
+    app.page.on('dialog', dismiss_and_record)
+    app.page.on('popup', lambda page: popups.append(page.url))
+
+    # End with the inspector visible: if the first toggle hid it, paper grows
+    # and the second toggle restores it. This scenario checks coexistence.
+    previous_width = app.viewport()['w']
+    app.menu('View', 'Object inspector')
+    if app.viewport()['w'] > previous_width:
+        app.menu('View', 'Object inspector')
+    # Recompute canvas coordinates after the side panel changes its layout.
+    v, cx, cy = box(app)
+    app.menu('Insert', 'Insert line')
+    app.drag(cx - 130, cy - 70, cx + 90, cy - 30)
+    app.key('Escape')
+    app.menu('Insert', 'Insert rectangle')
+    app.drag(cx + 25, cy + 15, cx + 125, cy + 85)
+    app.key('Escape')
+
+    # Change a real line through the same inspector used by the label edit.
+    # These values also make the later undo/redo and reopen oracle non-default.
+    app.click(cx - 20, cy - 50)
+    app.menu('Edit', 'Object properties')
+    line_width = app.page.get_by_role('textbox', name='Width multiplier', exact=True)
+    line_width.fill('2.25')
+    line_width.press('Enter')
+
+    def open_painted_picker(anchor, lower_anchor, fraction, value):
+        first = anchor.bounding_box()
+        last = lower_anchor.bounding_box()
+        if first is None or last is None:
+            raise AssertionError(f'inspector controls for {value!r} are not rendered')
+        first_center = first['y'] + first['height'] / 2
+        last_center = last['y'] + last['height'] / 2
+        y = first_center + (last_center - first_center) * fraction
+        # WASI paints LCL combo boxes into the canvas; the host exposes the
+        # opened list as a small accessible picker dialog.
+        app.page.mouse.click(first['x'] + first['width'] - 8, y)
+        picker = app.page.get_by_role('dialog', name='Choose item', exact=True)
+        picker.wait_for()
+        return picker
+
+    def choose_painted_item(anchor, lower_anchor, fraction, value):
+        picker = open_painted_picker(anchor, lower_anchor, fraction, value)
+        picker.locator('select').select_option(label=value)
+        picker.get_by_role('button', name='OK', exact=True).click()
+
+    arrow_size = app.page.get_by_role('textbox', name='Arrow size multiplier', exact=True)
+    # End arrow sits two rows after Width and one before Arrow size.
+    choose_painted_item(line_width, arrow_size, 2 / 3, 'h40')
+
+    # Collapse unrelated sections while the Line section is still in view.
+    # Later text-field focus scrolls the Inspector to keep its editor visible.
+    app.page.get_by_role('button', name='▾ Line', exact=True).click()
+    app.page.get_by_role('button', name='▾ Fill and hatching', exact=True).click()
+
+    app.menu('Insert', 'Insert text')
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('Insert text opened a dialog')
+    app.click(cx - 80, cy - 40)
+    text_editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    expect(text_editor).to_be_focused(timeout=3000)
+    app.type('Fallback λ')
+    if text_editor.input_value() != 'Fallback λ':
+        raise AssertionError('canvas keyboard input did not reach the new label')
+    app.page.get_by_role('button', name='Done', exact=True).click()
+
+    # Select the newly committed label through the canvas before opening its
+    # properties, so the text-specific inspector fields are exercised.
+    app.click(cx - 80, cy - 40)
+    app.menu('Edit', 'Object properties')
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('Object properties opened a dialog')
+    tex = app.page.get_by_role('textbox', name='TeX source', exact=True)
+    height = app.page.get_by_role('textbox', name='Text height (mm)', exact=True)
+    font_family = app.page.get_by_role('textbox', name='Font family', exact=True)
+    if tex.input_value() != '':
+        raise AssertionError(f'new label inspector started with unexpected TeX: {tex.input_value()}')
+    if not tex.is_enabled() or not height.is_enabled():
+        raise AssertionError('text properties were unavailable after selecting the new label')
+    tex.fill(r'$\beta_{i}$')
+    tex.press('Control+Enter')
+    if tex.input_value() != r'$\beta_{i}$' or not height.is_enabled():
+        raise AssertionError('committing TeX changed the selected label or its Inspector fields')
+    font_family.fill('Arial')
+    font_family.press('Enter')
+    if font_family.input_value() != 'Arial':
+        raise AssertionError('committing the font family changed its inspector value')
+    rotation = app.page.get_by_role('textbox', name='Text angle (degrees)', exact=True)
+
+    def assert_control_inside_lcl(control, stage):
+        control_box = control.bounding_box()
+        lcl_box = app.page.locator('#lcl').bounding_box()
+        if control_box is None or lcl_box is None:
+            raise AssertionError(f'{stage}: focused Inspector control has no visible bounds')
+        if (control_box['x'] < lcl_box['x'] - 1 or
+                control_box['y'] < lcl_box['y'] - 1 or
+                control_box['x'] + control_box['width'] >
+                lcl_box['x'] + lcl_box['width'] + 1 or
+                control_box['y'] + control_box['height'] >
+                lcl_box['y'] + lcl_box['height'] + 1):
+            raise AssertionError(
+                f'{stage}: Inspector control escaped the visible LCL canvas: '
+                f'control={control_box}, canvas={lcl_box}')
+
+    # The Inspector owns its own scrollbox; unrelated sections were collapsed
+    # before the selected Text fields took focus.
+    if not height.is_enabled():
+        raise AssertionError('collapsing unrelated Inspector sections changed the selected label')
+    height.fill('2.75')
+    if height.input_value() != '2.75' or not tex.is_enabled():
+        raise AssertionError('starting the height edit changed the selected label or text')
+    height.press('Tab')
+    expect(font_family).to_be_focused(timeout=3000)
+    if not height.is_enabled() or height.input_value() != '2.75':
+        raise AssertionError('Tab did not commit height and focus the next Inspector field')
+    app.page.keyboard.press('Shift+Tab')
+    expect(height).to_be_focused(timeout=3000)
+    if height.input_value() != '2.75':
+        raise AssertionError('Shift+Tab did not return to the committed height field')
+
+    # Continue through the painted style and alignment controls using the
+    # actual keyboard route. The chooser's checked option independently
+    # confirms each owner-drawn control received ArrowDown.
+    height.press('Tab')
+    expect(font_family).to_be_focused(timeout=3000)
+    font_family.press('Tab')
+    app.page.keyboard.press('ArrowDown')
+    style_picker = open_painted_picker(font_family, rotation, 1 / 3,
+                                       'Font style')
+    style_selection = style_picker.locator('select').locator(
+        'option:checked').inner_text()
+    if style_selection != 'Bold':
+        style_picker.get_by_role('button', name='Cancel', exact=True).click()
+        raise AssertionError(
+            f'Tab/ArrowDown left Font style at {style_selection!r}')
+    style_picker.get_by_role('button', name='OK', exact=True).click()
+
+    app.page.keyboard.press('Tab')
+    app.page.keyboard.press('ArrowDown')
+    alignment_picker = open_painted_picker(height, rotation, 3 / 4,
+                                           'Horizontal alignment')
+    alignment_selection = alignment_picker.locator('select').locator(
+        'option:checked').inner_text()
+    if alignment_selection != 'Center':
+        alignment_picker.get_by_role('button', name='Cancel', exact=True).click()
+        raise AssertionError(
+            f'Tab/ArrowDown left Horizontal alignment at {alignment_selection!r}, expected Center')
+    alignment_picker.get_by_role('button', name='OK', exact=True).click()
+
+    app.page.keyboard.press('Tab')
+    expect(rotation).to_be_focused(timeout=3000)
+    rotation_value = rotation.input_value()
+    rotation.press('Shift+Tab')
+    app.page.keyboard.press('ArrowDown')
+    alignment_picker = open_painted_picker(height, rotation, 3 / 4,
+                                           'Horizontal alignment')
+    alignment_selection = alignment_picker.locator('select').locator(
+        'option:checked').inner_text()
+    if alignment_selection != 'Right' or rotation.input_value() != rotation_value:
+        alignment_picker.get_by_role('button', name='Cancel', exact=True).click()
+        raise AssertionError(
+            'Shift+Tab did not return to alignment without changing Text angle')
+    alignment_picker.locator('select').select_option(label='Center')
+    alignment_picker.get_by_role('button', name='OK', exact=True).click()
+    app.page.keyboard.press('Tab')
+    expect(rotation).to_be_focused(timeout=3000)
+    assert_control_inside_lcl(rotation, 'Text angle focus')
+    if app.capture_requested:
+        app.shot('inspector-text-angle-focused')
+    rotation.press('Tab')
+    stars_section = app.page.get_by_role('button').filter(has_text=re.compile(
+        r'^(?:(?:▾|▸)\s*)?Stars and symbols$'))
+    expect(stars_section).to_be_focused(timeout=3000)
+    assert_control_inside_lcl(stars_section, 'Tab destination')
+    active_field = app.page.evaluate(
+        '() => document.activeElement?.getAttribute("aria-label") || ""')
+    if active_field in {
+            'Text', 'TeX source', 'Text height (mm)', 'Font family',
+            'Font style', 'Horizontal alignment', 'Text angle (degrees)'}:
+        raise AssertionError('Tab from the final Inspector field wrapped inside the Inspector')
+    app.page.keyboard.press('Shift+Tab')
+    expect(rotation).to_be_focused(timeout=3000)
+    assert_control_inside_lcl(rotation, 'Shift+Tab destination')
+    if rotation.input_value() != rotation_value:
+        raise AssertionError('Shift+Tab changed Text angle while returning from Stars and symbols')
+
+    # Finish the numeric editor explicitly before opening the canvas editor.
+    # This keeps the cross-view check independent of blur-commit behavior.
+    px, py = app.at(cx - 80, cy - 40)
+    app.page.mouse.dblclick(px, py, delay=80)
+    handoff_editor = app.page.get_by_role('textbox', name='TeX source (canvas)', exact=True)
+    handoff_editor.wait_for()
+    if (handoff_editor.input_value() != r'$\beta_{i}$' or
+            height.input_value() != '2.75'):
+        raise AssertionError(
+            'moving from inspector to canvas changed committed values: '
+            f'TeX={handoff_editor.input_value()!r}, height={height.input_value()!r}')
+    app.page.get_by_role('button', name='Done', exact=True).click()
+    app.page.wait_for_timeout(150)
+    if handoff_editor.count():
+        raise AssertionError('the inspector-to-canvas handoff left a stale editor visible')
+
+    def no_edit_dialogs():
+        if native_dialogs:
+            raise AssertionError(f'ordinary editing opened browser dialogs: {native_dialogs}')
+        if popups:
+            raise AssertionError(f'ordinary editing opened new pages: {popups}')
+        if app.page.get_by_role('dialog').count():
+            raise AssertionError('ordinary editing left a modal dialog open')
+
+    no_edit_dialogs()
+    baseline_path = app.save('nonmodal-initial.tpx')
+    baseline = drawing_xml(baseline_path)
+    if [obj.tag for obj in baseline] != ['line', 'rect', 'text']:
+        raise AssertionError(f'workflow saved the wrong scene: {[obj.tag for obj in baseline]}')
+    baseline_attrs = [copy.deepcopy(obj.attrib) for obj in baseline]
+    if (baseline[0].get('x1') == baseline[0].get('x2') and
+            baseline[0].get('y1') == baseline[0].get('y2')):
+        raise AssertionError(f'line tool saved a zero-length line: {baseline[0].attrib}')
+    if (float(baseline[1].get('w', '0')) <= 0 or
+            float(baseline[1].get('h', '0')) <= 0):
+        raise AssertionError(f'rectangle tool saved invalid geometry: {baseline[1].attrib}')
+    label = baseline[2]
+    font = label.find('font')
+    if (font is None or font.get('face') != 'Arial' or font.get('bf') != '1'):
+        raise AssertionError(f'keyboard Font-style selection was not saved as bold: {label.attrib}')
+    baseline_font = copy.deepcopy(font.attrib)
+    if (decode_tpx_text_once(label.get('t', '')) != 'Fallback λ' or
+            label.get('tex') != r'$\beta_{i}$' or
+            float(label.get('h', '0')) != 2.75):
+        raise AssertionError(f'inspector values were not saved independently: {label.attrib}')
+    if (label.get('halign', 'l') != 'c' or
+            any(not math.isfinite(float(label.get(field, 'nan')))
+                for field in ('x', 'y'))):
+        raise AssertionError(f'canvas label lost centered alignment or finite anchor: {label.attrib}')
+    if float(baseline[0].get('lw', '0')) != 2.25 or baseline[0].get('arr2') != 'h40':
+        raise AssertionError(f'inspector stroke or arrow values were not saved: {baseline[0].attrib}')
+
+    def snapshot(name):
+        objects = drawing_xml(app.save(name))
+        attrs = [obj.attrib for obj in objects]
+        if [obj.tag for obj in objects] != ['line', 'rect', 'text']:
+            raise AssertionError(f'{name} changed the object count or types')
+        if attrs[0] != baseline_attrs[0] or attrs[1] != baseline_attrs[1]:
+            raise AssertionError(f'{name} changed line or rectangle geometry/style')
+        saved_font = objects[2].find('font')
+        if saved_font is None or saved_font.attrib != baseline_font:
+            raise AssertionError(f'{name} changed the committed text font: {saved_font}')
+        return attrs[2]
+
+    def focus_canvas_for_history():
+        focus_document(app, v)
+        expect(app.page.locator('#lcl')).to_be_focused(timeout=3000)
+
+    # An over-limit live draft must keep its buffer, caret and editor when an
+    # Inspector handoff is refused; Cancel then restores the committed source.
+    px, py = app.at(cx - 80, cy - 40)
+    app.page.mouse.dblclick(px, py, delay=80)
+    blocked_editor = app.page.get_by_role(
+        'textbox', name='TeX source (canvas)', exact=True)
+    blocked_editor.wait_for()
+    oversized = 'x' * 65537
+    blocked_editor.fill(oversized)
+    overflow_selection = blocked_editor.evaluate(
+        '(e) => [e.selectionStart, e.selectionEnd]')
+    height.click()
+    expect(blocked_editor).to_be_focused(timeout=3000)
+    if (blocked_editor.input_value() != oversized or
+            blocked_editor.evaluate('(e) => [e.selectionStart, e.selectionEnd]') !=
+            overflow_selection or height.input_value() != '2.75'):
+        raise AssertionError(
+            'refused Inspector handoff changed buffer/caret or committed height: '
+            f'buffer length={len(blocked_editor.input_value())}, '
+            f'selection={blocked_editor.evaluate("(e) => [e.selectionStart, e.selectionEnd]")}, '
+            f'height={height.input_value()!r}')
+    app.page.get_by_role('button', name='Cancel', exact=True).click()
+    blocked_editor.wait_for(state='hidden')
+    if tex.input_value() != r'$\beta_{i}$' or height.input_value() != '2.75':
+        raise AssertionError(
+            'canceling the refused draft changed its committed source or height: '
+            f'TeX={tex.input_value()!r}, height={height.input_value()!r}')
+    if snapshot('nonmodal-overflow-cancelled.tpx') != baseline_attrs[2]:
+        raise AssertionError('canceling the refused raw draft changed the saved scene')
+
+    v = app.viewport()
+    px, py = app.at(cx - 80, cy - 40)
+    zoom_region = region(cx - 160, cy - 110, 320, 220)
+    before_zoom = app.pixels(zoom_region)
+
+    def zoom_at_label(wheel_steps):
+        app.page.keyboard.down('Control')
+        try:
+            delta = 120 if wheel_steps > 0 else -120
+            for _ in range(abs(wheel_steps)):
+                app.wheel(cx - 80, cy - 40, delta)
+        finally:
+            app.page.keyboard.up('Control')
+        app.page.wait_for_timeout(120)
+
+    # WASI normalizes every browser wheel event to one LCL tick; each Ctrl
+    # tick scales by 2**(1/8), independent of the browser delta magnitude.
+    # Five ticks reach about 154%; three more reach 200%; eight back restore 100%.
+    zoom_at_label(5)
+    at_150 = app.pixels(zoom_region)
+    if diff(before_zoom, at_150) < 40:
+        raise AssertionError('about 150% canvas zoom did not change the edited scene')
+    if snapshot('nonmodal-zoom-150.tpx') != baseline_attrs[2]:
+        raise AssertionError('150% canvas zoom changed the label or its world anchor')
+    zoom_at_label(3)
+    at_200 = app.pixels(zoom_region)
+    if diff(at_150, at_200) < 40:
+        raise AssertionError('200% canvas zoom did not change the edited scene again')
+    if snapshot('nonmodal-zoom-200.tpx') != baseline_attrs[2]:
+        raise AssertionError('200% canvas zoom changed the label or its world anchor')
+    zoom_at_label(-8)
+    restored_zoom = app.pixels(zoom_region)
+    if diff(before_zoom, restored_zoom) > 1000:
+        raise AssertionError('returning to 100% did not restore the starting view')
+    if snapshot('nonmodal-zoom-100.tpx') != baseline_attrs[2]:
+        raise AssertionError('returning to 100% changed the label or its world anchor')
+
+    # The cursor anchor remains usable after zoom changes.
+    px, py = app.at(cx - 80, cy - 40)
+    app.page.mouse.dblclick(px, py, delay=80)
+    editor = app.page.get_by_role('textbox', name='TeX source (canvas)', exact=True)
+    editor.wait_for()
+    if not editor.is_visible() or not tex.is_visible():
+        raise AssertionError('the inline editor and inspector did not remain visible together')
+    editor.fill(r'$\gamma_{j}$')
+    app.menu('View', 'Object inspector')
+    app.page.wait_for_timeout(200)
+    if not editor.is_visible() or editor.input_value() != r'$\gamma_{j}$':
+        raise AssertionError('collapsing the inspector lost or hid the active text buffer')
+    app.menu('View', 'Object inspector')
+    app.page.wait_for_timeout(200)
+    if (not editor.is_visible() or not tex.is_visible() or
+            editor.input_value() != r'$\gamma_{j}$'):
+        raise AssertionError('reopening the inspector lost or hid the active text buffer')
+    browser_size = app.page.viewport_size
+    app.page.set_viewport_size({'width': 900, 'height': 720})
+    app.page.wait_for_timeout(200)
+    editor_box = editor.bounding_box()
+    if (not editor.is_visible() or editor.input_value() != r'$\gamma_{j}$' or
+            editor_box is None or editor_box['x'] < 0 or editor_box['y'] < 0 or
+            editor_box['x'] + editor_box['width'] > 900 or
+            editor_box['y'] + editor_box['height'] > 720):
+        raise AssertionError('resizing the workspace hid or moved the active text buffer off-screen')
+    app.page.set_viewport_size(browser_size)
+    app.page.wait_for_timeout(200)
+    v = app.viewport()
+    if not editor.is_visible() or editor.input_value() != r'$\gamma_{j}$':
+        raise AssertionError('restoring the workspace size lost the active text buffer')
+    # A deliberate click in another Inspector field settles the valid canvas
+    # draft first, then gives keyboard focus to the new field before its first
+    # character is typed. This catches a commit callback that refocuses canvas.
+    height.click()
+    expect(height).to_be_focused(timeout=3000)
+    height.press('Control+A')
+    height.type('3.125')
+    if height.input_value() != '3.125':
+        raise AssertionError(
+            f'keyboard input after inline settlement was lost or changed: {height.input_value()!r}')
+    height.press('Enter')
+    app.page.wait_for_timeout(150)
+    if editor.count() or height.input_value() != '3.125':
+        raise AssertionError(
+            'switching to the Inspector failed to settle inline text and commit '
+            f'height: inline editors={editor.count()}, height={height.input_value()!r}')
+    no_edit_dialogs()
+    edited = snapshot('nonmodal-cross-view-edited.tpx')
+    expected_edited = copy.deepcopy(baseline_attrs[2])
+    expected_edited['tex'] = r'$\gamma_{j}$'
+    expected_edited['h'] = '3.125'
+    if edited != expected_edited:
+        raise AssertionError(f'cross-view edits changed source, anchor, style or unrelated fields: {edited}')
+
+    focus_canvas_for_history()
+    app.key('Control+z')
+    undone_height = snapshot('nonmodal-height-undone.tpx')
+    expected_gamma = copy.deepcopy(baseline_attrs[2])
+    expected_gamma['tex'] = r'$\gamma_{j}$'
+    if undone_height != expected_gamma:
+        raise AssertionError(f'height undo crossed the inline text edit: {undone_height}')
+    focus_canvas_for_history()
+    app.key('Control+Shift+z')
+    redone_height = snapshot('nonmodal-height-redone.tpx')
+    if redone_height != expected_edited:
+        raise AssertionError(f'height redo did not restore its own committed edit: {redone_height}')
+    focus_canvas_for_history()
+    app.key('Control+z')
+    undone_height_again = snapshot('nonmodal-height-undone-again.tpx')
+    if undone_height_again != expected_gamma:
+        raise AssertionError(f'second height undo crossed the inline text edit: {undone_height_again}')
+    focus_canvas_for_history()
+    app.key('Control+z')
+    undone_text = snapshot('nonmodal-text-undone.tpx')
+    if undone_text != baseline_attrs[2]:
+        raise AssertionError(f'text undo did not restore the complete prior object: {undone_text}')
+    focus_canvas_for_history()
+    app.key('Control+Shift+z')
+    redone_text = snapshot('nonmodal-text-redone.tpx')
+    if redone_text != expected_gamma:
+        raise AssertionError(f'text redo changed the inspector edit or other fields: {redone_text}')
+    focus_canvas_for_history()
+    app.key('Control+Shift+z')
+    redone_height = snapshot('nonmodal-height-redone-again.tpx')
+    if redone_height != expected_edited:
+        raise AssertionError(f'height redo changed the inline text edit: {redone_height}')
+    # Select the text through the real canvas keyboard route, then use the
+    # ordinary Edit menu action instead of a stale post-resize page point.
+    focus_canvas_for_history()
+    for _ in range(3):
+        app.page.keyboard.press('Tab')
+    expect(tex).to_be_enabled(timeout=3000)
+    if tex.input_value() != r'$\gamma_{j}$':
+        raise AssertionError(
+            f'canvas Tab selection did not reach the edited text: {tex.input_value()!r}')
+    app.menu('Edit', 'Edit text')
+    save_editor = app.page.get_by_role('textbox', name='TeX source (canvas)', exact=True)
+    save_editor.wait_for()
+    save_editor.fill(r'$\delta_{k}$')
+    with app.page.expect_download(timeout=5000) as saved_download:
+        app.menu('File', 'Download a copy')
+    final_path = app.output / 'nonmodal-active-draft-save.tpx'
+    saved_download.value.save_as(final_path)
+    if save_editor.count():
+        raise AssertionError('File → Save did not settle and close the valid inline draft')
+    no_edit_dialogs()
+    final = drawing_xml(final_path)
+    expected_saved = copy.deepcopy(expected_edited)
+    expected_saved['tex'] = r'$\delta_{k}$'
+    final_font = final[2].find('font')
+    if ([obj.tag for obj in final] != ['line', 'rect', 'text'] or
+            [obj.attrib for obj in final[:2]] != baseline_attrs[:2] or
+            final[2].attrib != expected_saved or
+            final_font is None or final_font.attrib != baseline_font or
+            decode_tpx_text_once(final[2].get('t', '')) != 'Fallback λ'):
+        raise AssertionError(f'File → Save lost the live draft or changed unrelated scene data: {[obj.attrib for obj in final]}')
+
+    app.menu('File', 'New')
+    app.menu('File', 'Open')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('Choose file').set_input_files(final_path)
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    app.page.wait_for_timeout(250)
+    reopened = drawing_xml(app.save('nonmodal-reopened.tpx'))
+    reopened_font = reopened[2].find('font')
+    if ([obj.attrib for obj in reopened] != [obj.attrib for obj in final] or
+            reopened_font is None or reopened_font.attrib != baseline_font or
+            decode_tpx_text_once(reopened[2].get('t', '')) != 'Fallback λ'):
+        raise AssertionError('save/reopen changed the accepted scene or either text source')
+    no_edit_dialogs()
+    return 'canvas label, cross-view TeX/height edits, undo/redo, active-draft Save and reopen preserve sources, anchor and unrelated geometry'
+
 SCENARIOS = [
     ('default-view', s_default_view),
     ('viewport-fit', s_viewport_fit),
@@ -1384,6 +1922,7 @@ SCENARIOS = [
     ('wheel-zoom', s_wheel_zoom),
     ('keyboard-shortcut', s_keyboard_shortcut),
     ('text-input', s_text_input),
+    ('nonmodal-editing-workflow', s_nonmodal_editing_workflow),
     ('idle-stops-repainting', s_idle_stops_repainting),
     ('title-tracks-document', s_title_tracks_document),
     ('edit-move-delete', s_edit_move_delete),

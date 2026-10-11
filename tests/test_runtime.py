@@ -326,6 +326,60 @@ class RuntimeTests(unittest.TestCase):
             with self.subTest(scenario=scenario):
                 self.run_scenario(scenario)
 
+    def test_nonmodal_text_recovery_across_process_restart(self):
+        fixture = Path(__file__).parent / "fixtures" / "nonmodal-recovery-scene.tpx"
+        with runtime_temp_directory("tpx-nonmodal-recovery-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            state = root / "state"
+            cache = root / "cache"
+            for path in (home, config, state, cache):
+                path.mkdir()
+            source = root / "nested-recovery.tpx"
+            shutil.copy2(fixture, source)
+            original_source = source.read_bytes()
+            ready_path = root / "draft-ready"
+            env = os.environ.copy()
+            env.update(storage_environment(home, config, state, cache))
+            env.update(TMPDIR=str(root), TEMP=str(root), TMP=str(root),
+                       TPX_NONMODAL_RECOVERY_SOURCE=str(source),
+                       TPX_NONMODAL_RECOVERY_OLD_ID="30000",
+                       TPX_NONMODAL_RECOVERY_READY_FILE=str(ready_path))
+            with self.subTest(scenario="nonmodal-recovery-create"):
+                process = subprocess.Popen(
+                    [str(BINARY), "nonmodal-recovery-create"], cwd=root,
+                    env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    text=True, encoding="utf-8", errors="replace")
+                deadline = time.monotonic() + 40
+                while not ready_path.exists():
+                    if process.poll() is not None:
+                        stdout, stderr = process.communicate()
+                        self.fail(stdout + stderr or
+                                  "create process exited before persisting its recovery draft")
+                    if time.monotonic() >= deadline:
+                        process.kill()
+                        stdout, stderr = process.communicate()
+                        self.fail("create process did not persist its recovery draft: " +
+                                  stdout + stderr)
+                    time.sleep(0.02)
+                process.kill()
+                process.communicate(timeout=5)
+                self.assertEqual(source.read_bytes(), original_source,
+                                 "recovery changed the accepted source file")
+
+            with self.subTest(scenario="nonmodal-recovery-restore"):
+                result = subprocess.run([str(BINARY), "nonmodal-recovery-restore"],
+                                        cwd=root, env=env, capture_output=True,
+                                        text=True, encoding="utf-8", errors="replace",
+                                        timeout=40)
+                self.assertEqual(result.returncode, 0,
+                                 result.stdout + result.stderr)
+                self.assertIn("PASS nonmodal-recovery-restore", result.stdout,
+                              result.stderr)
+                self.assertEqual(source.read_bytes(), original_source,
+                                 "restoring and committing recovery changed the source file")
+
     def test_registered_tikz_open_materializes_native_scene(self):
         fixture_dir = Path(__file__).parent / "core" / "fixtures" / "tikz"
         with tempfile.TemporaryDirectory(prefix="tpx-tikz-import-") as directory:

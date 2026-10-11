@@ -74,6 +74,57 @@ warning stays active while the drawing has unsaved work and after a download
 request whose completion cannot be confirmed. Starting a new drawing or opening
 another one clears that request warning. Browsers may suppress the warning, so
 keep an explicit downloaded copy.
+
+## Inspector and text editing
+
+**Edit → Object properties** opens the right-side Inspector; use **View → Object
+inspector** to show or hide it, and drag its splitter to resize the panel. Its
+sections can be collapsed to leave more room for the canvas. Mixed selections
+show **Mixed** for fields whose values differ. Editing one field applies that
+property to the selection while preserving each object's other properties.
+Owner-drawn dropdowns in the browser open an in-page modal **Choose item**
+dialog; ordinary numeric and text edits stay inline.
+
+Create a label with the Text tool or **Insert → Insert text**, then type in the
+canvas editor. Click an existing label with the Text tool or double-click it in
+selection mode to edit it. With one text label selected, **Edit → Edit text**
+also opens the canvas editor. The **Text** and **TeX source** buffers are
+independent; Enter inserts a line break, while Ctrl+Enter (or Command+Enter on
+macOS), Tab, or **Done** finishes a valid edit. Escape cancels it after active
+input-method composition ends. Save actions settle a valid inline draft.
+Coordinates, transforms, scale and preferences keep their
+dedicated dialogs; file selection and explicit discard/replacement safeguards
+also remain dialogs.
+
+For an end-to-end check, draw a line and a rectangle, create and type a canvas
+label, then use the Inspector to change line width, end arrow and text height.
+Use Tab to commit a field, edit the same label with the Text tool and selection
+mode's double-click, and check Undo/Redo. Collapse and resize the Inspector and
+workspace, then save and reopen to confirm the geometry, style, Text and TeX
+source remain. Where a live input method is available, press Escape during a
+marked composition and verify cancellation waits until that composition ends.
+
+Automated browser interaction scenarios use Playwright with desktop Chromium
+viewports. They do not certify tablet or phone layouts, touch or Apple Pencil
+input, or screen-reader operation. Native composition regressions use synthetic
+platform composition hooks; they do not claim coverage of a live operating
+system input method on physical hardware.
+
+To check browser device-pixel ratio separately from canvas zoom, run the
+integrated edit workflow at representative DPR values:
+
+```sh
+for dpr in 1 1.5 2; do
+  python3 tests/browser/playtest.py web/dist "/tmp/tpx-browser-dpr-$dpr" \
+    --only=nonmodal-editing-workflow --browser=chromium \
+    --device-scale-factor="$dpr"
+done
+```
+
+The runner verifies `window.devicePixelRatio` for each run. This is a browser
+rendering-scale check; it does not emulate operating-system display scaling.
+The integrated workflow checks canvas zoom separately.
+
 Browser support is exercised through the application scenarios below, not every
 LCL API or TpX drawing tool.
 

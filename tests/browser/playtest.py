@@ -31,11 +31,17 @@ parser.add_argument('outdir', nargs='?', default=str(ROOT / 'dist/browser-playte
 parser.add_argument('--only', default='')
 parser.add_argument('--screenshots', action='store_true')
 parser.add_argument('--port', type=int, default=0)
+parser.add_argument('--device-scale-factor', type=float, default=1.0)
 parser.add_argument('--browser', choices=['chromium', 'firefox', 'webkit'], default='chromium')
 parser.add_argument('--chromium', default=os.environ.get('CHROMIUM', '/usr/bin/chromium'))
 args = parser.parse_args()
+if args.device_scale_factor <= 0:
+    parser.error('--device-scale-factor must be positive')
 
 wanted = set(n for n in args.only.split(',') if n)
+unknown = wanted - {name for name, _ in SCENARIOS}
+if unknown:
+    parser.error('unknown scenario name(s): ' + ', '.join(sorted(unknown)))
 OUT = Path(args.outdir)
 OUT.mkdir(parents=True, exist_ok=True)
 
@@ -53,12 +59,18 @@ try:
         for name, fn in SCENARIOS:
             if wanted and name not in wanted:
                 continue
-            page = browser.new_page(viewport={'width': 1280, 'height': 900})
+            page = browser.new_page(viewport={'width': 1280, 'height': 900},
+                                    device_scale_factor=args.device_scale_factor)
             app = App(page, name, OUT)
             app.capture_requested = args.screenshots
             status = 'pass'
             detail = ''
             try:
+                actual_scale = page.evaluate('window.devicePixelRatio')
+                if abs(actual_scale - args.device_scale_factor) > 0.001:
+                    raise AssertionError(
+                        f'device scale factor is {actual_scale}, expected '
+                        f'{args.device_scale_factor}')
                 page.goto(f'http://127.0.0.1:{srv.server_port}/')
                 page.wait_for_selector('#status[data-state=ready]', timeout=30000)
                 page.wait_for_function('Number(document.querySelector("#lcl").dataset.frames)>0')
@@ -90,7 +102,8 @@ finally:
     srv.shutdown()
     srv.server_close()
 
-manifest = {'passed': len(results) - len(failures), 'failed': len(failures),
+manifest = {'device_scale_factor': args.device_scale_factor,
+            'passed': len(results) - len(failures), 'failed': len(failures),
             'failures': failures, 'results': results}
 (OUT / 'manifest.json').write_text(json.dumps(manifest, indent=1))
 print(f'\n{manifest["passed"]}/{len(results)} passed, screenshots in {OUT}')
