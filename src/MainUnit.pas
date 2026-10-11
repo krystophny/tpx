@@ -1729,6 +1729,7 @@ var
   TextObj: TText2D;
   GraphicObj: TObject2D;
   Anchor: TPoint2D;
+  MemoText: string;
   LeftPos, TopPos, EditorWidth, EditorHeight, FontPixels, LineCount, I: Integer;
 begin
   if (FInlineTextMemo = nil) or (LocalView = nil) or
@@ -1745,9 +1746,10 @@ begin
     else
       FontPixels := 12;
     if FontPixels < 10 then FontPixels := 10;
+    MemoText := FInlineTextMemo.Text;
     LineCount := 1;
-    for I := 1 to Length(FInlineTextMemo.Text) do
-      if FInlineTextMemo.Text[I] = #10 then Inc(LineCount);
+    for I := 1 to Length(MemoText) do
+      if MemoText[I] = #10 then Inc(LineCount);
     EditorHeight := LineCount * (FontPixels + 4) + 18;
     if EditorHeight < 58 then EditorHeight := 58;
     if EditorHeight > 190 then EditorHeight := 190;
