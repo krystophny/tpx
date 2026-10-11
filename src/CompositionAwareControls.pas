@@ -14,6 +14,7 @@ type
   TCompositionAwareEdit = class(TEdit)
   private
     FCompositionPending: Boolean;
+    FCompositionCommitted: Boolean;
     FOnCompositionChanged: TCompositionChangedEvent;
     procedure SetCompositionPending(Value: Boolean);
   protected
@@ -22,6 +23,7 @@ type
     function SampleCompositionState: Boolean;
     procedure RefreshCompositionState;
     property CompositionPending: Boolean read FCompositionPending;
+    property CompositionCommitted: Boolean read FCompositionCommitted;
     property OnCompositionChanged: TCompositionChangedEvent
       read FOnCompositionChanged write FOnCompositionChanged;
   end;
@@ -29,6 +31,7 @@ type
   TCompositionAwareMemo = class(TMemo)
   private
     FCompositionPending: Boolean;
+    FCompositionCommitted: Boolean;
     FOnCompositionChanged: TCompositionChangedEvent;
     procedure SetCompositionPending(Value: Boolean);
     function GetEditText: string;
@@ -38,6 +41,7 @@ type
     function SampleCompositionState: Boolean;
     procedure RefreshCompositionState;
     property CompositionPending: Boolean read FCompositionPending;
+    property CompositionCommitted: Boolean read FCompositionCommitted;
     property EditText: string read GetEditText;
     property OnCompositionChanged: TCompositionChangedEvent
       read FOnCompositionChanged write FOnCompositionChanged;
@@ -94,7 +98,11 @@ end;
 procedure TCompositionAwareEdit.RefreshCompositionState;
 begin
   {$IFDEF LCLCOCOA}
-  SetCompositionPending(NativeEditHasMarkedText(Self));
+  if NativeEditHasMarkedText(Self) then
+  begin
+    if not FCompositionPending then FCompositionCommitted := False;
+    SetCompositionPending(True);
+  end;
   {$ENDIF}
 end;
 
@@ -116,19 +124,36 @@ begin
   if (Message.Msg = LM_IM_COMPOSITION) and
     ((Message.WParam and (GTK_IM_FLAG_START or GTK_IM_FLAG_PREEDIT)) =
     (GTK_IM_FLAG_START or GTK_IM_FLAG_PREEDIT)) then
+  begin
+    FCompositionCommitted := False;
     SetCompositionPending(True);
+  end;
+  if (Message.Msg = LM_IM_COMPOSITION) and
+    ((Message.WParam and GTK_IM_FLAG_COMMIT) <> 0) then
+    FCompositionCommitted := True;
   if (Message.Msg = LM_IM_COMPOSITION) then
     CompositionEnded := (Message.WParam and GTK_IM_FLAG_END) <> 0;
   {$ELSE}
   if Message.Msg = LM_IM_COMPOSITION then
   begin
     if (Message.WParam and GTK_IM_FLAG_START) <> 0 then
+    begin
+      FCompositionCommitted := False;
       SetCompositionPending(True);
+    end;
+    if (Message.WParam and GTK_IM_FLAG_COMMIT) <> 0 then
+      FCompositionCommitted := True;
     CompositionEnded := (Message.WParam and GTK_IM_FLAG_END) <> 0;
   end;
   {$ENDIF}
   {$IFDEF MSWINDOWS}
-  if Message.Msg = $010D then SetCompositionPending(True);
+  if Message.Msg = $010D then
+  begin
+    FCompositionCommitted := False;
+    SetCompositionPending(True);
+  end;
+  if (Message.Msg = $010F) and ((Message.LParam and $0800) <> 0) then
+    FCompositionCommitted := True;
   if Message.Msg = $010E then CompositionEnded := True;
   {$ENDIF}
 
@@ -142,6 +167,7 @@ begin
   begin
     {$IFDEF LCLCOCOA}
     RefreshCompositionState;
+    if not NativeEditHasMarkedText(Self) then SetCompositionPending(False);
     {$ELSE}
     SetCompositionPending(False);
     {$ENDIF}
@@ -159,7 +185,11 @@ end;
 procedure TCompositionAwareMemo.RefreshCompositionState;
 begin
   {$IFDEF LCLCOCOA}
-  SetCompositionPending(NativeMemoHasMarkedText(Self));
+  if NativeMemoHasMarkedText(Self) then
+  begin
+    if not FCompositionPending then FCompositionCommitted := False;
+    SetCompositionPending(True);
+  end;
   {$ENDIF}
 end;
 
@@ -186,19 +216,36 @@ begin
   if (Message.Msg = LM_IM_COMPOSITION) and
     ((Message.WParam and (GTK_IM_FLAG_START or GTK_IM_FLAG_PREEDIT)) =
     (GTK_IM_FLAG_START or GTK_IM_FLAG_PREEDIT)) then
+  begin
+    FCompositionCommitted := False;
     SetCompositionPending(True);
+  end;
+  if (Message.Msg = LM_IM_COMPOSITION) and
+    ((Message.WParam and GTK_IM_FLAG_COMMIT) <> 0) then
+    FCompositionCommitted := True;
   if (Message.Msg = LM_IM_COMPOSITION) then
     CompositionEnded := (Message.WParam and GTK_IM_FLAG_END) <> 0;
   {$ELSE}
   if Message.Msg = LM_IM_COMPOSITION then
   begin
     if (Message.WParam and GTK_IM_FLAG_START) <> 0 then
+    begin
+      FCompositionCommitted := False;
       SetCompositionPending(True);
+    end;
+    if (Message.WParam and GTK_IM_FLAG_COMMIT) <> 0 then
+      FCompositionCommitted := True;
     CompositionEnded := (Message.WParam and GTK_IM_FLAG_END) <> 0;
   end;
   {$ENDIF}
   {$IFDEF MSWINDOWS}
-  if Message.Msg = $010D then SetCompositionPending(True);
+  if Message.Msg = $010D then
+  begin
+    FCompositionCommitted := False;
+    SetCompositionPending(True);
+  end;
+  if (Message.Msg = $010F) and ((Message.LParam and $0800) <> 0) then
+    FCompositionCommitted := True;
   if Message.Msg = $010E then CompositionEnded := True;
   {$ENDIF}
 
@@ -212,6 +259,7 @@ begin
   begin
     {$IFDEF LCLCOCOA}
     RefreshCompositionState;
+    if not NativeMemoHasMarkedText(Self) then SetCompositionPending(False);
     {$ELSE}
     SetCompositionPending(False);
     {$ENDIF}

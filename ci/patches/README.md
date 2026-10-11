@@ -61,3 +61,13 @@ scenario drives marked text through the real `NSTextView`, cancels without a
 text-change notification, and verifies that the inspector's composition gate
 releases. This checks the consumer boundary; it does not claim a manual or
 physical-device IME session.
+
+`lazarus-4.8-cocoa-field-editor-ime.patch` adds the corresponding lifecycle
+forwarding to Cocoa's shared field editor for `TEdit` controls. It is the
+pinned 4.8 backport `981660ebd79833a30c67ac08024b8b6812a354a8`, following the
+memo backport and derived from merged provider fix
+`143c7f4b77b12a9d3b78355aac37b9a32b9205d8`. Its SHA-256 is
+`b5ea976248a4f918d6cd1a5477090972cb29c6d822abc9fba598a4f69008b45a`. The
+inspector scenario also marks and cancels text through a focused native field
+editor, checking that the edit value stays unchanged and the composition gate
+releases.
