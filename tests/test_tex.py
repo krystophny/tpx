@@ -18,13 +18,22 @@ class TeXTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix="tpx-tex-")
         self.root = Path(self.directory.name)
+        self.env = os.environ.copy()
+        self.env.update(HOME=str(self.root / "home"),
+                        USERPROFILE=str(self.root / "home"),
+                        XDG_CONFIG_HOME=str(self.root / "config"),
+                        XDG_STATE_HOME=str(self.root / "state"),
+                        XDG_CACHE_HOME=str(self.root / "cache"),
+                        APPDATA=str(self.root / "config"),
+                        LOCALAPPDATA=str(self.root / "state"))
 
     def tearDown(self):
         self.directory.cleanup()
 
     def run_command(self, command):
         result = subprocess.run(list(map(str, command)), cwd=self.root,
-                                capture_output=True, text=True, timeout=40)
+                                env=self.env, capture_output=True, text=True,
+                                timeout=40)
         self.assertEqual(result.returncode, 0, result.stdout[-4000:] + result.stderr[-2000:])
         return result
 
@@ -77,7 +86,7 @@ class TeXTests(unittest.TestCase):
         ET.SubElement(drawing, "bitmap", x="0", y="0", w="16", h="16", link="red.bmp")
         source = self.root / "input.TpX"
         source.write_text("%" + ET.tostring(drawing, encoding="unicode") + "\n")
-        # The copied application reads this test-only configuration beside itself.
+        # Seed the historical beside-executable settings file for migration.
         binary = self.root / BINARY.name
         shutil.copy2(BINARY, binary)
         for filename in ("preview.tex.inc", "metapost.tex.inc"):

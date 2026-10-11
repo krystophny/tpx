@@ -80,6 +80,9 @@ uses
   Process{$IFDEF MSWINDOWS}, ProcessUnicode{$ENDIF},
 {$ENDIF}
   {$IFDEF WINDOWS}Windows,{$ENDIF} ExtCtrls
+{$IFNDEF CPUWASM32}
+  , UserStorage
+{$ENDIF}
 {$ENDIF};
 
 {$IF DEFINED(FPC) AND DEFINED(MSWINDOWS)}
@@ -167,11 +170,40 @@ begin
 end;
 
 function TpXTemplatePath(const FileName: string): string;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+var
+  ResourcePath, ErrorText: string;
+{$ENDIF}
+{$ELSE}
 {$IFDEF DARWIN}
 var
   ResourcePath, ConfigDir: string;
 {$ENDIF}
+{$ENDIF}
 begin
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  if (FileName = '') or (FileName = '.') or (FileName = '..') or
+    (Pos('/', FileName) > 0) or (Pos('\', FileName) > 0) then
+    raise Exception.Create('Invalid TpX template name: ' + FileName);
+  Result := IncludeTrailingPathDelimiter(UserStorageDirectory(usaConfig)) +
+    FileName;
+  ResourcePath := TpXResourcePath(FileName);
+  if not FileExists(ResourcePath) and not FileExists(Result) then
+  begin
+    if not EnsureUserStorageDirectory(usaConfig, ErrorText) then
+      raise Exception.Create(ErrorText);
+    Exit;
+  end;
+  if not EnsureUserStorageDirectory(usaConfig, ErrorText) then
+    raise Exception.Create(ErrorText);
+  if not InstallUserFileIfMissing(ResourcePath, Result, ErrorText) then
+    raise Exception.Create(ErrorText);
+{$ELSE}
+  Result := TpXResourcePath(FileName);
+{$ENDIF}
+{$ELSE}
 {$IFDEF DARWIN}
   ConfigDir := IncludeTrailingPathDelimiter(GetAppConfigDir(False));
   Result := ConfigDir + FileName;
@@ -184,6 +216,7 @@ begin
     raise Exception.Create('Could not copy TpX template to user settings');
 {$ELSE}
   Result := TpXResourcePath(FileName);
+{$ENDIF}
 {$ENDIF}
 end;
 

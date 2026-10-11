@@ -15,6 +15,14 @@ class ExportTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix="tpx-test-")
         self.root = Path(self.directory.name)
+        self.env = os.environ.copy()
+        self.env.update(HOME=str(self.root / "home"),
+                        USERPROFILE=str(self.root / "home"),
+                        XDG_CONFIG_HOME=str(self.root / "config"),
+                        XDG_STATE_HOME=str(self.root / "state"),
+                        XDG_CACHE_HOME=str(self.root / "cache"),
+                        APPDATA=str(self.root / "config"),
+                        LOCALAPPDATA=str(self.root / "state"))
 
     def tearDown(self):
         self.directory.cleanup()
@@ -37,7 +45,7 @@ class ExportTests(unittest.TestCase):
     def run_tpx(self, *arguments):
         result = subprocess.run([str(BINARY), *map(str, arguments)],
                                 cwd=self.root, capture_output=True,
-                                text=True, timeout=20)
+                                env=self.env, text=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     @staticmethod

@@ -16,7 +16,8 @@ uses
 {$IFDEF FPC}
   , LazFileUtils, DocumentFormats, FileWatch, AutoReload
 {$IFNDEF CPUWASM32}
-  , SyncObjs, AutoSaveRuntime, AutoSaveStore, AutoSavePreferences
+  , SyncObjs, AutoSaveRuntime, AutoSaveStore, AutoSavePreferences,
+  UserStorage
 {$ENDIF}
 {$ENDIF}
   ;
@@ -474,6 +475,11 @@ type
     procedure HandToolExecute(Sender: TObject);
     procedure InsertLineExecute(Sender: TObject);
     procedure FormCreate(Sender: TObject);
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+    procedure ShowStorageLocations(Sender: TObject);
+{$ENDIF}
+{$ENDIF}
     procedure InsertArcExecute(Sender: TObject);
     procedure InsertPolylineExecute(Sender: TObject);
     procedure LocalViewMouseMove2D(Sender: TObject;
@@ -958,9 +964,13 @@ end;
 
 
 procedure TMainForm.FormCreate(Sender: TObject);
-{$IFDEF FPC}{$IFDEF CPUWASM32}
+{$IFDEF FPC}
+{$IFDEF CPUWASM32}
 var InfoMenu: TMenuItem;
-{$ENDIF}{$ENDIF}
+{$ELSE}
+var StorageMenu: TMenuItem;
+{$ENDIF}
+{$ENDIF}
 begin
   FormPos_Left := MainForm.Left;
   FormPos_Top := MainForm.Top;
@@ -993,6 +1003,15 @@ begin
 {$IFNDEF CPUWASM32}
   InitializeAutoReload;
   InitializeAutoSave;
+  StorageMenu := TMenuItem.Create(Self);
+  StorageMenu.Caption := 'Storage locations...';
+  StorageMenu.OnClick := ShowStorageLocations;
+  Help2.Add(StorageMenu);
+  if StorageStartupDiagnostic <> '' then
+  begin
+    MessageBoxError(StorageStartupDiagnostic);
+    StorageStartupDiagnostic := '';
+  end;
 {$ELSE}
   InfoMenu := TMenuItem.Create(Self);
   InfoMenu.Caption := 'Persistent AutoSave and recovery unavailable in browser builds';
@@ -1667,10 +1686,24 @@ begin
 end;
 
 procedure TMainForm.InitializeAutoSave;
+var
+  RecoveryPath, ErrorText: string;
 begin
-  FSaveRuntime := TAutoSaveRuntime.Create(
-    TDocumentPath(UTF8String(IncludeTrailingPathDelimiter(
-      GetAppConfigDirUTF8(False)) + 'AutoSaveRecovery')));
+  RecoveryPath := IncludeTrailingPathDelimiter(UserStorageDirectory(usaState)) +
+    'AutoSaveRecovery';
+  try
+    if not EnsureUserStorageDirectory(usaState, ErrorText) then
+      raise Exception.Create(ErrorText);
+    FSaveRuntime := TAutoSaveRuntime.Create(
+      TDocumentPath(UTF8String(RecoveryPath)));
+  except
+    on E: Exception do
+    begin
+      FSaveRuntime := nil;
+      MessageBoxError('Crash recovery storage is unavailable at ' +
+        RecoveryPath + ': ' + E.Message);
+    end;
+  end;
   FAutoSaveTimer := TTimer.Create(Self);
   FAutoSaveTimer.Enabled := False;
   FAutoSaveTimer.OnTimer := ProcessAutoSaveDeadline;
@@ -1700,6 +1733,15 @@ begin
   FAutoSaveStatusPanel.Width := 360;
   UpdateAutoSaveUi;
 end;
+
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+procedure TMainForm.ShowStorageLocations(Sender: TObject);
+begin
+  MessageBoxInfo(UserStorageDiagnostics);
+end;
+{$ENDIF}
+{$ENDIF}
 
 procedure TMainForm.ShutdownAutoSave;
 begin

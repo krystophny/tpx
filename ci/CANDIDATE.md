@@ -4,13 +4,20 @@ This archive is a build candidate. Read `BUILD.json` for the proposed version,
 source commit, platform, and completed checks. Retain its adjacent `.sha256`
 file when sharing the archive. Manual playtesting is required before release.
 
-Extract the complete archive into a writable folder. On Windows and Linux,
-keep `preview.tex.inc` and `metapost.tex.inc` beside the executable; TpX reads
-these customizable preambles during TeX previews and MetaPost exports. The form and icon resources
-are embedded in the executable. On macOS, the executable is in `TpX.app/Contents/MacOS` and bundled
-preambles and help are in `Contents/Resources`; keep the app bundle intact.
-Editable Mac templates and preferences are stored in your user config folder. `source.zip`
-contains the exact project source.
+Extract the complete archive. Packaged preambles and help are read-only defaults;
+TpX creates writable template copies in the user configuration directory when
+needed. Preferences, recovery drafts and preview caches stay in the user
+profile, so the application can run from a read-only install folder. The form
+and icon resources are embedded in the executable. On macOS, the executable is
+in `TpX.app/Contents/MacOS` and bundled preambles and help are in
+`Contents/Resources`; keep the app bundle intact. `source.zip` contains the
+exact project source.
+
+For portable mode, pass `--portable` or place `TpX.portable` beside the
+executable. Data goes into `TpX-portable-data/config`, `state` and `cache`.
+On macOS, place the sentinel beside `TpX.app`; portable data stays beside the
+bundle and does not change its sealed resources. **Help → Storage locations**
+shows the active paths.
 
 - Windows: run `TpX.exe`. This build targets 64-bit Windows with the native
   win32 backend; it does not require a Lazarus installation.

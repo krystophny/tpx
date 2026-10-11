@@ -32,6 +32,13 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "platform-shortcuts", "svg-linked-image-copy", "svg-codec")
 
 
+def storage_environment(home, config, state, cache):
+    return {"HOME": str(home), "USERPROFILE": str(home),
+            "XDG_CONFIG_HOME": str(config), "XDG_STATE_HOME": str(state),
+            "XDG_CACHE_HOME": str(cache), "APPDATA": str(config),
+            "LOCALAPPDATA": str(state)}
+
+
 class RuntimeTests(unittest.TestCase):
     def test_transactional_pstoedit_emf_import(self):
         with tempfile.TemporaryDirectory(prefix="tpx-pstoedit-") as directory:
@@ -126,23 +133,32 @@ class RuntimeTests(unittest.TestCase):
                                          "EPS compatibility check leaked its scratch file")
 
     def run_scenario(self, scenario, extra_env=None, directory_prefix="tpx-runtime-",
-                     beside_executable=(), runtime_directory=None):
+                     beside_executable=(), runtime_directory=None,
+                     readonly_runtime=False, portable=False,
+                     portable_argument=False, unicode_profile=False):
         with tempfile.TemporaryDirectory(prefix=directory_prefix) as directory:
             root = Path(directory).resolve()
-            home = root / "home"
-            config = root / "config"
+            suffix = " space-Ünicode-Καλημέρα-ß" if unicode_profile else ""
+            home = root / ("home" + suffix)
+            config = root / ("config" + suffix)
+            state = root / ("state" + suffix)
+            cache = root / ("cache" + suffix)
             work = root / "work"
             home.mkdir()
             config.mkdir()
+            state.mkdir()
+            cache.mkdir()
             work.mkdir()
             runtime_dir = (Path(runtime_directory).resolve() if runtime_directory
-                           else root / "runtime")
+                           else root / ("runtime" + suffix))
             runtime_dir.mkdir(parents=True, exist_ok=True)
             runtime_binary = runtime_dir / BINARY.name
             if not runtime_binary.exists():
                 shutil.copy2(BINARY, runtime_binary)
             for resource_name in ("preview.tex.inc", "metapost.tex.inc", "help", "Help"):
                 source = BINARY.parent / resource_name
+                if not source.exists():
+                    source = Path(__file__).resolve().parents[1] / "ci" / resource_name
                 destination = runtime_dir / resource_name
                 if source.is_dir() and not destination.exists():
                     shutil.copytree(source, runtime_dir / resource_name)
@@ -153,14 +169,76 @@ class RuntimeTests(unittest.TestCase):
             env = os.environ.copy()
             env.update({"TMPDIR": str(root), "TMP": str(root), "TEMP": str(root),
                         "HOME": str(home), "USERPROFILE": str(home),
-                        "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
-                        "LOCALAPPDATA": str(config)})
+                        "XDG_CONFIG_HOME": str(config),
+                        "XDG_STATE_HOME": str(state), "XDG_CACHE_HOME": str(cache),
+                        "APPDATA": str(config), "LOCALAPPDATA": str(state)})
             env.update(extra_env or {})
-            result = subprocess.run([str(runtime_binary), scenario], cwd=work,
-                                    env=env, capture_output=True, text=True,
-                                    encoding="utf-8", errors="replace", timeout=40)
+            expected_entries = {path.name for path in runtime_dir.iterdir()}
+            readonly_modes = {}
+            if readonly_runtime and os.name != "nt":
+                readonly_paths = [runtime_dir, *runtime_dir.rglob("*")]
+                readonly_modes = {path: path.stat().st_mode & 0o777
+                                  for path in readonly_paths}
+                for path in sorted(readonly_paths, key=lambda item: len(item.parts),
+                                   reverse=True):
+                    path.chmod(readonly_modes[path] & ~0o222)
+            try:
+                arguments = [str(runtime_binary), scenario]
+                if portable_argument:
+                    arguments.append("--portable")
+                result = subprocess.run(arguments, cwd=work,
+                                        env=env, capture_output=True, text=True,
+                                        encoding="utf-8", errors="replace", timeout=40)
+            finally:
+                for path in sorted(readonly_modes, key=lambda item: len(item.parts)):
+                    path.chmod(readonly_modes[path])
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("PASS " + scenario, result.stdout, result.stderr)
+            if scenario == "storage-paths":
+                values = dict(line.split("=", 1) for line in result.stdout.splitlines()
+                              if line.startswith("STORAGE_"))
+                self.assertEqual(values.get("STORAGE_MODE"),
+                                 "portable" if portable else "installed")
+                if portable:
+                    storage_root = runtime_dir / "TpX-portable-data"
+                    expected = {"STORAGE_CONFIG": storage_root / "config",
+                                "STORAGE_STATE": storage_root / "state",
+                                "STORAGE_CACHE": storage_root / "cache"}
+                elif sys.platform == "darwin":
+                    expected = {
+                        "STORAGE_CONFIG": home / "Library" / "Preferences" / "TpX",
+                        "STORAGE_STATE": home / "Library" / "Application Support" / "TpX",
+                        "STORAGE_CACHE": home / "Library" / "Caches" / "TpX"}
+                elif sys.platform == "win32":
+                    expected = {"STORAGE_CONFIG": config / "TpX",
+                                "STORAGE_STATE": state / "TpX",
+                                "STORAGE_CACHE": state / "TpX"}
+                else:
+                    expected = {"STORAGE_CONFIG": config / "TpX",
+                                "STORAGE_STATE": state / "TpX",
+                                "STORAGE_CACHE": cache / "TpX"}
+                for key, path in expected.items():
+                    self.assertEqual(Path(values[key]).resolve(), path.resolve(), key)
+                self.assertTrue((Path(values["STORAGE_STATE"]) /
+                                 "AutoSaveRecovery").is_dir(),
+                                "recovery store is not under the user state directory")
+                expected_after = expected_entries | ({"TpX-portable-data"}
+                                                      if portable else set())
+                self.assertEqual({path.name for path in runtime_dir.iterdir()},
+                                 expected_after,
+                                 "application wrote into its executable directory")
+
+    def test_user_storage_works_from_read_only_application_directory(self):
+        self.run_scenario("storage-paths", readonly_runtime=True,
+                          unicode_profile=True)
+
+    def test_explicit_portable_storage_layout(self):
+        self.run_scenario("storage-paths", beside_executable=("TpX.portable",),
+                          portable=True, unicode_profile=True)
+
+    def test_explicit_portable_flag(self):
+        self.run_scenario("storage-paths", portable=True,
+                          portable_argument=True, unicode_profile=True)
 
     def test_runtime_scenarios(self):
         for scenario in SCENARIOS:
@@ -213,31 +291,55 @@ class RuntimeTests(unittest.TestCase):
             # profile path. Exercise UTF-8 process launch there and GetTempPath.
             home = root / "home-Καλημέρα-ß"
             config = root / "config-Καλημέρα-ß"
+            state = root / "state-Καλημέρα-ß"
+            cache = root / "cache-Καλημέρα-ß"
             temp = root / "temp-Καλημέρα-ß"
             home.mkdir()
             config.mkdir()
+            state.mkdir()
+            cache.mkdir()
             temp.mkdir()
-            env = {"HOME": str(home), "USERPROFILE": str(home),
-                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
-                   "LOCALAPPDATA": str(config), "TMPDIR": str(temp),
-                   "TMP": str(temp), "TEMP": str(temp)}
-            runtime_dir = root / "runtime"
+            env = storage_environment(home, config, state, cache)
+            env.update(TMPDIR=str(temp), TMP=str(temp), TEMP=str(temp))
+            first_runtime_dir = root / "runtime-before-move-Καλημέρα-ß"
+            moved_runtime_dir = root / "runtime-after-move-Καλημέρα-ß"
             self.run_scenario("autosave-recovery-create", env,
-                              runtime_directory=runtime_dir)
+                              runtime_directory=first_runtime_dir)
             self.run_scenario("autosave-recovery-restore", env,
-                              runtime_directory=runtime_dir)
+                              runtime_directory=moved_runtime_dir)
+
+    def test_user_preferences_survive_executable_replacement(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-settings-restart-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            state = root / "state"
+            cache = root / "cache"
+            home.mkdir()
+            config.mkdir()
+            state.mkdir()
+            cache.mkdir()
+            env = storage_environment(home, config, state, cache)
+            first_runtime_dir = root / "runtime-before-replacement-Καλημέρα-ß"
+            replacement_runtime_dir = root / "runtime-after-replacement-Καλημέρα-ß"
+            self.run_scenario("user-preferences-write", env,
+                              runtime_directory=first_runtime_dir)
+            self.run_scenario("user-preferences-read", env,
+                              runtime_directory=replacement_runtime_dir)
 
     def test_dirty_empty_draft_survives_restart_without_source_write(self):
         with tempfile.TemporaryDirectory(prefix="tpx-autosave-empty-restart-") as directory:
             root = Path(directory).resolve()
             home = root / "home"
             config = root / "config"
+            state = root / "state"
+            cache = root / "cache"
             home.mkdir()
             config.mkdir()
-            env = {"HOME": str(home), "USERPROFILE": str(home),
-                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
-                   "LOCALAPPDATA": str(config),
-                   "TPX_AUTOSAVE_EMPTY_SOURCE": str(root / "empty.tpx")}
+            state.mkdir()
+            cache.mkdir()
+            env = storage_environment(home, config, state, cache)
+            env["TPX_AUTOSAVE_EMPTY_SOURCE"] = str(root / "empty.tpx")
             runtime_dir = root / "runtime"
             self.run_scenario("autosave-empty-recovery-create", env,
                               runtime_directory=runtime_dir)
@@ -249,11 +351,13 @@ class RuntimeTests(unittest.TestCase):
             root = Path(directory).resolve()
             home = root / "home"
             config = root / "config"
+            state = root / "state"
+            cache = root / "cache"
             home.mkdir()
             config.mkdir()
-            env = {"HOME": str(home), "USERPROFILE": str(home),
-                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
-                   "LOCALAPPDATA": str(config)}
+            state.mkdir()
+            cache.mkdir()
+            env = storage_environment(home, config, state, cache)
             self.run_scenario("autosave-unresolved-image-warning", env)
 
     def test_named_bitmap_recovery_gates_source_autosave_until_manual_save(self):
@@ -261,12 +365,14 @@ class RuntimeTests(unittest.TestCase):
             root = Path(directory).resolve()
             home = root / "home"
             config = root / "config"
+            state = root / "state"
+            cache = root / "cache"
             home.mkdir()
             config.mkdir()
-            env = {"HOME": str(home), "USERPROFILE": str(home),
-                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
-                   "LOCALAPPDATA": str(config),
-                   "TPX_AUTOSAVE_NAMED_SOURCE": str(root / "named.tpx")}
+            state.mkdir()
+            cache.mkdir()
+            env = storage_environment(home, config, state, cache)
+            env["TPX_AUTOSAVE_NAMED_SOURCE"] = str(root / "named.tpx")
             runtime_dir = root / "runtime"
             self.run_scenario("autosave-named-recovery-create", env,
                               runtime_directory=runtime_dir)
@@ -278,12 +384,14 @@ class RuntimeTests(unittest.TestCase):
             root = Path(directory).resolve()
             home = root / "home"
             config = root / "config"
+            state = root / "state"
+            cache = root / "cache"
             home.mkdir()
             config.mkdir()
-            env = {"HOME": str(home), "USERPROFILE": str(home),
-                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
-                   "LOCALAPPDATA": str(config),
-                   "TPX_AUTOSAVE_WATCH_SOURCE": str(root / "active.tpx")}
+            state.mkdir()
+            cache.mkdir()
+            env = storage_environment(home, config, state, cache)
+            env["TPX_AUTOSAVE_WATCH_SOURCE"] = str(root / "active.tpx")
             self.run_scenario("autosave-recovery-watch-binding", env)
 
     def test_source_autosave_undo_picture_properties_and_conflict(self):
@@ -291,11 +399,13 @@ class RuntimeTests(unittest.TestCase):
             root = Path(directory).resolve()
             home = root / "home"
             config = root / "config"
+            state = root / "state"
+            cache = root / "cache"
             home.mkdir()
             config.mkdir()
-            env = {"HOME": str(home), "USERPROFILE": str(home),
-                   "XDG_CONFIG_HOME": str(config), "APPDATA": str(config),
-                   "LOCALAPPDATA": str(config)}
+            state.mkdir()
+            cache.mkdir()
+            env = storage_environment(home, config, state, cache)
             self.run_scenario("autosave-integration", env)
 
     @unittest.skipUnless(shutil.which("latex") and
@@ -307,15 +417,7 @@ class RuntimeTests(unittest.TestCase):
 
     @unittest.skipIf(sys.platform == "darwin", "covered by macOS settings test")
     def test_live_latex_preference_persists(self):
-        # Settings on Linux/Windows live beside the executable: isolate the copy.
-        with tempfile.TemporaryDirectory(prefix="tpx-live-settings-") as directory:
-            executable = Path(directory) / BINARY.name
-            shutil.copy2(BINARY, executable)
-            result = subprocess.run([str(executable), "live-tex-settings"],
-                                    cwd=directory, capture_output=True, text=True,
-                                    timeout=40)
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn("PASS live-tex-settings", result.stdout)
+        self.run_scenario("live-tex-settings")
 
     @unittest.skipUnless(sys.platform.startswith("linux"),
                          "native editable shortcut routing uses GTK2/X11")
@@ -339,6 +441,9 @@ class RuntimeTests(unittest.TestCase):
                     env = os.environ.copy()
                     env.update(TPX_STARTUP_EXPECTED=expected,
                                TPX_STARTUP_OBJECTS=str(count))
+                    env.update(storage_environment(
+                        root / "home", root / "config", root / "state",
+                        root / "cache"))
                     result = subprocess.run([str(BINARY), *arguments], cwd=root,
                                             env=env, capture_output=True,
                                             text=True, timeout=40)
@@ -387,8 +492,8 @@ class RuntimeTests(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == "darwin", "macOS user settings location")
     def test_macos_settings_are_saved_outside_application_bundle(self):
-        for legacy_settings in (False, True):
-            with self.subTest(legacy_settings=legacy_settings), \
+        for legacy_layout in ("none", "old-user-config", "bundle"):
+            with self.subTest(legacy_layout=legacy_layout), \
                     tempfile.TemporaryDirectory(prefix="tpx-mac-settings-") as directory:
                 root = Path(directory).resolve()
                 bundle_dir = root / "TpX.app" / "Contents" / "MacOS"
@@ -397,17 +502,35 @@ class RuntimeTests(unittest.TestCase):
                 shutil.copy2(BINARY, executable)
                 bundle_ini = bundle_dir / "TpX.ini"
                 original_legacy = "LineWidth_Default=2.25\n"
-                if legacy_settings:
+                if legacy_layout == "bundle":
                     bundle_ini.write_text(original_legacy)
 
                 home = root / "home"
                 config_home = root / "config"
                 home.mkdir()
                 config_home.mkdir()
+                state_home = root / "state"
+                cache_home = root / "cache"
+                state_home.mkdir()
+                cache_home.mkdir()
                 env = os.environ.copy()
-                env.update(HOME=str(home), XDG_CONFIG_HOME=str(config_home),
+                env.update(storage_environment(home, config_home,
+                                               state_home, cache_home),
                            TMPDIR=str(root))
-                if legacy_settings:
+                old_user_settings = None
+                if legacy_layout == "old-user-config":
+                    seed = subprocess.run(
+                        [str(executable), "seed-legacy-mac-settings"], cwd=root,
+                        env=env, capture_output=True, text=True, timeout=40)
+                    self.assertEqual(seed.returncode, 0,
+                                     seed.stdout + seed.stderr)
+                    legacy_line = next(line for line in seed.stdout.splitlines()
+                                       if line.startswith("LEGACY_SETTINGS_FILE="))
+                    old_user_settings = Path(
+                        legacy_line.split("=", 1)[1]).resolve()
+                    self.assertTrue(old_user_settings.is_file())
+                    self.assertEqual(old_user_settings.read_text(), original_legacy)
+                if legacy_layout != "none":
                     env["TPX_SETTINGS_EXPECT_LEGACY"] = "2.25"
                 else:
                     env.pop("TPX_SETTINGS_EXPECT_LEGACY", None)
@@ -422,9 +545,11 @@ class RuntimeTests(unittest.TestCase):
                 self.assertTrue(settings_file.is_file())
                 self.assertNotEqual(settings_file, bundle_ini.resolve())
                 self.assertTrue(settings_file.is_relative_to(root))
-                if legacy_settings:
-                    self.assertEqual(bundle_ini.read_text(), original_legacy,
-                                     "Legacy bundle settings were modified")
+                legacy_file = (bundle_ini if legacy_layout == "bundle"
+                               else old_user_settings)
+                if legacy_file is not None:
+                    self.assertEqual(legacy_file.read_text(), original_legacy,
+                                     "Legacy preferences were modified")
                 else:
                     self.assertFalse(bundle_ini.exists(),
                                      "Saving created TpX.ini inside the app bundle")
@@ -467,10 +592,15 @@ class RuntimeTests(unittest.TestCase):
 
                 home = root / "home"
                 config_home = root / "config"
+                state_home = root / "state"
+                cache_home = root / "cache"
                 home.mkdir()
                 config_home.mkdir()
+                state_home.mkdir()
+                cache_home.mkdir()
                 env = os.environ.copy()
-                env.update(HOME=str(home), XDG_CONFIG_HOME=str(config_home),
+                env.update(storage_environment(home, config_home,
+                                               state_home, cache_home),
                            TMPDIR=str(root),
                            TPX_RESOURCE_EXPECT_BUNDLE="1" if bundled else "0")
                 result = subprocess.run([str(executable), "mac-resources"], cwd=root,

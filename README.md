@@ -15,6 +15,28 @@ run the editor; no compiler is needed. See [INSTALL.md](INSTALL.md) for the
 short installation steps, dependencies and Mac first-launch instructions.
 The Mac app is ad hoc signed and not notarized.
 
+### Preferences and recovery files
+
+TpX keeps preferences, recovery drafts and preview caches in your user profile,
+separate from the application and drawing files. Windows uses
+`%APPDATA%\TpX\TpX.ini` for preferences, `%LOCALAPPDATA%\TpX\AutoSaveRecovery`
+for recovery drafts and `%LOCALAPPDATA%\TpX\preview-cache` for the preview
+cache. Linux uses the XDG config, state and cache directories, with `~/.config`,
+`~/.local/state` and `~/.cache` as fallbacks. macOS uses
+`~/Library/Preferences/TpX/TpX.ini`,
+`~/Library/Application Support/TpX/AutoSaveRecovery` and
+`~/Library/Caches/TpX/preview-cache`.
+Existing per-user preferences take precedence. If there are none, TpX imports
+the historical `TpX.ini` from beside the executable or the previous macOS
+settings location and leaves the original in place.
+
+For a self-contained copy, start TpX with `--portable` or place an empty
+`TpX.portable` file beside the executable. TpX then stores files under
+`TpX-portable-data/{config,state,cache}` beside that copy. For a macOS app,
+place the sentinel beside `TpX.app`; portable data stays beside the bundle so
+the signed app resources remain intact. **Help → Storage locations** shows the
+paths in use.
+
 [![Linux tests](https://github.com/krystophny/tpx/actions/workflows/test.yml/badge.svg)](https://github.com/krystophny/tpx/actions/workflows/test.yml)
 
 This is a screenshot of the v1.6.alpha.1 on Linux/GTK2

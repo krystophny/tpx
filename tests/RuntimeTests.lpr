@@ -7,7 +7,7 @@ uses
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Options, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, AutoSaveStore, AutoSaveRuntime, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, SvgCodec, EditSessions, PropertyEdits, PropertyEditCore, gzio;
+  Settings0, MainUnit, Propert, Options, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, AutoSaveStore, AutoSaveRuntime, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, SvgCodec, EditSessions, PropertyEdits, PropertyEditCore, UserStorage, gzio;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Propert.lfm}
@@ -350,6 +350,34 @@ begin
   SetLiveTeXEnabled(True);
   LoadSettings;
   Check(not LiveTeXEnabled, 'Live LaTeX preview preference did not persist');
+end;
+
+procedure TestUserPreferencesWrite;
+begin
+  SetLiveTeXEnabled(False);
+  SaveSettings;
+end;
+
+procedure TestUserPreferencesRead;
+begin
+  Check(not LiveTeXEnabled,
+    'user preferences did not survive replacing the executable');
+end;
+
+procedure TestStoragePaths;
+var
+  Paths: TUserStoragePaths;
+  ErrorText: string;
+begin
+  Paths := CurrentUserStoragePaths;
+  Check(EnsureUserStorageDirectory(usaConfig, ErrorText), ErrorText);
+  Check(EnsureUserStorageDirectory(usaState, ErrorText), ErrorText);
+  Check(EnsureUserStorageDirectory(usaCache, ErrorText), ErrorText);
+  if Paths.Portable then WriteLn('STORAGE_MODE=portable')
+  else WriteLn('STORAGE_MODE=installed');
+  WriteLn('STORAGE_CONFIG=', Paths.Config);
+  WriteLn('STORAGE_STATE=', Paths.State);
+  WriteLn('STORAGE_CACHE=', Paths.Cache);
 end;
 
 procedure TestLiveTeX;
@@ -1177,12 +1205,31 @@ begin
 end;
 
 {$IFDEF DARWIN}
+procedure SeedLegacyMacSettings;
+var
+  FileName: string;
+  Strings: TStringList;
+begin
+  FileName := IncludeTrailingPathDelimiter(GetAppConfigDir(False)) + 'TpX.ini';
+  if not ForceDirectories(ExtractFileDir(FileName)) then
+    raise Exception.Create('Could not create legacy settings directory');
+  Strings := TStringList.Create;
+  try
+    Strings.Add('LineWidth_Default=2.25');
+    Strings.SaveToFile(FileName);
+  finally
+    Strings.Free;
+  end;
+  WriteLn('LEGACY_SETTINGS_FILE=', FileName);
+end;
+
 procedure TestMacSettings;
 var
   ConfigFile, BundleFile, ExpectedLegacy: string;
   ExpectedWidth: Double;
 begin
-  ConfigFile := IncludeTrailingPathDelimiter(GetAppConfigDir(False)) + 'TpX.ini';
+  ConfigFile := IncludeTrailingPathDelimiter(UserStorageDirectory(usaConfig)) +
+    'TpX.ini';
   BundleFile := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) + 'TpX.ini';
   ExpectedLegacy := GetEnvironmentVariable('TPX_SETTINGS_EXPECT_LEGACY');
   if ExpectedLegacy <> '' then
@@ -1428,6 +1475,13 @@ begin
       RunPstoeditFixture;
       Halt(0);
     end;
+{$IFDEF DARWIN}
+    if ParamStr(1) = 'seed-legacy-mac-settings' then
+    begin
+      SeedLegacyMacSettings;
+      Halt(0);
+    end;
+{$ENDIF}
     if SameText(ChangeFileExt(ExtractFileName(ParamStr(0)), ''), 'mpost-fixture')
       or SameText(ChangeFileExt(ExtractFileName(ParamStr(0)), ''), 'gs-fixture') then
     begin
@@ -1449,6 +1503,9 @@ begin
     else if ParamStr(1) = 'live-tex-missing-tool' then TestLiveTeXMissingTool
     else if ParamStr(1) = 'live-tex' then TestLiveTeX
     else if ParamStr(1) = 'live-tex-settings' then TestLiveTeXSettings
+    else if ParamStr(1) = 'user-preferences-write' then TestUserPreferencesWrite
+    else if ParamStr(1) = 'user-preferences-read' then TestUserPreferencesRead
+    else if ParamStr(1) = 'storage-paths' then TestStoragePaths
     else if ParamStr(1) = 'preview-state' then TestPreviewState
     else if ParamStr(1) = 'external-tools' then TestExternalTools
     else if ParamStr(1) = 'check-file-path' then TestCheckFilePath
