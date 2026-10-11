@@ -2206,7 +2206,6 @@ begin
   FBrowserRecoveryTimer.Enabled := False;
   FBrowserRecoveryTimer.Interval := 750;
   FBrowserRecoveryTimer.OnTimer := ProcessBrowserRecoveryDeadline;
-  OnRecoveryEditSessionRestored := RecoveryEditSessionRestored;
   SetBrowserDocumentLifecycleCallbacks(BrowserRecoveryDocumentEdited,
     ResetBrowserRecoveryDocument, BrowserRecoveryDownloadRequested);
   ResetBrowserRecoveryDocument;
