@@ -3,7 +3,7 @@ program WatchWindowsTests;
 {$mode objfpc}{$H+}{$codepage utf8}
 
 uses
-  Classes, SysUtils, SyncObjs, Process, FileWatch, FileWatchWindows,
+  Classes, SysUtils, SyncObjs, Process, Pipes, FileWatch, FileWatchWindows,
   FileWatchNative;
 
 type
@@ -268,7 +268,7 @@ begin
   Result := TProcess.Create(nil);
   try
     Result.Executable := 'powershell.exe';
-    Result.Options := [poNoConsole];
+    Result.Options := [poNoConsole, poUsePipes];
     Result.Parameters.Add('-NoLogo');
     Result.Parameters.Add('-NoProfile');
     Result.Parameters.Add('-NonInteractive');
@@ -288,6 +288,132 @@ begin
     Result.Free;
     raise;
   end;
+end;
+
+procedure DrainPipe(Stream: TInputPipeStream; var Captured: RawByteString);
+var
+  Buffer: array[0..1023] of Byte;
+  Count, ExistingLength: Integer;
+begin
+  while (Stream <> nil) and (Stream.NumBytesAvailable > 0) do
+  begin
+    Count := Stream.NumBytesAvailable;
+    if Count > SizeOf(Buffer) then Count := SizeOf(Buffer);
+    Count := Stream.Read(Buffer[0], Count);
+    if Count <= 0 then Exit;
+    ExistingLength := Length(Captured);
+    SetLength(Captured, ExistingLength + Count);
+    Move(Buffer[0], Captured[ExistingLength + 1], Count);
+  end;
+end;
+
+procedure DrainHelperOutput(Process: TProcess; var CapturedOutput,
+  CapturedError: RawByteString);
+begin
+  DrainPipe(Process.Output, CapturedOutput);
+  DrainPipe(Process.Stderr, CapturedError);
+end;
+
+function WaitForHelperEvent(Process: TProcess; Event: TEvent;
+  TimeoutMS: Cardinal; var CapturedOutput, CapturedError: RawByteString): Boolean;
+var
+  StartedAt, Elapsed: QWord;
+  WaitMS: Cardinal;
+  WaitResult: TWaitResult;
+begin
+  StartedAt := GetTickCount64;
+  repeat
+    Elapsed := GetTickCount64 - StartedAt;
+    if Elapsed >= TimeoutMS then Break;
+    DrainHelperOutput(Process, CapturedOutput, CapturedError);
+    Elapsed := GetTickCount64 - StartedAt;
+    if Elapsed >= TimeoutMS then Break;
+    WaitResult := Event.WaitFor(0);
+    if WaitResult = wrSignaled then Exit(True);
+    if WaitResult <> wrTimeout then
+    begin
+      DrainHelperOutput(Process, CapturedOutput, CapturedError);
+      Exit(False);
+    end;
+    if not Process.Running then
+    begin
+      DrainHelperOutput(Process, CapturedOutput, CapturedError);
+      Exit(False);
+    end;
+
+    Elapsed := GetTickCount64 - StartedAt;
+    if Elapsed >= TimeoutMS then Break;
+    WaitMS := TimeoutMS - Elapsed;
+    if WaitMS > 50 then WaitMS := 50;
+    WaitResult := Event.WaitFor(WaitMS);
+    if WaitResult = wrSignaled then
+    begin
+      DrainHelperOutput(Process, CapturedOutput, CapturedError);
+      Exit(True);
+    end;
+    if WaitResult <> wrTimeout then
+    begin
+      DrainHelperOutput(Process, CapturedOutput, CapturedError);
+      Exit(False);
+    end;
+    if not Process.Running then
+    begin
+      DrainHelperOutput(Process, CapturedOutput, CapturedError);
+      Exit(False);
+    end;
+  until False;
+  DrainHelperOutput(Process, CapturedOutput, CapturedError);
+  Result := False;
+end;
+
+function WaitForHelperExit(Process: TProcess; TimeoutMS: Cardinal;
+  var CapturedOutput, CapturedError: RawByteString): Boolean;
+var
+  StartedAt, Elapsed: QWord;
+  WaitMS: Cardinal;
+begin
+  StartedAt := GetTickCount64;
+  repeat
+    Elapsed := GetTickCount64 - StartedAt;
+    if Elapsed >= TimeoutMS then Break;
+    DrainHelperOutput(Process, CapturedOutput, CapturedError);
+    Elapsed := GetTickCount64 - StartedAt;
+    if Elapsed >= TimeoutMS then Break;
+    WaitMS := TimeoutMS - Elapsed;
+    if WaitMS > 50 then WaitMS := 50;
+    if Process.WaitOnExit(WaitMS) then
+    begin
+      DrainHelperOutput(Process, CapturedOutput, CapturedError);
+      Exit(True);
+    end;
+  until False;
+  DrainHelperOutput(Process, CapturedOutput, CapturedError);
+  Result := False;
+end;
+
+function HelperFailureDetails(Process: TProcess; const CapturedOutput,
+  CapturedError: RawByteString): string;
+var
+  StateText, OutputText, ErrorText: string;
+begin
+  if Process.Running then
+    StateText := 'still running'
+  else
+    StateText := Format('exited with code %d', [Process.ExitCode]);
+  OutputText := Trim(string(CapturedOutput));
+  ErrorText := Trim(string(CapturedError));
+  if OutputText = '' then OutputText := '<empty>';
+  if ErrorText = '' then ErrorText := '<empty>';
+  if Length(OutputText) > 2048 then
+    OutputText := Copy(OutputText, 1, 2048) + ' [truncated]';
+  if Length(ErrorText) > 2048 then
+    ErrorText := Copy(ErrorText, 1, 2048) + ' [truncated]';
+  OutputText := StringReplace(OutputText, #13, '\r', [rfReplaceAll]);
+  OutputText := StringReplace(OutputText, #10, '\n', [rfReplaceAll]);
+  ErrorText := StringReplace(ErrorText, #13, '\r', [rfReplaceAll]);
+  ErrorText := StringReplace(ErrorText, #10, '\n', [rfReplaceAll]);
+  Result := Format('helper %s; stdout=%s; stderr=%s',
+    [StateText, OutputText, ErrorText]);
 end;
 
 procedure TestNativeWatcher(const HelperPath: string);
@@ -314,6 +440,7 @@ var
   StartedAt: QWord;
   StepExists: Boolean;
   StepBytes: RawByteString;
+  HelperOutput, HelperError: RawByteString;
 begin
   Prefix := 'Local\TpXWatch64-' + IntToHex(GetTickCount64, 16);
   CaseRenameObserved := False;
@@ -340,8 +467,10 @@ begin
     Path := Directory + UTF8String(PathDelim) +
       UTF8String('drawing üñ spaced.tpx');
     Process := StartHelper(HelperPath, Path, Events, EventNames);
-    Check(Events[0].WaitFor(WaitLimitMS) = wrSignaled,
-      'The external writer did not reach its ready barrier');
+    if not WaitForHelperEvent(Process, Events[0], WaitLimitMS,
+      HelperOutput, HelperError) then
+      raise Exception.Create('The external writer did not reach its ready barrier (' +
+        HelperFailureDetails(Process, HelperOutput, HelperError) + ')');
     SubscribeStatus := Source.Subscribe(Path, 17, SubscriptionID);
     Check(SubscribeStatus = fwsReady,
       'The Windows notification source rejected a supported directory');
@@ -384,45 +513,48 @@ begin
     begin
       WriteLn('Waiting for filesystem scenario step ', I);
       Flush(Output);
-      Check(Events[2].WaitFor(WaitLimitMS) = wrSignaled,
-        'The external writer did not reach a step barrier');
+      if not WaitForHelperEvent(Process, Events[2], WaitLimitMS,
+        HelperOutput, HelperError) then
+        raise Exception.CreateFmt(
+          'The external writer did not reach step barrier %d (%s)',
+          [I, HelperFailureDetails(Process, HelperOutput, HelperError)]);
       case I of
-        0: begin StepExists := True; StepBytes := 'in-place-one'; end;
-        1: begin StepExists := True; StepBytes := 'in-place-two'; end;
-        2: begin StepExists := True; StepBytes := 'replacement-one'; end;
-        3: begin StepExists := True; StepBytes := 'replacement-two'; end;
-        4: begin StepExists := False; StepBytes := ''; end;
-        5: begin StepExists := True; StepBytes := 'replacement-two'; end;
-        6: begin StepExists := False; StepBytes := ''; end;
-        7: begin StepExists := True; StepBytes := 'delete-recreate-final'; end;
+        0: begin StepExists := True; StepBytes := 'initial'; end;
+        1: begin StepExists := True; StepBytes := 'in-place-one'; end;
+        2: begin StepExists := True; StepBytes := 'in-place-two'; end;
+        3: begin StepExists := True; StepBytes := 'replacement-one'; end;
+        4: begin StepExists := True; StepBytes := 'replacement-two'; end;
+        5: begin StepExists := False; StepBytes := ''; end;
+        6: begin StepExists := True; StepBytes := 'replacement-two'; end;
+        7: begin StepExists := False; StepBytes := ''; end;
         8: begin StepExists := True; StepBytes := 'delete-recreate-final'; end;
         9: begin StepExists := True; StepBytes := 'delete-recreate-final'; end;
         else begin StepExists := True; StepBytes := 'final-source-bytes'; end;
       end;
-      if I = 9 then
+      if I = 0 then
       begin
         Check(not Source.WaitForEvent(500),
           'Unrelated sibling activity produced a watched-file event');
       end
       else
       begin
-        if I = 0 then
+        if I = 1 then
         begin
           PreviousBytes := ReadFileBytes(Path, PreviousModifiedFileTime);
         end;
-        if I = 4 then
+        if I = 5 then
           WaitForSubscriptionEvent(Source, SubscriptionID, NormalizedPath,
             fckDisappeared, True)
-        else if I = 5 then
-          WaitForSubscriptionEvent(Source, SubscriptionID, NormalizedPath,
-            fckReappeared, True)
         else if I = 6 then
           WaitForSubscriptionEvent(Source, SubscriptionID, NormalizedPath,
-            fckDisappeared, True)
+            fckReappeared, True)
         else if I = 7 then
           WaitForSubscriptionEvent(Source, SubscriptionID, NormalizedPath,
-            fckReappeared, True)
+            fckDisappeared, True)
         else if I = 8 then
+          WaitForSubscriptionEvent(Source, SubscriptionID, NormalizedPath,
+            fckReappeared, True)
+        else if I = 9 then
         begin
           CaseRenameObserved := Events[6].WaitFor(0) = wrSignaled;
           if CaseRenameObserved then
@@ -433,13 +565,13 @@ begin
           WaitForSubscriptionEvent(Source, SubscriptionID, NormalizedPath,
             fckContentChanged, False);
       end;
-      if I = 0 then
+      if I = 1 then
       begin
         Check((Length(PreviousBytes) = Length('in-place-one')) and
           (PreviousBytes = 'in-place-one'),
           'Initial source bytes were not recorded');
       end
-      else if I = 1 then
+      else if I = 2 then
       begin
         CurrentBytes := ReadFileBytes(Path, CurrentModifiedFileTime);
         Check((Length(CurrentBytes) = Length(PreviousBytes)) and
@@ -455,8 +587,10 @@ begin
     else
       WriteLn('Case-only rename was not supported by this temporary directory');
 
-    Check(Events[4].WaitFor(WaitLimitMS) = wrSignaled,
-      'The external writer did not finish its scenario');
+    if not WaitForHelperEvent(Process, Events[4], WaitLimitMS,
+      HelperOutput, HelperError) then
+      raise Exception.Create('The external writer did not finish its scenario (' +
+        HelperFailureDetails(Process, HelperOutput, HelperError) + ')');
     AssertFileBytes(Path, True, 'final-source-bytes');
 
     DrainEvents(Source);
@@ -499,14 +633,19 @@ begin
       (CancelCompletions > 0),
       'Shutdown did not drain an actual cancelled overlapped read');
     Events[5].SetEvent;
-    Check(Process.WaitOnExit(WaitLimitMS), 'The external writer did not exit');
-    Check(Process.ExitCode = 0, 'The external writer reported a failure');
+    if not WaitForHelperExit(Process, WaitLimitMS, HelperOutput, HelperError) then
+      raise Exception.Create('The external writer did not exit (' +
+        HelperFailureDetails(Process, HelperOutput, HelperError) + ')');
+    if Process.ExitCode <> 0 then
+      raise Exception.Create('The external writer reported a failure (' +
+        HelperFailureDetails(Process, HelperOutput, HelperError) + ')');
   finally
     if Process <> nil then
     begin
       Events[3].SetEvent;
       Events[5].SetEvent;
-      if not Process.WaitOnExit(2000) then Process.Terminate(1);
+      if not WaitForHelperExit(Process, 2000, HelperOutput, HelperError) then
+        Process.Terminate(1);
       Process.Free;
     end;
     Source.Free;

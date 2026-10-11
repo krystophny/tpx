@@ -48,6 +48,10 @@ try {
     $ready.Set() | Out-Null
     if (-not $start.WaitOne(15000)) { throw 'The watcher test did not start' }
 
+    Complete-Step {
+        $sibling = Join-Path $directory 'unrelated sibling noise.txt'
+        [IO.File]::WriteAllBytes($sibling, $utf8.GetBytes('noise'))
+    }
     Complete-Step { Write-Target 'in-place-one' }
     Complete-Step {
         $oldTime = [IO.File]::GetLastWriteTimeUtc($target)
@@ -68,10 +72,6 @@ try {
             [IO.File]::Move($temporary, $upper)
             $caseChanged.Set() | Out-Null
         }
-    }
-    Complete-Step {
-        $sibling = Join-Path $directory 'unrelated sibling noise.txt'
-        [IO.File]::WriteAllBytes($sibling, $utf8.GetBytes('noise'))
     }
     Complete-Step { Write-Target 'final-source-bytes' }
 
