@@ -1827,6 +1827,7 @@ begin
     else if ParamStr(1) = 'autosave-recovery-watch-binding' then TestAutoSaveRecoveryWatchBinding
     else if ParamStr(1) = 'edit-session-preview-cancel' then TestEditSessionPreviewCancel
     else if ParamStr(1) = 'edit-session-recovery-payload' then TestEditSessionRecoveryPayload
+    else if ParamStr(1) = 'edit-session-nested-recovery-rebind' then TestEditSessionNestedRecoveryRebind
     else if ParamStr(1) = 'edit-session-text-whitespace' then TestEditSessionTextWhitespaceSaveRoundTrip
     else if ParamStr(1) = 'edit-session-malformed-reference' then TestEditSessionMalformedLiteralReference
     else if ParamStr(1) = 'edit-session-autosave-cancel' then TestEditSessionAutoSaveCancel
