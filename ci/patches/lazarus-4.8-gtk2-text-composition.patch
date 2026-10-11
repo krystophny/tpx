@@ -1,0 +1,311 @@
+From b8356ab0fc201b47f4ef95e0f99d128b2bc58635 Mon Sep 17 00:00:00 2001
+From: Christopher Albert <albert@tugraz.at>
+Date: Sun, 11 Oct 2026 00:36:45 +0200
+Subject: [PATCH] gtk2: forward native text composition lifecycle
+
+---
+ lcl/interfaces/gtk2/gtk2wscustommemo.inc | 222 ++++++++++++++++++++++-
+ lcl/interfaces/gtk2/gtk2wsstdctrls.pp    |  10 +
+ 2 files changed, 231 insertions(+), 1 deletion(-)
+
+diff --git a/lcl/interfaces/gtk2/gtk2wscustommemo.inc b/lcl/interfaces/gtk2/gtk2wscustommemo.inc
+index fc7705149c..34429da980 100644
+--- a/lcl/interfaces/gtk2/gtk2wscustommemo.inc
++++ b/lcl/interfaces/gtk2/gtk2wscustommemo.inc
+@@ -1,7 +1,216 @@
+ {%MainUnit gtk2wsstdctrls.pp}
+ 
++type
++  PNativeIMEEndData = ^TNativeIMEEndData;
++  TNativeIMEEndData = record
++    MainWidget: PGtkWidget;
++    Generation: guint;
++    SourceID: guint;
++  end;
++
++  PNativeIMEState = ^TNativeIMEState;
++  TNativeIMEState = record
++    NativeWidget: PGtkWidget;
++    Active: Boolean;
++    Generation: guint;
++    PendingEnd: PNativeIMEEndData;
++  end;
++
++const
++  NativeIMEStateKey = 'lcl-native-ime-state';
++
+ { Callbacks }
+ 
++procedure Gtk2WS_FreeNativeIMEEndData(EndData: PNativeIMEEndData);
++begin
++  if EndData = nil then Exit;
++  if EndData^.MainWidget <> nil then
++    g_object_unref(PGObject(EndData^.MainWidget));
++  Dispose(EndData);
++end;
++
++procedure Gtk2WS_CancelNativeIMEEnd(State: PNativeIMEState);
++var
++  EndData: PNativeIMEEndData;
++begin
++  if (State = nil) or (State^.PendingEnd = nil) then Exit;
++  EndData := State^.PendingEnd;
++  State^.PendingEnd := nil;
++  if EndData^.SourceID <> 0 then
++    g_source_remove(EndData^.SourceID);
++  Gtk2WS_FreeNativeIMEEndData(EndData);
++end;
++
++procedure Gtk2WS_FreeNativeIMEState(Data: gpointer); cdecl;
++var
++  State: PNativeIMEState;
++begin
++  State := PNativeIMEState(Data);
++  if State = nil then Exit;
++  Gtk2WS_CancelNativeIMEEnd(State);
++  if State^.NativeWidget <> nil then
++    g_object_unref(PGObject(State^.NativeWidget));
++  Dispose(State);
++end;
++
++function Gtk2WS_GetNativeIMEState(MainWidget, NativeWidget: PGtkWidget): PNativeIMEState;
++begin
++  Result := g_object_get_data(PGObject(MainWidget), NativeIMEStateKey);
++  if Result <> nil then Exit;
++
++  New(Result);
++  FillChar(Result^, SizeOf(Result^), 0);
++  Result^.NativeWidget := PGtkWidget(g_object_ref(PGObject(NativeWidget)));
++  g_object_set_data_full(PGObject(MainWidget), NativeIMEStateKey, Result,
++    @Gtk2WS_FreeNativeIMEState);
++end;
++
++function Gtk2WS_GetNativeIMEWidgetInfo(State: PNativeIMEState;
++  out MainWidget: PGtkWidget): PWidgetInfo;
++begin
++  Result := nil;
++  MainWidget := nil;
++  if (State = nil) or (State^.NativeWidget = nil) then Exit;
++  MainWidget := PGtkWidget(GetMainWidget(State^.NativeWidget));
++  if MainWidget = nil then Exit;
++  Result := GetWidgetInfo(MainWidget);
++  if (Result = nil) or (Result^.CoreWidget <> State^.NativeWidget) then
++    Result := nil;
++end;
++
++procedure Gtk2WS_DeliverNativeIME(ControlInfo: PWidgetInfo; Flags: WPARAM;
++  Data: LPARAM);
++var
++  Mess: TLMessage;
++begin
++  if (ControlInfo = nil) or (ControlInfo^.LCLObject = nil) then Exit;
++  FillChar(Mess, SizeOf(Mess), 0);
++  Mess.Msg := LM_IM_COMPOSITION;
++  Mess.WParam := Flags;
++  Mess.LParam := Data;
++  DeliverMessage(ControlInfo^.LCLObject, Mess);
++end;
++
++function Gtk2WS_NativeIMEEndIdle(Data: gpointer): gboolean; cdecl;
++var
++  EndData: PNativeIMEEndData;
++  State: PNativeIMEState;
++  ControlInfo: PWidgetInfo;
++begin
++  Result := gFalse;
++  EndData := PNativeIMEEndData(Data);
++  if EndData = nil then Exit;
++
++  State := g_object_get_data(PGObject(EndData^.MainWidget), NativeIMEStateKey);
++  if (State <> nil) and (State^.PendingEnd = EndData) then
++  begin
++    State^.PendingEnd := nil;
++    if State^.Generation = EndData^.Generation then
++    begin
++      State^.Active := False;
++      ControlInfo := GetWidgetInfo(EndData^.MainWidget);
++      if (ControlInfo <> nil) and
++         (ControlInfo^.CoreWidget = State^.NativeWidget) then
++        Gtk2WS_DeliverNativeIME(ControlInfo, GTK_IM_FLAG_END, 0);
++    end;
++  end;
++  Gtk2WS_FreeNativeIMEEndData(EndData);
++end;
++
++procedure Gtk2WS_NativePreeditChanged(NativeWidget: PGtkWidget;
++  Preedit: Pgchar; Data: gpointer); cdecl;
++var
++  State: PNativeIMEState;
++  ControlInfo: PWidgetInfo;
++  MainWidget: PGtkWidget;
++  Flags: WPARAM;
++  EndData: PNativeIMEEndData;
++begin
++  State := PNativeIMEState(Data);
++  if State = nil then Exit;
++  if NativeWidget <> State^.NativeWidget then Exit;
++  ControlInfo := Gtk2WS_GetNativeIMEWidgetInfo(State, MainWidget);
++  if ControlInfo = nil then Exit;
++
++  if (Preedit <> nil) and (Preedit^ <> #0) then
++  begin
++    if State^.PendingEnd <> nil then
++    begin
++      Inc(State^.Generation);
++      Gtk2WS_CancelNativeIMEEnd(State);
++      State^.Active := False;
++    end;
++
++    if State^.Active then
++      Flags := GTK_IM_FLAG_PREEDIT or GTK_IM_FLAG_REPLACE
++    else
++    begin
++      State^.Active := True;
++      Inc(State^.Generation);
++      Flags := GTK_IM_FLAG_START or GTK_IM_FLAG_PREEDIT;
++    end;
++    { Preedit is borrowed from GTK, so consumers must process it synchronously. }
++    Gtk2WS_DeliverNativeIME(ControlInfo, Flags, LPARAM(Preedit));
++  end
++  else if State^.Active and (State^.PendingEnd = nil) then
++  begin
++    New(EndData);
++    EndData^.MainWidget := PGtkWidget(g_object_ref(PGObject(MainWidget)));
++    EndData^.Generation := State^.Generation;
++    EndData^.SourceID := 0;
++    State^.PendingEnd := EndData;
++    { GTK commits to the native buffer in this dispatch; idle runs after its
++      changed callback has delivered CM_TEXTCHANGED. Cancellation also drains. }
++    EndData^.SourceID := g_idle_add(TGtkFunction(@Gtk2WS_NativeIMEEndIdle), EndData);
++  end;
++end;
++
++procedure Gtk2WS_NativeWidgetDestroy(Widget: PGtkWidget; Data: gpointer); cdecl;
++var
++  State: PNativeIMEState;
++begin
++  State := PNativeIMEState(Data);
++  if State = nil then Exit;
++  Gtk2WS_CancelNativeIMEEnd(State);
++  if State^.NativeWidget <> nil then
++    g_signal_handlers_disconnect_matched(PGtkObject(State^.NativeWidget),
++      G_SIGNAL_MATCH_DATA, 0, 0, nil, nil, State);
++  g_signal_handlers_disconnect_matched(PGtkObject(Widget), G_SIGNAL_MATCH_DATA,
++    0, 0, nil, nil, State);
++  g_object_set_data_full(PGObject(Widget), NativeIMEStateKey, nil, nil);
++end;
++
++procedure Gtk2WS_DetachNativeIME(MainWidget: PGtkWidget);
++var
++  State: PNativeIMEState;
++begin
++  if MainWidget = nil then Exit;
++  State := g_object_get_data(PGObject(MainWidget), NativeIMEStateKey);
++  if State = nil then Exit;
++  Gtk2WS_CancelNativeIMEEnd(State);
++  if State^.NativeWidget <> nil then
++    g_signal_handlers_disconnect_matched(PGtkObject(State^.NativeWidget),
++      G_SIGNAL_MATCH_DATA, 0, 0, nil, nil, State);
++  g_signal_handlers_disconnect_matched(PGtkObject(MainWidget), G_SIGNAL_MATCH_DATA,
++    0, 0, nil, nil, State);
++  g_object_set_data_full(PGObject(MainWidget), NativeIMEStateKey, nil, nil);
++end;
++
++procedure Gtk2WS_AttachNativeIME(MainWidget, NativeWidget: PGtkWidget);
++var
++  State: PNativeIMEState;
++begin
++  if (MainWidget = nil) or (NativeWidget = nil) or
++     (g_signal_lookup('preedit-changed', GTK_OBJECT_TYPE(NativeWidget)) = 0) then
++    Exit;
++  if g_object_get_data(PGObject(MainWidget), NativeIMEStateKey) <> nil then Exit;
++  State := Gtk2WS_GetNativeIMEState(MainWidget, NativeWidget);
++  g_signal_connect(PGtkObject(NativeWidget), 'preedit-changed',
++    TGTKSignalFunc(@Gtk2WS_NativePreeditChanged), State);
++  g_signal_connect(PGtkObject(MainWidget), 'destroy',
++    TGTKSignalFunc(@Gtk2WS_NativeWidgetDestroy), State);
++end;
++
+ procedure Gtk2WS_MemoChanged({%H-}AGtkTextBuffer: PGtkTextBuffer; WidgetInfo: PWidgetInfo); cdecl;
+ var
+   Mess: TLMessage;
+@@ -93,8 +302,10 @@ class procedure TGtk2WSCustomMemo.SetCallbacks(const AGtkWidget: PGtkWidget;
+   const AWidgetInfo: PWidgetInfo);
+ var
+   TextBuf: PGtkTextBuffer;
++  TextView: PGtkWidget;
+ begin
+-  TextBuf := gtk_text_view_get_buffer(PGtkTextView(AWidgetInfo^.CoreWidget));
++  TextView := AWidgetInfo^.CoreWidget;
++  TextBuf := gtk_text_view_get_buffer(PGtkTextView(TextView));
+ 
+   //TGtkWSBaseScrollingWinControl.SetCallbacks(AGtkWidget, AWidgetInfo);
+ 
+@@ -103,6 +314,8 @@ begin
+   SignalConnect(PGtkWidget(TextBuf), 'changed', @Gtk2WS_MemoChanged, AWidgetInfo);
+   SignalConnect(PGtkWidget(TextBuf), 'insert-text', @Gtk2WS_MemoTextInserting, AWidgetInfo);
+ 
++  Gtk2WS_AttachNativeIME(AGtkWidget, TextView);
++
+   //SetCallback(LM_ACTIVATE, AGTKObject,ALCLObject);
+   
+   SignalConnect(AWidgetInfo^.CoreWidget, 'cut-clipboard', @Gtk2WS_MemoCutToClip, AWidgetInfo);
+@@ -113,6 +326,13 @@ begin
+     gtk_signal_func(@gtkDefaultPopupMenuCloseFix), AWidgetInfo);
+ end;
+ 
++class procedure TGtk2WSCustomMemo.DestroyHandle(const AWinControl: TWinControl);
++begin
++  if AWinControl.HandleAllocated then
++    Gtk2WS_DetachNativeIME(PGtkWidget(AWinControl.Handle));
++  TGtk2WSWinControl.DestroyHandle(AWinControl);
++end;
++
+ class function TGtk2WSCustomMemo.CreateHandle(const AWinControl: TWinControl;
+   const AParams: TCreateParams): TLCLHandle;
+ var
+diff --git a/lcl/interfaces/gtk2/gtk2wsstdctrls.pp b/lcl/interfaces/gtk2/gtk2wsstdctrls.pp
+index 20f27ed689..70e61fafcf 100644
+--- a/lcl/interfaces/gtk2/gtk2wsstdctrls.pp
++++ b/lcl/interfaces/gtk2/gtk2wsstdctrls.pp
+@@ -195,6 +195,7 @@ type
+   published
+     class procedure SetCallbacks(const AGtkWidget: PGtkWidget; const AWidgetInfo: PWidgetInfo); virtual;
+     class function CreateHandle(const AWinControl: TWinControl; const AParams: TCreateParams): TLCLHandle; override;
++    class procedure DestroyHandle(const AWinControl: TWinControl); override;
+     class function GetCaretPos(const ACustomEdit: TCustomEdit): TPoint; override;
+     class function GetSelStart(const ACustomEdit: TCustomEdit): integer; override;
+     class function GetSelLength(const ACustomEdit: TCustomEdit): integer; override;
+@@ -230,6 +231,7 @@ type
+     class procedure SetCallbacks(const AGtkWidget: PGtkWidget; const AWidgetInfo: PWidgetInfo); virtual;
+   published
+     class function  CreateHandle(const AWinControl: TWinControl; const AParams: TCreateParams): TLCLHandle; override;
++    class procedure DestroyHandle(const AWinControl: TWinControl); override;
+ 
+     class function  GetSelStart(const ACustomEdit: TCustomEdit): integer; override;
+     class function  GetSelLength(const ACustomEdit: TCustomEdit): integer; override;
+@@ -1073,6 +1075,7 @@ class procedure TGtk2WSCustomEdit.SetCallbacks(const AGtkWidget: PGtkWidget;
+   const AWidgetInfo: PWidgetInfo);
+ begin
+   TGtk2WSWinControl.SetCallbacks(PGtkObject(AGtkWidget), TComponent(AWidgetInfo^.LCLObject));
++  Gtk2WS_AttachNativeIME(AGtkWidget, AWidgetInfo^.CoreWidget);
+ 
+   with TGtk2Widgetset(Widgetset) do
+   begin
+@@ -1087,6 +1090,13 @@ begin
+     gtk_signal_func(@gtkDefaultPopupMenuCloseFix), AWidgetInfo);
+ end;
+ 
++class procedure TGtk2WSCustomEdit.DestroyHandle(const AWinControl: TWinControl);
++begin
++  if AWinControl.HandleAllocated then
++    Gtk2WS_DetachNativeIME(PGtkWidget(AWinControl.Handle));
++  TGtk2WSWinControl.DestroyHandle(AWinControl);
++end;
++
+ class procedure TGtk2WSCustomEdit.GetPreferredSize(const AWinControl: TWinControl;
+   var PreferredWidth, PreferredHeight: integer; WithThemeSpace: Boolean);
+ begin
+-- 
+2.50.1 (Apple Git-155)
+
