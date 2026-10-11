@@ -227,7 +227,6 @@ class ReleaseArtifactTests(unittest.TestCase):
                            "TeX compilation", "packaged TeX compilation"]
             if platform.startswith("macos-"):
                 checks += ["native Cocoa font cancellation", "native Cocoa text shortcuts",
-                           "ad hoc signature verification", "signature tamper detection",
                            "native Cocoa inspector text composition",
                            "ad hoc signature verification", "signature tamper detection",
                            "Cocoa document type and app icon"]

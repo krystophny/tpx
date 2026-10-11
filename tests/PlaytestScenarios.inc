@@ -212,7 +212,7 @@ var
   Bad: string;
   ErrorText: string;
   HistoryCount: Integer;
-  HeightEditor, WidthEditor: TEdit;
+  HeightEditor, WidthEditor, FontEditor: TEdit;
   ErrorLabel, SelectionLabel: TLabel;
   LineStyleEditor: TComboBox;
   Key: Word;
@@ -237,6 +237,7 @@ begin
   MainForm.RefreshInspectorSelection;
   HeightEditor := MainForm.Inspector.EditorFor(opfTextHeight) as TEdit;
   WidthEditor := MainForm.Inspector.EditorFor(opfLineWidth) as TEdit;
+  FontEditor := MainForm.Inspector.EditorFor(opfFontName) as TEdit;
   ErrorLabel := MainForm.Inspector.FindComponent(
     'InspectorTextHeightError') as TLabel;
   for Bad in InvalidHeights do begin
@@ -303,9 +304,15 @@ begin
   Key := VK_TAB;
   Shift := [];
   HeightEditor.OnKeyDown(HeightEditor, Key, Shift);
-  Check(not MainForm.Inspector.HasActiveEdit and
-    (MainForm.TheDrawing.History.Count = HistoryCount + 1),
-    'Explicit Tab did not commit one inspector history step');
+  Check((Key = 0) and not MainForm.Inspector.HasActiveEdit and
+    (MainForm.TheDrawing.History.Count = HistoryCount + 1) and
+    (MainForm.ActiveControl = FontEditor),
+    'Explicit Tab did not commit and move to the next inspector field');
+  Key := VK_TAB;
+  Shift := [ssShift];
+  FontEditor.OnKeyDown(FontEditor, Key, Shift);
+  Check((Key = 0) and (MainForm.ActiveControl = HeightEditor),
+    'Shift+Tab did not return to the previous inspector field');
   MainForm.TheDrawing.History.Undo;
   TextObj := MainForm.TheDrawing.GetObject(0) as TText2D;
   Check(TextObj.Height = 7, 'Undo did not restore the draft before Tab commit');

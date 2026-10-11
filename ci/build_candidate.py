@@ -223,8 +223,6 @@ def build_and_package():
                                        "native Cocoa text shortcuts",
                                        "Cocoa document type and app icon",
                                        "native Cocoa inspector text composition",
-                                       "Cocoa document type and app icon",
-                                       "native Cocoa inspector text composition",
                                        "ad hoc signature verification",
                                        "signature tamper detection"])
         (package / "BUILD.json").write_text(json.dumps(manifest, indent=2) + "\n")

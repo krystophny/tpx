@@ -14,6 +14,8 @@ type
   TInspectorEpochProvider = function: QWord of object;
   TInspectorSessionEvent = function(Sender: TObject;
     Session: TObjectEditSession; RegisterSession: Boolean): Boolean of object;
+  TInspectorBeforeFieldInput = function(Sender: TObject;
+    CurrentSession: TObjectEditSession): Boolean of object;
   TInspectorFieldRefreshGuard = function(Sender: TObject;
     Field: TObjectPropertyField; const TargetIDs: TEditTargetIDs): Boolean of object;
 
@@ -57,10 +59,12 @@ type
     FStableFieldSelStart: array[TObjectPropertyField] of Integer;
     FStableFieldSelLength: array[TObjectPropertyField] of Integer;
     FRefreshing: Integer;
+    FRestoringFieldInput: Boolean;
     FHasSelection: Boolean;
     FOnEditCommitted: TNotifyEvent;
     FOnOpenCoordinates: TNotifyEvent;
     FOnSessionChanged: TInspectorSessionEvent;
+    FOnBeforeFieldInput: TInspectorBeforeFieldInput;
     FOnShouldSkipFieldRefresh: TInspectorFieldRefreshGuard;
     procedure BuildView;
     function ContentWidth: Integer;
@@ -131,6 +135,8 @@ type
       write FOnOpenCoordinates;
     property OnSessionChanged: TInspectorSessionEvent
       read FOnSessionChanged write FOnSessionChanged;
+    property OnBeforeFieldInput: TInspectorBeforeFieldInput
+      read FOnBeforeFieldInput write FOnBeforeFieldInput;
     property OnShouldSkipFieldRefresh: TInspectorFieldRefreshGuard
       read FOnShouldSkipFieldRefresh write FOnShouldSkipFieldRefresh;
     property HasActiveEdit: Boolean read FHasSessionField;
@@ -1296,6 +1302,25 @@ begin
         Exit;
       end;
   end;
+  if Assigned(FOnBeforeFieldInput) and not FRestoringFieldInput then
+  begin
+    if not FOnBeforeFieldInput(Self, FSession) then
+    begin
+      FSelectionLabel.Caption :=
+        'Finish or cancel the active edit before editing a property';
+      Exit;
+    end;
+    if not FWidgets[Field].Editor.Focused and
+      FWidgets[Field].Editor.CanFocus then
+    begin
+      FRestoringFieldInput := True;
+      try
+        FWidgets[Field].Editor.SetFocus;
+      finally
+        FRestoringFieldInput := False;
+      end;
+    end;
+  end;
   FSelectionLabel.Caption := 'Editing ' + FWidgets[Field].Editor.Hint;
 end;
 
@@ -1539,11 +1564,16 @@ procedure TObjectInspector.FieldKeyDown(Sender: TObject;
 var
   ErrorText: string;
   Field: TObjectPropertyField;
+  TabMoved: Boolean;
 begin
   Field := FieldFromControl(Sender);
   CaptureStableSelection(Field);
   if EditorCompositionPending(FWidgets[Field].Editor) or
-    ((FSession <> nil) and FSession.CompositionPending) then Exit;
+    ((FSession <> nil) and FSession.CompositionPending) then
+  begin
+    if Key = VK_TAB then Key := 0;
+    Exit;
+  end;
   if (Key = VK_ESCAPE) and FHasSessionField and
     (FSessionField = Field) then
   begin
@@ -1558,10 +1588,18 @@ begin
     CommitSession(ErrorText);
     Key := 0;
   end
-  else if (Key = VK_TAB) and FHasSessionField and
-    (FSessionField = Field) then
+  else if Key = VK_TAB then
   begin
-    if not CommitSession(ErrorText) then Key := 0;
+    if FHasSessionField and (FSessionField = Field) and
+      not CommitSession(ErrorText) then
+    begin
+      Key := 0;
+      Exit;
+    end;
+    TabMoved := FWidgets[Field].Editor.PerformTab(not (ssShift in Shift));
+    if TabMoved and
+      not FWidgets[Field].Editor.Focused then
+      Key := 0;
   end;
 end;
 

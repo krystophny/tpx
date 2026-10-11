@@ -799,7 +799,12 @@ def s_object_inspector(app):
         dialog.get_by_role('button', name='OK', exact=True).click()
 
     width.fill('2.5')
-    width.press('Enter')
+    width.press('Tab')
+    if width.input_value() != '2.5' or not width.is_enabled():
+        focus = app.page.evaluate('''() => document.activeElement?.tagName || 'none' ''')
+        raise AssertionError(
+            f'Tab lost the selected property or its committed value: '
+            f'{width.input_value()!r}, focus={focus}')
     if app.page.get_by_role('dialog').count():
         raise AssertionError('routine inspector edits opened a modal dialog')
     width.fill('4.5')
@@ -865,6 +870,32 @@ def s_object_inspector(app):
     if vertical.input_value() != '3.5':
         raise AssertionError(
             f'vertical radius did not remain after Enter: {vertical.input_value()!r}')
+    vertical.press('Tab')
+    focus_after_tab = app.page.evaluate('''() => {
+        const e = document.activeElement;
+        return e ? {tag: e.tagName, text: (e.textContent || '').trim()} : null;
+    }''')
+    if (not vertical.is_enabled() or vertical.input_value() != '3.5' or
+            focus_after_tab is None or focus_after_tab['tag'] != 'BUTTON' or
+            'Bitmap' not in focus_after_tab['text']):
+        raise AssertionError(
+            'Tab from Vertical radius did not preserve selection and move to '
+            f'the next Inspector control (Bitmap section): {focus_after_tab}')
+    app.page.keyboard.type('9')
+    if vertical.input_value() != '3.5':
+        raise AssertionError(
+            'typing after Tab changed the previously committed radius: '
+            f'{vertical.input_value()!r}')
+    app.page.keyboard.press('Shift+Tab')
+    focus_after_shift_tab = app.page.evaluate('''() => {
+        const e = document.activeElement;
+        return e ? `${e.tagName}[${e.getAttribute('aria-label') || ''}]` : 'none';
+    }''')
+    if (focus_after_shift_tab != 'INPUT[Vertical radius (mm)]' or
+            not vertical.is_enabled() or vertical.input_value() != '3.5'):
+        raise AssertionError(
+            'Shift+Tab did not return to the committed Inspector field: '
+            f'{focus_after_shift_tab}')
     if app.capture_requested:
         app.shot('wide-open')
     if vertical.input_value() != '3.5':
