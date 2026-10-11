@@ -1399,6 +1399,7 @@ begin
     SetString(FBrowserRecoveryDocumentID, NewID, Count)
   else
     BrowserRecoveryShowStatus(9);
+  UpdateBrowserDocumentDirty;
 end;
 
 procedure TMainForm.BrowserRecoveryDocumentEdited;
