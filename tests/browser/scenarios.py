@@ -1470,6 +1470,22 @@ def s_nonmodal_editing_workflow(app):
     if font_family.input_value() != 'Arial':
         raise AssertionError('committing the font family changed its inspector value')
     rotation = app.page.get_by_role('textbox', name='Text angle (degrees)', exact=True)
+
+    def assert_control_inside_lcl(control, stage):
+        control_box = control.bounding_box()
+        lcl_box = app.page.locator('#lcl').bounding_box()
+        if control_box is None or lcl_box is None:
+            raise AssertionError(f'{stage}: focused Inspector control has no visible bounds')
+        if (control_box['x'] < lcl_box['x'] - 1 or
+                control_box['y'] < lcl_box['y'] - 1 or
+                control_box['x'] + control_box['width'] >
+                lcl_box['x'] + lcl_box['width'] + 1 or
+                control_box['y'] + control_box['height'] >
+                lcl_box['y'] + lcl_box['height'] + 1):
+            raise AssertionError(
+                f'{stage}: Inspector control escaped the visible LCL canvas: '
+                f'control={control_box}, canvas={lcl_box}')
+
     # Keep the canvas viewport fixed. The Inspector owns its own scrollbox, so
     # collapse the unrelated sections before using the painted alignment combo.
     app.page.get_by_role('button', name='▾ Line', exact=True).click()
@@ -1534,12 +1550,14 @@ def s_nonmodal_editing_workflow(app):
     alignment_picker.get_by_role('button', name='OK', exact=True).click()
     app.page.keyboard.press('Tab')
     expect(rotation).to_be_focused(timeout=3000)
+    assert_control_inside_lcl(rotation, 'Text angle focus')
     if app.capture_requested:
         app.shot('inspector-text-angle-focused')
     rotation.press('Tab')
     stars_section = app.page.get_by_role('button').filter(has_text=re.compile(
         r'^(?:(?:▾|▸)\s*)?Stars and symbols$'))
     expect(stars_section).to_be_focused(timeout=3000)
+    assert_control_inside_lcl(stars_section, 'Tab destination')
     active_field = app.page.evaluate(
         '() => document.activeElement?.getAttribute("aria-label") || ""')
     if active_field in {
@@ -1548,6 +1566,7 @@ def s_nonmodal_editing_workflow(app):
         raise AssertionError('Tab from the final Inspector field wrapped inside the Inspector')
     app.page.keyboard.press('Shift+Tab')
     expect(rotation).to_be_focused(timeout=3000)
+    assert_control_inside_lcl(rotation, 'Shift+Tab destination')
     if rotation.input_value() != rotation_value:
         raise AssertionError('Shift+Tab changed Text angle while returning from Stars and symbols')
 
