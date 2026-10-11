@@ -309,10 +309,17 @@ def s_recovery_retains_source_and_linked_asset(app):
     app.drag(cx - 70, cy - 50, cx + 70, cy + 50)
     app.key('Escape')
     app.menu('Insert', 'Insert text')
-    app.click(cx - 40, cy + 65)
-    label = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
-    label.fill('Uploaded source label')
-    app.page.get_by_role('button', name='Done', exact=True).click()
+    text_prompt = app.page.get_by_role('dialog')
+    if text_prompt.count():
+        text_prompt.get_by_label('String', exact=True).fill('Uploaded source label')
+        text_prompt.get_by_role('button', name='OK', exact=True).click()
+        app.click(cx - 40, cy + 65)
+    else:
+        app.click(cx - 40, cy + 65)
+        label = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+        label.wait_for()
+        label.fill('Uploaded source label')
+        app.page.get_by_role('button', name='Done', exact=True).click()
 
     related_downloads = []
     app.page.on('download', lambda download: related_downloads.append(download))
