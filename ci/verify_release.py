@@ -46,7 +46,10 @@ def toolchain(platform):
         name: hashlib.sha256((ROOT / "ci/patches" / name).read_bytes()).hexdigest()
         for name in ("lazarus-4.8-opendocument.patch",
                      "lazarus-4.8-cocoa-font-cancel.patch",
-                     "lazarus-4.8-cocoa-text-shortcuts.patch")
+                     "lazarus-4.8-cocoa-text-shortcuts.patch",
+                     "lazarus-4.8-gtk2-text-composition.patch",
+                     "lazarus-4.8-cocoa-text-composition.patch",
+                     "lazarus-4.8-cocoa-field-editor-ime.patch")
     }
     return {
         "fpc_version": "3.2.3" if platform.startswith("macos-") else "3.2.2",
@@ -91,6 +94,7 @@ def verify(directory, version, commit):
         required_checks = set(BASE_CHECKS)
         if platform.startswith("macos-"):
             required_checks |= {"native Cocoa font cancellation", "native Cocoa text shortcuts",
+                                "native Cocoa inspector text composition",
                                 "ad hoc signature verification", "signature tamper detection"}
         if platform.startswith("linux-"):
             required_checks |= {"TeX compilation", "packaged TeX compilation"}

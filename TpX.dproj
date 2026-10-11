@@ -123,9 +123,6 @@
         <DCCReference Include="src\Output.pas"/>
         <DCCReference Include="src\MprtEMF.pas"/>
         <DCCReference Include="src\EMF_Add.pas"/>
-        <DCCReference Include="src\Propert.pas">
-            <Form>PropertiesForm</Form>
-        </DCCReference>
         <DCCReference Include="src\Options0.pas"/>
         <DCCReference Include="src\GObjects.pas"/>
         <DCCReference Include="src\Drawings.pas"/>

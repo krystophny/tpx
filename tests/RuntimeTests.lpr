@@ -1,16 +1,16 @@
 program RuntimeTests;
 {$mode Delphi}
+{$IFDEF LCLCOCOA}{$modeswitch objectivec2}{$ENDIF}
 uses
   {$IFDEF UNIX}{$IFNDEF CPUWASM32}cthreads,{$ENDIF}{$ENDIF}
   {$IFDEF UNIX}BaseUnix,{$ENDIF}
   Interfaces, Forms, SysUtils, Classes, Types, Math, Controls, Dialogs, ExtCtrls, Clipbrd, InterfaceBase, LCLType, LMessages, Process, LazFileUtils, LazUTF8,
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
-  {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
+  {$IFDEF LCLcocoa}CocoaInt, CocoaAll, CocoaTextEdits, CocoaUtils,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Propert, Options, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, AutoSaveStore, AutoSaveRuntime, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, SvgCodec, EditSessions, PropertyEdits, PropertyEditCore, UserStorage, gzio;
+  Settings0, MainUnit, Options, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, AutoSaveStore, AutoSaveRuntime, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, SvgCodec, EditSessions, PropertyEdits, PropertyEditCore, CompositionAwareControls, UserStorage, gzio;
 
 {$R ../src/MainUnit.lfm}
-{$R ../src/Propert.lfm}
 {$R ../src/Options.lfm}
 
 type
@@ -1084,7 +1084,7 @@ var
   InitialCount: Integer;
   CustomColor: TColor;
 begin
-  ComboBox := PropertiesForm.ComboBox3;
+  ComboBox := MainForm.ComboBox3;
   InitialCount := ComboBox.Items.Count;
   CustomColor := TColor($00123456);
   ColorBoxSet(ComboBox, CustomColor);
@@ -1853,7 +1853,6 @@ begin
     Application.Initialize;
     RequireDerivedFormResource := True;
     Application.CreateForm(TMainForm, MainForm);
-    Application.CreateForm(TPropertiesForm, PropertiesForm);
     Observer := TObserver.Create;
     MainForm.OnClose := Observer.Closing;
     PromptDialogFunction := AnswerPrompt;
@@ -1953,6 +1952,8 @@ begin
     else if ParamStr(1) = 'async-tools' then TestAsyncTools
     else if ParamStr(1) = 'default-opener' then TestDefaultOpener
     else if ParamStr(1) = 'property-dimensions' then TestPropertyDimensions
+    else if ParamStr(1) = 'inspector-mixed-selection' then TestInspectorMixedSelection
+    else if ParamStr(1) = 'inspector-property-families' then TestInspectorPropertyFamilies
     else if ParamStr(1) = 'font-choice' then TestFontChoice
     else if ParamStr(1) = 'conversion-save' then TestConversionSave
     else if ParamStr(1) = 'unsupported-exports' then TestUnsupportedExports

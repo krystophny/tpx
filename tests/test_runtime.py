@@ -31,7 +31,8 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "edit-session-autosave-cancel", "edit-session-recovery-disabled",
              "edit-session-deferred-reload",
              "edit-session-form-destroy",
-             "property-dimensions", "font-choice", "conversion-save",
+             "property-dimensions", "inspector-mixed-selection", "inspector-property-families",
+             "font-choice", "conversion-save",
              "unsupported-exports", "live-tex-missing-tool", "clipboard-format-width",
              "clipboard-roundtrip", "color-box-custom-state", "open-examples",
              "platform-shortcuts", "svg-linked-image-copy", "svg-codec")

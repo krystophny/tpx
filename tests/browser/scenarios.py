@@ -752,34 +752,194 @@ def s_bitmap_roundtrip(app):
     return 'bitmap save has no converter dialog; EPS contains pixels; related PNG reopens'
 
 
-def s_modal_properties(app):
+def s_object_inspector(app):
+    import re
+    from playwright.sync_api import expect
+
     v, cx, cy = box(app)
     app.menu('Insert', 'Insert rectangle')
-    app.drag(cx-70, cy-50, cx+70, cy+50)
+    app.drag(cx-150, cy-55, cx-35, cy+45)
+    app.key('Escape')
+    app.menu('Insert', 'Insert rectangle')
+    app.drag(cx+35, cy-45, cx+145, cy+55)
     app.key('Escape')
     app.menu('Edit', 'Select all')
     app.menu('Edit', 'Object properties')
-    app.click(335, 17)  # Line color combo's dropdown arrow in the Properties LFM
-    choices = app.page.get_by_role('dialog').get_by_role('listbox')
-    choices.press('Escape')
-    app.page.get_by_role('dialog').wait_for(state='hidden')
-    app.click(335, 17)
-    choices = app.page.get_by_role('dialog').get_by_role('listbox')
-    choices.select_option('1')  # Custom, after Default; preserves Pascal item order
-    choices.press('Enter')
-    color = app.page.get_by_role('dialog').get_by_label('Color', exact=True)
-    color.fill('#1278b5')
-    app.page.get_by_role('dialog').get_by_role('button', name='OK', exact=True).click()
-    app.page.get_by_role('textbox', name='RX', exact=True).fill('2.5')
-    app.page.get_by_role('textbox', name='RY', exact=True).fill('3.5')
-    app.page.get_by_role('button', name='OK', exact=True).click()
-    objects = drawing_xml(app.save('properties.tpx'))
-    if len(objects) != 1 or float(objects[0].get('rx', '0')) != 2.5 or float(objects[0].get('ry', '0')) != 3.5 or objects[0].get('lc') != '#1278B5':
-        raise AssertionError(f'edited corner radii did not survive save: {[o.attrib for o in objects]}')
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('opening the inspector created a modal dialog')
+    rounded = app.page.get_by_role('button').filter(has_text='Rounded corners')
+    width = app.page.get_by_role('textbox', name='Width multiplier', exact=True)
+    arrow_size = app.page.get_by_role(
+        'textbox', name='Arrow size multiplier', exact=True)
+
+    def open_combo_from_width(rows_away):
+        bounds = width.bounding_box()
+        size_bounds = arrow_size.bounding_box()
+        if bounds is None or size_bounds is None:
+            raise AssertionError('inspector anchor fields have no browser bounds')
+        width_center = bounds['y'] + bounds['height'] / 2
+        size_center = size_bounds['y'] + size_bounds['height'] / 2
+        # The Line section's owner-drawn combos share rows with the two
+        # accessible edit controls; interpolation keeps the hit test scaled.
+        row_pitch = (size_center - width_center) / 3
+        click_x = bounds['x'] + bounds['width'] - 16
+        click_y = width_center + rows_away * row_pitch
+        app.page.mouse.click(click_x, click_y)
+        dialog = app.page.get_by_role('dialog', name='Choose item', exact=True)
+        try:
+            dialog.wait_for(state='visible', timeout=4000)
+        except Exception as exc:
+            raise AssertionError(
+                'Choose item did not open for the inspector row click '
+                f'at ({click_x:.1f}, {click_y:.1f}); field bounds={bounds}') from exc
+        return dialog
+
+    def select_combo_option(rows_away, option):
+        dialog = open_combo_from_width(rows_away)
+        dialog.locator('select').select_option(label=option)
+        dialog.get_by_role('button', name='OK', exact=True).click()
+
+    width.fill('2.5')
+    width.press('Tab')
+    if width.input_value() != '2.5' or not width.is_enabled():
+        focus = app.page.evaluate('''() => document.activeElement?.tagName || 'none' ''')
+        raise AssertionError(
+            f'Tab lost the selected property or its committed value: '
+            f'{width.input_value()!r}, focus={focus}')
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('routine inspector edits opened a modal dialog')
+    width.fill('4.5')
+    style_dialog = open_combo_from_width(-2)
+    style_dialog.get_by_role('button', name='Cancel', exact=True).click()
+    width.press('Escape')
+    restored_width = width.input_value()
+    if restored_width != '2.5':
+        raise AssertionError(
+            'opening a property dropdown committed the other field draft: '
+            f'width is {restored_width!r}')
+    select_combo_option(-1, 'red')
+
+    width.fill('3.5')
+    # Leaving the field for another canvas selection commits the pending edit.
+    app.click(cx+210, cy+160)
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('committing the inspector edit opened a modal dialog')
+    app.menu('Edit', 'Select all')
     app.menu('Edit', 'Object properties')
-    if app.page.get_by_role('textbox', name='RX', exact=True).input_value() != '2.5':
-        raise AssertionError('reopened properties lost the edited value')
-    app.page.get_by_role('button', name='Cancel', exact=True).click()
+    if width.input_value() != '3.5':
+        raise AssertionError('selection refresh lost the last committed width')
+
+    def section_button(title):
+        return app.page.get_by_role('button').filter(has_text=re.compile(
+            rf'^(?:(?:▾|▸)\s*)?{re.escape(title)}$'))
+
+    for title in ('Line', 'Fill and hatching', 'Text'):
+        button = section_button(title)
+        if button.count() != 1 or not button.is_visible():
+            raise AssertionError(f'inspector section button is missing: {title}')
+        button.click()
+    if width.is_visible():
+        raise AssertionError('collapsing Line left its width control visible')
+
+    rounded = section_button('Rounded corners')
+    if rounded.count() != 1 or not rounded.is_visible():
+        raise AssertionError('Rounded corners section is not visible')
+    rounded.click()
+
+    def assert_editor_in_viewport(editor):
+        bounds = editor.bounding_box()
+        canvas = app.page.locator('#lcl').bounding_box()
+        viewport = app.page.evaluate('({width: innerWidth, height: innerHeight})')
+        if bounds is None or canvas is None or not (
+                bounds['x'] >= canvas['x'] and bounds['y'] >= canvas['y'] and
+                bounds['x'] + bounds['width'] <= canvas['x'] + canvas['width'] and
+                bounds['y'] + bounds['height'] <= canvas['y'] + canvas['height'] and
+                bounds['x'] >= 0 and bounds['y'] >= 0 and
+                bounds['x'] + bounds['width'] <= viewport['width'] and
+                bounds['y'] + bounds['height'] <= viewport['height']):
+            raise AssertionError(
+                f'inspector editor is outside the visible canvas: {bounds}')
+
+    horizontal = app.page.get_by_role(
+        'textbox', name='Horizontal radius (mm)', exact=True)
+    assert_editor_in_viewport(horizontal)
+    horizontal.fill('2.5')
+    vertical = app.page.get_by_role('textbox', name='Vertical radius (mm)', exact=True)
+    assert_editor_in_viewport(vertical)
+    vertical.fill('3.5')
+    vertical.press('Enter')
+    if vertical.input_value() != '3.5':
+        raise AssertionError(
+            f'vertical radius did not remain after Enter: {vertical.input_value()!r}')
+    vertical.press('Tab')
+    expect(section_button('Bitmap')).to_be_focused()
+    focus_after_tab = app.page.evaluate('''() => {
+        const e = document.activeElement;
+        return e ? {tag: e.tagName, text: (e.textContent || '').trim()} : null;
+    }''')
+    if (not vertical.is_enabled() or vertical.input_value() != '3.5' or
+            focus_after_tab is None or focus_after_tab['tag'] != 'BUTTON' or
+            'Bitmap' not in focus_after_tab['text']):
+        raise AssertionError(
+            'Tab from Vertical radius did not preserve selection and move to '
+            f'the next Inspector control (Bitmap section): {focus_after_tab}')
+    app.page.keyboard.type('9')
+    if vertical.input_value() != '3.5':
+        raise AssertionError(
+            'typing after Tab changed the previously committed radius: '
+            f'{vertical.input_value()!r}')
+    app.page.keyboard.press('Shift+Tab')
+    expect(vertical).to_be_focused()
+    focus_after_shift_tab = app.page.evaluate('''() => {
+        const e = document.activeElement;
+        return e ? `${e.tagName}[${e.getAttribute('aria-label') || ''}]` : 'none';
+    }''')
+    if (focus_after_shift_tab != 'INPUT[Vertical radius (mm)]' or
+            not vertical.is_enabled() or vertical.input_value() != '3.5'):
+        raise AssertionError(
+            'Shift+Tab did not return to the committed Inspector field: '
+            f'{focus_after_shift_tab}')
+    if app.capture_requested:
+        app.shot('wide-open')
+    if vertical.input_value() != '3.5':
+        raise AssertionError(
+            f'vertical radius was not committed before selection refresh: {vertical.input_value()!r}')
+    before = app.viewport()
+    inspector_menu_item = re.compile(r'^(?:✓ )?Object inspector$')
+    app.menu('View', inspector_menu_item)
+    hidden = app.viewport()
+    if hidden['w'] <= before['w']:
+        raise AssertionError('collapsing the inspector did not restore canvas width')
+    if app.capture_requested:
+        app.shot('wide-collapsed')
+    app.menu('View', inspector_menu_item)
+    if vertical.input_value() != '3.5':
+        raise AssertionError('reopening the inspector lost the rounded-corner value')
+    app.page.set_viewport_size({'width': 760, 'height': 900})
+    app.page.wait_for_timeout(250)
+    radius = app.page.get_by_role('textbox', name='Horizontal radius (mm)', exact=True)
+    if not radius.is_visible():
+        raise AssertionError('Rounded corners editor left the visible inspector on narrow resize')
+    assert_editor_in_viewport(radius)
+    radius.fill('-1')
+    radius.press('Enter')
+    # Validation messages are painted into the WASI canvas, not exposed as DOM
+    # text; the native inspector scenario asserts the actual error label.
+    if radius.input_value() != '-1':
+        raise AssertionError('invalid inspector input was cleared instead of remaining editable')
+    if app.capture_requested:
+        app.shot('narrow-inline-error-advanced')
+    radius.fill('2.5')
+    radius.press('Enter')
+    objects = drawing_xml(app.save('properties.tpx'))
+    if (len(objects) != 2 or any(
+            float(obj.get('lw', '0')) != 3.5 or
+            float(obj.get('rx', '0')) != 2.5 or
+            float(obj.get('ry', '0')) != 3.5 or
+            obj.get('lc', '').lower() != 'red' for obj in objects)):
+        raise AssertionError(
+            'inspector edits did not survive save: '
+            f'RY editor={vertical.input_value()!r}, {[o.attrib for o in objects]}')
     app.menu('Help', 'About')
     app.page.get_by_role('button', name='Acknowledgements').click()
     memo = app.page.locator('textarea:visible')
@@ -788,7 +948,7 @@ def s_modal_properties(app):
     app.page.get_by_role('button', name='Acknowledgements').focus()
     app.key('Escape')
     app.page.wait_for_function('document.querySelector("#lcl").width > 500')
-    return 'custom color and property edits survive save; read-only memo and modal Escape work'
+    return 'two-object property edits, inline validation, collapse and save work without a modal'
 
 
 def s_clipboard_roundtrip(app):
@@ -858,15 +1018,13 @@ def s_nested_coordinates(app):
     app.key('Escape')
     app.menu('Edit', 'Select all')
     app.menu('Edit', 'Object properties')
-    app.page.get_by_role('button', name='Points', exact=True).click()
+    app.page.get_by_role('button', name='Point coordinates…', exact=True).click()
     app.page.wait_for_function('document.querySelector("#lcl").width === 530')
     app.click(155, 55)  # First x-coordinate cell in the fixed-size Table LFM
     app.key('F2')
     editor = app.page.get_by_role('textbox').last
     editor.fill('125.5')
     app.key('Enter')
-    app.page.get_by_role('button', name='OK', exact=True).click()
-    app.page.wait_for_function('document.querySelector("#lcl").width === 460')
     app.page.get_by_role('button', name='OK', exact=True).click()
     app.page.wait_for_function('document.querySelector("#lcl").width > 600')
     objects = drawing_xml(app.save('coordinates.tpx'))
@@ -1017,7 +1175,7 @@ SCENARIOS = [
     ('export-formats', s_export_formats),
     ('download-status-unload', s_download_status_and_unload),
     ('bitmap-roundtrip', s_bitmap_roundtrip),
-    ('modal-properties', s_modal_properties),
+    ('object-inspector', s_object_inspector),
     ('nested-coordinates', s_nested_coordinates),
     ('unsaved-confirmation', s_unsaved_confirmation),
     ('tex-preview', s_tex_preview),

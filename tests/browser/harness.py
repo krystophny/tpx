@@ -26,6 +26,7 @@ class App:
         self.prefix = prefix
         self.output = Path(output)
         self.shots = 0
+        self.capture_requested = False
         self.errors = []
         page.on('pageerror', lambda e: self.errors.append(str(e)[:400]))
         page.on('console', lambda m: self.errors.append(f'{m.type}: {m.text}'[:400])

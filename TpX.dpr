@@ -7,7 +7,6 @@ uses
   Output in 'src\Output.pas',
   MprtEMF in 'src\MprtEMF.pas',
   EMF_Add in 'src\EMF_Add.pas',
-  Propert in 'src\Propert.pas' {PropertiesForm},
   Options0 in 'src\Options0.pas',
   GObjects in 'src\GObjects.pas',
   Drawings in 'src\Drawings.pas',
@@ -57,7 +56,6 @@ begin
   Application.Title := 'TpX';
   Application.Initialize;
   Application.CreateForm(TMainForm, MainForm);
-  Application.CreateForm(TPropertiesForm, PropertiesForm);
   Application.CreateForm(TOptionsForm, OptionsForm);
   Application.CreateForm(TAboutForm, AboutForm);
   Application.CreateForm(TTransfForm, TransfForm);
