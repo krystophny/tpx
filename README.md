@@ -67,7 +67,8 @@ To build a figure from a blank page:
    The Inspector stays beside the drawing, so edits can be checked against the
    figure as you work.
 
-4. Choose **File → Save as…**, select **TikZ source**, and save `figure.tikz`.
+4. Choose **File → Save as…** (**File → Download a copy as…** in the browser),
+   select **TikZ source**, and save `figure.tikz`.
    Keep the `.TpX` file for native editing; TikZ save-back supports a defined
    subset and refuses edits it cannot represent safely.
 5. Include the TikZ snippet in LaTeX:
