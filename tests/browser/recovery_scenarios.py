@@ -181,9 +181,11 @@ def hold_recovery_checkpoint_timer(page, record_id):
     page.evaluate('''(recordId) => {
       const originalSetInterval = window.setInterval.bind(window);
       window.tpxRecoveryTimerCallback = null;
+      window.tpxRecoveryTimerCreated = 0;
       window.setInterval = (callback, delay, ...args) => {
         if (delay === 750) {
           window.tpxRecoveryTimerCallback = callback;
+          window.tpxRecoveryTimerCreated++;
           return originalSetInterval(() => {}, delay, ...args);
         }
         return originalSetInterval(callback, delay, ...args);
@@ -290,6 +292,92 @@ def s_recovery_restores_raw_inline_label_after_restart(app):
     if raw_label not in labels:
         raise AssertionError('committed recovered label is missing from the downloaded TpX source')
     return 'a browser process restart restores the exact uncommitted Unicode label and its later TpX source'
+
+
+def s_recovery_skips_active_composition_and_restores_commit(app):
+    opt_in(app.page)
+    _, cx, cy = box(app)
+    app.menu('Insert', 'Insert text')
+    app.click(cx - 60, cy - 20)
+    editor = app.page.locator('#lcl-dom textarea')
+    editor.wait_for()
+    stable = 'Committed before composition'
+    editor.fill(stable)
+    wait_saved(app.page)
+    before = records(app.page)
+    if len(before) != 1:
+        raise AssertionError(f'expected one baseline draft, got {before}')
+    hold_recovery_checkpoint_timer(app.page, before[0]['id'])
+
+    def start_composition(text):
+        app.page.evaluate('''({text}) => {
+          const el = document.querySelector('#lcl-dom textarea');
+          el.focus();
+          el.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+          el.value = text;
+          el.dispatchEvent(new InputEvent('input', {bubbles:true,
+            inputType:'insertCompositionText', data:text, isComposing:true}));
+        }''', {'text': text})
+
+    def force_composition_checkpoint():
+        generation = app.page.evaluate('window.tpxRecoveryTimerCreated')
+        app.page.wait_for_function('(old) => window.tpxRecoveryTimerCreated > old', arg=generation,
+                                   timeout=10000)
+        app.page.evaluate('window.tpxRecoveryCheckpointCommitted = false')
+        app.page.evaluate('window.tpxRecoveryTimerCallback()')
+        app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Text composition is still active")',
+                                   timeout=10000)
+        rows = records(app.page)
+        if len(rows) != 1 or rows[0]['payloadHash'] != before[0]['payloadHash']:
+            raise AssertionError('an active composition replaced the last safe recovery payload')
+
+    start_composition('Uncommitted preedit')
+    force_composition_checkpoint()
+
+    app.page.evaluate('''(text) => {
+      const el = document.querySelector('#lcl-dom textarea');
+      el.value = text;
+      el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:''}));
+    }''', stable)
+    app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("New changes are not yet saved")',
+                               timeout=10000)
+    app.page.evaluate('window.tpxRecoveryCheckpointCommitted = false')
+    app.page.evaluate('window.tpxRecoveryTimerCallback()')
+    app.page.wait_for_function('window.tpxRecoveryCheckpointCommitted === true', timeout=10000)
+    after_cancel = records(app.page)
+    if (len(after_cancel) != 1 or
+            after_cancel[0]['payloadHash'] != before[0]['payloadHash'] or
+            after_cancel[0]['sequence'] <= before[0]['sequence']):
+        raise AssertionError('cancelled composition changed or failed to checkpoint the stable draft')
+
+    start_composition('Uncommitted λ label: \\input{pending}')
+    force_composition_checkpoint()
+    committed = 'Committed λ label: \\input{pending}'
+    app.page.evaluate('''(text) => {
+      const el = document.querySelector('#lcl-dom textarea');
+      el.value = text;
+      el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:text}));
+    }''', committed)
+    app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("New changes are not yet saved")',
+                               timeout=10000)
+    app.page.evaluate('window.tpxRecoveryCheckpointCommitted = false')
+    app.page.evaluate('window.tpxRecoveryTimerCallback()')
+    app.page.wait_for_function('window.tpxRecoveryCheckpointCommitted === true', timeout=10000)
+    after_commit = records(app.page)
+    if (len(after_commit) != 1 or
+            after_commit[0]['payloadHash'] == after_cancel[0]['payloadHash']):
+        raise AssertionError('committed composition was not checkpointed as a new raw draft')
+
+    page = app.restart()
+    wait_ready(page)
+    page.get_by_role('button', name='Recover as new drawing', exact=True).click()
+    page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Draft recovered as a new TpX drawing")',
+                           timeout=10000)
+    recovered = page.locator('#lcl-dom textarea')
+    recovered.wait_for(timeout=10000)
+    if recovered.input_value() != committed:
+        raise AssertionError(f'restarted recovery lost committed composition text: {recovered.input_value()!r}')
+    return 'active preedit preserved the last safe payload; cancellation retained it and committed composition survived restart'
 
 
 def s_recovery_retains_source_and_linked_asset(app):
@@ -555,6 +643,7 @@ SCENARIOS = [
     ('recovery-restart-geometry', s_recovery_survives_application_restart),
     ('recovery-noop-download', s_recovery_noop_download_keeps_previous_draft),
     ('recovery-restart-raw-label', s_recovery_restores_raw_inline_label_after_restart),
+    ('recovery-restart-composition', s_recovery_skips_active_composition_and_restores_commit),
     ('recovery-source-assets', s_recovery_retains_source_and_linked_asset),
     ('recovery-quota', s_recovery_quota_failure_keeps_previous_record),
     ('recovery-capacity', s_recovery_capacity_does_not_evict),
