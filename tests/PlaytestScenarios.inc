@@ -551,6 +551,8 @@ var
   StableInlineText: string;
   StablePlainStorage: AnsiString;
   StableInlineCaret: Integer;
+  TestKey: Word;
+  TestShift: TShiftState;
 
   function InspectorTop(Control: TControl): Integer;
   begin
@@ -842,6 +844,11 @@ begin
   InlineMemo.Text := 'stable source draft';
   InlineMemo.SelStart := 7;
   InlineMemo.SelLength := 0;
+  TestKey := VK_RIGHT;
+  TestShift := [];
+  Check(Assigned(InlineMemo.OnKeyUp),
+    'Inline editor did not install its caret tracking handler');
+  InlineMemo.OnKeyUp(InlineMemo, TestKey, TestShift);
   StableInlineText := InlineMemo.EditText;
   StableInlineCaret := InlineMemo.SelStart;
   Check(TextObj.TeXText = '\beta',
