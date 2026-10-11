@@ -96,18 +96,37 @@ try:
             if status != 'pass':
                 failures.append(name)
             if args.screenshots or status != 'pass':
-                app.shot(status)
+                try:
+                    app.shot(status)
+                except Exception as exc:  # noqa: BLE001 - browser may have exited
+                    detail = (f'{detail}; screenshot unavailable: {type(exc).__name__}')[:220]
+            try:
+                frame_count = app.frames()
+            except Exception:  # noqa: BLE001 - target may have crashed
+                frame_count = None
             results.append({'scenario': name, 'status': status, 'detail': detail,
-                            'frames': app.frames(), 'shots': app.shots})
+                            'frames': frame_count, 'shots': app.shots})
             print(f'{status:5} {name:24} {detail[:150]}')
-            page.on('dialog', lambda dialog: dialog.accept()
-                    if dialog.type == 'beforeunload' else dialog.dismiss())
-            if context is not None:
-                context.close()
+            cleanup_page = app.page
+            cleanup_context = app.context
+            try:
+                if not cleanup_page.is_closed():
+                    cleanup_page.on('dialog', lambda dialog: dialog.accept()
+                                    if dialog.type == 'beforeunload' else dialog.dismiss())
+            except Exception:  # noqa: BLE001 - cleanup must survive a browser exit
+                pass
+            try:
+                if cleanup_context is not None:
+                    cleanup_context.close()
+            except Exception:  # noqa: BLE001 - context may already have exited
+                pass
             if profile is not None:
                 import shutil
                 shutil.rmtree(profile, ignore_errors=True)
-        browser.close()
+        try:
+            browser.close()
+        except Exception:  # noqa: BLE001 - a scenario can crash the browser process
+            pass
 finally:
     srv.shutdown()
     srv.server_close()
