@@ -592,6 +592,7 @@ var
   SymbolObj: TSymbol2D;
   BitmapObj: TBitmap2D;
   Combo: TComboBox;
+  FontStyleCombo, AlignmentCombo: TComboBox;
   Edit: TEdit;
   Memo: TCompositionAwareMemo;
   InlineMemo: TCompositionAwareMemo;
@@ -607,6 +608,7 @@ var
   StableInlineText: string;
   StablePlainStorage: AnsiString;
   StableInlineCaret: Integer;
+  HandoffHistory: Integer;
   TestKey: Word;
   TestShift: TShiftState;
 
@@ -874,6 +876,50 @@ begin
   Memo := MainForm.Inspector.EditorFor(opfText) as TCompositionAwareMemo;
   Check(Memo.Text = 'Legacy β 😀',
     'Inspector did not decode stored Unicode character references');
+  FontStyleCombo := MainForm.Inspector.EditorFor(opfFontStyle) as TComboBox;
+  AlignmentCombo := MainForm.Inspector.EditorFor(opfHAlignment) as TComboBox;
+  HandoffHistory := Drawing.History.Count;
+  MainForm.Inspector.FocusField(opfFontStyle);
+  FontStyleCombo.ItemIndex := 1;
+  if Assigned(FontStyleCombo.OnChange) then
+    FontStyleCombo.OnChange(FontStyleCombo);
+  Check(MainForm.Inspector.HasActiveEdit and
+    (fsBold in TextObj.Font.Style) and
+    (Drawing.History.Count = HandoffHistory),
+    'First combo did not remain a live, uncommitted inspector edit');
+  AlignmentCombo.SetFocus;
+  Application.ProcessMessages;
+  Check(MainForm.Inspector.HasActiveEdit and
+    (fsBold in TextObj.Font.Style) and
+    (Drawing.History.Count = HandoffHistory),
+    'Moving between combo controls committed the first field before a change');
+  AlignmentCombo.ItemIndex := Ord(ahCenter);
+  if Assigned(AlignmentCombo.OnChange) then
+    AlignmentCombo.OnChange(AlignmentCombo);
+  Check((fsBold in TextObj.Font.Style) and
+    (TextObj.HAlignment = ahCenter) and
+    (Drawing.History.Count = HandoffHistory + 1),
+    'Changing the second combo lost its new value while committing the first: '
+    + 'style=' + IntToStr(FontStyleCombo.ItemIndex) + ', alignment=' +
+    IntToStr(AlignmentCombo.ItemIndex) + ', modelAlignment=' +
+    IntToStr(Ord(TextObj.HAlignment)) + ', history=' +
+    IntToStr(Drawing.History.Count) + ', expectedHistory=' +
+    IntToStr(HandoffHistory + 1));
+  Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+    'Second combo did not commit after a combo-to-combo handoff: ' + ErrorText);
+  Check(Drawing.History.Count = HandoffHistory + 2,
+    'The two combo edits did not produce separate undo boundaries');
+  Drawing.History.Undo;
+  TextObj := Drawing.GetObject(TextObj.ID) as TText2D;
+  Check((fsBold in TextObj.Font.Style) and
+    (TextObj.HAlignment = ahLeft),
+    'Undo did not restore only the second combo edit');
+  Drawing.History.Undo;
+  TextObj := Drawing.GetObject(TextObj.ID) as TText2D;
+  Check(not (fsBold in TextObj.Font.Style) and
+    (TextObj.HAlignment = ahLeft),
+    'Undo did not restore the first combo edit');
+  SelectObject(TextObj);
   ChangeText(opfText, 'Changed plain β 😀');
   Check((TextObj.Text = 'Changed plain &#946; &#55357;&#56832;') and
     (TextObj.TeXText = '\alpha'),

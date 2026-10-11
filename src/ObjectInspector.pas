@@ -1338,9 +1338,13 @@ var
   Raw: string;
   Composing: Boolean;
   ExpectedIndex: Integer;
+  ComboIndex: Integer;
+  ComboText: string;
+  RestoreComboState: Boolean;
 begin
   if FRefreshing > 0 then Exit;
   Field := FieldFromControl(Sender);
+  RestoreComboState := False;
   if FWidgets[Field].Editor is TComboBox then
   begin
     Combo := FWidgets[Field].Editor as TComboBox;
@@ -1363,6 +1367,14 @@ begin
         if Combo.ItemIndex = ExpectedIndex then Exit;
       end;
     end;
+    RestoreComboState := (FSession <> nil) and FSession.IsActive and
+      FHasSessionField and (FSessionField <> Field);
+    if RestoreComboState then
+    begin
+      { Committing the previous field refreshes controls before this patch. }
+      ComboIndex := Combo.ItemIndex;
+      ComboText := Combo.Text;
+    end;
   end;
   if not StartFieldSession(Field) then
   begin
@@ -1372,6 +1384,18 @@ begin
     else if FHasSessionField and (FSessionField <> Field) then
       SetFieldError(Field, 'Finish or cancel the active edit first');
     Exit;
+  end;
+  if RestoreComboState then
+  begin
+    Combo := FWidgets[Field].Editor as TComboBox;
+    Inc(FRefreshing);
+    try
+      Combo.ItemIndex := ComboIndex;
+      if Combo.Style.HasEditBox then
+        Combo.Text := ComboText;
+    finally
+      Dec(FRefreshing);
+    end;
   end;
   Composing := False;
   if FWidgets[Field].Editor is TCompositionAwareEdit then
