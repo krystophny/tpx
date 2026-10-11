@@ -443,7 +443,8 @@ end;
 
 procedure TBitmapEntry.AdoptImageLink(const Link: string);
 begin
-  SetImageLink(Link);
+  fImageLink := Link;
+  SetImageKind(Link);
 end;
 
 procedure TBitmapEntry.RebindParentFileName(const NewFileName: string);
