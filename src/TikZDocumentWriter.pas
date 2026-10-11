@@ -4,13 +4,14 @@ unit TikZDocumentWriter;
 
 interface
 
-uses DocumentFormats;
+uses DocumentFormats, Drawings;
 
 procedure RegisterTikZDocumentCodec;
+function GenerateTikZPictureFragment(Drawing: TDrawing2D): RawByteString;
 
 implementation
 
-uses Classes, SysUtils, Math, Graphics, Drawings, Geometry, GObjects,
+uses Classes, SysUtils, Math, Graphics, Geometry, GObjects,
   Devices, GObjBase, TikZLexer, TikZSyntax, TikZImport, TikZImportDrawing,
   TikZWriter, DocumentIO;
 
@@ -1105,6 +1106,28 @@ begin
   end;
   Result := Result + '\end{tikzpicture}' + EOL;
   if IsTeXDocument then Result := Result + '\end{document}' + EOL;
+end;
+
+function GenerateTikZPictureFragment(Drawing: TDrawing2D): RawByteString;
+var
+  Obj: TObject2D;
+begin
+  if Drawing <> nil then
+  begin
+    Obj := Drawing.ObjectList.FirstObj as TObject2D;
+    while Obj <> nil do
+    begin
+      if Obj is TBitmap2D then
+        raise EWriteError.Create(
+          'TikZ copy cannot embed bitmap assets; copy or export the linked image separately');
+      Obj := Drawing.ObjectList.NextObj as TObject2D;
+    end;
+  end;
+  Result := '% Generated from the current TpX drawing; this is regenerated TikZ.' +
+    RawByteString(LineEnding) +
+    '% Requires \usepackage{tikz}; TeX labels may need their own packages or macros.' +
+    RawByteString(LineEnding) +
+    SerializeNewDocument(Drawing, TDocumentPath('clipboard.tikz'));
 end;
 
 function BuildSourceEdits(Drawing: TDrawing2D; Context: TTikZImportContext;

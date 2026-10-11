@@ -207,6 +207,67 @@ class RuntimeTests(unittest.TestCase):
                 "TPX_TIKZ_EMPTY_FILE": str(fresh_dir / "empty.tikz"),
             })
 
+    @unittest.skipUnless(shutil.which("pdflatex") and shutil.which("gs"),
+                         "pdflatex and Ghostscript are required to render copied TikZ")
+    def test_copy_as_tikz_compiles_and_renders_without_tex_dependency(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-copy-tikz-") as directory:
+            root = Path(directory).resolve()
+            fragment = root / "clipboard.tikz"
+            self.run_scenario("copy-as-tikz", {
+                "TPX_COPY_TIKZ_OUTPUT": str(fragment),
+                # The application command must be usable without TeX on PATH.
+                "PATH": "",
+            })
+            source = fragment.read_text(encoding="utf-8")
+            self.assertIn(r"\usepackage{tikz}", source)
+            self.assertIn("1.125mm", source)
+            self.assertIn("2.375mm", source)
+            self.assertIn("rotate=", source)
+            self.assertIn("$x^2$", source)
+            self.assertIn("β", source)
+
+            (root / "copy.tex").write_text(
+                r"""\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{tikz}
+\DeclareUnicodeCharacter{03B2}{\ensuremath{\beta}}
+\pagestyle{empty}
+\begin{document}
+""" + source + r"""\end{document}
+""", encoding="utf-8")
+            compiled = subprocess.run(
+                [shutil.which("pdflatex"), "-halt-on-error", "-interaction=nonstopmode", "copy.tex"],
+                cwd=root, capture_output=True, text=True, timeout=40)
+            self.assertEqual(compiled.returncode, 0,
+                             compiled.stdout[-4000:] + compiled.stderr[-2000:])
+            image = root / "copy.ppm"
+            rendered = subprocess.run(
+                [shutil.which("gs"), "-q", "-dSAFER", "-dBATCH", "-dNOPAUSE",
+                 "-sDEVICE=ppmraw", "-r72", "-sOutputFile=" + str(image), "copy.pdf"],
+                cwd=root, capture_output=True, text=True, timeout=40)
+            self.assertEqual(rendered.returncode, 0,
+                             rendered.stdout[-2000:] + rendered.stderr[-2000:])
+            data = image.read_bytes()
+            tokens, offset = [], 0
+            while len(tokens) < 4:
+                while data[offset:offset + 1].isspace():
+                    offset += 1
+                if data[offset:offset + 1] == b"#":
+                    offset = data.index(b"\n", offset) + 1
+                    continue
+                start = offset
+                while not data[offset:offset + 1].isspace():
+                    offset += 1
+                tokens.append(data[start:offset])
+            self.assertEqual(tokens[0], b"P6")
+            self.assertEqual(tokens[3], b"255")
+            rgb = data[offset + 1:]
+            blue_pixels = sum(
+                rgb[index] < 10 and rgb[index + 1] < 10 and rgb[index + 2] > 240
+                for index in range(0, len(rgb), 3))
+            self.assertGreater(blue_pixels, 100,
+                               "Rendered copied TikZ did not contain the filled rectangle")
+
     def test_untitled_recovery_survives_restart_and_requires_choice(self):
         with tempfile.TemporaryDirectory(prefix="tpx-autosave-restart-") as directory:
             root = Path(directory).resolve()

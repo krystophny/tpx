@@ -755,6 +755,96 @@ def s_clipboard_roundtrip(app):
     return 'copy, paste, cut and restore preserve drawing objects'
 
 
+def s_copy_as_tikz(app):
+    v, cx, cy = box(app)
+    app.menu('Insert', 'Insert rectangle')
+    app.drag(cx-90, cy-60, cx+60, cy+40)
+    app.key('Escape')
+    app.page.evaluate('''() => Object.defineProperty(navigator, 'clipboard', {
+      configurable: true, value: {writeText: text => {
+        window.tpxCopiedTikZ = text; return Promise.resolve();
+      }}
+    })''')
+    app.menu('Edit', 'Copy as TikZ')
+    app.page.wait_for_function('typeof window.tpxCopiedTikZ === "string"')
+    copied = app.page.evaluate('window.tpxCopiedTikZ')
+    if not copied.startswith('% Generated from the current TpX drawing'):
+        raise AssertionError('clipboard API did not receive generated TikZ source')
+    if r'\begin{tikzpicture}' not in copied or r'\end{tikzpicture}' not in copied:
+        raise AssertionError('browser clipboard received an incomplete TikZ picture')
+    if app.page.locator('#tpx-copy-fallback').count():
+        raise AssertionError('successful clipboard write showed the fallback')
+
+    app.page.evaluate('''() => Object.defineProperty(navigator, 'clipboard', {
+      configurable: true, value: {writeText: () => Promise.reject(new Error('denied'))}
+    })''')
+    app.menu('Edit', 'Copy as TikZ')
+    fallback = app.page.locator('#tpx-copy-fallback:not([hidden])')
+    fallback.wait_for()
+    source = fallback.locator('textarea')
+    displayed = source.input_value()
+    selection = source.evaluate('''element => ({active: document.activeElement === element,
+      start: element.selectionStart, end: element.selectionEnd, length: element.value.length})''')
+    if displayed != copied or selection != {
+            'active': True, 'start': 0, 'end': len(displayed), 'length': len(displayed)}:
+        raise AssertionError('rejected clipboard write did not expose selectable complete source')
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('clipboard rejection opened a modal dialog')
+    return 'browser menu copy writes a complete TikZ picture; rejected writes show selectable source'
+
+
+def s_copy_as_tikz_inline_edit(app):
+    """Leave the edit shortcut with the memo, then copy its settled draft by menu."""
+    _, cx, cy = box(app)
+    app.menu('Insert', 'Insert text')
+    app.click(cx-60, cy-20)
+    editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    editor.wait_for()
+    draft = 'inlineDraftTikZ95'
+    editor.fill(draft)
+    app.page.evaluate('''() => Object.defineProperty(navigator, 'clipboard', {
+      configurable: true, value: {writeText: text => {
+        window.tpxCopiedTikZ = text; return Promise.resolve();
+      }}
+    })''')
+
+    app.key('Control+Shift+C')
+    app.page.wait_for_timeout(150)
+    if app.page.evaluate('typeof window.tpxCopiedTikZ') != 'undefined':
+        raise AssertionError('Copy as TikZ shortcut stole focus from the inline editor')
+    if editor.count() != 1 or editor.input_value() != draft:
+        raise AssertionError('shortcut changed or prematurely settled the inline draft')
+
+    app.menu('Edit', 'Copy as TikZ')
+    app.page.wait_for_function('typeof window.tpxCopiedTikZ === "string"')
+    copied = app.page.evaluate('window.tpxCopiedTikZ')
+    if draft not in copied or r'\begin{tikzpicture}' not in copied or r'\end{tikzpicture}' not in copied:
+        raise AssertionError('menu copy omitted the unsaved inline draft or picture wrapper')
+    app.page.wait_for_timeout(150)
+    if editor.count():
+        raise AssertionError('Copy as TikZ did not settle and close the inline editor')
+    if app.page.locator('dialog[open]').count():
+        raise AssertionError('Copy as TikZ opened a modal dialog during inline editing')
+
+    settled = drawing_xml(app.save('inline-copy-settled.tpx'))
+    settled_state = (settled.tag, tuple(sorted(settled.attrib.items())),
+                     [(obj.tag, tuple(sorted(obj.attrib.items()))) for obj in settled])
+    title = app.title()
+    app.page.evaluate('delete window.tpxCopiedTikZ')
+    app.menu('Edit', 'Copy as TikZ')
+    app.page.wait_for_function('typeof window.tpxCopiedTikZ === "string"')
+    if draft not in app.page.evaluate('window.tpxCopiedTikZ'):
+        raise AssertionError('copy from the settled drawing omitted the committed draft')
+    if app.title() != title:
+        raise AssertionError('Copy as TikZ changed the document identity')
+    copied = drawing_xml(app.save('inline-copy-after.tpx'))
+    copied_state = (copied.tag, tuple(sorted(copied.attrib.items())),
+                    [(obj.tag, tuple(sorted(obj.attrib.items()))) for obj in copied])
+    if copied_state != settled_state:
+        raise AssertionError('Copy as TikZ changed the drawing after edit settlement')
+    return 'memo keeps Ctrl+Shift+C; menu copy settles the draft and preserves the settled drawing'
+
+
 def s_nested_coordinates(app):
     v, cx, cy = box(app)
     app.menu('Insert', 'Insert line')
@@ -914,6 +1004,8 @@ SCENARIOS = [
     ('area-select', s_area_select),
     ('open-roundtrip', s_open_roundtrip),
     ('clipboard-roundtrip', s_clipboard_roundtrip),
+    ('copy-as-tikz', s_copy_as_tikz),
+    ('copy-as-tikz-inline-edit', s_copy_as_tikz_inline_edit),
     ('export-formats', s_export_formats),
     ('bitmap-roundtrip', s_bitmap_roundtrip),
     ('object-inspector', s_object_inspector),

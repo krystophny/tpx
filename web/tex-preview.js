@@ -65,6 +65,52 @@ export function texPreviewImports(runtime) {
     element.hidden = false;
   }
 
+  function showTikZFallback(text) {
+    let element = document.querySelector('#tpx-copy-fallback');
+    if (!element) {
+      element = document.createElement('aside');
+      element.id = 'tpx-copy-fallback';
+      element.setAttribute('role', 'status');
+      const message = document.createElement('p');
+      message.textContent = 'Clipboard access was unavailable. Select and copy the TikZ source below.';
+      const source = document.createElement('textarea');
+      source.setAttribute('aria-label', 'TikZ source to copy');
+      source.readOnly = true;
+      const select = document.createElement('button');
+      select.textContent = 'Select source';
+      select.onclick = () => { source.focus(); source.select(); };
+      const close = document.createElement('button');
+      close.textContent = 'Dismiss';
+      close.onclick = () => { element.hidden = true; };
+      element.append(message, source, select, close);
+      document.body.append(element);
+    }
+    const source = element.querySelector('textarea');
+    source.value = text;
+    element.hidden = false;
+    source.focus();
+    source.select();
+  }
+
+  function copyTikZ(pointer, count) {
+    const text = decoder.decode(new Uint8Array(runtime.memory().buffer, pointer, count));
+    const clipboard = navigator.clipboard;
+    if (!clipboard || typeof clipboard.writeText !== 'function') {
+      showTikZFallback(text);
+      return 0;
+    }
+    try {
+      Promise.resolve(clipboard.writeText(text)).then(() => {
+        const fallback = document.querySelector('#tpx-copy-fallback');
+        if (fallback) fallback.hidden = true;
+      }).catch(() => showTikZFallback(text));
+      return 1;
+    } catch (_) {
+      showTikZFallback(text);
+      return 0;
+    }
+  }
+
   async function rasterize(entry, generation) {
     let svg = sources.get(entry.source);
     if (!svg) {
@@ -203,6 +249,7 @@ export function texPreviewImports(runtime) {
       if (errorNotice) errorNotice.hidden = true;
     },
     source_snapshot: value => sourceSnapshotStatus(Boolean(value)),
+    tpx_copy_text: copyTikZ,
     tex_forget: key => {
       objects.delete(key); trimRasters();
       for (const entry of rasters.values()) if (entry.capacityBlocked) entry.error = false;

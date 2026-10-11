@@ -32,6 +32,7 @@ type
     CloseRequests: Integer;
     procedure Closing(Sender: TObject; var Action: TCloseAction);
     procedure ClosingDefault(Sender: TObject; var Action: TCloseAction);
+    procedure RunClipboardScenarioInEventLoop(Sender: TObject);
   end;
   TSourceWorkflowTimerObserver = class
     Timer: TTimer;
@@ -53,6 +54,8 @@ var
   SourceWorkflowIdleTarget: TDocumentPath;
   SourceWorkflowIdlePathExistsCount, SourceWorkflowIdleMetadataCount,
     SourceWorkflowIdleSnapshotCount, SourceWorkflowIdleWriteCount: Integer;
+  ClipboardScenarioTimer: TTimer;
+  ClipboardScenarioError: string;
 
 {$IFDEF FPC}{$IFDEF WINDOWS}
 function TpxCreateHardLinkW(NewFileName, ExistingFileName: PWideChar;
@@ -725,6 +728,11 @@ begin
   Check(Clipboard.AsText = '0.2', 'Ctrl+C did not copy selected combo text');
   Check(MainForm.TheDrawing.SelectedObjects.Count = 0,
     'Ctrl+C in the editable combo dispatched the drawing Copy action');
+  SendNativeKey('ctrl+shift+c');
+  Check(Clipboard.AsText = '0.2',
+    'Ctrl+Shift+C in the editable combo dispatched Copy as TikZ');
+  Check(MainForm.TheDrawing.SelectedObjects.Count = 0,
+    'Copy as TikZ in the editable combo selected drawing objects');
 
   SendNativeKey('ctrl+x');
   Check(MainForm.ComboBox6.Text = '', 'Ctrl+X did not cut selected combo text');
@@ -831,6 +839,8 @@ begin
   CheckPlatformActionShortcut(MainForm.Undo, Ord('Z'), [], 'Undo');
   CheckPlatformActionShortcut(MainForm.Redo, Ord('Z'), [ssShift], 'Redo');
   CheckPlatformActionShortcut(MainForm.ClipboardCopy, Ord('C'), [], 'Copy');
+  CheckPlatformActionShortcut(MainForm.CopyAsTikZ, Ord('C'), [ssShift],
+    'Copy as TikZ');
   CheckPlatformActionShortcut(MainForm.ClipboardCut, Ord('X'), [], 'Cut');
   CheckPlatformActionShortcut(MainForm.ClipboardPaste, Ord('V'), [], 'Paste');
   CheckPlatformActionShortcut(MainForm.SelectAll, Ord('A'), [], 'Select All');
@@ -873,6 +883,114 @@ begin
   finally
     TableWindow.Free;
   end;
+end;
+
+procedure TestCopyAsTikZ;
+var
+  Drawing: TDrawing2D;
+  Line: TPolyline2D;
+  Rectangle: TRectangle2D;
+  TeXLabel, UnicodeLabel: TText2D;
+  Bitmap: TBitmap2D;
+  ClipboardText, OutputName, FileNameBefore: string;
+  OutputStream: TFileStream;
+  DirtyBefore, CanUndoBefore, CanRedoBefore: Boolean;
+  CountBefore, SelectionBefore: Integer;
+begin
+  Drawing := MainForm.TheDrawing;
+  Drawing.Clear;
+  Drawing.LineWidthBase := 0.5;
+  Line := TPolyline2D.CreateSpec(-1,
+    [Point2D(1.125, 2.375), Point2D(5.625, 8.875)]);
+  Line.LineStyle := liSolid;
+  Line.LineColor := clBlack;
+  Drawing.AddObject(-1, Line);
+  Rectangle := TRectangle2D.Create(-1);
+  Rectangle.Points[0] := Point2D(10.125, 12.375);
+  Rectangle.Points[1] := Point2D(14.75, 18.625);
+  Rectangle.Points[2] := Point2D(10.125, 18.625);
+  Rectangle.LineStyle := liSolid;
+  Rectangle.LineColor := clBlack;
+  Rectangle.FillColor := clBlue;
+  Drawing.AddObject(-1, Rectangle);
+  TeXLabel := TText2D.CreateSpec(-1, Point2D(2.75, 3.125),
+    Drawing.DefaultFontHeight, '$x^2$');
+  TeXLabel.TeXText := '$x^2$';
+  TeXLabel.Rot := 0.37;
+  Drawing.AddObject(-1, TeXLabel);
+  UnicodeLabel := TText2D.CreateSpec(-1, Point2D(3.5, 4.25),
+    Drawing.DefaultFontHeight, UTF8Encode(UnicodeString(WideChar($03B2))));
+  Drawing.AddObject(-1, UnicodeLabel);
+
+  Clipboard.AsText := 'preserve this clipboard text';
+  CountBefore := Drawing.ObjectsCount;
+  SelectionBefore := Drawing.SelectedObjects.Count;
+  DirtyBefore := Drawing.History.IsChanged;
+  CanUndoBefore := Drawing.History.CanUndo;
+  CanRedoBefore := Drawing.History.CanRedo;
+  FileNameBefore := string(Drawing.FileName);
+  MainForm.CopyAsTikZ.Execute;
+  ClipboardText := Clipboard.AsText;
+  Check(Pos('% Generated from the current TpX drawing', ClipboardText) = 1,
+    'Copy as TikZ did not put the generated fragment on the native clipboard');
+  Check((Pos('\usepackage{tikz}', ClipboardText) > 0) and
+    (Pos('1.125mm', ClipboardText) > 0) and
+    (Pos('2.375mm', ClipboardText) > 0),
+    'Copied TikZ omitted prerequisites or source-precision fractional coordinates');
+  Check((Pos('rotate=', ClipboardText) > 0) and
+    (Pos('$x^2$', ClipboardText) > 0) and
+    (Pos(UTF8Encode(UnicodeString(WideChar($03B2))), ClipboardText) > 0),
+    'Copied TikZ lost rotated TeX text or plain Unicode text');
+  Check((Pos('\begin{tikzpicture}', ClipboardText) > 0) and
+    (Pos('\end{tikzpicture}', ClipboardText) > 0),
+    'Copied TikZ is not a complete picture fragment');
+  Check((Drawing.ObjectsCount = CountBefore) and
+    (Drawing.SelectedObjects.Count = SelectionBefore) and
+    (Drawing.History.IsChanged = DirtyBefore) and
+    (Drawing.History.CanUndo = CanUndoBefore) and
+    (Drawing.History.CanRedo = CanRedoBefore) and
+    (string(Drawing.FileName) = FileNameBefore),
+    'Copy as TikZ changed drawing, selection, history, or document identity');
+
+  OutputName := GetEnvironmentVariable('TPX_COPY_TIKZ_OUTPUT');
+  if OutputName <> '' then
+  begin
+    OutputStream := TFileStream.Create(OutputName, fmCreate);
+    try
+      if ClipboardText <> '' then
+        OutputStream.WriteBuffer(ClipboardText[1], Length(ClipboardText));
+    finally
+      OutputStream.Free;
+    end;
+  end;
+
+  Drawing.Clear;
+  Clipboard.AsText := 'empty drawing sentinel';
+  MainForm.CopyAsTikZ.Execute;
+  ClipboardText := Clipboard.AsText;
+  Check((Pos('\begin{tikzpicture}', ClipboardText) > 0) and
+    (Pos('\end{tikzpicture}', ClipboardText) > 0) and
+    (Pos('\draw', ClipboardText) = 0) and
+    (Pos('\fill', ClipboardText) = 0) and
+    (Pos('\node', ClipboardText) = 0),
+    'Empty drawing did not copy a complete empty picture');
+
+  Bitmap := TBitmap2D.Create(-1);
+  Drawing.AddObject(-1, Bitmap);
+  Clipboard.AsText := 'unsupported asset sentinel';
+  CountBefore := Drawing.ObjectsCount;
+  DirtyBefore := Drawing.History.IsChanged;
+  CanUndoBefore := Drawing.History.CanUndo;
+  CanRedoBefore := Drawing.History.CanRedo;
+  MainForm.CopyAsTikZ.Execute;
+  Check(Clipboard.AsText = 'unsupported asset sentinel',
+    'Unsupported bitmap asset partially replaced the clipboard');
+  Check((Pos('bitmap', LowerCase(MainForm.StatusBar1.Panels[0].Text)) > 0) and
+    (Drawing.ObjectsCount = CountBefore) and
+    (Drawing.History.IsChanged = DirtyBefore) and
+    (Drawing.History.CanUndo = CanUndoBefore) and
+    (Drawing.History.CanRedo = CanRedoBefore),
+    'Unsupported bitmap was not reported or changed drawing history');
 end;
 
 procedure TestColorBoxCustomState;
@@ -939,6 +1057,20 @@ begin
     Target.Free;
     Source.Free;
   end;
+end;
+
+procedure TObserver.RunClipboardScenarioInEventLoop(Sender: TObject);
+begin
+  ClipboardScenarioTimer.Enabled := False;
+  try
+    if ParamStr(1) = 'copy-as-tikz' then
+      TestCopyAsTikZ
+    else
+      TestClipboardRoundTrip;
+  except
+    on E: Exception do ClipboardScenarioError := E.Message;
+  end;
+  Application.Terminate;
 end;
 
 procedure TestShapeSnap;
@@ -1435,7 +1567,8 @@ begin
       Halt(7);
     end;
     if (ParamStr(1) <> 'clipboard-format-width') and
-      (ParamStr(1) <> 'clipboard-roundtrip') then
+      (ParamStr(1) <> 'clipboard-roundtrip') and
+      (ParamStr(1) <> 'copy-as-tikz') then
       WidgetSet := TTestWidgetSet.Create;
     Application.Initialize;
     RequireDerivedFormResource := True;
@@ -1443,6 +1576,20 @@ begin
     Observer := TObserver.Create;
     MainForm.OnClose := Observer.Closing;
     PromptDialogFunction := AnswerPrompt;
+    if (ParamStr(1) = 'copy-as-tikz') or
+      (ParamStr(1) = 'clipboard-roundtrip') then
+    begin
+      ClipboardScenarioTimer := TTimer.Create(nil);
+      ClipboardScenarioTimer.Interval := 1;
+      ClipboardScenarioTimer.OnTimer := Observer.RunClipboardScenarioInEventLoop;
+      ClipboardScenarioTimer.Enabled := True;
+      Application.Run;
+      ClipboardScenarioTimer.Free;
+      if ClipboardScenarioError <> '' then
+        raise Exception.Create(ClipboardScenarioError);
+      WriteLn('PASS ', ParamStr(1));
+      Halt(0);
+    end;
     if GetEnvironmentVariable('TPX_STARTUP_EXPECTED') <> '' then TestStartupFileName
     else if Pos('viewport-', ParamStr(1)) = 1 then TestViewport(ParamStr(1))
     else if ParamStr(1) = 'live-tex-missing-tool' then TestLiveTeXMissingTool
@@ -1453,6 +1600,7 @@ begin
     else if ParamStr(1) = 'check-file-path' then TestCheckFilePath
     else if ParamStr(1) = 'clipboard-format-width' then TestClipboardFormatWidth
     else if ParamStr(1) = 'clipboard-roundtrip' then TestClipboardRoundTrip
+    else if ParamStr(1) = 'copy-as-tikz' then TestCopyAsTikZ
     else if ParamStr(1) = 'editable-shortcut-routing' then TestEditableShortcutRouting
     else if ParamStr(1) = 'canvas-focus-transfer' then TestCanvasFocusTransfer
     else if ParamStr(1) = 'platform-shortcuts' then TestPlatformShortcuts

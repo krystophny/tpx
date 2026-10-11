@@ -1113,6 +1113,9 @@ object MainForm: TMainForm
       object Paste1: TMenuItem
         Action = ClipboardPaste
       end
+      object CopyAsTikZItem: TMenuItem
+        Action = CopyAsTikZ
+      end
       object Duplicateselected1: TMenuItem
         Action = DuplicateSelected
         ShortCut = 16452
@@ -1593,6 +1596,13 @@ object MainForm: TMainForm
         'ctrl+ins')
       ShortCut = 16451
       OnExecute = UserEventExecute
+    end
+    object CopyAsTikZ: TAction
+      Category = 'Edit'
+      Caption = 'Copy as TikZ'
+      Hint = 'Copy the whole drawing as TikZ source'
+      ShortCut = 24643
+      OnExecute = CopyAsTikZExecute
     end
     object ClipboardPaste: TAction
       Category = 'Edit'
