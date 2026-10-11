@@ -2600,6 +2600,21 @@ var
   Action: TAction;
   ShortcutBelongsToCanvas: Boolean;
 begin
+  if (Inspector <> nil) and (ActiveControl <> nil) and
+    Inspector.ContainsControl(ActiveControl) then
+  begin
+    Shortcut := Menus.ShortCut(Message.CharCode,
+      KeyDataToShiftState(Message.KeyData));
+    { Keep Inspector navigation from dispatching canvas actions. }
+    if (Shortcut = SelNext.ShortCut) or (Shortcut = SelPrev.ShortCut) or
+      (Shortcut = MoveUp.ShortCut) or (Shortcut = MoveDown.ShortCut) or
+      (Shortcut = MoveLeft.ShortCut) or (Shortcut = MoveRight.ShortCut) or
+      (Shortcut = MoveUpPixel.ShortCut) or
+      (Shortcut = MoveDownPixel.ShortCut) or
+      (Shortcut = MoveLeftPixel.ShortCut) or
+      (Shortcut = MoveRightPixel.ShortCut) then
+      Exit(False);
+  end;
   EditableFocus := ActiveControl is TCustomEdit;
   if not EditableFocus and (ActiveControl is TCustomComboBox) then
     EditableFocus := TCustomComboBox(ActiveControl).Style.HasEditBox;

@@ -611,6 +611,11 @@ var
   HandoffHistory: Integer;
   TestKey: Word;
   TestShift: TShiftState;
+  ShortcutMessage: TLMKey;
+  ShortcutHandled: Boolean;
+  SelectedID: Integer;
+  SelectedAfter: Integer;
+  TextAnchor: TPoint2D;
 
   function InspectorTop(Control: TControl): Integer;
   begin
@@ -826,6 +831,49 @@ var
     end;
   end;
 
+  procedure DispatchShortcut(Key: Word; Modifiers: TShiftState;
+    out Handled: Boolean);
+  begin
+    FillChar(ShortcutMessage, SizeOf(ShortcutMessage), 0);
+    ShortcutMessage.CharCode := Key;
+    ShortcutModifiers := Modifiers;
+    ShortcutModifierSimulation := True;
+    try
+      Handled := MainForm.IsShortcut(ShortcutMessage);
+    finally
+      ShortcutModifierSimulation := False;
+      ShortcutModifiers := [];
+    end;
+  end;
+
+  procedure CheckInspectorKeepsCanvasKey(Key: Word;
+    Modifiers: TShiftState; const KeyName: string);
+  begin
+    SelectObject(TextObj);
+    MainForm.Inspector.FocusField(opfFontStyle);
+    FontStyleCombo.SetFocus;
+    Application.ProcessMessages;
+    Check(MainForm.ActiveControl = FontStyleCombo,
+      KeyName + ' setup did not focus the Inspector combo');
+    SelectedID := Drawing.SelectedObjects.FirstObj.ID;
+    TextAnchor := TextObj.Points[0];
+    DispatchShortcut(Key, Modifiers, ShortcutHandled);
+    if Drawing.SelectedObjects.Count = 0 then
+      SelectedAfter := -1
+    else
+      SelectedAfter := Drawing.SelectedObjects.FirstObj.ID;
+    Check(not ShortcutHandled,
+      KeyName + ' was consumed by a canvas shortcut while the Inspector owned focus; ' +
+      'before=' + IntToStr(SelectedID) + ', after=' +
+      IntToStr(SelectedAfter));
+    Check((Drawing.SelectedObjects.Count = 1) and
+      (Drawing.SelectedObjects.FirstObj.ID = SelectedID) and
+      (SelectedID = TextObj.ID),
+      KeyName + ' changed the selected Inspector target');
+    Check(IsSamePoint2D(TextObj.Points[0], TextAnchor),
+      KeyName + ' moved the selected text object');
+  end;
+
 begin
   SetLiveTeXEnabled(False);
   MainForm.Show;
@@ -878,6 +926,24 @@ begin
     'Inspector did not decode stored Unicode character references');
   FontStyleCombo := MainForm.Inspector.EditorFor(opfFontStyle) as TComboBox;
   AlignmentCombo := MainForm.Inspector.EditorFor(opfHAlignment) as TComboBox;
+  CheckInspectorKeepsCanvasKey(VK_TAB, [], 'Tab');
+  CheckInspectorKeepsCanvasKey(VK_TAB, [ssShift], 'Shift+Tab');
+  CheckInspectorKeepsCanvasKey(VK_DOWN, [], 'ArrowDown');
+  SelectObject(TextObj);
+  MainForm.ActiveControl := MainForm.LocalView;
+  Application.ProcessMessages;
+  DispatchShortcut(VK_TAB, [], ShortcutHandled);
+  Check(ShortcutHandled and (Drawing.SelectedObjects.Count = 1) and
+    (Drawing.SelectedObjects.FirstObj.ID = LineObj.ID),
+    'Canvas Tab no longer dispatches Select next when the canvas owns focus');
+  SelectObject(LineObj);
+  MainForm.ActiveControl := MainForm.LocalView;
+  Application.ProcessMessages;
+  DispatchShortcut(VK_TAB, [ssShift], ShortcutHandled);
+  Check(ShortcutHandled and (Drawing.SelectedObjects.Count = 1) and
+    (Drawing.SelectedObjects.FirstObj.ID = TextObj.ID),
+    'Canvas Shift+Tab no longer dispatches Select previous when the canvas owns focus');
+  SelectObject(TextObj);
   HandoffHistory := Drawing.History.Count;
   MainForm.Inspector.FocusField(opfFontStyle);
   FontStyleCombo.ItemIndex := 1;
