@@ -1437,6 +1437,11 @@ def s_nonmodal_editing_workflow(app):
     # End arrow sits two rows after Width and one before Arrow size.
     choose_painted_item(line_width, arrow_size, 2 / 3, 'h40')
 
+    # Collapse unrelated sections while the Line section is still in view.
+    # Later text-field focus scrolls the Inspector to keep its editor visible.
+    app.page.get_by_role('button', name='▾ Line', exact=True).click()
+    app.page.get_by_role('button', name='▾ Fill and hatching', exact=True).click()
+
     app.menu('Insert', 'Insert text')
     if app.page.get_by_role('dialog').count():
         raise AssertionError('Insert text opened a dialog')
@@ -1486,10 +1491,8 @@ def s_nonmodal_editing_workflow(app):
                 f'{stage}: Inspector control escaped the visible LCL canvas: '
                 f'control={control_box}, canvas={lcl_box}')
 
-    # Keep the canvas viewport fixed. The Inspector owns its own scrollbox, so
-    # collapse the unrelated sections before using the painted alignment combo.
-    app.page.get_by_role('button', name='▾ Line', exact=True).click()
-    app.page.get_by_role('button', name='▾ Fill and hatching', exact=True).click()
+    # The Inspector owns its own scrollbox; unrelated sections were collapsed
+    # before the selected Text fields took focus.
     if not height.is_enabled():
         raise AssertionError('collapsing unrelated Inspector sections changed the selected label')
     height.fill('2.75')
