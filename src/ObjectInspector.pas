@@ -40,6 +40,7 @@ type
     FSectionBodies: array[0..5] of TPanel;
     FSectionButtons: array[0..5] of TButton;
     FSectionTitles: array[0..5] of string;
+    FSectionHeights: array[0..5] of Integer;
     FDrawing: TDrawing2D;
     FTargetIDs: TEditTargetIDs;
     FEpochProvider: TInspectorEpochProvider;
@@ -53,6 +54,7 @@ type
     FOnSessionChanged: TInspectorSessionEvent;
     FOnShouldSkipFieldRefresh: TInspectorFieldRefreshGuard;
     procedure BuildView;
+    procedure LayoutSections;
     procedure AddSection(Index: Integer; const Title: string);
     procedure AddField(Section: Integer; Field: TObjectPropertyField;
       const Caption: string; IsCombo, IsColor, IsCheck: Boolean);
@@ -228,6 +230,8 @@ begin
 end;
 
 procedure TObjectInspector.BuildView;
+var
+  I: Integer;
 begin
   FHeader := TPanel.Create(Self);
   FHeader.Parent := Self;
@@ -263,7 +267,7 @@ begin
   FContent.Parent := FScroll;
   FContent.Align := alTop;
   FContent.BevelOuter := bvNone;
-  FContent.AutoSize := True;
+  FContent.AutoSize := False;
 
   AddSection(0, 'Line');
   AddField(0, opfLineStyle, 'Line style', True, False, False);
@@ -304,21 +308,59 @@ begin
 
   FEmptyLabel := TLabel.Create(Self);
   FEmptyLabel.Parent := FContent;
-  FEmptyLabel.Align := alTop;
+  FEmptyLabel.Align := alNone;
   FEmptyLabel.AutoSize := False;
   FEmptyLabel.Height := 54;
   FEmptyLabel.WordWrap := True;
   FEmptyLabel.Caption := 'No object selected. New-object defaults remain available in the property toolbars.';
   FEmptyLabel.BorderSpacing.Around := 8;
+  FEmptyLabel.SetBounds(0, 0, 264, 54);
+  FEmptyLabel.Anchors := [akTop, akLeft, akRight];
   FEmptyLabel.Visible := False;
 
   FCoordinateButton := TButton.Create(Self);
   FCoordinateButton.Parent := FContent;
-  FCoordinateButton.Align := alTop;
-  FCoordinateButton.Height := 30;
+  FCoordinateButton.Align := alNone;
   FCoordinateButton.Caption := 'Point coordinates…';
+  FCoordinateButton.SetBounds(0, 0, 264, 30);
+  FCoordinateButton.Anchors := [akTop, akLeft, akRight];
   FCoordinateButton.OnClick := CoordinatesClick;
   FCoordinateButton.Visible := False;
+
+  for I := 0 to SectionCount - 1 do
+  begin
+    FSectionButtons[I].Name := 'InspectorSection' + IntToStr(I) + 'Header';
+    FSectionBodies[I].Name := 'InspectorSection' + IntToStr(I) + 'Body';
+  end;
+  LayoutSections;
+end;
+
+procedure TObjectInspector.LayoutSections;
+var
+  I, Y: Integer;
+begin
+  Y := 0;
+  for I := 0 to SectionCount - 1 do
+  begin
+    FSectionButtons[I].SetBounds(0, Y, 264, 28);
+    Inc(Y, 28);
+    if FSectionBodies[I].Visible then
+      FSectionBodies[I].SetBounds(0, Y, 264, FSectionHeights[I])
+    else
+      FSectionBodies[I].SetBounds(0, Y, 264, 0);
+    Inc(Y, FSectionBodies[I].Height);
+  end;
+  if FEmptyLabel.Visible then
+  begin
+    FEmptyLabel.Top := Y;
+    Inc(Y, FEmptyLabel.Height);
+  end;
+  if FCoordinateButton.Visible then
+  begin
+    FCoordinateButton.Top := Y;
+    Inc(Y, FCoordinateButton.Height);
+  end;
+  FContent.Height := Y;
 end;
 
 procedure TObjectInspector.AddSection(Index: Integer; const Title: string);
@@ -326,7 +368,8 @@ begin
   FSectionTitles[Index] := Title;
   FSectionButtons[Index] := TButton.Create(Self);
   FSectionButtons[Index].Parent := FContent;
-  FSectionButtons[Index].Align := alTop;
+  FSectionButtons[Index].Align := alNone;
+  FSectionButtons[Index].Anchors := [akTop, akLeft, akRight];
   FSectionButtons[Index].Height := 28;
   FSectionButtons[Index].Tag := Index;
   FSectionButtons[Index].Caption := '▾ ' + Title;
@@ -334,7 +377,8 @@ begin
 
   FSectionBodies[Index] := TPanel.Create(Self);
   FSectionBodies[Index].Parent := FContent;
-  FSectionBodies[Index].Align := alTop;
+  FSectionBodies[Index].Align := alNone;
+  FSectionBodies[Index].Anchors := [akTop, akLeft, akRight];
   FSectionBodies[Index].BevelOuter := bvNone;
   FSectionBodies[Index].AutoSize := False;
   FSectionBodies[Index].Height := 0;
@@ -354,11 +398,13 @@ begin
   IsText := Field in [opfText, opfTeXText];
   Row := TPanel.Create(Self);
   Row.Parent := FSectionBodies[Section];
-  Row.Align := alTop;
+  Row.Align := alNone;
+  Row.Anchors := [akTop, akLeft, akRight];
   Row.BevelOuter := bvNone;
   if IsText then Row.Height := 132 else Row.Height := 64;
-  FSectionBodies[Section].Height :=
-    FSectionBodies[Section].Height + Row.Height;
+  Row.SetBounds(0, FSectionHeights[Section], 264, Row.Height);
+  Inc(FSectionHeights[Section], Row.Height);
+  FSectionBodies[Section].Height := FSectionHeights[Section];
 
   LabelControl := TLabel.Create(Self);
   LabelControl.Parent := Row;
@@ -456,6 +502,7 @@ begin
       CompositionChanged;
   end;
   Control.Name := 'Inspector' + FieldName(Field) + 'Control';
+  Control.Hint := Caption;
   Control.Parent := Row;
   Control.Anchors := [akTop, akLeft, akRight];
   Control.Tag := Ord(Field);
@@ -600,6 +647,7 @@ begin
     (Sender as TButton).Caption := '▾ ' + FSectionTitles[Index]
   else
     (Sender as TButton).Caption := '▸ ' + FSectionTitles[Index];
+  LayoutSections;
 end;
 
 procedure TObjectInspector.Bind(Drawing: TDrawing2D;
@@ -824,6 +872,7 @@ begin
     FEmptyLabel.Visible := not FHasSelection;
     FCoordinateButton.Visible := FHasSelection;
     FCoordinateButton.Enabled := HasCoordinateTable;
+    LayoutSections;
     if FHasSelection then
     begin
       FSelectionLabel.Caption := Format('%d object(s) selected', [SelectedCount]);
@@ -1381,6 +1430,7 @@ begin
     FSectionBodies[Section].Visible := True;
     FSectionButtons[Section].Caption := '▾ ' + FSectionTitles[Section];
   end;
+  LayoutSections;
   if FWidgets[Field].Editor.CanFocus then
     FWidgets[Field].Editor.SetFocus;
 end;
