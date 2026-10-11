@@ -637,6 +637,7 @@ type
     FInlineTextCancelButton: TButton;
     FInlineTextField: TObjectPropertyField;
     FInlineTargetID: Integer;
+    FInlineFocusGeneration: Integer;
     FInlineNewTextObject: Boolean;
     FInlineUpdating: Boolean;
     FInlineStableText: TEditUtf8Text;
@@ -664,9 +665,11 @@ type
     procedure InlineTextCancel(Sender: TObject);
     procedure EditTextMenuClick(Sender: TObject);
     procedure CloseInlineTextEditor;
+    procedure AdvanceInlineTextFocusGeneration;
     procedure UpdateInlineTextEditorPosition;
     procedure LocalViewResized(Sender: TObject);
     procedure ApplyInlineTextEditorPosition(Data: PtrInt);
+    procedure RestoreBlockedInlineTextFocus(Data: PtrInt);
     function GetCurrentDocumentEpoch: QWord;
     function GetHasActiveEditSession: Boolean;
     function GetInlineTextEditActive: Boolean;
@@ -1185,6 +1188,7 @@ begin
   FInlineTextDoneButton := nil;
   FInlineTextCancelButton := nil;
   FInlineTargetID := -1;
+  FInlineFocusGeneration := 0;
   FInlineNewTextObject := False;
   FInlineUpdating := False;
   EventManager.OnExit := OnExit;
@@ -1443,6 +1447,7 @@ var
   TextObj: TText2D;
   FontPixels: Integer;
 begin
+  AdvanceInlineTextFocusGeneration;
   FInlineTextFieldLabel := TLabel.Create(Self);
   FInlineTextFieldLabel.Name := 'InlineTextFieldLabel';
   FInlineTextFieldLabel.Parent := LocalView;
@@ -1748,6 +1753,13 @@ begin
   UpdateInlineTextEditorPosition;
 end;
 
+procedure TMainForm.RestoreBlockedInlineTextFocus(Data: PtrInt);
+begin
+  if (Data <> FInlineFocusGeneration) or not InlineTextEditActive then Exit;
+  if (FInlineTextMemo <> nil) and FInlineTextMemo.CanFocus then
+    FInlineTextMemo.SetFocus;
+end;
+
 function TMainForm.BeginInlineTextEdit(Obj: TObject2D): Boolean;
 var
   TextObj: TText2D;
@@ -1899,8 +1911,17 @@ begin
   CloseInlineTextEditor;
 end;
 
+procedure TMainForm.AdvanceInlineTextFocusGeneration;
+begin
+  if FInlineFocusGeneration = High(Integer) then
+    FInlineFocusGeneration := 1
+  else
+    Inc(FInlineFocusGeneration);
+end;
+
 procedure TMainForm.CloseInlineTextEditor;
 begin
+  AdvanceInlineTextFocusGeneration;
   if FInlineSession <> nil then
   begin
     FInlineSession.OnInteractionChanged := nil;
@@ -2214,8 +2235,9 @@ begin
   if (CurrentSession <> nil) and CurrentSession.IsActive and
     (FEditSession = CurrentSession) then Exit(True);
   Result := TrySettleEditSession;
-  if not Result and InlineTextEditActive and FInlineTextMemo.CanFocus then
-    FInlineTextMemo.SetFocus;
+  if not Result and InlineTextEditActive then
+    Application.QueueAsyncCall(RestoreBlockedInlineTextFocus,
+      PtrInt(FInlineFocusGeneration));
 end;
 
 function TMainForm.InspectorCurrentEpoch: QWord;
