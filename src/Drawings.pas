@@ -399,6 +399,14 @@ type
     TOnControlPoint;
     OnControlLine: TOnControlLine;
     OnControlBox: TOnControlBox;
+    {: Ensures that an object already in this drawing has a unique,
+       nonnegative runtime ID. Nested objects loaded from native documents
+       may not have an ID until an editor needs to address them. This does
+       not change drawing history or notify drawing observers.
+    }
+    function EnsureUniqueObjectID(const Obj: TGraphicObject): Integer;
+    procedure EnsureUniqueObjectIDs(const Objects: array of TGraphicObject;
+      var IDs: array of Integer);
     {: This is the constructor of the control.
 
        It sets the control in the following state:
@@ -1152,6 +1160,106 @@ begin
   try
     fListOfBlocks.Delete(ID);
   except
+  end;
+end;
+
+procedure ScanDrawingObjectIDs(List: TGraphicObjList; Target: TGraphicObject;
+  var TargetFound: Boolean; var TargetIDCount, MaxID: Integer);
+var
+  Obj: TGraphicObject;
+begin
+  if List = nil then Exit;
+  Obj := List.FirstObj;
+  while Obj <> nil do
+  begin
+    if Obj = Target then TargetFound := True;
+    if Obj.ID >= 0 then
+    begin
+      if Obj.ID > MaxID then MaxID := Obj.ID;
+      if (Target.ID >= 0) and (Obj.ID = Target.ID) then
+        Inc(TargetIDCount);
+    end;
+    if Obj is TGroup2D then
+      ScanDrawingObjectIDs((Obj as TGroup2D).Objects, Target,
+        TargetFound, TargetIDCount, MaxID);
+    Obj := List.NextObj;
+  end;
+end;
+
+function TDrawing.EnsureUniqueObjectID(const Obj: TGraphicObject): Integer;
+var
+  Objects: array[0..0] of TGraphicObject;
+  IDs: array[0..0] of Integer;
+begin
+  Objects[0] := Obj;
+  EnsureUniqueObjectIDs(Objects, IDs);
+  Result := IDs[0];
+end;
+
+procedure TDrawing.EnsureUniqueObjectIDs(
+  const Objects: array of TGraphicObject; var IDs: array of Integer);
+var
+  PlannedIDs: array of Integer;
+  I, J, NeededIDs, TargetIDCount, MaxID, NextID: Integer;
+  TargetFound: Boolean;
+begin
+  if Length(IDs) <> Length(Objects) then
+    raise EArgumentException.Create('Object and ID counts do not match');
+  SetLength(PlannedIDs, Length(Objects));
+  MaxID := -1;
+  NeededIDs := 0;
+  for I := 0 to High(Objects) do
+  begin
+    if Objects[I] = nil then
+      raise EArgumentException.Create('Cannot assign an ID to a nil object');
+    for J := 0 to I - 1 do
+      if Objects[J] = Objects[I] then
+        raise EArgumentException.Create('The object list repeats an object');
+    TargetFound := False;
+    TargetIDCount := 0;
+    ScanDrawingObjectIDs(fListOfObjects, Objects[I], TargetFound,
+      TargetIDCount, MaxID);
+    if not TargetFound then
+      raise ETpX_ListObjNotFound.Create(
+        'Cannot assign an ID to an object outside this drawing');
+    if (Objects[I].ID >= 0) and (TargetIDCount = 1) then
+      PlannedIDs[I] := Objects[I].ID
+    else
+    begin
+      PlannedIDs[I] := -1;
+      Inc(NeededIDs);
+    end;
+  end;
+
+  NextID := fNextID;
+  if NextID < 0 then NextID := 0;
+  if NextID <= MaxID then
+  begin
+    if MaxID = High(Integer) then
+    begin
+      if NeededIDs > 0 then
+        raise ERangeError.Create(
+          'The drawing has no available runtime object ID');
+      NextID := High(Integer);
+    end
+    else
+      NextID := MaxID + 1;
+  end;
+  if Int64(NextID) + NeededIDs > High(Integer) then
+    raise ERangeError.Create('The drawing has no available runtime object ID');
+  for I := 0 to High(PlannedIDs) do
+    if PlannedIDs[I] < 0 then
+    begin
+      PlannedIDs[I] := NextID;
+      Inc(NextID);
+    end;
+
+  fNextID := NextID;
+  for I := 0 to High(Objects) do
+  begin
+    IDs[I] := PlannedIDs[I];
+    if Objects[I].ID <> PlannedIDs[I] then
+      Objects[I].ID := PlannedIDs[I];
   end;
 end;
 

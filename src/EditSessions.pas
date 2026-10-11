@@ -1085,6 +1085,9 @@ var
   Targets: TRecoveryTargets;
   Provisionals: TRecoveryProvisionals;
   Objects: array of TObject2D;
+  TargetObjects: array of TObject2D;
+  ValidationTargets: array of TObject2D;
+  ObjectsToNormalize: array of TGraphicObject;
   TargetIDs: TEditTargetIDs;
   RawDrafts: TRawEditDraftArray;
   Patch: TObjectPropertyPatch;
@@ -1223,7 +1226,7 @@ begin
       if Stream.Position <> Stream.Size then
         raise EReadError.Create('Edit recovery state has trailing data');
 
-      SetLength(TargetIDs, Length(Targets));
+      SetLength(TargetObjects, Length(Targets));
       for I := 0 to High(Targets) do
       begin
         Obj := ReadObjectAtPath(Drawing.ObjectList, Targets[I].Path);
@@ -1231,13 +1234,28 @@ begin
           raise EReadError.Create(
             'The recovered edit target no longer matches its saved location');
         for J := 0 to I - 1 do
-          if TargetIDs[J] = Obj.ID then
+          if TargetObjects[J] = Obj then
             raise EReadError.Create('Edit recovery repeats a target location');
-        TargetIDs[I] := Obj.ID;
+        TargetObjects[I] := Obj;
       end;
-      if (Length(TargetIDs) = 0) and (Length(Objects) = 0) and
+      if (Length(TargetObjects) = 0) and (Length(Objects) = 0) and
         ((Length(RawDrafts) > 0) or (Patch.Fields <> [])) then
         raise EReadError.Create('Edit recovery has no target objects');
+
+      SetLength(ValidationTargets,
+        Length(TargetObjects) + Length(Objects));
+      for I := 0 to High(TargetObjects) do
+        ValidationTargets[I] := TargetObjects[I];
+      for I := 0 to High(Objects) do
+        ValidationTargets[Length(TargetObjects) + I] := Objects[I];
+      if not ValidateObjectPropertyPatchForObjects(ValidationTargets,
+        Patch, ErrorText0) then
+        raise EReadError.Create(ErrorText0);
+      SetLength(TargetIDs, Length(TargetObjects));
+      SetLength(ObjectsToNormalize, Length(TargetObjects));
+      for I := 0 to High(TargetObjects) do
+        ObjectsToNormalize[I] := TargetObjects[I];
+      Drawing.EnsureUniqueObjectIDs(ObjectsToNormalize, TargetIDs);
 
       Session := TObjectEditSession.Create(Drawing, DocumentEpoch, TargetIDs);
       Session.Presentation := Presentation;
