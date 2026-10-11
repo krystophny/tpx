@@ -51,22 +51,14 @@ then go to **System Settings → Privacy & Security → Open Anyway** and confir
 See [Apple's instructions](https://support.apple.com/en-us/102445).
 A managed Mac may prevent this exception.
 
-<<<<<<< HEAD
 Keep the app bundle intact. Preferences are saved in
 `~/Library/Preferences/TpX/TpX.ini`, recovery drafts in
 `~/Library/Application Support/TpX/AutoSaveRecovery`, and the live TeX preview
 cache in `~/Library/Caches/TpX/preview-cache`. Bundled defaults and help are
-sealed in `Contents/Resources`. The template-editing menu opens writable copies in your
-preferences folder; changes there preserve the app signature. Editing files
-inside the app invalidates its signature.
-=======
-Keep the app bundle intact. Preferences are saved in your user configuration
-folder. Bundled defaults and help are sealed in `Contents/Resources`.
-The template-editing menu opens writable copies in your configuration folder;
-changes there preserve the app signature. Editing files inside the app
-invalidates its signature. Finder and Open With can open native `.tpx` drawings
-with the TpX document icon.
->>>>>>> fae5f54 (feat: open native tpx files from the OS (#97))
+sealed in `Contents/Resources`. The template-editing menu opens writable copies
+in your preferences folder; changes there preserve the app signature. Editing
+files inside the app invalidates its signature. Finder and Open With can open
+native `.tpx` drawings with the TpX document icon.
 
 ## Linux
 
