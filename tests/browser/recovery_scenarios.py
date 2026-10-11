@@ -1,7 +1,7 @@
 """Browser-local recovery behavior in real browser storage and WASM sessions."""
 
 from harness import App
-from scenarios import box, diff, drawing_xml, park, region
+from scenarios import box, decode_tpx_text_once, diff, drawing_xml, park, region
 
 
 DB_NAME = 'tpx-browser-local-recovery'
@@ -10,17 +10,6 @@ DB_NAME = 'tpx-browser-local-recovery'
 def wait_ready(page):
     page.wait_for_selector('#status[data-state=ready]', timeout=30000)
     page.wait_for_function('Number(document.querySelector("#lcl").dataset.frames)>0')
-
-
-def decode_tpx_text_once(value):
-    """Decode TpX text references after XML parsing, preserving literal entities."""
-    import re
-
-    def decode(match):
-        codepoint = int(match.group(1))
-        return chr(codepoint) if codepoint <= 0x10FFFF else match.group(0)
-
-    return re.sub(r'&#([0-9]+);', decode, value)
 
 
 def opt_in(page):
@@ -292,6 +281,92 @@ def s_recovery_restores_raw_inline_label_after_restart(app):
     return 'a browser process restart restores the exact uncommitted Unicode label and its later TpX source'
 
 
+def s_recovery_skips_active_composition_and_restores_commit(app):
+    opt_in(app.page)
+    _, cx, cy = box(app)
+    app.menu('Insert', 'Insert text')
+    app.click(cx - 60, cy - 20)
+    editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    editor.wait_for()
+    stable = 'Committed before composition'
+    editor.fill(stable)
+    wait_saved(app.page)
+    stable_selection = editor.evaluate('(el) => [el.selectionStart, el.selectionEnd]')
+    before = records(app.page)
+    if len(before) != 1:
+        raise AssertionError(f'expected one baseline draft, got {before}')
+
+    def start_composition(text):
+        editor.evaluate('''(el) => {
+          el.focus();
+          el.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+        }''')
+        app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Text composition is still active")',
+                                   timeout=10000)
+        editor.evaluate('''(el, text) => {
+          el.value = text;
+          el.dispatchEvent(new InputEvent('input', {bubbles:true,
+            inputType:'insertCompositionText', data:text, isComposing:true}));
+        }''', text)
+
+    def verify_composition_is_skipped(previous_hash):
+        app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Text composition is still active")',
+                                   timeout=10000)
+        rows = records(app.page)
+        if len(rows) != 1 or rows[0]['payloadHash'] != previous_hash:
+            raise AssertionError('an active composition replaced the last safe recovery payload')
+
+    start_composition('Uncommitted preedit')
+    verify_composition_is_skipped(before[0]['payloadHash'])
+
+    editor.evaluate('''(el, text) => {
+      el.value = text;
+      el.setSelectionRange(el.value.length, el.value.length);
+      el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:''}));
+    }''', stable)
+    app.page.wait_for_function('''!document.querySelector("#tpx-recovery-state").textContent
+      .includes("Text composition is still active")''')
+    if editor.input_value() != stable:
+        raise AssertionError(f'cancelled composition changed the stable text: {editor.input_value()!r}')
+    cancelled_selection = editor.evaluate('(el) => [el.selectionStart, el.selectionEnd]')
+    if cancelled_selection != stable_selection:
+        raise AssertionError('cancelled composition changed the caret/selection: '
+                             f'{stable_selection!r} -> {cancelled_selection!r}')
+    after_cancel = records(app.page)
+    if len(after_cancel) != 1:
+        raise AssertionError(f'cancelled composition changed draft count: {after_cancel!r}')
+    if after_cancel[0]['payloadHash'] != before[0]['payloadHash']:
+        raise AssertionError('cancelled composition changed the payload: '
+                             f'{before[0]["payloadHash"][:12]} -> '
+                             f'{after_cancel[0]["payloadHash"][:12]}; '
+                             f'editor={editor.input_value()!r}')
+
+    start_composition('Uncommitted λ label: \\input{pending}')
+    verify_composition_is_skipped(after_cancel[0]['payloadHash'])
+    committed = 'Committed λ label: \\input{pending}'
+    editor.evaluate('''(el, text) => {
+      el.value = text;
+      el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:text}));
+    }''', committed)
+    app.page.wait_for_function('''(() => {
+      const text = document.querySelector("#tpx-recovery-state").textContent;
+      return text.includes("New changes are not yet saved") ||
+        text.includes("Draft saved in this browser");
+    })()''', timeout=10000)
+    wait_saved(app.page)
+
+    page = app.restart()
+    wait_ready(page)
+    page.get_by_role('button', name='Recover as new drawing', exact=True).click()
+    page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Draft recovered as a new TpX drawing")',
+                           timeout=10000)
+    recovered = page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    recovered.wait_for(timeout=10000)
+    if recovered.input_value() != committed:
+        raise AssertionError(f'restarted recovery lost committed composition text: {recovered.input_value()!r}')
+    return 'synthetic active composition preserved the safe payload; cancellation kept stable text/selection and committed text survived restart'
+
+
 def s_recovery_retains_source_and_linked_asset(app):
     import hashlib
     import re
@@ -555,6 +630,7 @@ SCENARIOS = [
     ('recovery-restart-geometry', s_recovery_survives_application_restart),
     ('recovery-noop-download', s_recovery_noop_download_keeps_previous_draft),
     ('recovery-restart-raw-label', s_recovery_restores_raw_inline_label_after_restart),
+    ('recovery-restart-composition', s_recovery_skips_active_composition_and_restores_commit),
     ('recovery-source-assets', s_recovery_retains_source_and_linked_asset),
     ('recovery-quota', s_recovery_quota_failure_keeps_previous_record),
     ('recovery-capacity', s_recovery_capacity_does_not_evict),
