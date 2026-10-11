@@ -893,7 +893,7 @@ begin
   finally
     InlineTextView.supressTextChangeEvent := 0;
   end;
-  CocoaDrainTextInputQueue;
+  CocoaDrainTextInputQueue(InlineMemo);
   Check(not InlineMemo.CompositionPending,
     'Canceled native inline composition left the session pending');
   Check(InlineMemo.EditText = StableInlineText,
