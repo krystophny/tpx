@@ -1,0 +1,31 @@
+\begin{picture}(0,0)
+%<TpX v="5" PicScale="1.25" TeXFormat="tikz" PdfTeXFormat="tikz" FontName="Latin Modern">
+%<caption label="fig:double-slit">Two coherent sources produce an interference pattern</caption>
+%<comment>Concentric arcs are wavefronts; line styles distinguish the two slits.</comment>
+%<line x1="15" y1="8" x2="15" y2="16.9" lw="1.0" lc="#333333"/>
+%<line x1="15" y1="21.1" x2="15" y2="30.9" lw="1.0" lc="#333333"/>
+%<line x1="15" y1="35.1" x2="15" y2="44" lw="1.0" lc="#333333"/>
+%<line x1="62" y1="8" x2="62" y2="44" lw="1.0" lc="#333333"/>
+%<line x1="8" y1="26" x2="62" y2="26" li="dash" lw="0.45" lc="#777777"/>
+%<arc x="15" y="19" d="12" a1="-1.5708" a2="1.5708" lw="0.5" lc="#0072B2"/>
+%<arc x="15" y="19" d="20" a1="-1.5708" a2="1.5708" lw="0.5" lc="#0072B2"/>
+%<arc x="15" y="19" d="26" a1="-1.5708" a2="1.5708" lw="0.5" lc="#0072B2"/>
+%<arc x="15" y="33" d="12" a1="-1.5708" a2="1.5708" li="dash" lw="0.5" lc="#D55E00"/>
+%<arc x="15" y="33" d="20" a1="-1.5708" a2="1.5708" li="dash" lw="0.5" lc="#D55E00"/>
+%<arc x="15" y="33" d="26" a1="-1.5708" a2="1.5708" li="dash" lw="0.5" lc="#D55E00"/>
+%<line x1="15" y1="19" x2="62" y2="26" arr2="h40" lw="0.8" lc="#0072B2"/>
+%<line x1="15" y1="33" x2="62" y2="26" arr2="h40" lw="0.8" lc="#D55E00"/>
+%<line x1="4" y1="19" x2="4" y2="33" arr1="h40" arr2="h40" lw="0.6" lc="#333333"/>
+%<line x1="15" y1="5" x2="62" y2="5" arr1="h40" arr2="h40" lw="0.6" lc="#333333"/>
+%<circle x="15" y="19" d="2.1" lc="#0072B2" fill="#0072B2"/>
+%<circle x="15" y="33" d="2.1" lc="#D55E00" fill="#D55E00"/>
+%<circle x="62" y="26" d="1.8" lc="#6A3D9A" fill="#6A3D9A"/>
+%<text x="1" y="25" h="3.0" t="d" tex="$d$"/>
+%<text x="32" y="3" h="3.0" t="L" tex="$L$"/>
+%<text x="9" y="19" h="2.7" t="S1" tex="$S_1$"/>
+%<text x="9" y="33" h="2.7" t="S2" tex="$S_2$"/>
+%<text x="48" y="39" h="3.0" t="screen" tex="screen"/>
+%<text x="64" y="27" h="2.8" t="central bright fringe" tex="$\Delta r=0$"/>
+%<text x="31" y="48" h="2.8" t="lambda" tex="$\lambda$"/>
+%</TpX>
+\end{picture}

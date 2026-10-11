@@ -242,6 +242,10 @@ class ReleaseArtifactTests(unittest.TestCase):
                      executable: f"Version {binary_version}".encode(),
                      location + "help/tpx_tpxabout_tpx_drawing_tool.htm":
                          f'<meta name="tpx-version" content="{help_version}">'.encode(),
+                     location + "examples/README.md": b"example instructions",
+                     location + "examples/quadratic-function.TpX": b"quadratic scene",
+                     location + "examples/vector-addition.TpX": b"vector scene",
+                     location + "examples/double-slit.TpX": b"double-slit scene",
                      location + "preview.tex.inc": b"preview",
                      location + "metapost.tex.inc": b"metapost",
                      "README.md": b"readme", "INSTALL.md": b"install",

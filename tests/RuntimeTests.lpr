@@ -1514,7 +1514,7 @@ procedure TestMacResourcePaths;
 var
   Files: array[0..1] of string;
   I: Integer;
-  ResourcePath, UserPath, HelpPath: string;
+  ResourcePath, UserPath, HelpPath, ExamplePath: string;
   ResourceContents, UserContents: string;
   Strings: TStringList;
   ExpectBundle: Boolean;
@@ -1580,8 +1580,116 @@ begin
       'help/tpx_tpxabout_tpx_drawing_tool.htm'),
       'Bare executable did not use adjacent legacy help');
   WriteLn('HELP_PATH=', HelpPath);
+
+  ExamplePath := TpXResourcePath('examples/quadratic-function.TpX');
+  Check(FileExists(ExamplePath), 'Bundled example was not found: ' + ExamplePath);
+  if ExpectBundle then
+    Check(Pos('/Contents/Resources/examples/', ExamplePath) > 0,
+      'Example did not resolve under Contents/Resources: ' + ExamplePath)
+  else
+    Check(ExpandFileName(ExamplePath) = ExpandFileName(ExeDir +
+      'examples/quadratic-function.TpX'),
+      'Bare executable did not use its adjacent example');
+  WriteLn('EXAMPLE_PATH=', ExamplePath);
 end;
 {$ENDIF}
+
+procedure TestOpenExamples;
+const
+  ExampleCaptions: array[0..2] of string =
+    ('Quadratic function', 'Vector addition', 'Double-slit interference');
+  ExampleFiles: array[0..2] of string =
+    ('quadratic-function.TpX', 'vector-addition.TpX', 'double-slit.TpX');
+  ExpectedCounts: array[0..2] of Integer = (14, 12, 25);
+  ExpectedTex: array[0..2] of string =
+    ('$f(x)=x^2-1$', '$\vec{A}$', '$\Delta r=0$');
+var
+  ExampleMenu, Item: TMenuItem;
+  ExamplePath, SavedPath, ErrorText: string;
+  I, J: Integer;
+  FoundTex: Boolean;
+  Primitive: TPrimitive2D;
+  Line: TLine2D;
+  Arc: TArc2D;
+  TextObject: TText2D;
+begin
+  ExampleMenu := FindMenuCaption(MainForm.MainMenu1.Items, 'Open Example');
+  Check(ExampleMenu <> nil, 'File menu has no Open Example submenu');
+  Check(ExampleMenu.Count = 3, 'Open Example must contain three drawings');
+  for I := Low(ExampleCaptions) to High(ExampleCaptions) do
+  begin
+    Item := FindMenuCaption(ExampleMenu, ExampleCaptions[I]);
+    Check(Item <> nil, 'Open Example is missing ' + ExampleCaptions[I]);
+    Item.Click;
+    ExamplePath := TpXResourcePath('examples/' + ExampleFiles[I]);
+    Check((MainForm.EventManager.DocumentSession.SourcePath = '') and
+      not MainForm.EventManager.DocumentSession.CanSaveBack and
+      (MainForm.TheDrawing.FileName = Drawing_NewFileName) and
+      (MainForm.EventManager.RecentFiles.IndexOf(ExamplePath) < 0),
+      'Open Example did not detach the bundled document before editing');
+    Check(not LiveTeXDocumentTrusted,
+      'Opening an example trusted its TeX labels automatically');
+    Check(MainForm.TheDrawing.ObjectsCount = ExpectedCounts[I],
+      ExampleCaptions[I] + ' opened with ' +
+      IntToStr(MainForm.TheDrawing.ObjectsCount) + ' objects; expected ' +
+      IntToStr(ExpectedCounts[I]));
+    FoundTex := False;
+    for J := 0 to MainForm.TheDrawing.ObjectsCount - 1 do
+    begin
+      Primitive := MainForm.TheDrawing.GetObject(J) as TPrimitive2D;
+      Check(not (Primitive is TBitmap2D),
+        ExampleCaptions[I] + ' unexpectedly linked a bitmap');
+      if Primitive is TText2D then
+      begin
+        TextObject := Primitive as TText2D;
+        if TextObject.TeXText = ExpectedTex[I] then FoundTex := True;
+      end;
+    end;
+    Check(FoundTex, ExampleCaptions[I] + ' lost its TeX source label');
+
+    if I = 0 then
+    begin
+      Line := MainForm.TheDrawing.GetObject(0) as TLine2D;
+      Check(Line.EndArrowKind <> arrNone,
+        'Quadratic x-axis lost its arrow');
+      Check(Abs(Line.Points[0].X - 6) < 0.0001,
+        'Quadratic x-axis start changed');
+      Check(Abs(Line.Points[1].X - 64) < 0.0001,
+        'Quadratic x-axis end changed');
+    end
+    else if I = 1 then
+    begin
+      Line := MainForm.TheDrawing.GetObject(0) as TLine2D;
+      Check(Line.EndArrowKind <> arrNone,
+        'Vector arrow lost its arrowhead');
+      Check((Abs(Line.Points[0].X - 12) < 0.0001) and
+        (Abs(Line.Points[1].X - 42) < 0.0001) and
+        (Abs(Line.Points[1].Y - 12) < 0.0001),
+        'Vector arrow geometry changed');
+    end
+    else
+    begin
+      Check(MainForm.TheDrawing.GetObject(5) is TArc2D,
+        'Double-slit example lost its first wavefront');
+      Arc := MainForm.TheDrawing.GetObject(5) as TArc2D;
+      Check(Abs(Arc.Radius - 6) < 0.0001,
+        'Double-slit first wavefront has the wrong radius');
+      Primitive := MainForm.TheDrawing.GetObject(8) as TPrimitive2D;
+      Check(Primitive.LineStyle = liDashed,
+        'Double-slit wavefront styles no longer distinguish the sources');
+    end;
+
+    SavedPath := IncludeTrailingPathDelimiter(GetCurrentDir) +
+      'example-roundtrip-' + IntToStr(I) + '.TpX';
+    Check(BaseMode.SaveDocumentToPath(SavedPath, 'tpx', True, True,
+      ErrorText), 'Could not save ' + ExampleCaptions[I] + ': ' + ErrorText);
+    Check(BaseMode.OpenDocumentFromPath(SavedPath, ErrorText),
+      'Could not reopen ' + ExampleCaptions[I] + ': ' + ErrorText);
+    Check((MainForm.TheDrawing.ObjectsCount = ExpectedCounts[I]) and
+      (MainForm.EventManager.DocumentSession.SourceFormatId = 'tpx'),
+      ExampleCaptions[I] + ' did not survive native save and reopen');
+  end;
+end;
 
 procedure TestExit(const Scenario: string);
 var
@@ -1853,6 +1961,7 @@ begin
     else if ParamStr(1) = 'bitmap-eps' then TestBitmapEps
     else if ParamStr(1) = 'svg-linked-image-copy' then TestSvgLinkedImageCopy
     else if ParamStr(1) = 'svg-codec' then TestSvgCodec
+    else if ParamStr(1) = 'open-examples' then TestOpenExamples
     else if ParamStr(1) = 'labeled-preview' then TestLabeledPreview
 {$IFDEF DARWIN}
     else if ParamStr(1) = 'mac-settings' then TestMacSettings

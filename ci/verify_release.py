@@ -113,7 +113,11 @@ def verify(directory, version, commit):
         require(f'name="tpx-version" content="{version}"'.encode("ascii") in files.get(help_path, b""),
                 f"{platform}: offline help version mismatch")
         for required in ("preview.tex.inc", "metapost.tex.inc",
-                         "help/tpx_tpxabout_tpx_drawing_tool.htm"):
+                         "help/tpx_tpxabout_tpx_drawing_tool.htm",
+                         "examples/README.md",
+                         "examples/quadratic-function.TpX",
+                         "examples/vector-addition.TpX",
+                         "examples/double-slit.TpX"):
             require(files.get(location + required), f"{platform}: missing {required}")
         for required in ("INSTALL.md", "README.md", "LICENSE", "THIRD_PARTY.md"):
             require(files.get(prefix + required), f"{platform}: missing {required}")

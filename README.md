@@ -39,8 +39,62 @@ paths in use.
 
 [![Linux tests](https://github.com/krystophny/tpx/actions/workflows/test.yml/badge.svg)](https://github.com/krystophny/tpx/actions/workflows/test.yml)
 
-This is a screenshot of the v1.6.alpha.1 on Linux/GTK2
-![Screenshot](/doc/screenshot_v1.6alpha1.png?raw=true "Screenshot")
+## First scientific figure
+
+The desktop **File → Open Example** menu opens three bundled drawings as new
+unsaved documents, so **Save** asks where to write your copy. In the browser,
+download the [quadratic function](examples/quadratic-function.TpX),
+[vector addition](examples/vector-addition.TpX), or
+[double-slit](examples/double-slit.TpX) example, then choose **File → Open**.
+Choose **File → Download a copy** to keep browser edits outside the current
+tab. The examples use native vector objects and TeX labels; they have no linked
+image assets.
+
+To build a figure from a blank page:
+
+1. Choose **File → New**. Draw axes with **Insert → Insert line**, then use
+   **Insert → Insert curve** for a plotted trace; click to place its points and
+   double-click to finish.
+2. Add a label with **Insert → Insert text**. Select it to edit its caption and
+   **TeX source**; for example, enter `$f(x)=x^2-1$` as the TeX source. The
+   caption remains editable on the canvas.
+3. Select an object to inspect its style and text properties in the
+   **Inspector**. Choose **Point coordinates…** for point geometry;
+   **Object properties** focuses the Inspector on the selection.
+
+   ![A scientific curve in TpX with the selected line's properties open in the Inspector](doc/first-scientific-figure-inspector.png)
+
+   The Inspector stays beside the drawing, so edits can be checked against the
+   figure as you work.
+
+4. Choose **File → Save as…** (**File → Download a copy as…** in the browser),
+   select **TikZ source**, and save `figure.tikz`.
+   Keep the `.TpX` file for native editing; TikZ save-back supports a defined
+   subset and refuses edits it cannot represent safely.
+5. Include the TikZ snippet in LaTeX:
+
+   ```tex
+   \usepackage{tikz}
+   ...
+   \input{figure.tikz}
+   ```
+
+   Compile with `pdflatex`. Debian/Ubuntu need `texlive-latex-base` and
+   `texlive-pictures` for the engine and PGF/TikZ. The snippet carries a
+   bounding rectangle based on the figure's drawing extent.
+
+Imported or refreshed TeX source stays inert until **View → Trust TeX preview
+for this document** is chosen. Review the source first: desktop previews pass
+it to the local LaTeX and `dvipng` tools; installing `dvisvgm` enables reusable
+SVG previews. The browser uses bundled MathJax for supported math text and
+does not run a local TeX engine or external programs. TikZ import is bounded
+to 4 MiB, 500,000 tokens, and 256 nested groups.
+
+Browser documents live in a temporary virtual file system for the current
+tab. **File → Open** copies the selected file into that space, and **File →
+Download a copy** downloads a copy; closing or reloading the tab discards
+unsaved browser edits.
+See [INSTALL.md](INSTALL.md) for platform setup.
 
 ## Build and run on Linux
 
@@ -130,7 +184,7 @@ points farther away still use the grid when it is enabled.
 
 Text can be selected across its visible area. Text properties offer left,
 center, and right alignment. Enter a complete math expression such as
-`$(a+b)$` in the text field, or use the TeX text field for other LaTeX code.
+`$(a+b)$` in the text field, or use the **TeX source** field for other LaTeX code.
 Desktop live previews typeset TeX text in the canvas using LaTeX and `dvipng`,
 with reusable SVG output when `dvisvgm` is available. **View → Live LaTeX
 Preview** toggles this behavior; it is enabled by default. Without the tools,

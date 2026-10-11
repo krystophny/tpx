@@ -1,0 +1,18 @@
+\begin{picture}(0,0)
+%<TpX v="5" PicScale="1.25" TeXFormat="tikz" PdfTeXFormat="tikz" FontName="Latin Modern">
+%<caption label="fig:vector-addition">Head-to-tail construction of a vector sum</caption>
+%<comment>Arrow directions and dashed guides show the vector construction.</comment>
+%<line x1="12" y1="12" x2="42" y2="12" arr2="h40" lw="1.15" lc="#0072B2"/>
+%<line x1="42" y1="12" x2="42" y2="38" arr2="h40" lw="1.15" lc="#D55E00"/>
+%<line x1="12" y1="12" x2="42" y2="38" arr2="h40" lw="1.3" lc="#6A3D9A"/>
+%<line x1="42" y1="12" x2="42" y2="38" li="dash" lw="0.5" lc="#777777"/>
+%<line x1="42" y1="38" x2="12" y2="38" li="dash" lw="0.5" lc="#777777"/>
+%<circle x="12" y="12" d="1.8" lc="#333333" fill="#333333"/>
+%<circle x="42" y="12" d="1.8" lc="#0072B2" fill="#0072B2"/>
+%<circle x="42" y="38" d="1.8" lc="#D55E00" fill="#D55E00"/>
+%<text x="24" y="8" h="3.5" t="A" tex="$\vec{A}$"/>
+%<text x="44" y="24" h="3.5" t="B" tex="$\vec{B}$"/>
+%<text x="14" y="1" h="3.5" t="R=A+B" tex="$\vec{R}=\vec{A}+\vec{B}$"/>
+%<text x="9" y="8" h="2.8" t="O" tex="$O$"/>
+%</TpX>
+\end{picture}

@@ -104,6 +104,7 @@ def stage_runtime(package, binary, platform, version):
         raise RuntimeError("offline help is missing its version marker")
     (help_dir / "tpx_tpxabout_tpx_drawing_tool.htm").write_text(
         help_html.replace(marker, f'content="{version}"'), encoding="utf-8")
+    shutil.copytree(ROOT / "examples", resource_dir / "examples")
     if platform.startswith("macos-"):
         # Seal the complete bundle, including the editable TeX templates.
         command("codesign", "--force", "--sign", "-", package / "TpX.app")
@@ -150,6 +151,8 @@ def build_and_package():
         command("sh", lazarus / "test/lcltests/testcocoatextshortcuts.sh", lazarus)
     suffix = ".exe" if platform.startswith("windows-") else ""
     binary_dir = ROOT / "obj" / f"{cpu}-{operating_system}"
+    shutil.copytree(ROOT / "examples", binary_dir / "examples",
+                    dirs_exist_ok=True)
     binary = binary_dir / ("TpX" + suffix)
     runtime = binary_dir / ("RuntimeTests" + suffix)
     if f"Version {version}".encode() not in binary.read_bytes():
