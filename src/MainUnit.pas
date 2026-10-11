@@ -638,15 +638,27 @@ type
     FInlineTargetID: Integer;
     FInlineNewTextObject: Boolean;
     FInlineUpdating: Boolean;
+    FInlineStableText: TEditUtf8Text;
+    FInlineStableSelStart: Integer;
+    FInlineStableSelLength: Integer;
+    FInlineCompositionActive: Boolean;
+    FInlineCompositionHadTextChange: Boolean;
     FUpdatingInlineTextPosition: Boolean;
     FInlinePositionQueued: Boolean;
     FSavedActionListState: TActionListState;
     procedure ShowInlineTextEditor(const InitialText: TEditUtf8Text);
+    procedure CaptureInlineStableTextState;
+    procedure CaptureInlineStableSelection;
+    procedure RestoreInlineStableTextState;
     procedure InlineTextChanged(Sender: TObject);
     procedure InlineTextCompositionChanged(Sender: TObject;
       Composing: Boolean);
     procedure InlineTextKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
+    procedure InlineTextKeyUp(Sender: TObject; var Key: Word;
+      Shift: TShiftState);
+    procedure InlineTextMouseUp(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
     procedure InlineTextDone(Sender: TObject);
     procedure InlineTextCancel(Sender: TObject);
     procedure EditTextMenuClick(Sender: TObject);
@@ -1391,6 +1403,8 @@ begin
   FInlineTextMemo.ScrollBars := ssAutoBoth;
   FInlineTextMemo.OnChange := InlineTextChanged;
   FInlineTextMemo.OnKeyDown := InlineTextKeyDown;
+  FInlineTextMemo.OnKeyUp := InlineTextKeyUp;
+  FInlineTextMemo.OnMouseUp := InlineTextMouseUp;
   FInlineTextMemo.OnCompositionChanged := InlineTextCompositionChanged;
   FInlineTextFieldLabel.FocusControl := FInlineTextMemo;
   FInlineUpdating := True;
@@ -1427,6 +1441,41 @@ begin
   FInlineTextMemo.SetFocus;
   FInlineTextMemo.SelStart := InlineTextCaretOffset(InitialText);
   FInlineTextMemo.SelLength := 0;
+  CaptureInlineStableTextState;
+  FInlineCompositionActive := False;
+  FInlineCompositionHadTextChange := False;
+end;
+
+procedure TMainForm.CaptureInlineStableTextState;
+begin
+  if FInlineTextMemo = nil then Exit;
+  FInlineStableText := LCLTextToUTF8Bytes(FInlineTextMemo.EditText);
+  FInlineStableSelStart := FInlineTextMemo.SelStart;
+  FInlineStableSelLength := FInlineTextMemo.SelLength;
+end;
+
+procedure TMainForm.CaptureInlineStableSelection;
+begin
+  if FInlineUpdating or (FInlineTextMemo = nil) then Exit;
+  FInlineTextMemo.RefreshCompositionState;
+  if FInlineTextMemo.CompositionPending then Exit;
+  if LCLTextToUTF8Bytes(FInlineTextMemo.EditText) <> FInlineStableText then
+    Exit;
+  FInlineStableSelStart := FInlineTextMemo.SelStart;
+  FInlineStableSelLength := FInlineTextMemo.SelLength;
+end;
+
+procedure TMainForm.RestoreInlineStableTextState;
+begin
+  if FInlineTextMemo = nil then Exit;
+  FInlineUpdating := True;
+  try
+    FInlineTextMemo.Text := UTF8BytesToLCLText(FInlineStableText);
+    FInlineTextMemo.SelStart := FInlineStableSelStart;
+    FInlineTextMemo.SelLength := FInlineStableSelLength;
+  finally
+    FInlineUpdating := False;
+  end;
 end;
 
 procedure TMainForm.InlineTextChanged(Sender: TObject);
@@ -1436,8 +1485,14 @@ var
 begin
   if FInlineUpdating or (FInlineSession = nil) or
     (FInlineTextMemo = nil) then Exit;
-  if FInlineTextMemo.SampleCompositionState then
+  FInlineTextMemo.RefreshCompositionState;
+  if FInlineTextMemo.SampleCompositionState or
+    FInlineTextMemo.CompositionPending then
+  begin
+    FInlineCompositionHadTextChange := True;
     FInlineSession.SetCompositionPending(True);
+    Exit;
+  end;
   DisplayText := LCLTextToUTF8Bytes(FInlineTextMemo.EditText);
   if not FInlineSession.TrySetRawDraft(FInlineTextField,
     DisplayText, ErrorText) then
@@ -1446,24 +1501,62 @@ begin
     FInlineTextFieldLabel.Caption := 'TeX source'
   else
     FInlineTextFieldLabel.Caption := 'Text';
-  FInlineTextMemo.RefreshCompositionState;
-  FInlineSession.SetCompositionPending(
-    FInlineTextMemo.CompositionPending);
+  CaptureInlineStableTextState;
 end;
 
 procedure TMainForm.InlineTextCompositionChanged(Sender: TObject;
   Composing: Boolean);
-var ErrorText: string;
+var
+  ErrorText: string;
+  AcceptComposition: Boolean;
+  DisplayText: TEditUtf8Text;
 begin
-  if FInlineSession = nil then Exit;
-  if Composing then FInlineSession.SetCompositionPending(True);
-  if FInlineTextMemo <> nil then
+  if (FInlineSession = nil) or (FInlineTextMemo = nil) then Exit;
+  if Composing then
+  begin
+    if not FInlineCompositionActive then
+    begin
+      if LCLTextToUTF8Bytes(FInlineTextMemo.EditText) =
+        FInlineStableText then
+      begin
+        FInlineStableSelStart := FInlineTextMemo.SelStart;
+        FInlineStableSelLength := FInlineTextMemo.SelLength;
+      end;
+      FInlineCompositionActive := True;
+      FInlineCompositionHadTextChange := False;
+    end;
+    FInlineSession.SetCompositionPending(True);
+    Exit;
+  end;
+
+  FInlineTextMemo.RefreshCompositionState;
+  if FInlineTextMemo.CompositionPending then
+  begin
+    FInlineSession.SetCompositionPending(True);
+    Exit;
+  end;
+
+  DisplayText := LCLTextToUTF8Bytes(FInlineTextMemo.EditText);
+{$IFDEF LCLCOCOA}
+  AcceptComposition := FInlineTextMemo.CompositionCommitted;
+{$ELSE}
+  AcceptComposition := FInlineTextMemo.CompositionCommitted or
+    FInlineCompositionHadTextChange or (DisplayText <> FInlineStableText);
+{$ENDIF}
+  if AcceptComposition then
+  begin
     if not FInlineSession.TrySetRawDraft(FInlineTextField,
-      LCLTextToUTF8Bytes(FInlineTextMemo.EditText), ErrorText) and
-      (FInlineTextFieldLabel <> nil) then
+      DisplayText, ErrorText) and (FInlineTextFieldLabel <> nil) then
       FInlineTextFieldLabel.Caption := ErrorText;
-  FInlineSession.SetCompositionPending(Composing or
-    ((FInlineTextMemo <> nil) and FInlineTextMemo.CompositionPending));
+    CaptureInlineStableTextState;
+  end
+{$IFDEF LCLCOCOA}
+  else
+    RestoreInlineStableTextState;
+{$ENDIF}
+  FInlineCompositionActive := False;
+  FInlineCompositionHadTextChange := False;
+  FInlineSession.SetCompositionPending(False);
 end;
 
 procedure TMainForm.InlineTextKeyDown(Sender: TObject; var Key: Word;
@@ -1488,6 +1581,18 @@ begin
     Key := 0;
     CommitInlineTextEdit;
   end;
+end;
+
+procedure TMainForm.InlineTextKeyUp(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  CaptureInlineStableSelection;
+end;
+
+procedure TMainForm.InlineTextMouseUp(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  CaptureInlineStableSelection;
 end;
 
 procedure TMainForm.InlineTextDone(Sender: TObject);
@@ -1739,12 +1844,19 @@ begin
   begin
     FInlineTextMemo.OnChange := nil;
     FInlineTextMemo.OnKeyDown := nil;
+    FInlineTextMemo.OnKeyUp := nil;
+    FInlineTextMemo.OnMouseUp := nil;
     FInlineTextMemo.OnCompositionChanged := nil;
     FInlineTextMemo.Lines.Clear;
     FreeAndNil(FInlineTextMemo);
   end;
   FInlineTargetID := -1;
   FInlineNewTextObject := False;
+  FInlineStableText := '';
+  FInlineStableSelStart := 0;
+  FInlineStableSelLength := 0;
+  FInlineCompositionActive := False;
+  FInlineCompositionHadTextChange := False;
   ActionList1.State := FSavedActionListState;
   if (LocalView <> nil) and LocalView.CanFocus then LocalView.SetFocus;
 end;
