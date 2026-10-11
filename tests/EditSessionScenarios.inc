@@ -607,6 +607,125 @@ begin
   end;
 end;
 
+procedure TestEditSessionNestedRecoveryRebind;
+var
+  Drawing, Candidate: TDrawing2D;
+  OuterGroup, InnerGroup, RestoredOuter, RestoredInner: TGroup2D;
+  Anchor, Sibling, Target, RestoredAnchor, RestoredSibling, RestoredTarget,
+    AddedObject, OutsideObject: TText2D;
+  Session, RestoredSession: TObjectEditSession;
+  Patch: TObjectPropertyPatch;
+  ModelBytes, AuxiliaryState: RawByteString;
+  ErrorText, DisplayText: string;
+  CodecContext: TObject;
+  Diagnostics: TStringList;
+  CanSaveBack: Boolean;
+  TargetIDs: TEditTargetIDs;
+  ObjectsToAssign: array of TGraphicObject;
+  AssignedIDs: array of Integer;
+  RejectedOutsideObject: Boolean;
+begin
+  Drawing := TDrawing2D.CreateDetached;
+  Candidate := nil;
+  Session := nil;
+  RestoredSession := nil;
+  CodecContext := nil;
+  Diagnostics := TStringList.Create;
+  try
+    Anchor := TText2D.CreateSpec(-1, Point2D(1, 1), 5, 'anchor');
+    Sibling := TText2D.CreateSpec(-1, Point2D(2, 2), 5, 'sibling');
+    Target := TText2D.CreateSpec(-1, Point2D(3, 3), 5, 'committed target');
+    InnerGroup := TGroup2D.CreateSpec(-1, [Sibling, Target]);
+    OuterGroup := TGroup2D.CreateSpec(-1, [Anchor, InnerGroup]);
+    Drawing.AddObject(-1, OuterGroup);
+    Target.ID := 30000;
+    Check(Drawing.EnsureUniqueObjectID(Target) = 30000,
+      'a unique nested runtime ID must be preserved');
+    Session := TObjectEditSession.Create(Drawing, 1, [Target.ID]);
+    Session.Presentation := espInlineText;
+    Patch.Fields := [opfText];
+    Patch.Text := EncodeEditTextForTpX('preview target');
+    Check(Session.Preview(Patch, 1, ErrorText),
+      'nested recovery preview setup failed: ' + ErrorText);
+    Check(Session.BuildRecoveryData('nested-recovery.tpx', ModelBytes,
+      AuxiliaryState, ErrorText),
+      'could not build the nested recovery fixture: ' + ErrorText);
+
+    Candidate := LoadDocumentCandidate('tpx', 'nested-recovery.tpx',
+      ModelBytes, CanSaveBack, CodecContext, Diagnostics);
+    Check((Candidate <> nil) and CanSaveBack,
+      'the nested committed scene did not reopen');
+    Check(Candidate.ObjectsCount = 1,
+      'the recovered nested scene should contain its outer group');
+    RestoredOuter := Candidate.ObjectList.FirstObj as TGroup2D;
+    RestoredAnchor := RestoredOuter.Objects.FirstObj as TText2D;
+    RestoredInner := RestoredOuter.Objects.NextObj as TGroup2D;
+    RestoredSibling := RestoredInner.Objects.FirstObj as TText2D;
+    RestoredTarget := RestoredInner.Objects.NextObj as TText2D;
+    Check((RestoredAnchor.Text = 'anchor') and
+      (RestoredTarget.ID = -1) and
+      (RestoredTarget.Text = 'committed target'),
+      'native loading must reproduce the unassigned nested target');
+    OutsideObject := TText2D.CreateSpec(-1, Point2D(7, 7), 5,
+      'outside object');
+    RejectedOutsideObject := False;
+    SetLength(ObjectsToAssign, 2);
+    SetLength(AssignedIDs, 2);
+    ObjectsToAssign[0] := RestoredTarget;
+    ObjectsToAssign[1] := OutsideObject;
+    try
+      try
+        Candidate.EnsureUniqueObjectIDs(ObjectsToAssign, AssignedIDs);
+      except
+        on ETpX_ListObjNotFound do RejectedOutsideObject := True;
+      end;
+      Check(RejectedOutsideObject and (OutsideObject.ID = -1) and
+        (RestoredTarget.ID = -1),
+        'batch ID assignment must reject an outside object without partially '
+          + 'mutating valid targets');
+    finally
+      OutsideObject.Free;
+    end;
+    RestoredSibling.ID := 7000;
+    Check(TObjectEditSession.RestoreRecoveryState(Candidate, 2,
+      AuxiliaryState, RestoredSession, ErrorText),
+      'structural recovery should bind a nested object without persisted IDs: '
+        + ErrorText);
+    TargetIDs := RestoredSession.CopyTargetIDs;
+    Check((Length(TargetIDs) = 1) and
+      (TargetIDs[0] = RestoredTarget.ID) and
+      (TargetIDs[0] > RestoredSibling.ID) and (TargetIDs[0] <> 30000),
+      'recovery must assign the path-resolved target a fresh ID beyond a '
+        + 'nonsequential sibling ID');
+    Check((RestoredSibling.ID = 7000) and
+      (RestoredSibling.Text = 'sibling') and
+      (DecodeTpXTextForEdit(RestoredTarget.Text) = 'preview target'),
+      'recovery must preview only the nested path target');
+    Check(RestoredSession.Cancel(2),
+      'the rebound nested edit session could not be canceled');
+    DisplayText := string(DecodeTpXTextForEdit(RestoredTarget.Text));
+    Check((DisplayText = 'committed target') and
+      (RestoredSibling.Text = 'sibling'),
+      'cancel must restore the committed target without changing its sibling');
+
+    AddedObject := TText2D.CreateSpec(-1, Point2D(8, 8), 5, 'new object');
+    Candidate.AddObject(-1, AddedObject);
+    Check((AddedObject.ID > RestoredTarget.ID) and
+      (AddedObject.ID <> RestoredSibling.ID),
+      'the drawing allocator must continue beyond the rebound nested ID');
+  finally
+    if (RestoredSession <> nil) and RestoredSession.IsActive then
+      RestoredSession.Cancel(2);
+    RestoredSession.Free;
+    if (Session <> nil) and Session.IsActive then Session.Cancel(1);
+    Session.Free;
+    Candidate.Free;
+    CodecContext.Free;
+    Diagnostics.Free;
+    Drawing.Free;
+  end;
+end;
+
 function EditSessionRecoveryAuxiliaryLength(Runtime: TAutoSaveRuntime;
   const DocumentKey, TempRoot: string): Integer;
 var Files: TStringList; Entry: TAutoSaveStoredRecord;
