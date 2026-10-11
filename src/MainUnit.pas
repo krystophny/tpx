@@ -783,6 +783,8 @@ uses Output, Input, Settings0, ColorEtc, Geometry, Options,
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
   , DocumentIO, FileWatchNative
+{$ELSE}
+  , BrowserDocumentStatus
 {$ENDIF}
 {$ENDIF}
   ;
@@ -970,9 +972,7 @@ end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
 {$IFDEF FPC}
-{$IFDEF CPUWASM32}
-var InfoMenu: TMenuItem;
-{$ELSE}
+{$IFNDEF CPUWASM32}
 var StorageMenu: TMenuItem;
 {$ENDIF}
 {$ENDIF}
@@ -1018,11 +1018,8 @@ begin
     StorageStartupDiagnostic := '';
   end;
 {$ELSE}
-  InfoMenu := TMenuItem.Create(Self);
-  InfoMenu.Caption := 'Persistent AutoSave and recovery unavailable in browser builds';
-  InfoMenu.Enabled := False;
-  InfoMenu.Hint := 'Browser downloads are temporary snapshots and do not track desktop files';
-  File1.Add(InfoMenu);
+  SaveDoc.Caption := 'Download a copy';
+  SaveAs.Caption := 'Download a copy as...';
 {$ENDIF}
 {$ENDIF}
   RefreshSourceStatus;
@@ -1300,6 +1297,11 @@ begin
     RefreshRecoveryAfterEditSessionEnd;
   if not Session.IsActive and FDeferredReload then
     Application.QueueAsyncCall(TryApplyDeferredReload, 0);
+{$ELSE}
+  BrowserDocumentDidChange(Assigned(TheDrawing) and
+    Assigned(TheDrawing.History) and
+    (TheDrawing.History.IsChanged or
+    ((FEditSession <> nil) and FEditSession.HasUncommittedWork)));
 {$ENDIF}
 {$ENDIF}
 end;

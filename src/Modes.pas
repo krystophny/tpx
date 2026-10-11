@@ -478,7 +478,11 @@ uses MainUnit, SysBasic, Propert, Options, TransForm, PreView,
 {$ELSE}
 {$ENDIF}
   Settings0, AboutUnit, Input, Output, ScaleStandardUnit, Modify,
-  InfoForm, Devices, Bitmaps;
+  InfoForm, Devices, Bitmaps
+{$IFDEF CPUWASM32}
+  , BrowserDocumentStatus
+{$ENDIF}
+  ;
 
 { --================ TTpXManager ==================-- }
 
@@ -757,6 +761,8 @@ begin
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
   MainForm.NotifyDocumentEdited;
+{$ELSE}
+  BrowserDocumentDidChange(Drawing.History.IsChanged);
 {$ENDIF}
 {$ENDIF}
   Drawing.Update;
@@ -773,6 +779,8 @@ begin
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
   MainForm.NotifyDocumentEdited;
+{$ELSE}
+  BrowserDocumentDidChange(Drawing.History.IsChanged);
 {$ENDIF}
 {$ENDIF}
   Drawing.Update;
@@ -793,6 +801,8 @@ begin
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
       MainForm.NotifyDocumentEdited;
+{$ELSE}
+      BrowserDocumentDidChange(Drawing.History.IsChanged);
 {$ENDIF}
 {$ENDIF}
       //SaveDoc.Enabled := History.IsChanged;
@@ -848,6 +858,7 @@ begin
       MainForm.NotifyDocumentEdited;
 {$ELSE}
       TpX_Manager.DocumentSession.AdvanceLocalRevision;
+      BrowserDocumentDidChange(Drawing.History.IsChanged);
 {$ENDIF}
 {$ELSE}
       TpX_Manager.DocumentSession.AdvanceLocalRevision;
@@ -969,6 +980,9 @@ begin
     end;
     if Result then
     begin
+{$IFDEF CPUWASM32}
+      ReplaceBrowserDocument(True);
+{$ENDIF}
       try
         TpX_Manager.DocumentSession.Diagnostics.Assign(Diagnostics);
         ViewPort.BeginUpdate;
@@ -1017,6 +1031,11 @@ var
   SameSource, ExtensionAllowed: Boolean;
   Sep: Integer;
   Ext, Extensions: string;
+{$IFDEF CPUWASM32}
+  BrowserPaths: TStringList;
+  BrowserBundleStarted: Boolean;
+  I: Integer;
+{$ENDIF}
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
   WatchGeneration, SubscriptionID: QWord;
@@ -1030,6 +1049,10 @@ begin
   Result := False;
   ErrorText := '';
   Transaction := nil;
+{$IFDEF CPUWASM32}
+  BrowserPaths := TStringList.Create;
+  BrowserBundleStarted := False;
+{$ENDIF}
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
   WatchGeneration := 0;
@@ -1042,6 +1065,11 @@ begin
 {$ENDIF}
   try
     try
+{$IFDEF CPUWASM32}
+      if not MainForm.TrySettleEditSession then
+        raise EWriteError.Create(
+          'Finish the current text or property edit before downloading');
+{$ENDIF}
       if not FindDocumentFormatById(FormatId, Format) or
         not Format.CanSaveBack or not IsDocumentCodecRegistered(Format.Id) then
         raise EWriteError.CreateFmt('No save-back codec is available for %s',
@@ -1083,7 +1111,26 @@ begin
         SaveCodecContext := TpX_Manager.DocumentSession.CodecContext;
       Transaction := TDocumentSaveTransaction.Create(Format.Id, Drawing,
         Path, ExpectedRevision, SaveCodecContext, True);
+{$IFDEF CPUWASM32}
+      if not BeginBrowserDownloadBundle(Path) then
+        raise EWriteError.Create('The browser could not prepare this download');
+      BrowserBundleStarted := True;
+      Transaction.AppendBrowserDownloadAssets(BrowserPaths);
+      for I := 0 to BrowserPaths.Count - 1 do
+        if not AddBrowserDownloadPath(TDocumentPath(BrowserPaths[I])) then
+          raise EWriteError.Create(
+            'The browser cannot safely download a linked document asset');
+{$ENDIF}
       Transaction.Publish(NewRevision, BackupFileName);
+{$IFDEF CPUWASM32}
+      PreviousBackup := TpX_Manager.DocumentSession.RecoveryBackupPath;
+      Transaction.Accept(TpX_Manager.DocumentSession);
+      SetBrowserDocumentSource(True);
+      BrowserBundleStarted := False;
+      if not FinishBrowserDownloadBundle(True) then
+        raise EWriteError.Create('The browser could not start the document download');
+      BrowserDocumentDownloadRequested;
+{$ENDIF}
 
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
@@ -1095,12 +1142,18 @@ begin
       end;
 {$ENDIF}
 {$ENDIF}
+{$IFNDEF CPUWASM32}
       PreviousBackup := TpX_Manager.DocumentSession.RecoveryBackupPath;
       Transaction.Accept(TpX_Manager.DocumentSession);
+{$ENDIF}
       Result := True;
       try
         MainForm.RefreshSourceStatus;
         Drawing.History.SaveCheckSum;
+{$IFDEF CPUWASM32}
+        SetBrowserDocumentSource(True);
+        SetBrowserDocumentDirty(False);
+{$ENDIF}
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
         if SameSource then
@@ -1125,7 +1178,13 @@ begin
         { Publication and source acceptance already succeeded. }
       end;
     except
-      on E: Exception do ErrorText := E.Message;
+      on E: Exception do
+      begin
+        ErrorText := E.Message;
+{$IFDEF CPUWASM32}
+        SetBrowserDocumentError(ErrorText);
+{$ENDIF}
+      end;
     end;
   finally
 {$IFDEF FPC}
@@ -1133,6 +1192,11 @@ begin
     if WatchBindingStarted and not WatchBindingAccepted then
       MainForm.CancelDocumentWatchBinding(WatchGeneration, SubscriptionID);
 {$ENDIF}
+{$ENDIF}
+{$IFDEF CPUWASM32}
+    if BrowserBundleStarted then
+      FinishBrowserDownloadBundle(False);
+    BrowserPaths.Free;
 {$ENDIF}
     Transaction.Free;
   end;
@@ -1143,8 +1207,10 @@ var ErrorText: string;
 begin
   Result := SaveDocumentToPath(FileName,
     TpX_Manager.DocumentSession.SourceFormatId, False, False, ErrorText);
+{$IFNDEF CPUWASM32}
   if not Result and (ErrorText <> '') then
     MessageBoxError('Can not save ' + string(FileName) + ': ' + ErrorText);
+{$ENDIF}
 end;
 
 procedure TTpXMode.DrawingSaveDlgTypeChange(Sender: TObject);
@@ -1200,7 +1266,9 @@ begin
   begin
     if not SaveDocumentToPath(Path, Format.Id, True, True, ErrorText) then
     begin
+{$IFNDEF CPUWASM32}
       MessageBoxError('Can not save ' + string(Path) + ': ' + ErrorText);
+{$ENDIF}
       Exit(mrCancel);
     end;
     Exit(mrOK);
@@ -1209,20 +1277,45 @@ begin
     ExportFormat) then
   begin
     try
+{$IFDEF CPUWASM32}
+      if not MainForm.TrySettleEditSession then
+        raise EWriteError.Create(
+          'Finish the current text or property edit before downloading');
+      if not BeginBrowserDownloadBundle(Path) then
+        raise EWriteError.Create('The browser could not prepare this download');
+{$ENDIF}
+      try
       ExportToFile(Drawing, string(Path), ExportFormatKind(ExportFormat.Kind));
       if not DocumentFileExists(Path) then
         raise EWriteError.Create('Export file was not created');
+{$IFDEF CPUWASM32}
+      if not FinishBrowserDownloadBundle(True) then
+        raise EWriteError.Create('The browser could not start the export download');
+{$ENDIF}
       if ForClosePrompt then Exit(mrCancel);
       Exit(mrOK);
+      finally
+{$IFDEF CPUWASM32}
+        FinishBrowserDownloadBundle(False);
+{$ENDIF}
+      end;
     except
       on E: Exception do
       begin
+{$IFDEF CPUWASM32}
+        SetBrowserDocumentError(E.Message);
+{$ELSE}
         MessageBoxError('Can not export ' + string(Path) + ': ' + E.Message);
+{$ENDIF}
         Exit(mrCancel);
       end;
     end;
   end;
+{$IFDEF CPUWASM32}
+  SetBrowserDocumentError('No writer is available for the selected output format');
+{$ELSE}
   MessageBoxError('No writer is available for the selected output format');
+{$ENDIF}
   Result := mrCancel;
 end;
 
@@ -1244,7 +1337,9 @@ begin
       (Pos('The destination was removed on disk', ErrorText) = 0) and
       (Pos('The destination appeared before replace', ErrorText) = 0) then
     begin
+{$IFNDEF CPUWASM32}
       MessageBoxError('Can not save ' + string(FileName) + ': ' + ErrorText);
+{$ENDIF}
       Exit(mrCancel);
     end;
     if MessageDlg('The document changed on disk. Overwrite the external changes?',
@@ -1314,6 +1409,9 @@ begin
   if FileName <> Drawing_NewFileName then
     TpX_Manager.RecentFiles.Update(FileName);
   Drawing.History.SaveCheckSum;
+{$IFDEF CPUWASM32}
+  ReplaceBrowserDocument(False);
+{$ENDIF}
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
   MainForm.BindAutoSaveForCurrentDocument;

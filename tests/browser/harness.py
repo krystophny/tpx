@@ -144,6 +144,9 @@ class App:
             self.shot(name)
 
     def menu(self, group, item):
+        if group == 'File':
+            item = {'Save': 'Download a copy',
+                    'Save as...': 'Download a copy as...'}.get(item, item)
         menu = self.page.locator('#lcl-menus > details').filter(
             has=self.page.locator('summary').get_by_text(group, exact=True))
         menu.locator(':scope > summary').click()
