@@ -578,15 +578,30 @@ end;
 
 function ExpandObjectEditTargetIDs(Drawing: TDrawing2D;
   const TargetIDs: array of Integer; out ErrorText: string): TEditTargetIDs;
-var List: TList; I: Integer;
+var List: TList; Objects: array of TGraphicObject; I: Integer;
 begin
   Result := nil;
   List := TList.Create;
   try
     if not CollectTargets(Drawing, TargetIDs, List, ErrorText) then Exit;
+    SetLength(Objects, List.Count);
     SetLength(Result, List.Count);
     for I := 0 to List.Count - 1 do
-      Result[I] := TObject2D(List[I]).ID;
+      Objects[I] := TObject2D(List[I]);
+    try
+      Drawing.EnsureUniqueObjectIDs(Objects, Result);
+    except
+      on E: ERangeError do
+      begin
+        Result := nil;
+        ErrorText := E.Message;
+      end;
+      on E: ETpX_ListObjNotFound do
+      begin
+        Result := nil;
+        ErrorText := E.Message;
+      end;
+    end;
   finally
     List.Free;
   end;
