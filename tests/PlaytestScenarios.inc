@@ -215,6 +215,7 @@ var
   HeightEditor, WidthEditor, FontEditor: TEdit;
   ErrorLabel, SelectionLabel: TLabel;
   LineStyleEditor: TComboBox;
+  ActiveName: string;
   Key: Word;
   Shift: TShiftState;
 begin
@@ -278,12 +279,27 @@ begin
   HeightEditor.Text := '7.5';
   Check(TextObj.Height = 7.5, 'Valid height draft was not previewed');
   LineStyleEditor := MainForm.Inspector.EditorFor(opfLineStyle) as TComboBox;
-  LineStyleEditor.SetFocus;
-  Application.ProcessMessages;
+  Check(Assigned(LineStyleEditor.OnChange),
+    'The line style control has no change handler');
+  LineStyleEditor.OnChange(LineStyleEditor);
   Check(MainForm.Inspector.HasActiveEdit and
     (HeightEditor.Text = '7.5') and (TextObj.Height = 7.5) and
     (MainForm.TheDrawing.History.Count = HistoryCount),
-    'Focusing the style dropdown committed or replaced the height draft');
+    'An unchanged native combo notification committed the height draft');
+  LineStyleEditor.SetFocus;
+  Application.ProcessMessages;
+  if MainForm.ActiveControl = nil then ActiveName := '<nil>'
+  else ActiveName := MainForm.ActiveControl.Name;
+  Check(MainForm.Inspector.HasActiveEdit and
+    (HeightEditor.Text = '7.5') and (TextObj.Height = 7.5) and
+    (MainForm.TheDrawing.History.Count = HistoryCount),
+    'Focusing the style dropdown committed or replaced the height draft: ' +
+    'active=' + BoolToStr(MainForm.Inspector.HasActiveEdit, True) +
+    ', text=' + HeightEditor.Text +
+    ', model=' + FloatToStr(TextObj.Height) +
+    ', history=' + IntToStr(MainForm.TheDrawing.History.Count) +
+    ', expectedHistory=' + IntToStr(HistoryCount) +
+    ', activeControl=' + ActiveName);
   MainForm.LocalView.SetFocus;
   Application.ProcessMessages;
   Check(MainForm.Inspector.HasActiveEdit and
@@ -516,11 +532,22 @@ end;
       NSMakeRange(0, 0), NSMakeRange(NSNotFound, 0));
   end;
 
-procedure CocoaDrainTextInputQueue;
-var
-  I: Integer;
+function CocoaControlCompositionPending(Control: TWinControl): Boolean;
 begin
-  for I := 1 to 5 do
+  if Control is TCompositionAwareMemo then
+    Exit((Control as TCompositionAwareMemo).CompositionPending);
+  if Control is TCompositionAwareEdit then
+    Exit((Control as TCompositionAwareEdit).CompositionPending);
+  Result := False;
+end;
+
+procedure CocoaDrainTextInputQueue(Control: TWinControl);
+var
+  Deadline: QWord;
+begin
+  Deadline := GetTickCount64 + 1000;
+  while CocoaControlCompositionPending(Control) and
+    (GetTickCount64 < Deadline) do
     NSRunLoop.currentRunLoop.runMode_beforeDate(NSDefaultRunLoopMode,
       NSDate.dateWithTimeIntervalSinceNow(0.01));
 end;
@@ -618,9 +645,11 @@ var
     finally
       TextView.supressTextChangeEvent := 0;
     end;
-    CocoaDrainTextInputQueue;
+    CocoaDrainTextInputQueue(InspectorMemo);
     Check(not InspectorMemo.CompositionPending,
-      'Native Cocoa END without text change left the inspector memo pending');
+      'Native Cocoa END without text change left the inspector memo pending: ' +
+      'pending=' + BoolToStr(InspectorMemo.CompositionPending, True) +
+      ', nativeMarked=' + BoolToStr(TextView.hasMarkedText, True));
     Selection := TextView.selectedRange;
     Check((TextObj.Text = OriginalStorageText) and
       (InspectorMemo.Text = OriginalDisplayText),
@@ -650,9 +679,10 @@ var
       MainForm.Inspector.HasActiveEdit,
       'Native Cocoa field-editor marked text did not hold the inspector gate');
     CocoaCancelFieldMarkedText(InspectorEdit);
-    CocoaDrainTextInputQueue;
+    CocoaDrainTextInputQueue(InspectorEdit);
     Check(not InspectorEdit.CompositionPending,
-      'Native Cocoa field-editor END without text change left TEdit pending');
+      'Native Cocoa field-editor END without text change left TEdit pending: ' +
+      'pending=' + BoolToStr(InspectorEdit.CompositionPending, True));
     Check(InspectorEdit.Text = OriginalText,
       'Canceling native field-editor composition changed the TEdit value (' +
       OriginalText + ' -> ' + InspectorEdit.Text + ')');

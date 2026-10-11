@@ -1283,6 +1283,7 @@ procedure TObjectInspector.FieldEnter(Sender: TObject);
 var
   Field: TObjectPropertyField;
   ErrorText: string;
+  ParentForm: TCustomForm;
 begin
   if FRefreshing > 0 then Exit;
   Field := FieldFromControl(Sender);
@@ -1310,7 +1311,9 @@ begin
         'Finish or cancel the active edit before editing a property';
       Exit;
     end;
-    if not FWidgets[Field].Editor.Focused and
+    ParentForm := GetParentForm(Self);
+    if (ParentForm <> nil) and
+      (ParentForm.ActiveControl <> FWidgets[Field].Editor) and
       FWidgets[Field].Editor.CanFocus then
     begin
       FRestoringFieldInput := True;
@@ -1328,12 +1331,38 @@ procedure TObjectInspector.FieldChanged(Sender: TObject);
 var
   Field: TObjectPropertyField;
   Patch: TObjectPropertyPatch;
+  CurrentValue: TPropertyValue;
+  Combo: TComboBox;
   ErrorText: string;
   Raw: string;
   Composing: Boolean;
+  ExpectedIndex: Integer;
 begin
   if FRefreshing > 0 then Exit;
   Field := FieldFromControl(Sender);
+  if FWidgets[Field].Editor is TComboBox then
+  begin
+    Combo := FWidgets[Field].Editor as TComboBox;
+    CurrentValue := ReadObjectProperty(FDrawing, FTargetIDs, Field);
+    if CurrentValue.State = pvsMixed then
+    begin
+      if (Combo.ItemIndex = -1) and (Combo.Text = '') then Exit;
+    end
+    else if CurrentValue.State = pvsUniform then
+    begin
+      if IsColorField(Field) then
+      begin
+        if Combo.Text = DisplayValue(Field, CurrentValue.Value) then Exit;
+      end
+      else
+      begin
+        ExpectedIndex := Integer(CurrentValue.Value);
+        if ((Field = opfBeginArrowKind) or (Field = opfEndArrowKind)) and
+          (ExpectedIndex >= Combo.Items.Count) then ExpectedIndex := -1;
+        if Combo.ItemIndex = ExpectedIndex then Exit;
+      end;
+    end;
+  end;
   if not StartFieldSession(Field) then
   begin
     if (FSession <> nil) and FSession.IsActive and
@@ -1564,9 +1593,11 @@ procedure TObjectInspector.FieldKeyDown(Sender: TObject;
 var
   ErrorText: string;
   Field: TObjectPropertyField;
-  TabMoved: Boolean;
+  ParentForm: TCustomForm;
+  OriginControl: TWinControl;
 begin
   Field := FieldFromControl(Sender);
+  OriginControl := FWidgets[Field].Editor;
   CaptureStableSelection(Field);
   if EditorCompositionPending(FWidgets[Field].Editor) or
     ((FSession <> nil) and FSession.CompositionPending) then
@@ -1596,9 +1627,11 @@ begin
       Key := 0;
       Exit;
     end;
-    TabMoved := FWidgets[Field].Editor.PerformTab(not (ssShift in Shift));
-    if TabMoved and
-      not FWidgets[Field].Editor.Focused then
+    OriginControl.PerformTab(not (ssShift in Shift));
+    ParentForm := GetParentForm(Self);
+    if (ParentForm <> nil) and
+      (ParentForm.ActiveControl <> nil) and
+      (ParentForm.ActiveControl <> OriginControl) then
       Key := 0;
   end;
 end;
