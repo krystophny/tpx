@@ -187,7 +187,8 @@ center, and right alignment. Enter a complete math expression such as
 `$(a+b)$` in the text field, or use the **TeX source** field for other LaTeX code.
 Choose the Text tool and click the canvas to type at a new label's position;
 click an existing label with that tool or double-click it in selection mode to
-edit it. Enter inserts a line break, while
+edit it. With a text label selected, **Edit → Edit text** also opens the
+canvas editor. Enter inserts a line break, while
 Ctrl+Enter (or Command+Enter on macOS), Tab, or **Done** finishes the edit.
 Escape cancels the uncommitted edit after any active input-method composition
 ends.

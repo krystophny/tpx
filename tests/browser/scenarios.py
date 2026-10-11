@@ -1773,21 +1773,16 @@ def s_nonmodal_editing_workflow(app):
     redone_height = snapshot('nonmodal-height-redone-again.tpx')
     if redone_height != expected_edited:
         raise AssertionError(f'height redo changed the inline text edit: {redone_height}')
-    # The viewport may have shifted during inspector scroll/resize. Select
-    # the text object from the real canvas object order instead of reusing a
-    # stale page point, then use its existing keyboard context action.
+    # Select the text through the real canvas keyboard route, then use the
+    # ordinary Edit menu action instead of a stale post-resize page point.
     focus_canvas_for_history()
     for _ in range(3):
         app.page.keyboard.press('Tab')
     expect(tex).to_be_enabled(timeout=3000)
     if tex.input_value() != r'$\gamma_{j}$':
         raise AssertionError(
-            f'canvas Tab selection did not reach the edited text object: {tex.input_value()!r}')
-    app.page.keyboard.press('Shift+F10')
-    app.page.keyboard.press('Home')
-    for _ in range(5):
-        app.page.keyboard.press('ArrowDown')
-    app.page.keyboard.press('Enter')
+            f'canvas Tab selection did not reach the edited text: {tex.input_value()!r}')
+    app.menu('Edit', 'Edit text')
     save_editor = app.page.get_by_role('textbox', name='TeX source (canvas)', exact=True)
     save_editor.wait_for()
     save_editor.fill(r'$\delta_{k}$')

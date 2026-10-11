@@ -87,7 +87,8 @@ dialog; ordinary numeric and text edits stay inline.
 
 Create a label with the Text tool or **Insert → Insert text**, then type in the
 canvas editor. Click an existing label with the Text tool or double-click it in
-selection mode to edit it. The **Text** and **TeX source** buffers are
+selection mode to edit it. With one text label selected, **Edit → Edit text**
+also opens the canvas editor. The **Text** and **TeX source** buffers are
 independent; Enter inserts a line break, while Ctrl+Enter (or Command+Enter on
 macOS), Tab, or **Done** finishes a valid edit. Escape cancels it after active
 input-method composition ends. Save actions settle a valid inline draft.

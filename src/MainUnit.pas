@@ -630,6 +630,7 @@ type
     FInspectorHost: TPanel;
     FInspectorSplitter: TSplitter;
     FInspectorMenuItem: TMenuItem;
+    FEditTextMenuItem: TMenuItem;
     FInlineSession: TObjectEditSession;
     FInlineTextMemo: TCompositionAwareMemo;
     FInlineTextFieldLabel: TLabel;
@@ -2176,6 +2177,12 @@ begin
   SetLength(EmptyIDs, 0);
   Inspector.Bind(TheDrawing, EmptyIDs, InspectorCurrentEpoch);
 
+  FEditTextMenuItem := TMenuItem.Create(Self);
+  FEditTextMenuItem.Caption := 'Edit text';
+  FEditTextMenuItem.Enabled := False;
+  FEditTextMenuItem.OnClick := EditTextMenuClick;
+  Edit2.Insert(Objectproperties1.MenuIndex, FEditTextMenuItem);
+
   FInspectorMenuItem := TMenuItem.Create(Self);
   FInspectorMenuItem.Caption := 'Object inspector';
   FInspectorMenuItem.Checked := InspectorPanelVisible;
@@ -2252,6 +2259,13 @@ var
   Count: Integer;
   HasCoordinateTable: Boolean;
 begin
+  if FEditTextMenuItem <> nil then
+  begin
+    FEditTextMenuItem.Enabled := False;
+    if (TheDrawing <> nil) and (TheDrawing.SelectedObjects.Count = 1) then
+      FEditTextMenuItem.Enabled :=
+        TheDrawing.SelectedObjects.FirstObj is TText2D;
+  end;
   if Inspector = nil then Exit;
   Count := TheDrawing.SelectedObjects.Count;
   SetLength(IDs, Count);
