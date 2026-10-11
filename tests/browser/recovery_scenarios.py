@@ -350,12 +350,16 @@ def s_recovery_skips_active_composition_and_restores_commit(app):
     }''', stable)
     wait_record_sequence(app.page, before[0]['id'], before[0]['sequence'])
     after_cancel = records(app.page)
-    if (len(after_cancel) != 1 or
-            after_cancel[0]['payloadHash'] != before[0]['payloadHash'] or
-            after_cancel[0]['sequence'] <= before[0]['sequence']):
-        raise AssertionError(f'cancelled composition changed or failed to checkpoint the stable draft: '
-                             f'before={before!r}; after={after_cancel!r}; '
+    if len(after_cancel) != 1:
+        raise AssertionError(f'cancelled composition changed draft count: {after_cancel!r}')
+    if after_cancel[0]['payloadHash'] != before[0]['payloadHash']:
+        raise AssertionError('cancelled composition changed the payload: '
+                             f'{before[0]["payloadHash"][:12]} -> '
+                             f'{after_cancel[0]["payloadHash"][:12]}; '
                              f'editor={editor.input_value()!r}')
+    if after_cancel[0]['sequence'] <= before[0]['sequence']:
+        raise AssertionError('cancelled composition was not checkpointed: '
+                             f'{before[0]["sequence"]} -> {after_cancel[0]["sequence"]}')
 
     start_composition('Uncommitted λ label: \\input{pending}')
     verify_composition_is_skipped(after_cancel[0]['payloadHash'])
