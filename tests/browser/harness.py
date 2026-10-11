@@ -21,16 +21,36 @@ OUT = ROOT / 'dist/browser-playtest'
 class App:
     """Drive the browser TpX and observe it through its rendered output."""
 
-    def __init__(self, page, prefix='', output=OUT):
+    def __init__(self, page, prefix='', output=OUT, context=None,
+                 persistent_context_factory=None):
         self.page = page
+        self.context = context
+        self.persistent_context_factory = persistent_context_factory
+        self.url = page.url
         self.prefix = prefix
         self.output = Path(output)
         self.shots = 0
         self.capture_requested = False
         self.errors = []
+        self._observe_page(page)
+
+    def _observe_page(self, page):
         page.on('pageerror', lambda e: self.errors.append(str(e)[:400]))
         page.on('console', lambda m: self.errors.append(f'{m.type}: {m.text}'[:400])
                 if m.type == 'error' else None)
+
+    def restart(self):
+        """Restart the browser process with the same persistent profile."""
+        if self.context is None or self.persistent_context_factory is None:
+            raise RuntimeError('this scenario does not use a persistent browser profile')
+        self.context.close()
+        self.context = self.persistent_context_factory()
+        self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
+        self._observe_page(self.page)
+        self.page.goto(self.url)
+        self.page.wait_for_selector('#status[data-state=ready]', timeout=30000)
+        self.page.wait_for_function('Number(document.querySelector("#lcl").dataset.frames)>0')
+        return self.page
 
     # --- observation -------------------------------------------------------
     def box(self):

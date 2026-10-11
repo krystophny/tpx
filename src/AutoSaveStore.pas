@@ -12,7 +12,8 @@ const
   AutoSaveMaxRetainedRecords = 20;
   AutoSaveMaxRetainedBytes: Int64 = 513 * 1024 * 1024;
   AutoSaveMaxRecordBytes: Int64 = 513 * 1024 * 1024;
-  AutoSaveMaxPayloadBytes: Int64 = 268435456;
+  AutoSaveDefaultMaxPayloadBytes = 268435456;
+  AutoSaveMaxPayloadBytes: Int64 = AutoSaveDefaultMaxPayloadBytes;
 
 type
   TAutoSaveRecordKind = (asrDraft, asrPriorVersion);
@@ -60,6 +61,11 @@ type
       out Entry: TAutoSaveStoredRecord): Boolean;
     property Root: TDocumentPath read FRoot;
   end;
+
+function EncodeAutoSaveStoredRecord(
+  const Entry: TAutoSaveStoredRecord): RawByteString;
+function DecodeAutoSaveStoredRecord(const Bytes: RawByteString;
+  out Entry: TAutoSaveStoredRecord): Boolean;
 
 implementation
 
@@ -264,6 +270,129 @@ begin
   Stream.WriteBuffer(ExistsByte, SizeOf(ExistsByte));
 end;
 
+procedure InitializeStoredRecord(out Entry: TAutoSaveStoredRecord);
+begin
+  Entry.Kind := asrDraft;
+  Entry.DocumentKey := '';
+  Entry.SourcePath := '';
+  Entry.SourceFormatId := '';
+  Entry.PayloadFormatId := '';
+  Entry.BaseRevision.ContentDigest := '';
+  Entry.BaseRevision.Size := 0;
+  Entry.BaseRevision.ModifiedUTC := 0;
+  Entry.BaseRevision.Identity := '';
+  Entry.BaseRevision.Exists := False;
+  Entry.BaseSourceBytes := '';
+  Entry.LocalRevision := 0;
+  Entry.Payload := '';
+end;
+
+procedure WriteRecordData(Stream: TStream; const Entry: TAutoSaveStoredRecord);
+var KindByte: Byte; PayloadSize: QWord;
+begin
+  Stream.WriteBuffer(RecordMagic[1], Length(RecordMagic));
+  if Entry.Kind = asrDraft then KindByte := 1 else KindByte := 2;
+  Stream.WriteBuffer(KindByte, SizeOf(KindByte));
+  WriteUtf8(Stream, UTF8String(Entry.DocumentKey));
+  WriteUtf8(Stream, UTF8String(Entry.SourcePath));
+  WriteUtf8(Stream, UTF8String(Entry.SourceFormatId));
+  WriteUtf8(Stream, UTF8String(Entry.PayloadFormatId));
+  WriteDiskRevision(Stream, Entry.BaseRevision);
+  Stream.WriteBuffer(Entry.LocalRevision, SizeOf(Entry.LocalRevision));
+  PayloadSize := Length(Entry.BaseSourceBytes);
+  Stream.WriteBuffer(PayloadSize, SizeOf(PayloadSize));
+  if PayloadSize > 0 then
+    Stream.WriteBuffer(Entry.BaseSourceBytes[1], Longint(PayloadSize));
+  PayloadSize := Length(Entry.Payload);
+  Stream.WriteBuffer(PayloadSize, SizeOf(PayloadSize));
+  if PayloadSize > 0 then
+    Stream.WriteBuffer(Entry.Payload[1], Longint(PayloadSize));
+end;
+
+procedure ReadDiskRevision(Stream: TStream; out Revision: TDiskRevision); forward;
+
+function ReadRecordData(Stream: TStream;
+  out Entry: TAutoSaveStoredRecord): Boolean;
+var Magic: array[0..7] of Char; KindByte: Byte; PayloadSize: QWord;
+begin
+  InitializeStoredRecord(Entry);
+  Result := False;
+  if Stream.Size < RecordHeaderBytes then Exit;
+  Stream.Position := 0;
+  Stream.ReadBuffer(Magic, SizeOf(Magic));
+  if not CompareMem(@Magic[0], @RecordMagic[1], SizeOf(Magic)) then Exit;
+  Stream.ReadBuffer(KindByte, SizeOf(KindByte));
+  if (KindByte <> 1) and (KindByte <> 2) then Exit;
+  Entry.DocumentKey := ReadUtf8(Stream);
+  Entry.SourcePath := ReadUtf8(Stream);
+  Entry.SourceFormatId := ReadUtf8(Stream);
+  Entry.PayloadFormatId := ReadUtf8(Stream);
+  ReadDiskRevision(Stream, Entry.BaseRevision);
+  Stream.ReadBuffer(Entry.LocalRevision, SizeOf(Entry.LocalRevision));
+  Stream.ReadBuffer(PayloadSize, SizeOf(PayloadSize));
+  if (PayloadSize > AutoSaveMaxPayloadBytes) or
+    (PayloadSize > QWord(Stream.Size - Stream.Position)) then Exit;
+  SetLength(Entry.BaseSourceBytes, Longint(PayloadSize));
+  if PayloadSize > 0 then
+    Stream.ReadBuffer(Entry.BaseSourceBytes[1], Longint(PayloadSize));
+  Stream.ReadBuffer(PayloadSize, SizeOf(PayloadSize));
+  if (PayloadSize > AutoSaveMaxPayloadBytes) or
+    (PayloadSize <> QWord(Stream.Size - Stream.Position)) then Exit;
+  SetLength(Entry.Payload, Longint(PayloadSize));
+  if PayloadSize > 0 then
+    Stream.ReadBuffer(Entry.Payload[1], Longint(PayloadSize));
+  if not SafeKey(Entry.DocumentKey) then Exit;
+  if KindByte = 1 then Entry.Kind := asrDraft
+  else Entry.Kind := asrPriorVersion;
+  Result := True;
+end;
+
+function EncodeAutoSaveStoredRecord(
+  const Entry: TAutoSaveStoredRecord): RawByteString;
+var Stream: TMemoryStream;
+begin
+  if (Length(Entry.Payload) > AutoSaveMaxPayloadBytes) or
+    (Length(Entry.BaseSourceBytes) > AutoSaveMaxPayloadBytes) or
+    (EncodedRecordSize(Entry) > AutoSaveMaxRecordBytes) or
+    not SafeKey(Entry.DocumentKey) then
+    raise Exception.Create('AutoSave recovery record exceeds the storage limit');
+  Stream := TMemoryStream.Create;
+  try
+    WriteRecordData(Stream, Entry);
+    SetLength(Result, Stream.Size);
+    if Stream.Size > 0 then
+    begin
+      Stream.Position := 0;
+      Stream.ReadBuffer(Result[1], Stream.Size);
+    end;
+  finally
+    Stream.Free;
+  end;
+end;
+
+function DecodeAutoSaveStoredRecord(const Bytes: RawByteString;
+  out Entry: TAutoSaveStoredRecord): Boolean;
+var Stream: TMemoryStream;
+begin
+  InitializeStoredRecord(Entry);
+  Result := False;
+  if (Length(Bytes) < RecordHeaderBytes) or
+    (Length(Bytes) > AutoSaveMaxRecordBytes) then Exit;
+  Stream := TMemoryStream.Create;
+  try
+    Stream.WriteBuffer(Bytes[1], Length(Bytes));
+    try
+      Result := ReadRecordData(Stream, Entry);
+      if not Result then InitializeStoredRecord(Entry);
+    except
+      Result := False;
+      InitializeStoredRecord(Entry);
+    end;
+  finally
+    Stream.Free;
+  end;
+end;
+
 procedure ReadDiskRevision(Stream: TStream; out Revision: TDiskRevision);
 var
   ExistsByte: Byte;
@@ -409,8 +538,6 @@ procedure TAutoSaveStore.WriteRecord(const FileName: TDocumentPath;
 var
   TempName: TDocumentPath;
   Stream: TStream;
-  KindByte: Byte;
-  PayloadSize: QWord;
 begin
   if (Length(Entry.Payload) > AutoSaveMaxPayloadBytes) or
     (Length(Entry.BaseSourceBytes) > AutoSaveMaxPayloadBytes) or
@@ -420,23 +547,7 @@ begin
   Stream := nil;
   try
     Stream := OpenStoreFile(TempName, True);
-    Stream.WriteBuffer(RecordMagic[1], Length(RecordMagic));
-    if Entry.Kind = asrDraft then KindByte := 1 else KindByte := 2;
-    Stream.WriteBuffer(KindByte, SizeOf(KindByte));
-    WriteUtf8(Stream, Entry.DocumentKey);
-    WriteUtf8(Stream, Entry.SourcePath);
-    WriteUtf8(Stream, Entry.SourceFormatId);
-    WriteUtf8(Stream, Entry.PayloadFormatId);
-    WriteDiskRevision(Stream, Entry.BaseRevision);
-    Stream.WriteBuffer(Entry.LocalRevision, SizeOf(Entry.LocalRevision));
-    PayloadSize := Length(Entry.BaseSourceBytes);
-    Stream.WriteBuffer(PayloadSize, SizeOf(PayloadSize));
-    if PayloadSize > 0 then
-      Stream.WriteBuffer(Entry.BaseSourceBytes[1], Longint(PayloadSize));
-    PayloadSize := Length(Entry.Payload);
-    Stream.WriteBuffer(PayloadSize, SizeOf(PayloadSize));
-    if PayloadSize > 0 then
-      Stream.WriteBuffer(Entry.Payload[1], Longint(PayloadSize));
+    WriteRecordData(Stream, Entry);
     FlushStream(Stream);
     FreeAndNil(Stream);
     ReplaceFile(TempName, FileName);
@@ -624,56 +735,15 @@ function TAutoSaveStore.LoadRecord(const FileName: TDocumentPath;
 var
   Stream: TStream;
   FullName: TDocumentPath;
-  Magic: array[0..7] of Char;
-  KindByte: Byte;
-  PayloadSize: QWord;
 begin
-  Entry.DocumentKey := '';
-  Entry.SourcePath := '';
-  Entry.SourceFormatId := '';
-  Entry.PayloadFormatId := '';
-  Entry.BaseRevision.ContentDigest := '';
-  Entry.BaseRevision.Size := 0;
-  Entry.BaseRevision.ModifiedUTC := 0;
-  Entry.BaseRevision.Identity := '';
-  Entry.BaseRevision.Exists := False;
-  Entry.BaseSourceBytes := '';
-  Entry.LocalRevision := 0;
-  Entry.Payload := '';
-  Entry.Kind := asrDraft;
+  InitializeStoredRecord(Entry);
   Result := False;
   Stream := nil;
   try
     try
       FullName := FullStoreFileName(FRoot, FileName);
       Stream := OpenStoreFile(FullName, False);
-      if Stream.Size < RecordHeaderBytes then Exit;
-      Stream.ReadBuffer(Magic, SizeOf(Magic));
-      if not CompareMem(@Magic[0], @RecordMagic[1], SizeOf(Magic)) then Exit;
-      Stream.ReadBuffer(KindByte, SizeOf(KindByte));
-      if (KindByte <> 1) and (KindByte <> 2) then Exit;
-      Entry.DocumentKey := ReadUtf8(Stream);
-      Entry.SourcePath := ReadUtf8(Stream);
-      Entry.SourceFormatId := ReadUtf8(Stream);
-      Entry.PayloadFormatId := ReadUtf8(Stream);
-      ReadDiskRevision(Stream, Entry.BaseRevision);
-      Stream.ReadBuffer(Entry.LocalRevision, SizeOf(Entry.LocalRevision));
-      Stream.ReadBuffer(PayloadSize, SizeOf(PayloadSize));
-      if (PayloadSize > AutoSaveMaxPayloadBytes) or
-        (PayloadSize > QWord(Stream.Size - Stream.Position)) then Exit;
-      SetLength(Entry.BaseSourceBytes, PayloadSize);
-      if PayloadSize > 0 then
-        Stream.ReadBuffer(Entry.BaseSourceBytes[1], Longint(PayloadSize));
-      Stream.ReadBuffer(PayloadSize, SizeOf(PayloadSize));
-      if (PayloadSize > AutoSaveMaxPayloadBytes) or
-        (PayloadSize <> QWord(Stream.Size - Stream.Position)) then Exit;
-      SetLength(Entry.Payload, PayloadSize);
-      if PayloadSize > 0 then
-        Stream.ReadBuffer(Entry.Payload[1], Longint(PayloadSize));
-      if not SafeKey(Entry.DocumentKey) then Exit;
-      if KindByte = 1 then Entry.Kind := asrDraft
-      else Entry.Kind := asrPriorVersion;
-      Result := True;
+      Result := ReadRecordData(Stream, Entry);
     except
       Result := False;
     end;
