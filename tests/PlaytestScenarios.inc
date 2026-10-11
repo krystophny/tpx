@@ -165,21 +165,9 @@ var
   HeightEditor, WidthEditor: TEdit;
   ErrorLabel, SelectionLabel: TLabel;
   LineStyleEditor: TComboBox;
-  MemoEditor: TCompositionAwareMemo;
   Key: Word;
   Shift: TShiftState;
 begin
-  MemoEditor := TCompositionAwareMemo.Create(nil);
-  try
-    MemoEditor.Lines.Add('alpha');
-    Check(MemoEditor.EditText = 'alpha',
-      'Memo edit text retained its synthetic final line ending');
-    MemoEditor.Lines.Add('');
-    Check(MemoEditor.EditText = 'alpha' + LineEnding,
-      'Memo edit text discarded an explicitly entered trailing newline');
-  finally
-    MemoEditor.Free;
-  end;
   MainForm.Show;
   Application.ProcessMessages;
   MainForm.RefreshInspectorSelection;
@@ -391,6 +379,43 @@ begin
     'Undo did not restore the distinct pre-edit mixed values');
 end;
 
+{$IFDEF LCLCOCOA}
+function CocoaInspectorTextView(Memo: TCompositionAwareMemo): TCocoaTextView;
+begin
+  Result := TCocoaTextView(NSScrollView(Memo.Handle).documentView);
+end;
+
+procedure CocoaSetMarkedText(Memo: TCompositionAwareMemo;
+  const Value: string);
+var
+  NativeText: NSString;
+begin
+  NativeText := NSStringUtf8(Value);
+  CocoaInspectorTextView(Memo).setMarkedText_selectedRange_replacementRange(
+    NativeText, NSMakeRange(NativeText.length, 0),
+    NSMakeRange(NSNotFound, 0));
+  NativeText.release;
+end;
+
+procedure CocoaCancelMarkedText(Memo: TCompositionAwareMemo);
+var
+  EmptyText: NSString;
+begin
+  EmptyText := NSString.string_;
+  CocoaInspectorTextView(Memo).setMarkedText_selectedRange_replacementRange(
+    EmptyText, NSMakeRange(0, 0), NSMakeRange(NSNotFound, 0));
+end;
+
+procedure CocoaDrainTextInputQueue;
+var
+  I: Integer;
+begin
+  for I := 1 to 5 do
+    NSRunLoop.currentRunLoop.runMode_beforeDate(NSDefaultRunLoopMode,
+      NSDate.dateWithTimeIntervalSinceNow(0.01));
+end;
+{$ENDIF}
+
 procedure TestInspectorPropertyFamilies;
 var
   Drawing: TDrawing2D;
@@ -402,9 +427,81 @@ var
   BitmapObj: TBitmap2D;
   Combo: TComboBox;
   Edit: TEdit;
-  Memo: TMemo;
+  Memo: TCompositionAwareMemo;
   CheckBox: TCheckBox;
   ErrorText: string;
+  FileName: string;
+  Reloaded: TDrawing2D;
+  Loader: T_TpX_Loader;
+  ReloadedText: TText2D;
+
+  function InspectorTop(Control: TControl): Integer;
+  begin
+    Result := 0;
+    while Control <> nil do
+    begin
+      Inc(Result, Control.Top);
+      Control := Control.Parent;
+    end;
+  end;
+
+  procedure CheckSectionOrder;
+  var
+    I, PreviousTop: Integer;
+    Component: TComponent;
+    Header: TButton;
+  begin
+    PreviousTop := -1;
+    for I := 0 to 5 do
+    begin
+      Component := MainForm.Inspector.FindComponent(
+        'InspectorSection' + IntToStr(I) + 'Header');
+      Check(Component is TButton,
+        'Inspector section heading is missing: ' + IntToStr(I));
+      Header := Component as TButton;
+      Check(InspectorTop(Header) > PreviousTop,
+        'Inspector section heading ' + IntToStr(I) + ' at ' +
+        IntToStr(InspectorTop(Header)) + ' follows ' + IntToStr(PreviousTop));
+      PreviousTop := InspectorTop(Header);
+    end;
+    Check(InspectorTop(MainForm.Inspector.FindComponent(
+      'InspectorSection0Header') as TButton) <
+      InspectorTop(MainForm.Inspector.EditorFor(opfLineStyle)),
+      'Line section heading appears below its fields');
+    Check(InspectorTop(MainForm.Inspector.EditorFor(opfLineStyle)) <
+      InspectorTop(MainForm.Inspector.EditorFor(opfLineWidth)),
+      'Line section fields are reversed');
+  end;
+
+  {$IFDEF LCLCOCOA}
+  procedure CheckCompositionEndWithoutTextChange;
+  var
+    TextView: TCocoaTextView;
+    InspectorMemo: TCompositionAwareMemo;
+  begin
+    MainForm.Inspector.FocusField(opfText);
+    InspectorMemo := MainForm.Inspector.EditorFor(opfText) as
+      TCompositionAwareMemo;
+    InspectorMemo.HandleNeeded;
+    TextView := CocoaInspectorTextView(InspectorMemo);
+    TextView.supressTextChangeEvent := 1;
+    try
+      CocoaSetMarkedText(InspectorMemo, 'unfinished composition');
+      Check(InspectorMemo.CompositionPending and
+        MainForm.Inspector.HasActiveEdit,
+        'Native Cocoa marked text did not hold the inspector edit gate');
+      CocoaCancelMarkedText(InspectorMemo);
+    finally
+      TextView.supressTextChangeEvent := 0;
+    end;
+    CocoaDrainTextInputQueue;
+    Check(not InspectorMemo.CompositionPending,
+      'Native Cocoa END without text change left the inspector memo pending');
+    Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+      'Canceled native composition still blocked inspector settlement: ' +
+      ErrorText);
+  end;
+  {$ENDIF}
 
   procedure SelectObject(Obj: TObject2D);
   begin
@@ -428,7 +525,7 @@ var
     MainForm.Inspector.FocusField(Field);
     if MainForm.Inspector.EditorFor(Field) is TMemo then
     begin
-      Memo := MainForm.Inspector.EditorFor(Field) as TMemo;
+      Memo := MainForm.Inspector.EditorFor(Field) as TCompositionAwareMemo;
       Memo.Text := Value;
     end
     else if MainForm.Inspector.EditorFor(Field) is TComboBox then
@@ -456,10 +553,54 @@ var
       'Inspector checkbox edit failed: ' + IntToStr(Ord(Field)) + ': ' + ErrorText);
   end;
 
+  procedure RoundTripText(const Value: string);
+  begin
+    Memo := MainForm.Inspector.EditorFor(opfText) as TCompositionAwareMemo;
+    MainForm.Inspector.FocusField(opfText);
+    Memo.HandleNeeded;
+    Check(Memo.HandleAllocated and (Memo.Parent <> nil),
+      'Inspector memo was not a parented, handled native control');
+    Memo.Text := Value;
+    Check(Memo.EditText = Value,
+      'Native memo edit text changed the exact input bytes');
+    Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+      'Inspector text draft did not commit: ' + ErrorText);
+    Check(DecodeTpXTextForEdit(TextObj.Text) = LCLTextToUTF8Bytes(Value),
+      'Inspector text draft did not reach its model before save');
+    FileName := GetTempFileName(SysUtils.GetTempDir(False),
+      'tpx-inspector-text-');
+    try
+      Check(StoreToFile_TpX(Drawing, FileName, False),
+        'Inspector text draft did not save');
+      Reloaded := TDrawing2D.Create(nil);
+      Loader := T_TpX_Loader.Create(Reloaded);
+      try
+        Loader.LoadFromFile(FileName);
+        ReloadedText := Reloaded.GetObject(TextObj.ID) as TText2D;
+        Check(ReloadedText.Text = TextObj.Text,
+          'Inspector stored text changed through native save/reload (' +
+          IntToStr(Length(TextObj.Text)) + ' vs ' +
+          IntToStr(Length(ReloadedText.Text)) + ' bytes)');
+        Check(DecodeTpXTextForEdit(ReloadedText.Text) =
+          LCLTextToUTF8Bytes(Value),
+          'Inspector display text changed through native save/reload (' +
+          IntToStr(Length(Value)) + ' vs ' +
+          IntToStr(Length(DecodeTpXTextForEdit(ReloadedText.Text))) + ' bytes)');
+      finally
+        Loader.Free;
+        Reloaded.Free;
+      end;
+    finally
+      DeleteFile(FileName);
+    end;
+  end;
+
 begin
+  SetLiveTeXEnabled(False);
   MainForm.Show;
   MainForm.ShowInspector;
   Application.ProcessMessages;
+  CheckSectionOrder;
   Drawing := MainForm.TheDrawing;
 
   LineObj := TLine2D.CreateSpec(-1, Point2D(1, 2), Point2D(20, 30));
@@ -499,7 +640,7 @@ begin
   TextObj.TeXText := '\alpha';
   Drawing.AddObject(-1, TextObj);
   SelectObject(TextObj);
-  Memo := MainForm.Inspector.EditorFor(opfText) as TMemo;
+  Memo := MainForm.Inspector.EditorFor(opfText) as TCompositionAwareMemo;
   Check(Memo.Text = 'Legacy β 😀',
     'Inspector did not decode stored Unicode character references');
   ChangeText(opfText, 'Changed plain β 😀');
@@ -516,6 +657,13 @@ begin
   Check((TextObj.Text = 'Changed plain &#946; &#55357;&#56832;') and
     (TextObj.TeXText = '\beta'),
     'Editing TeX source changed the independent Text fallback');
+  Drawing.TeXFormat := tex_none;
+  Drawing.PdfTeXFormat := pdftex_none;
+  RoundTripText('alpha');
+  RoundTripText('alpha' + LineEnding);
+  {$IFDEF LCLCOCOA}
+  CheckCompositionEndWithoutTextChange;
+  {$ENDIF}
 
   StarObj := TStar2D.CreateSpec(-1, Point2D(8, 9));
   Drawing.AddObject(-1, StarObj);

@@ -112,7 +112,14 @@ var
   CompositionEnded: Boolean;
 begin
   CompositionEnded := False;
-  {$IFNDEF LCLCOCOA}
+  {$IFDEF LCLCOCOA}
+  if (Message.Msg = LM_IM_COMPOSITION) and
+    ((Message.WParam and (GTK_IM_FLAG_START or GTK_IM_FLAG_PREEDIT)) =
+    (GTK_IM_FLAG_START or GTK_IM_FLAG_PREEDIT)) then
+    SetCompositionPending(True);
+  if (Message.Msg = LM_IM_COMPOSITION) then
+    CompositionEnded := (Message.WParam and GTK_IM_FLAG_END) <> 0;
+  {$ELSE}
   if Message.Msg = LM_IM_COMPOSITION then
   begin
     if (Message.WParam and GTK_IM_FLAG_START) <> 0 then
@@ -157,17 +164,8 @@ begin
 end;
 
 function TCompositionAwareMemo.GetEditText: string;
-var
-  TextLength: SizeInt;
 begin
   Result := Text;
-  TextLength := Length(Result);
-  if TextLength = 0 then Exit;
-  if (Result[TextLength] = #10) and (TextLength > 1) and
-    (Result[TextLength - 1] = #13) then
-    Delete(Result, TextLength - 1, 2)
-  else if Result[TextLength] in [#10, #13] then
-    Delete(Result, TextLength, 1);
 end;
 
 function TCompositionAwareMemo.SampleCompositionState: Boolean;
@@ -184,7 +182,14 @@ var
   CompositionEnded: Boolean;
 begin
   CompositionEnded := False;
-  {$IFNDEF LCLCOCOA}
+  {$IFDEF LCLCOCOA}
+  if (Message.Msg = LM_IM_COMPOSITION) and
+    ((Message.WParam and (GTK_IM_FLAG_START or GTK_IM_FLAG_PREEDIT)) =
+    (GTK_IM_FLAG_START or GTK_IM_FLAG_PREEDIT)) then
+    SetCompositionPending(True);
+  if (Message.Msg = LM_IM_COMPOSITION) then
+    CompositionEnded := (Message.WParam and GTK_IM_FLAG_END) <> 0;
+  {$ELSE}
   if Message.Msg = LM_IM_COMPOSITION then
   begin
     if (Message.WParam and GTK_IM_FLAG_START) <> 0 then
