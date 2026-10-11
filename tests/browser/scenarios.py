@@ -754,6 +754,7 @@ def s_bitmap_roundtrip(app):
 
 def s_object_inspector(app):
     import re
+    from playwright.sync_api import expect
 
     v, cx, cy = box(app)
     app.menu('Insert', 'Insert rectangle')
@@ -871,6 +872,7 @@ def s_object_inspector(app):
         raise AssertionError(
             f'vertical radius did not remain after Enter: {vertical.input_value()!r}')
     vertical.press('Tab')
+    expect(section_button('Bitmap')).to_be_focused()
     focus_after_tab = app.page.evaluate('''() => {
         const e = document.activeElement;
         return e ? {tag: e.tagName, text: (e.textContent || '').trim()} : null;
@@ -887,6 +889,7 @@ def s_object_inspector(app):
             'typing after Tab changed the previously committed radius: '
             f'{vertical.input_value()!r}')
     app.page.keyboard.press('Shift+Tab')
+    expect(vertical).to_be_focused()
     focus_after_shift_tab = app.page.evaluate('''() => {
         const e = document.activeElement;
         return e ? `${e.tagName}[${e.getAttribute('aria-label') || ''}]` : 'none';
