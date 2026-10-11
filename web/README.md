@@ -109,6 +109,21 @@ input, or screen-reader operation. Native composition regressions use synthetic
 platform composition hooks; they do not claim coverage of a live operating
 system input method on physical hardware.
 
+To check browser device-pixel ratio separately from canvas zoom, run the
+integrated edit workflow at representative DPR values:
+
+```sh
+for dpr in 1 1.5 2; do
+  python3 tests/browser/playtest.py web/dist "/tmp/tpx-browser-dpr-$dpr" \
+    --only=nonmodal-editing-workflow --browser=chromium \
+    --device-scale-factor="$dpr"
+done
+```
+
+The runner verifies `window.devicePixelRatio` for each run. This is a browser
+rendering-scale check; it does not emulate operating-system display scaling.
+The integrated workflow checks canvas zoom separately.
+
 Browser support is exercised through the application scenarios below, not every
 LCL API or TpX drawing tool.
 
