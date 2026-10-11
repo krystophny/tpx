@@ -5,7 +5,7 @@ unit PropertyEdits;
 interface
 
 uses Classes, Graphics, Geometry, Devices, Drawings, GObjects,
-  PropertyEditCore;
+  GObjBase, PropertyEditCore;
 
 type
   { LCL edit controls expose UTF-8 bytes in string values on every widgetset.
@@ -69,6 +69,9 @@ function ReadObjectProperty(Drawing: TDrawing2D;
 function ValidateObjectPropertyPatch(Drawing: TDrawing2D;
   const TargetIDs: array of Integer;
   const Patch: TObjectPropertyPatch; out ErrorText: string): Boolean;
+function ValidateObjectPropertyPatchForObjects(
+  const Targets: array of TObject2D; const Patch: TObjectPropertyPatch;
+  out ErrorText: string): Boolean;
 function ApplyObjectPropertyPatch(Drawing: TDrawing2D;
   const TargetIDs: array of Integer;
   const Patch: TObjectPropertyPatch; out ErrorText: string;
@@ -79,13 +82,13 @@ function CaptureObjectPropertyPatch(Drawing: TDrawing2D;
 
 implementation
 
-uses SysUtils, Math, Variants, GObjBase, Bitmaps;
+uses SysUtils, Math, Variants, Bitmaps;
 
 procedure AddUnique(List: TList; Obj: TObject2D);
 var I: Integer;
 begin
   for I := 0 to List.Count - 1 do
-    if TObject2D(List[I]).ID = Obj.ID then Exit;
+    if TObject2D(List[I]) = Obj then Exit;
   List.Add(Obj);
 end;
 
@@ -357,10 +360,33 @@ begin
     Result := True;
 end;
 
+function ValidateObjectPropertyList(List: TList;
+  const Patch: TObjectPropertyPatch; out ErrorText: string): Boolean;
+var I: Integer; Field: TObjectPropertyField;
+begin
+  Result := False;
+  if Patch.Fields = [] then Exit(True);
+  if List.Count = 0 then
+  begin
+    ErrorText := 'Select at least one editable object';
+    Exit;
+  end;
+  for I := 0 to List.Count - 1 do
+    for Field := Low(TObjectPropertyField) to High(TObjectPropertyField) do
+      if (Field in Patch.Fields) and
+        not SupportsProperty(TObject2D(List[I]), Field) then
+      begin
+        ErrorText := 'A selected object does not support this property';
+        Exit;
+      end;
+  ErrorText := '';
+  Result := True;
+end;
+
 function ValidateObjectPropertyPatch(Drawing: TDrawing2D;
   const TargetIDs: array of Integer;
   const Patch: TObjectPropertyPatch; out ErrorText: string): Boolean;
-var List: TList; I: Integer; Field: TObjectPropertyField;
+var List: TList;
 begin
   Result := False;
   if not ValidatePatchValues(Patch, ErrorText) then Exit;
@@ -368,15 +394,32 @@ begin
   List := TList.Create;
   try
     if not CollectTargets(Drawing, TargetIDs, List, ErrorText) then Exit;
-    for I := 0 to List.Count - 1 do
-      for Field := Low(TObjectPropertyField) to High(TObjectPropertyField) do
-        if (Field in Patch.Fields) and
-          not SupportsProperty(TObject2D(List[I]), Field) then
-        begin
-          ErrorText := 'A selected object does not support this property';
-          Exit;
-        end;
-    Result := True;
+    Result := ValidateObjectPropertyList(List, Patch, ErrorText);
+  finally
+    List.Free;
+  end;
+end;
+
+function ValidateObjectPropertyPatchForObjects(
+  const Targets: array of TObject2D; const Patch: TObjectPropertyPatch;
+  out ErrorText: string): Boolean;
+var List: TList; I: Integer;
+begin
+  Result := False;
+  if not ValidatePatchValues(Patch, ErrorText) then Exit;
+  if Patch.Fields = [] then Exit(True);
+  List := TList.Create;
+  try
+    for I := 0 to High(Targets) do
+    begin
+      if Targets[I] = nil then
+      begin
+        ErrorText := 'The recovered edit target is unavailable';
+        Exit;
+      end;
+      CollectLeaves(Targets[I], List);
+    end;
+    Result := ValidateObjectPropertyList(List, Patch, ErrorText);
   finally
     List.Free;
   end;
@@ -535,15 +578,30 @@ end;
 
 function ExpandObjectEditTargetIDs(Drawing: TDrawing2D;
   const TargetIDs: array of Integer; out ErrorText: string): TEditTargetIDs;
-var List: TList; I: Integer;
+var List: TList; Objects: array of TGraphicObject; I: Integer;
 begin
   Result := nil;
   List := TList.Create;
   try
     if not CollectTargets(Drawing, TargetIDs, List, ErrorText) then Exit;
+    SetLength(Objects, List.Count);
     SetLength(Result, List.Count);
     for I := 0 to List.Count - 1 do
-      Result[I] := TObject2D(List[I]).ID;
+      Objects[I] := TObject2D(List[I]);
+    try
+      Drawing.EnsureUniqueObjectIDs(Objects, Result);
+    except
+      on E: ERangeError do
+      begin
+        Result := nil;
+        ErrorText := E.Message;
+      end;
+      on E: ETpX_ListObjNotFound do
+      begin
+        Result := nil;
+        ErrorText := E.Message;
+      end;
+    end;
   finally
     List.Free;
   end;

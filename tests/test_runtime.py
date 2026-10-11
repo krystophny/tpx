@@ -26,6 +26,7 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "auto-reload-integration",
              "autosave-source-formats",
              "edit-session-preview-cancel", "edit-session-recovery-payload",
+             "edit-session-nested-recovery-rebind",
              "edit-session-text-whitespace", "edit-session-malformed-reference",
              "edit-session-autosave-cancel", "edit-session-recovery-disabled",
              "edit-session-deferred-reload",
