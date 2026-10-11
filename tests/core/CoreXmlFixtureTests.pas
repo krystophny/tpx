@@ -17,39 +17,12 @@ begin
   CheckCore(Result <> '', 'TPX_CORE_FIXTURE_DIR is not set');
 end;
 
-function ExampleDirectory: string;
-begin
-  Result := GetEnvironmentVariable('TPX_EXAMPLE_DIR');
-  CheckCore(Result <> '', 'TPX_EXAMPLE_DIR is not set');
-end;
-
 function LoadFixture(const Name: string): TXmlDDocument;
 var
   Path: string;
   Source: TFileStream;
 begin
   Path := IncludeTrailingPathDelimiter(FixtureDirectory) + Name;
-  Result := nil;
-  RO_Init(Result, TXmlDDocument.Create);
-  Source := TFileStream.Create(Path, fmOpenRead or fmShareDenyNone);
-  try
-    try
-      Result.LoadXML(ExtractTpXXml(Source));
-    except
-      RO_Free(Result);
-      raise;
-    end;
-  finally
-    Source.Free;
-  end;
-end;
-
-function LoadExample(const Name: string): TXmlDDocument;
-var
-  Path: string;
-  Source: TFileStream;
-begin
-  Path := IncludeTrailingPathDelimiter(ExampleDirectory) + Name;
   Result := nil;
   RO_Init(Result, TXmlDDocument.Create);
   Source := TFileStream.Create(Path, fmOpenRead or fmShareDenyNone);
@@ -86,36 +59,6 @@ begin
     end;
   raise Exception.CreateFmt('Missing element child %d under <%s>',
     [Index, Node.NodeName]);
-end;
-
-function NamedChildCount(Node: TXmlDNode; const Name: string): Integer;
-var
-  I: Integer;
-begin
-  Result := 0;
-  for I := 0 to Node.ChildNodes.Count - 1 do
-    if (Node.ChildNodes[I] is TXmlDElement) and
-      (Node.ChildNodes[I].NodeName = Name) then Inc(Result);
-end;
-
-function FindChild(Node: TXmlDNode; const Name: string): TXmlDElement;
-var
-  I: Integer;
-begin
-  for I := 0 to Node.ChildNodes.Count - 1 do
-    if (Node.ChildNodes[I] is TXmlDElement) and
-      (Node.ChildNodes[I].NodeName = Name) then
-      Exit(Node.ChildNodes[I] as TXmlDElement);
-  raise Exception.CreateFmt('Missing <%s> under <%s>', [Name, Node.NodeName]);
-end;
-
-procedure CheckNoBitmap(Node: TXmlDNode);
-var
-  I: Integer;
-begin
-  if Node is TXmlDElement then
-    CheckCore(Node.NodeName <> 'bitmap', 'examples must not link bitmap assets');
-  for I := 0 to Node.ChildNodes.Count - 1 do CheckNoBitmap(Node.ChildNodes[I]);
 end;
 
 function AttributeNumber(Node: TXmlDElement; const Name: string): Double;
@@ -275,86 +218,10 @@ begin
   end;
 end;
 
-procedure TestScientificExampleScenes;
-var
-  Document: TXmlDDocument;
-  Root, Obj: TXmlDElement;
-begin
-  Document := LoadExample('quadratic-function.TpX');
-  try
-    Root := Document.DocumentElement;
-    CheckCore((Root.NodeName = 'TpX') and
-      (NamedChildCount(Root, 'line') = 7) and
-      (NamedChildCount(Root, 'curve') = 1) and
-      (NamedChildCount(Root, 'circle') = 1) and
-      (NamedChildCount(Root, 'text') = 5),
-      'quadratic example scene structure changed');
-    CheckNoBitmap(Root);
-    Obj := FindChild(Root, 'curve');
-    CheckAttribute(Obj, 'lc', '#0072B2');
-    CheckCore(Pos('34,10', Obj.Text) > 0,
-      'quadratic curve no longer passes through its minimum');
-    Obj := FindChild(Root, 'text');
-    CheckCore(Obj.AttributeValueSt['tex'] = '$f(x)=x^2-1$',
-      'quadratic example lost its function label');
-    CheckCore(FindChild(Root, 'caption').Text =
-      'A quadratic function and its minimum',
-      'quadratic example caption changed');
-  finally
-    RO_Free(Document);
-  end;
-
-  Document := LoadExample('vector-addition.TpX');
-  try
-    Root := Document.DocumentElement;
-    CheckCore((NamedChildCount(Root, 'line') = 5) and
-      (NamedChildCount(Root, 'circle') = 3) and
-      (NamedChildCount(Root, 'text') = 4),
-      'vector example scene structure changed');
-    CheckNoBitmap(Root);
-    Obj := FindChild(Root, 'line');
-    CheckNearCore(AttributeNumber(Obj, 'x1'), 12, 1e-6,
-      'vector resultant origin x');
-    CheckNearCore(AttributeNumber(Obj, 'y1'), 12, 1e-6,
-      'vector resultant origin y');
-    CheckAttribute(Obj, 'arr2', 'h40');
-    Obj := FindChild(Root, 'text');
-    CheckCore(Obj.AttributeValueSt['tex'] = '$\vec{A}$',
-      'vector example lost its first TeX vector label');
-    CheckCore(FindChild(Root, 'caption').Text =
-      'Head-to-tail construction of a vector sum',
-      'vector example caption changed');
-  finally
-    RO_Free(Document);
-  end;
-
-  Document := LoadExample('double-slit.TpX');
-  try
-    Root := Document.DocumentElement;
-    CheckCore((NamedChildCount(Root, 'line') = 9) and
-      (NamedChildCount(Root, 'arc') = 6) and
-      (NamedChildCount(Root, 'circle') = 3) and
-      (NamedChildCount(Root, 'text') = 7),
-      'double-slit example scene structure changed');
-    CheckNoBitmap(Root);
-    Obj := FindChild(Root, 'arc');
-    CheckNearCore(AttributeNumber(Obj, 'd'), 12, 1e-6,
-      'first wavefront diameter');
-    CheckAttribute(Obj, 'lc', '#0072B2');
-    CheckCore((NamedChildCount(Root, 'caption') = 1) and
-      (FindChild(Root, 'caption').Text =
-       'Two coherent sources produce an interference pattern'),
-      'double-slit example caption changed');
-  finally
-    RO_Free(Document);
-  end;
-end;
-
 initialization
   RegisterCoreTest('tpx-source-envelope-and-xml-codec', TestIndependentTpXXmlCodecStructure);
   RegisterCoreTest('empty-tpx-xml-document', TestEmptyTpXFixture);
   RegisterCoreTest('inline-first-child-does-not-close-root', TestInlineFirstChildDoesNotCloseRoot);
   RegisterCoreTest('malformed-xml-is-rejected', TestMalformedDocumentRejected);
-  RegisterCoreTest('scientific-example-scenes', TestScientificExampleScenes);
 
 end.

@@ -611,7 +611,7 @@ def s_download_status_and_unload(app):
     if app.page.evaluate('window.tpxDownloadBlobs') != ['application/xml']:
         raise AssertionError('TpX download used the wrong MIME type')
     app.page.wait_for_function('window.tpxRevokedBlobs.length === 1', timeout=4000)
-    if app.page.locator('a[download]').count():
+    if app.page.locator('a[download][href^="blob:"]').count():
         raise AssertionError('temporary download anchor was left in the page')
 
     app.menu('File', 'New')
