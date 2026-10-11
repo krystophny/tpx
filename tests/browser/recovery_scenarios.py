@@ -161,7 +161,7 @@ def s_recovery_survives_application_restart(app):
     retained = next(row for row in after if row['id'] == before[0]['id'])
     if retained['payloadHash'] != before[0]['payloadHash']:
         raise AssertionError('recovery rewrote the original durable source draft')
-    if app.page.get_by_role('button', name='Recover as new drawing', exact=True).is_enabled():
+    if app.page.locator('#tpx-recovery-drafts [data-restore]').first.is_enabled():
         raise AssertionError('a dirty recovered drawing still allowed another restore')
     return f'IndexedDB draft survived app reload and restored {ink} geometry pixels as a new drawing'
 
@@ -336,7 +336,8 @@ def s_recovery_retains_source_and_linked_asset(app):
     original_source = source.read_bytes()
     original_asset = asset_copy.read_bytes()
 
-    app.menu('File', 'New')
+    app.restart()
+    wait_ready(app.page)
     opt_in(app.page)
     app.menu('File', 'Open')
     dialog = app.page.get_by_role('dialog')
