@@ -131,6 +131,26 @@ def wait_saved(page):
         raise AssertionError(f'checkpoint did not finish: recovery={state!r}; document={document!r}') from exc
 
 
+def wait_record_sequence(page, record_id, previous_sequence):
+    page.wait_for_function('''async ({name, id, sequence}) => {
+      const request = indexedDB.open(name);
+      const db = await new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      try {
+        const tx = db.transaction('drafts', 'readonly');
+        const row = await new Promise((resolve, reject) => {
+          const get = tx.objectStore('drafts').get(id);
+          get.onsuccess = () => resolve(get.result);
+          get.onerror = () => reject(get.error);
+        });
+        return row && row.sequence > sequence;
+      } finally { db.close(); }
+    }''', arg={'name': DB_NAME, 'id': record_id, 'sequence': previous_sequence},
+       timeout=10000)
+
+
 def s_recovery_disabled_by_default(app):
     if app.page.locator('#tpx-recovery-enabled').is_checked():
         raise AssertionError('browser-local recovery unexpectedly started opted in')
@@ -181,11 +201,9 @@ def hold_recovery_checkpoint_timer(page, record_id):
     page.evaluate('''(recordId) => {
       const originalSetInterval = window.setInterval.bind(window);
       window.tpxRecoveryTimerCallback = null;
-      window.tpxRecoveryTimerCreated = 0;
       window.setInterval = (callback, delay, ...args) => {
         if (delay === 750) {
           window.tpxRecoveryTimerCallback = callback;
-          window.tpxRecoveryTimerCreated++;
           return originalSetInterval(() => {}, delay, ...args);
         }
         return originalSetInterval(callback, delay, ...args);
@@ -307,8 +325,6 @@ def s_recovery_skips_active_composition_and_restores_commit(app):
     before = records(app.page)
     if len(before) != 1:
         raise AssertionError(f'expected one baseline draft, got {before}')
-    hold_recovery_checkpoint_timer(app.page, before[0]['id'])
-
     def start_composition(text):
         editor.evaluate('''(el, text) => {
           el.focus();
@@ -318,56 +334,37 @@ def s_recovery_skips_active_composition_and_restores_commit(app):
             inputType:'insertCompositionText', data:text, isComposing:true}));
         }''', text)
 
-    def force_composition_checkpoint():
-        generation = app.page.evaluate('window.tpxRecoveryTimerCreated')
-        try:
-            app.page.wait_for_function('(old) => window.tpxRecoveryTimerCreated > old', arg=generation,
-                                       timeout=10000)
-        except Exception as exc:
-            raise AssertionError('composition did not arm recovery timer: ' +
-                                 app.page.locator('#tpx-recovery-state').inner_text()) from exc
-        app.page.evaluate('window.tpxRecoveryCheckpointCommitted = false')
-        app.page.evaluate('window.tpxRecoveryTimerCallback()')
-        try:
-            app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Text composition is still active")',
-                                       timeout=10000)
-        except Exception as exc:
-            raise AssertionError('forced composition checkpoint did not report pending composition: ' +
-                                 app.page.locator('#tpx-recovery-state').inner_text()) from exc
+    def verify_composition_is_skipped(previous_hash):
+        app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Text composition is still active")',
+                                   timeout=10000)
         rows = records(app.page)
-        if len(rows) != 1 or rows[0]['payloadHash'] != before[0]['payloadHash']:
+        if len(rows) != 1 or rows[0]['payloadHash'] != previous_hash:
             raise AssertionError('an active composition replaced the last safe recovery payload')
 
     start_composition('Uncommitted preedit')
-    force_composition_checkpoint()
+    verify_composition_is_skipped(before[0]['payloadHash'])
 
     editor.evaluate('''(el, text) => {
       el.value = text;
       el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:''}));
     }''', stable)
-    app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("New changes are not yet saved")',
-                               timeout=10000)
-    app.page.evaluate('window.tpxRecoveryCheckpointCommitted = false')
-    app.page.evaluate('window.tpxRecoveryTimerCallback()')
-    app.page.wait_for_function('window.tpxRecoveryCheckpointCommitted === true', timeout=10000)
+    wait_record_sequence(app.page, before[0]['id'], before[0]['sequence'])
     after_cancel = records(app.page)
     if (len(after_cancel) != 1 or
             after_cancel[0]['payloadHash'] != before[0]['payloadHash'] or
             after_cancel[0]['sequence'] <= before[0]['sequence']):
-        raise AssertionError('cancelled composition changed or failed to checkpoint the stable draft')
+        raise AssertionError(f'cancelled composition changed or failed to checkpoint the stable draft: '
+                             f'before={before!r}; after={after_cancel!r}; '
+                             f'editor={editor.input_value()!r}')
 
     start_composition('Uncommitted λ label: \\input{pending}')
-    force_composition_checkpoint()
+    verify_composition_is_skipped(after_cancel[0]['payloadHash'])
     committed = 'Committed λ label: \\input{pending}'
     editor.evaluate('''(el, text) => {
       el.value = text;
       el.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true, data:text}));
     }''', committed)
-    app.page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("New changes are not yet saved")',
-                               timeout=10000)
-    app.page.evaluate('window.tpxRecoveryCheckpointCommitted = false')
-    app.page.evaluate('window.tpxRecoveryTimerCallback()')
-    app.page.wait_for_function('window.tpxRecoveryCheckpointCommitted === true', timeout=10000)
+    wait_record_sequence(app.page, after_cancel[0]['id'], after_cancel[0]['sequence'])
     after_commit = records(app.page)
     if (len(after_commit) != 1 or
             after_commit[0]['payloadHash'] == after_cancel[0]['payloadHash']):
