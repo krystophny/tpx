@@ -2214,6 +2214,8 @@ begin
   if (CurrentSession <> nil) and CurrentSession.IsActive and
     (FEditSession = CurrentSession) then Exit(True);
   Result := TrySettleEditSession;
+  if not Result and InlineTextEditActive and FInlineTextMemo.CanFocus then
+    FInlineTextMemo.SetFocus;
 end;
 
 function TMainForm.InspectorCurrentEpoch: QWord;
