@@ -57,6 +57,12 @@ To build a figure from a blank page:
    TpX keeps ordinary fallback text editable on the canvas.
 3. Select objects to inspect their positions, dimensions, and styles in the
    **Inspector**. Use **Object properties** to edit all properties.
+
+   ![A scientific curve in TpX with the selected line's properties open in the Inspector](doc/first-scientific-figure-inspector.png)
+
+   The Inspector stays beside the drawing, so edits can be checked against the
+   figure as you work.
+
 4. Choose **File → Save as…**, select **TikZ source**, and save `figure.tikz`.
    Keep the `.TpX` file for native editing; TikZ save-back supports a defined
    subset and refuses edits it cannot represent safely.
