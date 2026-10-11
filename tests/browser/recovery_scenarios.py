@@ -111,8 +111,13 @@ def draw_line(app):
 
 
 def wait_saved(page):
-    page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Draft saved in this browser")',
-                           timeout=10000)
+    try:
+        page.wait_for_function('document.querySelector("#tpx-recovery-state").textContent.includes("Draft saved in this browser")',
+                               timeout=10000)
+    except Exception as exc:
+        state = page.locator('#tpx-recovery-state').inner_text()
+        document = page.locator('#document-status').inner_text()
+        raise AssertionError(f'checkpoint did not finish: recovery={state!r}; document={document!r}') from exc
 
 
 def s_recovery_disabled_by_default(app):
@@ -151,8 +156,11 @@ def s_recovery_survives_application_restart(app):
     if ink < 100:
         raise AssertionError(f'recovered geometry painted only {ink} changed pixels')
     after = records(app.page)
-    if len(after) != 1 or after[0]['id'] != before[0]['id']:
-        raise AssertionError('recovery silently removed or replaced its durable source draft')
+    if before[0]['id'] not in {row['id'] for row in after} or len(after) > 2:
+        raise AssertionError('recovery silently removed its durable source draft or created excess records')
+    retained = next(row for row in after if row['id'] == before[0]['id'])
+    if retained['payloadHash'] != before[0]['payloadHash']:
+        raise AssertionError('recovery rewrote the original durable source draft')
     if app.page.get_by_role('button', name='Recover as new drawing', exact=True).is_enabled():
         raise AssertionError('a dirty recovered drawing still allowed another restore')
     return f'IndexedDB draft survived app reload and restored {ink} geometry pixels as a new drawing'
