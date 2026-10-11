@@ -1324,6 +1324,7 @@ begin
       end;
     end;
   end;
+  FScroll.ScrollInView(FWidgets[Field].Editor);
   FSelectionLabel.Caption := 'Editing ' + FWidgets[Field].Editor.Hint;
 end;
 
@@ -1693,7 +1694,10 @@ begin
   end;
   LayoutSections;
   if FWidgets[Field].Editor.CanFocus then
+  begin
+    FScroll.ScrollInView(FWidgets[Field].Editor);
     FWidgets[Field].Editor.SetFocus;
+  end;
 end;
 
 procedure TObjectInspector.FocusObject(Obj: TObject2D);

@@ -13,9 +13,9 @@ uses
   LCLIntf, LCLType, LMessages, LResources,
 {$ENDIF}
   Devices, Modes, PlatformShortcuts, ObjectInspector, EditSessions,
-  PropertyEdits
+  PropertyEdits, CompositionAwareControls
 {$IFDEF FPC}
-  , LazFileUtils, DocumentFormats, FileWatch, AutoReload
+  , LazFileUtils, LazUTF8, DocumentFormats, FileWatch, AutoReload
 {$IFNDEF CPUWASM32}
   , SyncObjs, AutoSaveRuntime, AutoSaveStore, AutoSavePreferences,
   UserStorage
@@ -630,8 +630,49 @@ type
     FInspectorHost: TPanel;
     FInspectorSplitter: TSplitter;
     FInspectorMenuItem: TMenuItem;
+    FInlineSession: TObjectEditSession;
+    FInlineTextMemo: TCompositionAwareMemo;
+    FInlineTextFieldLabel: TLabel;
+    FInlineTextDoneButton: TButton;
+    FInlineTextCancelButton: TButton;
+    FInlineTextField: TObjectPropertyField;
+    FInlineTargetID: Integer;
+    FInlineFocusGeneration: Integer;
+    FInlineNewTextObject: Boolean;
+    FInlineUpdating: Boolean;
+    FInlineStableText: TEditUtf8Text;
+    FInlineStableSelStart: Integer;
+    FInlineStableSelLength: Integer;
+    FInlineCompositionActive: Boolean;
+    FInlineCompositionHadTextChange: Boolean;
+    FUpdatingInlineTextPosition: Boolean;
+    FInlinePositionQueued: Boolean;
+    FSavedActionListState: TActionListState;
+    procedure ShowInlineTextEditor(const InitialText: TEditUtf8Text);
+    procedure CaptureInlineStableTextState;
+    procedure CaptureInlineStableSelection;
+    procedure RestoreInlineStableTextState;
+    procedure InlineTextChanged(Sender: TObject);
+    procedure InlineTextCompositionChanged(Sender: TObject;
+      Composing: Boolean);
+    procedure InlineTextKeyDown(Sender: TObject; var Key: Word;
+      Shift: TShiftState);
+    procedure InlineTextKeyUp(Sender: TObject; var Key: Word;
+      Shift: TShiftState);
+    procedure InlineTextMouseUp(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
+    procedure InlineTextDone(Sender: TObject);
+    procedure InlineTextCancel(Sender: TObject);
+    procedure EditTextMenuClick(Sender: TObject);
+    procedure CloseInlineTextEditor;
+    procedure AdvanceInlineTextFocusGeneration;
+    procedure UpdateInlineTextEditorPosition;
+    procedure LocalViewResized(Sender: TObject);
+    procedure ApplyInlineTextEditorPosition(Data: PtrInt);
+    procedure RestoreBlockedInlineTextFocus(Data: PtrInt);
     function GetCurrentDocumentEpoch: QWord;
     function GetHasActiveEditSession: Boolean;
+    function GetInlineTextEditActive: Boolean;
     function BeforeSelectionChange(Sender: TObject): Boolean;
     function SendSettledMessage(Msg: TEventMessage;
       Sender: TObject): Boolean;
@@ -732,6 +773,17 @@ type
       const HasObject, HasSelection, IsOnObject,
       IsOnPoint, CanDeletePoints: Boolean);
     procedure SetCurrentProperties;
+    function BeginInlineTextEdit(Obj: TObject2D): Boolean;
+    function BeginNewInlineTextEdit(Obj: TText2D): Boolean;
+    function CommitInlineTextEdit: Boolean;
+    procedure CancelInlineTextEdit;
+    procedure EditSelectedText(Sender: TObject);
+    function TryAdoptRecoveredInlineTextSession(
+      Session: TObjectEditSession): Boolean;
+    procedure RecoveryEditSessionRestored(Sender: TObject;
+      Session: TObjectEditSession);
+    function ShouldSkipInlineInspectorFieldRefresh(Sender: TObject;
+      Field: TObjectPropertyField; const TargetIDs: TEditTargetIDs): Boolean;
     function RegisterEditSession(Session: TObjectEditSession): Boolean;
     procedure UnregisterEditSession(Session: TObjectEditSession);
     function TrySettleEditSession: Boolean;
@@ -740,6 +792,12 @@ type
     procedure ApplyInspectorSettings;
     procedure ShowInspector;
     procedure RefreshInspectorSelection;
+    property InlineTextEditActive: Boolean read GetInlineTextEditActive;
+    property InlineTextTargetID: Integer read FInlineTargetID;
+    property InlineTextField: TObjectPropertyField read FInlineTextField;
+    property InlineTextMemo: TCompositionAwareMemo read FInlineTextMemo;
+    property InlineTextFieldLabel: TLabel read FInlineTextFieldLabel;
+    property InlineTextDoneButton: TButton read FInlineTextDoneButton;
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
     function BeginDocumentWatchBinding(const Path: TDocumentPath;
@@ -813,6 +871,48 @@ uses Output, Input, Settings0, ColorEtc, Geometry, Options,
 {$ENDIF}
 {$ENDIF}
   ;
+
+function UTF8BytesToLCLText(const Value: TEditUtf8Text): string;
+var
+  Bytes: RawByteString;
+begin
+  Bytes := RawByteString(Value);
+  SetCodePage(Bytes, DefaultSystemCodePage, False);
+  Result := string(Bytes);
+end;
+
+function InlineTextCaretOffset(const Value: TEditUtf8Text): Integer;
+begin
+{$IFDEF CPUWASM32}
+  Result := UTF8Length(Value);
+{$ELSE}
+{$IFDEF LCLGTK2}
+  Result := UTF8Length(Value);
+{$ELSE}
+  Result := Length(UTF8Decode(Value));
+{$ENDIF}
+{$ENDIF}
+end;
+
+function FindDrawingObjectByID(List: TGraphicObjList;
+  ID: Integer): TObject2D;
+var
+  Obj: TGraphicObject;
+begin
+  Result := nil;
+  if List = nil then Exit;
+  Obj := List.FirstObj;
+  while Obj <> nil do
+  begin
+    if Obj.ID = ID then Exit(Obj as TObject2D);
+    if Obj is TGroup2D then
+    begin
+      Result := FindDrawingObjectByID((Obj as TGroup2D).Objects, ID);
+      if Result <> nil then Exit;
+    end;
+    Obj := List.NextObj;
+  end;
+end;
 
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
@@ -1077,6 +1177,20 @@ begin
   InspectorPanelWidth := 360;
   InspectorPanelVisible := True;
   BuildObjectInspector;
+{$IFDEF FPC}
+{$IFNDEF CPUWASM32}
+  OnRecoveryEditSessionRestored := RecoveryEditSessionRestored;
+{$ENDIF}
+{$ENDIF}
+  FInlineSession := nil;
+  FInlineTextMemo := nil;
+  FInlineTextFieldLabel := nil;
+  FInlineTextDoneButton := nil;
+  FInlineTextCancelButton := nil;
+  FInlineTargetID := -1;
+  FInlineFocusGeneration := 0;
+  FInlineNewTextObject := False;
+  FInlineUpdating := False;
   EventManager.OnExit := OnExit;
   OnDropFiles := OpenRequestedDocuments;
   EventManager.PushMode(BaseMode);
@@ -1099,6 +1213,8 @@ begin
   LocalView.ShowCrossHair := True;
   LocalView.GridOnTop := False;
   LocalView.OnEndRedraw := LocalViewEndRedraw;
+  LocalView.OnResize := LocalViewResized;
+  LocalView.OnViewMappingChanged := LocalViewResized;
 {$IFDEF FPC}
   InitializeLiveTeX(LiveTeXChanged);
 {$IFNDEF CPUWASM32}
@@ -1319,6 +1435,609 @@ begin
   Result := (FEditSession <> nil) and FEditSession.IsActive;
 end;
 
+function TMainForm.GetInlineTextEditActive: Boolean;
+begin
+  Result := (FInlineSession <> nil) and FInlineSession.IsActive and
+    (FInlineTextMemo <> nil);
+end;
+
+procedure TMainForm.ShowInlineTextEditor(
+  const InitialText: TEditUtf8Text);
+var
+  TextObj: TText2D;
+  FontPixels: Integer;
+begin
+  AdvanceInlineTextFocusGeneration;
+  FInlineTextFieldLabel := TLabel.Create(Self);
+  FInlineTextFieldLabel.Name := 'InlineTextFieldLabel';
+  FInlineTextFieldLabel.Parent := LocalView;
+  FInlineTextFieldLabel.FocusControl := nil;
+  FInlineTextFieldLabel.AutoSize := False;
+
+  FInlineTextDoneButton := TButton.Create(Self);
+  FInlineTextDoneButton.Name := 'InlineTextDoneButton';
+  FInlineTextDoneButton.Parent := LocalView;
+  FInlineTextDoneButton.Caption := 'Done';
+  FInlineTextDoneButton.OnClick := InlineTextDone;
+  FInlineTextDoneButton.TabOrder := 1;
+
+  FInlineTextCancelButton := TButton.Create(Self);
+  FInlineTextCancelButton.Name := 'InlineTextCancelButton';
+  FInlineTextCancelButton.Parent := LocalView;
+  FInlineTextCancelButton.Caption := 'Cancel';
+  FInlineTextCancelButton.OnClick := InlineTextCancel;
+  FInlineTextCancelButton.TabOrder := 2;
+
+  FInlineTextMemo := TCompositionAwareMemo.Create(Self);
+  FInlineTextMemo.Name := 'InlineTextMemo';
+  FInlineTextMemo.Parent := LocalView;
+  if FInlineTextField = opfTeXText then
+    FInlineTextMemo.Hint := 'TeX source (canvas)'
+  else
+    FInlineTextMemo.Hint := 'Text (canvas)';
+  FInlineTextMemo.WordWrap := True;
+  FInlineTextMemo.WantTabs := False;
+  FInlineTextMemo.ScrollBars := ssAutoBoth;
+  FInlineTextMemo.OnChange := InlineTextChanged;
+  FInlineTextMemo.OnKeyDown := InlineTextKeyDown;
+  FInlineTextMemo.OnKeyUp := InlineTextKeyUp;
+  FInlineTextMemo.OnMouseUp := InlineTextMouseUp;
+  FInlineTextMemo.OnCompositionChanged := InlineTextCompositionChanged;
+  FInlineTextFieldLabel.FocusControl := FInlineTextMemo;
+  FInlineUpdating := True;
+  FInlineTextMemo.Text := UTF8BytesToLCLText(InitialText);
+  FInlineUpdating := False;
+  FInlineTextMemo.SelStart := InlineTextCaretOffset(InitialText);
+  FInlineTextMemo.SelLength := 0;
+
+  if FInlineTextField = opfTeXText then
+    FInlineTextFieldLabel.Caption := 'TeX source'
+  else
+    FInlineTextFieldLabel.Caption := 'Text';
+  TextObj := FindDrawingObjectByID(TheDrawing.ObjectList,
+    FInlineTargetID) as TText2D;
+  if TextObj <> nil then
+  begin
+    FInlineTextMemo.Font.Name := TextObj.FaceName;
+    FInlineTextMemo.Font.Style := TextObj.Style;
+    if LocalView.PixelSize > 0 then
+      FontPixels := Round(TextObj.Height / LocalView.PixelSize)
+    else
+      FontPixels := 12;
+    if FontPixels < 10 then FontPixels := 10;
+    if FontPixels > 32 then FontPixels := 32;
+    FInlineTextMemo.Font.Height := -FontPixels;
+  end;
+  FSavedActionListState := ActionList1.State;
+  ActionList1.State := asNormal;
+  UpdateInlineTextEditorPosition;
+  FInlineTextFieldLabel.Visible := True;
+  FInlineTextDoneButton.Visible := True;
+  FInlineTextCancelButton.Visible := True;
+  FInlineTextMemo.Visible := True;
+  FInlineTextMemo.SetFocus;
+  FInlineTextMemo.SelStart := InlineTextCaretOffset(InitialText);
+  FInlineTextMemo.SelLength := 0;
+  CaptureInlineStableTextState;
+  FInlineCompositionActive := False;
+  FInlineCompositionHadTextChange := False;
+end;
+
+procedure TMainForm.CaptureInlineStableTextState;
+begin
+  if FInlineTextMemo = nil then Exit;
+  FInlineStableText := LCLTextToUTF8Bytes(FInlineTextMemo.EditText);
+  FInlineStableSelStart := FInlineTextMemo.SelStart;
+  FInlineStableSelLength := FInlineTextMemo.SelLength;
+end;
+
+procedure TMainForm.CaptureInlineStableSelection;
+begin
+  if FInlineUpdating or (FInlineTextMemo = nil) then Exit;
+  FInlineTextMemo.RefreshCompositionState;
+  if FInlineTextMemo.CompositionPending then Exit;
+  if LCLTextToUTF8Bytes(FInlineTextMemo.EditText) <> FInlineStableText then
+    Exit;
+  FInlineStableSelStart := FInlineTextMemo.SelStart;
+  FInlineStableSelLength := FInlineTextMemo.SelLength;
+end;
+
+procedure TMainForm.RestoreInlineStableTextState;
+begin
+  if FInlineTextMemo = nil then Exit;
+  FInlineUpdating := True;
+  try
+    FInlineTextMemo.Text := UTF8BytesToLCLText(FInlineStableText);
+    FInlineTextMemo.SelStart := FInlineStableSelStart;
+    FInlineTextMemo.SelLength := FInlineStableSelLength;
+  finally
+    FInlineUpdating := False;
+  end;
+end;
+
+procedure TMainForm.InlineTextChanged(Sender: TObject);
+var
+  ErrorText: string;
+  DisplayText: TEditUtf8Text;
+begin
+  if FInlineUpdating or (FInlineSession = nil) or
+    (FInlineTextMemo = nil) then Exit;
+  FInlineTextMemo.RefreshCompositionState;
+  if FInlineTextMemo.SampleCompositionState or
+    FInlineTextMemo.CompositionPending then
+  begin
+    FInlineCompositionHadTextChange := True;
+    FInlineSession.SetCompositionPending(True);
+    Exit;
+  end;
+  DisplayText := LCLTextToUTF8Bytes(FInlineTextMemo.EditText);
+  if not FInlineSession.TrySetRawDraft(FInlineTextField,
+    DisplayText, ErrorText) then
+    FInlineTextFieldLabel.Caption := ErrorText
+  else if FInlineTextField = opfTeXText then
+    FInlineTextFieldLabel.Caption := 'TeX source'
+  else
+    FInlineTextFieldLabel.Caption := 'Text';
+  CaptureInlineStableTextState;
+end;
+
+procedure TMainForm.InlineTextCompositionChanged(Sender: TObject;
+  Composing: Boolean);
+var
+  ErrorText: string;
+  AcceptComposition: Boolean;
+  DisplayText: TEditUtf8Text;
+begin
+  if (FInlineSession = nil) or (FInlineTextMemo = nil) then Exit;
+  if Composing then
+  begin
+    if not FInlineCompositionActive then
+    begin
+      if LCLTextToUTF8Bytes(FInlineTextMemo.EditText) =
+        FInlineStableText then
+      begin
+        FInlineStableSelStart := FInlineTextMemo.SelStart;
+        FInlineStableSelLength := FInlineTextMemo.SelLength;
+      end;
+      FInlineCompositionActive := True;
+      FInlineCompositionHadTextChange := False;
+    end;
+    FInlineSession.SetCompositionPending(True);
+    Exit;
+  end;
+
+  FInlineTextMemo.RefreshCompositionState;
+  if FInlineTextMemo.CompositionPending then
+  begin
+    FInlineSession.SetCompositionPending(True);
+    Exit;
+  end;
+
+  DisplayText := LCLTextToUTF8Bytes(FInlineTextMemo.EditText);
+{$IFDEF LCLCOCOA}
+  AcceptComposition := FInlineTextMemo.CompositionCommitted;
+{$ELSE}
+  AcceptComposition := FInlineTextMemo.CompositionCommitted or
+    FInlineCompositionHadTextChange or (DisplayText <> FInlineStableText);
+{$ENDIF}
+  if AcceptComposition then
+  begin
+    if not FInlineSession.TrySetRawDraft(FInlineTextField,
+      DisplayText, ErrorText) and (FInlineTextFieldLabel <> nil) then
+      FInlineTextFieldLabel.Caption := ErrorText;
+    CaptureInlineStableTextState;
+  end
+{$IFDEF LCLCOCOA}
+  else
+    RestoreInlineStableTextState
+{$ENDIF}
+  ;
+  FInlineCompositionActive := False;
+  FInlineCompositionHadTextChange := False;
+  FInlineSession.SetCompositionPending(False);
+end;
+
+procedure TMainForm.InlineTextKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  if Key = VK_ESCAPE then
+  begin
+    FInlineTextMemo.RefreshCompositionState;
+    if not FInlineTextMemo.CompositionPending then
+    begin
+      Key := 0;
+      CancelInlineTextEdit;
+    end;
+  end
+  else if (Key = VK_RETURN) and (ssModifier in Shift) then
+  begin
+    Key := 0;
+    CommitInlineTextEdit;
+  end
+  else if Key = VK_TAB then
+  begin
+    Key := 0;
+    CommitInlineTextEdit;
+  end;
+end;
+
+procedure TMainForm.InlineTextKeyUp(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  CaptureInlineStableSelection;
+end;
+
+procedure TMainForm.InlineTextMouseUp(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  CaptureInlineStableSelection;
+end;
+
+procedure TMainForm.InlineTextDone(Sender: TObject);
+begin
+  CommitInlineTextEdit;
+end;
+
+procedure TMainForm.InlineTextCancel(Sender: TObject);
+begin
+  CancelInlineTextEdit;
+end;
+
+procedure TMainForm.UpdateInlineTextEditorPosition;
+var
+  TextObj: TText2D;
+  GraphicObj: TObject2D;
+  Anchor: TPoint2D;
+  LeftPos, TopPos, EditorWidth, EditorHeight, FontPixels, LineCount, I: Integer;
+begin
+  if (FInlineTextMemo = nil) or (LocalView = nil) or
+    FUpdatingInlineTextPosition then Exit;
+  FUpdatingInlineTextPosition := True;
+  try
+    GraphicObj := FindDrawingObjectByID(TheDrawing.ObjectList,
+      FInlineTargetID);
+    if not (GraphicObj is TText2D) then Exit;
+    TextObj := GraphicObj as TText2D;
+    Anchor := LocalView.ViewportToScreen(TextObj.Points[0]);
+    if LocalView.PixelSize > 0 then
+      FontPixels := Round(TextObj.Height / LocalView.PixelSize)
+    else
+      FontPixels := 12;
+    if FontPixels < 10 then FontPixels := 10;
+    LineCount := 1;
+    for I := 1 to Length(FInlineTextMemo.Text) do
+      if FInlineTextMemo.Text[I] = #10 then Inc(LineCount);
+    EditorHeight := LineCount * (FontPixels + 4) + 18;
+    if EditorHeight < 58 then EditorHeight := 58;
+    if EditorHeight > 190 then EditorHeight := 190;
+    EditorWidth := LocalView.ClientWidth - 12;
+    if EditorWidth > 380 then EditorWidth := 380;
+    if EditorWidth < 180 then EditorWidth := LocalView.ClientWidth;
+    LeftPos := Round(Anchor.X);
+    case TextObj.HAlignment of
+      ahCenter: Dec(LeftPos, EditorWidth div 2);
+      ahRight: Dec(LeftPos, EditorWidth);
+    end;
+    if LeftPos + EditorWidth > LocalView.ClientWidth then
+      LeftPos := LocalView.ClientWidth - EditorWidth;
+    if LeftPos < 0 then LeftPos := 0;
+    TopPos := Round(Anchor.Y) - FontPixels - EditorHeight - 24;
+    if TopPos < 0 then TopPos := Round(Anchor.Y) + 4;
+    if TopPos + EditorHeight + 24 > LocalView.ClientHeight then
+      TopPos := LocalView.ClientHeight - EditorHeight - 24;
+    if TopPos < 0 then TopPos := 0;
+    FInlineTextFieldLabel.SetBounds(LeftPos, TopPos, 160, 20);
+    FInlineTextDoneButton.SetBounds(LeftPos + EditorWidth - 150,
+      TopPos, 70, 24);
+    FInlineTextCancelButton.SetBounds(LeftPos + EditorWidth - 76,
+      TopPos, 76, 24);
+    FInlineTextMemo.SetBounds(LeftPos, TopPos + 22,
+      EditorWidth, EditorHeight);
+  finally
+    FUpdatingInlineTextPosition := False;
+  end;
+end;
+
+procedure TMainForm.LocalViewResized(Sender: TObject);
+begin
+  if (FInlineTextMemo <> nil) and not FInlinePositionQueued then
+  begin
+    FInlinePositionQueued := True;
+    Application.QueueAsyncCall(ApplyInlineTextEditorPosition, 0);
+  end;
+end;
+
+procedure TMainForm.ApplyInlineTextEditorPosition(Data: PtrInt);
+begin
+  FInlinePositionQueued := False;
+  UpdateInlineTextEditorPosition;
+end;
+
+procedure TMainForm.RestoreBlockedInlineTextFocus(Data: PtrInt);
+begin
+  if (Data <> FInlineFocusGeneration) or not InlineTextEditActive then Exit;
+  if (FInlineTextMemo <> nil) and FInlineTextMemo.CanFocus then
+    FInlineTextMemo.SetFocus;
+end;
+
+function TMainForm.BeginInlineTextEdit(Obj: TObject2D): Boolean;
+var
+  TextObj: TText2D;
+  DisplayText: TEditUtf8Text;
+  ErrorText: string;
+  TargetID: Integer;
+  Session: TObjectEditSession;
+begin
+  Result := False;
+  if not (Obj is TText2D) then Exit;
+  if FInlineSession <> nil then
+    if not CommitInlineTextEdit then Exit;
+  if (FEditSession <> nil) and FEditSession.IsActive then
+    if not TrySettleEditSession then Exit;
+
+  TextObj := Obj as TText2D;
+  TargetID := TheDrawing.EnsureUniqueObjectID(TextObj);
+  Session := TObjectEditSession.Create(TheDrawing,
+    CurrentDocumentEpoch, [TargetID]);
+  Session.Presentation := espInlineText;
+  if not RegisterEditSession(Session) then
+  begin
+    Session.Free;
+    Exit;
+  end;
+  FInlineSession := Session;
+  FInlineTargetID := TargetID;
+  FInlineNewTextObject := False;
+  if TextObj.TeXText <> '' then
+  begin
+    FInlineTextField := opfTeXText;
+    DisplayText := TextObj.TeXText;
+  end
+  else
+  begin
+    FInlineTextField := opfText;
+    DisplayText := DecodeTpXTextForEdit(TextObj.Text);
+  end;
+  if not Session.TrySetRawDraft(FInlineTextField, DisplayText,
+    ErrorText) then
+    StatusBar1.Panels[0].Text := ErrorText;
+  ShowInlineTextEditor(DisplayText);
+  Result := FInlineTextMemo <> nil;
+end;
+
+function TMainForm.BeginNewInlineTextEdit(Obj: TText2D): Boolean;
+var
+  Session: TObjectEditSession;
+  ErrorText: string;
+begin
+  Result := False;
+  if Obj = nil then Exit;
+  if FInlineSession <> nil then
+    if not CommitInlineTextEdit then Exit;
+  if (FEditSession <> nil) and FEditSession.IsActive then
+    if not TrySettleEditSession then Exit;
+
+  Session := TObjectEditSession.Create(TheDrawing,
+    CurrentDocumentEpoch, []);
+  Session.Presentation := espInlineText;
+  if not RegisterEditSession(Session) then
+  begin
+    Session.Free;
+    Exit;
+  end;
+  FInlineSession := Session;
+  try
+    FInlineTargetID := Session.AddProvisional(Obj);
+  except
+    Session.Cancel(CurrentDocumentEpoch);
+    UnregisterEditSession(Session);
+    FInlineSession := nil;
+    Session.Free;
+    Exit;
+  end;
+  FInlineNewTextObject := True;
+  FInlineTextField := opfText;
+  if not Session.TrySetRawDraft(opfText, TEditUtf8Text(''), ErrorText) then
+    StatusBar1.Panels[0].Text := ErrorText;
+  ShowInlineTextEditor(TEditUtf8Text(''));
+  Result := FInlineTextMemo <> nil;
+end;
+
+function TMainForm.CommitInlineTextEdit: Boolean;
+var
+  Session: TObjectEditSession;
+  Patch: TObjectPropertyPatch;
+  ErrorText: string;
+  DisplayText: TEditUtf8Text;
+begin
+  Result := True;
+  Session := FInlineSession;
+  if Session = nil then Exit;
+  if (FInlineTextMemo = nil) or not Session.IsActive then
+  begin
+    Result := False;
+    Exit;
+  end;
+  FInlineTextMemo.RefreshCompositionState;
+  Session.SetCompositionPending(FInlineTextMemo.CompositionPending);
+  if Session.CompositionPending then
+  begin
+    StatusBar1.Panels[0].Text := 'Finish text composition before continuing';
+    Exit(False);
+  end;
+  DisplayText := LCLTextToUTF8Bytes(FInlineTextMemo.EditText);
+  if FInlineNewTextObject and (DisplayText = '') then
+  begin
+    CancelInlineTextEdit;
+    Exit(True);
+  end;
+  if not Session.TrySetRawDraft(FInlineTextField,
+    DisplayText, ErrorText) then
+  begin
+    FInlineTextFieldLabel.Caption := ErrorText;
+    Exit(False);
+  end;
+
+  Patch.Fields := [];
+  Include(Patch.Fields, FInlineTextField);
+  if FInlineTextField = opfText then
+    Patch.Text := EncodeEditTextForTpX(DisplayText)
+  else
+    Patch.TeXText := DisplayText;
+  Session.SetRawDraftPendingForField(FInlineTextField, False);
+  if not Session.Preview(Patch, CurrentDocumentEpoch, ErrorText) then
+  begin
+    Session.SetRawDraftPendingForField(FInlineTextField, True);
+    FInlineTextFieldLabel.Caption := ErrorText;
+    Exit(False);
+  end;
+  if not Session.Commit(CurrentDocumentEpoch, ErrorText) then
+  begin
+    Session.SetRawDraftPendingForField(FInlineTextField, True);
+    if FInlineTextFieldLabel <> nil then
+      FInlineTextFieldLabel.Caption := ErrorText;
+    Exit(False);
+  end;
+  CloseInlineTextEditor;
+end;
+
+procedure TMainForm.CancelInlineTextEdit;
+var
+  Session: TObjectEditSession;
+begin
+  Session := FInlineSession;
+  if Session = nil then Exit;
+  if Session.IsActive and not Session.Cancel(CurrentDocumentEpoch) then Exit;
+  CloseInlineTextEditor;
+end;
+
+procedure TMainForm.AdvanceInlineTextFocusGeneration;
+begin
+  if FInlineFocusGeneration = High(Integer) then
+    FInlineFocusGeneration := 1
+  else
+    Inc(FInlineFocusGeneration);
+end;
+
+procedure TMainForm.CloseInlineTextEditor;
+begin
+  AdvanceInlineTextFocusGeneration;
+  if FInlineSession <> nil then
+  begin
+    FInlineSession.OnInteractionChanged := nil;
+    if FEditSession = FInlineSession then FEditSession := nil;
+    FInlineSession.Free;
+    FInlineSession := nil;
+  end;
+  if FInlineTextFieldLabel <> nil then
+  begin
+    FInlineTextFieldLabel.FocusControl := nil;
+    FreeAndNil(FInlineTextFieldLabel);
+  end;
+  FreeAndNil(FInlineTextDoneButton);
+  FreeAndNil(FInlineTextCancelButton);
+  if FInlineTextMemo <> nil then
+  begin
+    FInlineTextMemo.OnChange := nil;
+    FInlineTextMemo.OnKeyDown := nil;
+    FInlineTextMemo.OnKeyUp := nil;
+    FInlineTextMemo.OnMouseUp := nil;
+    FInlineTextMemo.OnCompositionChanged := nil;
+    FInlineTextMemo.Lines.Clear;
+    FreeAndNil(FInlineTextMemo);
+  end;
+  FInlineTargetID := -1;
+  FInlineNewTextObject := False;
+  FInlineStableText := '';
+  FInlineStableSelStart := 0;
+  FInlineStableSelLength := 0;
+  FInlineCompositionActive := False;
+  FInlineCompositionHadTextChange := False;
+  ActionList1.State := FSavedActionListState;
+  if (LocalView <> nil) and LocalView.CanFocus then LocalView.SetFocus;
+end;
+
+procedure TMainForm.EditSelectedText(Sender: TObject);
+var
+  Obj: TGraphicObject;
+begin
+  Obj := TheDrawing.SelectedObjects.FirstObj;
+  if Obj is TText2D then BeginInlineTextEdit(Obj as TObject2D);
+end;
+
+procedure TMainForm.EditTextMenuClick(Sender: TObject);
+begin
+  EditSelectedText(Sender);
+end;
+
+function TMainForm.TryAdoptRecoveredInlineTextSession(
+  Session: TObjectEditSession): Boolean;
+var
+  Targets: TEditTargetIDs;
+  Drafts: TRawEditDraftArray;
+  Obj: TObject2D;
+begin
+  Result := False;
+  if (Session = nil) or not Session.IsActive or
+    (Session.Presentation <> espInlineText) or
+    (FInlineSession <> nil) then Exit;
+  Targets := Session.CopyTargetIDs;
+  Drafts := Session.CopyRawDrafts;
+  if (Length(Targets) <> 1) or (Length(Drafts) = 0) then Exit;
+  if not (Drafts[0].Field in [opfText, opfTeXText]) then Exit;
+  Obj := FindDrawingObjectByID(TheDrawing.ObjectList, Targets[0]);
+  if not (Obj is TText2D) then Exit;
+  if Session.IsProvisionalTarget(Targets[0]) and
+    (Drafts[0].Text = '') then Exit;
+
+  FInlineSession := Session;
+  FInlineTargetID := Targets[0];
+  FInlineNewTextObject := Session.IsProvisionalTarget(Targets[0]);
+  FInlineTextField := Drafts[0].Field;
+  try
+    ShowInlineTextEditor(Drafts[0].Text);
+  except
+    FInlineSession := nil;
+    FInlineTargetID := -1;
+    FInlineNewTextObject := False;
+    raise;
+  end;
+  Result := FInlineTextMemo <> nil;
+end;
+
+procedure TMainForm.RecoveryEditSessionRestored(Sender: TObject;
+  Session: TObjectEditSession);
+var
+  Adopted: Boolean;
+begin
+  Adopted := False;
+  case Session.Presentation of
+    espInlineText: Adopted := TryAdoptRecoveredInlineTextSession(Session);
+    espInspector:
+      if Inspector <> nil then
+        Adopted := Inspector.AdoptRecoverySession(Session);
+  end;
+  if Adopted then Exit;
+  UnregisterEditSession(Session);
+  Session.Free;
+end;
+
+function TMainForm.ShouldSkipInlineInspectorFieldRefresh(
+  Sender: TObject; Field: TObjectPropertyField;
+  const TargetIDs: TEditTargetIDs): Boolean;
+var
+  ExpandedIDs: TEditTargetIDs;
+  ErrorText: string;
+  I: Integer;
+begin
+  Result := False;
+  if not InlineTextEditActive or (Field <> FInlineTextField) then Exit;
+  ExpandedIDs := ExpandObjectEditTargetIDs(TheDrawing, TargetIDs,
+    ErrorText);
+  for I := 0 to High(ExpandedIDs) do
+    if ExpandedIDs[I] = FInlineTargetID then Exit(True);
+end;
+
 function TMainForm.RegisterEditSession(
   Session: TObjectEditSession): Boolean;
 begin
@@ -1351,11 +2070,20 @@ function TMainForm.TrySettleEditSession: Boolean;
 var ErrorText: string; Session: TObjectEditSession;
 begin
   if Inspector <> nil then Inspector.RefreshCompositionState;
+  if FInlineTextMemo <> nil then FInlineTextMemo.RefreshCompositionState;
+  if (FInlineSession <> nil) and (FInlineTextMemo <> nil) then
+    FInlineSession.SetCompositionPending(
+      FInlineTextMemo.CompositionPending);
   Session := FEditSession;
   if (Session = nil) or not Session.IsActive then
   begin
     FEditSession := nil;
     Exit(True);
+  end;
+  if Session = FInlineSession then
+  begin
+    Result := CommitInlineTextEdit;
+    Exit;
   end;
   Result := Session.Commit(CurrentDocumentEpoch, ErrorText);
   if Result and (FEditSession = Session) then FEditSession := nil;
@@ -1443,6 +2171,8 @@ begin
   Inspector.OnBeforeFieldInput := InspectorBeforeFieldInput;
   Inspector.OnEditCommitted := InspectorEditCommitted;
   Inspector.OnOpenCoordinates := InspectorOpenCoordinates;
+  Inspector.OnShouldSkipFieldRefresh :=
+    ShouldSkipInlineInspectorFieldRefresh;
   SetLength(EmptyIDs, 0);
   Inspector.Bind(TheDrawing, EmptyIDs, InspectorCurrentEpoch);
 
@@ -1505,6 +2235,9 @@ begin
   if (CurrentSession <> nil) and CurrentSession.IsActive and
     (FEditSession = CurrentSession) then Exit(True);
   Result := TrySettleEditSession;
+  if not Result and InlineTextEditActive then
+    Application.QueueAsyncCall(RestoreBlockedInlineTextFocus,
+      PtrInt(FInlineFocusGeneration));
 end;
 
 function TMainForm.InspectorCurrentEpoch: QWord;
@@ -1775,6 +2508,13 @@ begin
   if HasSelection then AddAction(ClipboardCut);
   if HasSelection then AddAction(DeleteSelected);
   if HasSelection then AddAction(DuplicateSelected);
+  if HasSelection and (TheDrawing.SelectedObjects.FirstObj is TText2D) then
+  begin
+    Item := TMenuItem.Create(LocalPopUp);
+    Item.Caption := 'Edit Text';
+    Item.OnClick := EditTextMenuClick;
+    LocalPopUp.Items.Add(Item);
+  end;
   if HasObject then AddAction(ObjectProperties);
   if HasSelection then AddAction(ConvertTo);
   if IsOnObject and CanDeletePoints then AddAction(AddPoint);
@@ -1799,6 +2539,7 @@ procedure TMainForm.LocalViewMouseDown2D(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; WX, WY: TRealTypeX;
   X, Y: Integer);
 begin
+  if (FInlineSession <> nil) and not CommitInlineTextEdit then Exit;
   if LocalView.CanFocus and not LocalView.Focused then
     LocalView.SetFocus;
 {$IFDEF FPC}
@@ -1855,12 +2596,18 @@ function TMainForm.IsShortcut(var Message: TLMKey): Boolean;
 var
   Shortcut: TShortCut;
   EditableFocus: Boolean;
+  I: Integer;
+  Action: TAction;
+  ShortcutBelongsToCanvas: Boolean;
 begin
   EditableFocus := ActiveControl is TCustomEdit;
   if not EditableFocus and (ActiveControl is TCustomComboBox) then
     EditableFocus := TCustomComboBox(ActiveControl).Style.HasEditBox;
   if EditableFocus then
   begin
+    if (FInlineSession <> nil) and
+      (Message.CharCode in [VK_ESCAPE, VK_TAB, VK_RETURN]) then
+      Exit(False);
     Shortcut := Menus.ShortCut(Message.CharCode,
       KeyDataToShiftState(Message.KeyData));
     if (Shortcut <> 0) and
@@ -1873,6 +2620,24 @@ begin
        (Shortcut = SelectAll.ShortCut) or
        (Shortcut = DeleteSelected.ShortCut)) then
       Exit(False);
+    if (FInlineSession <> nil) and (Shortcut <> 0) and
+      not (Message.CharCode in [VK_ESCAPE, VK_TAB, VK_RETURN]) then
+    begin
+      ShortcutBelongsToCanvas := False;
+      for I := 0 to ActionList1.ActionCount - 1 do
+      begin
+        Action := ActionList1.Actions[I] as TAction;
+        if (Action.ShortCut <> Shortcut) and
+          (Action.SecondaryShortCuts.IndexOfShortCut(Shortcut) < 0) then
+          Continue;
+        if (Action = SaveDoc) or (Action = SaveAs) or
+          (Action = OpenDoc) or (Action = NewDoc) or (Action = Print) then
+          Continue;
+        ShortcutBelongsToCanvas := True;
+        Break;
+      end;
+      if ShortcutBelongsToCanvas then Exit(False);
+    end;
   end;
   Result := inherited IsShortcut(Message);
 end;
@@ -1950,6 +2715,7 @@ end;
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
   if Inspector <> nil then Inspector.CancelActiveEdit;
+  if FInlineSession <> nil then CancelInlineTextEdit;
   if FEditSession <> nil then
   begin
     UnregisterEditSession(FEditSession);
@@ -1972,6 +2738,7 @@ begin
   mHHelp.Free;
   HHCloseAll; //Close help before shutdown or big trouble
 {$ENDIF}
+  Application.RemoveAsyncCalls(Self);
   TheDrawing.Free;
   EventManager.Free;
   LocalView.Free;

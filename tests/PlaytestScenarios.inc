@@ -215,9 +215,23 @@ var
   HeightEditor, WidthEditor, FontEditor: TEdit;
   ErrorLabel, SelectionLabel: TLabel;
   LineStyleEditor: TComboBox;
+  ScrollControl: TScrollBox;
+  ScrollPoint: TPoint;
+  ScrollPosition: Integer;
+  I: Integer;
   ActiveName: string;
   Key: Word;
   Shift: TShiftState;
+  procedure CheckFieldVisibleInInspector(Editor: TControl;
+    const FieldName: string);
+  begin
+    ScrollPoint := Editor.ClientToParent(Point(0, 0), ScrollControl);
+    Check((ScrollPoint.Y >= 0) and
+      (ScrollPoint.Y + Editor.Height <= ScrollControl.ClientHeight),
+      FieldName + ' is outside the inspector viewport: top=' +
+      IntToStr(ScrollPoint.Y) + ', height=' + IntToStr(Editor.Height) +
+      ', viewport=' + IntToStr(ScrollControl.ClientHeight));
+  end;
 begin
   MainForm.Show;
   Application.ProcessMessages;
@@ -239,10 +253,19 @@ begin
   HeightEditor := MainForm.Inspector.EditorFor(opfTextHeight) as TEdit;
   WidthEditor := MainForm.Inspector.EditorFor(opfLineWidth) as TEdit;
   FontEditor := MainForm.Inspector.EditorFor(opfFontName) as TEdit;
+  ScrollControl := nil;
+  for I := 0 to MainForm.Inspector.ComponentCount - 1 do
+    if MainForm.Inspector.Components[I] is TScrollBox then
+    begin
+      ScrollControl := TScrollBox(MainForm.Inspector.Components[I]);
+      Break;
+    end;
+  Check(ScrollControl <> nil, 'Inspector scroll container was not created');
   ErrorLabel := MainForm.Inspector.FindComponent(
     'InspectorTextHeightError') as TLabel;
   for Bad in InvalidHeights do begin
     MainForm.Inspector.FocusField(opfTextHeight);
+    CheckFieldVisibleInInspector(HeightEditor, 'Text height editor');
     HeightEditor.Text := Bad;
     Check(not MainForm.Inspector.PrepareForSelectionChange(ErrorText),
       'Invalid text height was accepted: ' + Bad);
@@ -264,8 +287,11 @@ begin
   WidthEditor.Text := '-';
   Check(not MainForm.Inspector.PrepareForSelectionChange(ErrorText),
     'Invalid width draft unexpectedly committed before changing fields');
+  ScrollPosition := ScrollControl.VertScrollBar.Position;
   HeightEditor.SetFocus;
   Application.ProcessMessages;
+  Check(ScrollControl.VertScrollBar.Position = ScrollPosition,
+    'A blocked invalid-field handoff scrolled to the rejected field');
   HeightEditor.Text := '9';
   Application.ProcessMessages;
   Check(MainForm.Inspector.HasActiveEdit and (WidthEditor.Text = '-') and
@@ -276,6 +302,7 @@ begin
   MainForm.Inspector.CancelActiveEdit;
   HistoryCount := MainForm.TheDrawing.History.Count;
   MainForm.Inspector.FocusField(opfTextHeight);
+  CheckFieldVisibleInInspector(HeightEditor, 'Text height editor after cancel');
   HeightEditor.Text := '7.5';
   Check(TextObj.Height = 7.5, 'Valid height draft was not previewed');
   LineStyleEditor := MainForm.Inspector.EditorFor(opfLineStyle) as TComboBox;
@@ -324,11 +351,13 @@ begin
     (MainForm.TheDrawing.History.Count = HistoryCount + 1) and
     (MainForm.ActiveControl = FontEditor),
     'Explicit Tab did not commit and move to the next inspector field');
+  CheckFieldVisibleInInspector(FontEditor, 'Font family editor after Tab');
   Key := VK_TAB;
   Shift := [ssShift];
   FontEditor.OnKeyDown(FontEditor, Key, Shift);
   Check((Key = 0) and (MainForm.ActiveControl = HeightEditor),
     'Shift+Tab did not return to the previous inspector field');
+  CheckFieldVisibleInInspector(HeightEditor, 'Text height editor after Shift+Tab');
   MainForm.TheDrawing.History.Undo;
   TextObj := MainForm.TheDrawing.GetObject(0) as TText2D;
   Check(TextObj.Height = 7, 'Undo did not restore the draft before Tab commit');
@@ -565,12 +594,21 @@ var
   Combo: TComboBox;
   Edit: TEdit;
   Memo: TCompositionAwareMemo;
+  InlineMemo: TCompositionAwareMemo;
+{$IFDEF LCLCOCOA}
+  InlineTextView: TCocoaTextView;
+{$ENDIF}
   CheckBox: TCheckBox;
   ErrorText: string;
   FileName: string;
   Reloaded: TDrawing2D;
   Loader: T_TpX_Loader;
   ReloadedText: TText2D;
+  StableInlineText: string;
+  StablePlainStorage: AnsiString;
+  StableInlineCaret: Integer;
+  TestKey: Word;
+  TestShift: TShiftState;
 
   function InspectorTop(Control: TControl): Integer;
   begin
@@ -858,6 +896,47 @@ begin
   CheckCompositionEndWithoutTextChange;
   SelectObject(RectObj);
   CheckFieldEditorCompositionEndWithoutTextChange;
+  StablePlainStorage := TextObj.Text;
+  Check(MainForm.BeginInlineTextEdit(TextObj as TObject2D),
+    'Existing text did not open the inline canvas editor');
+  InlineMemo := MainForm.InlineTextMemo;
+  InlineMemo.Text := 'stable source draft';
+  InlineMemo.SelStart := 7;
+  InlineMemo.SelLength := 0;
+  TestKey := VK_RIGHT;
+  TestShift := [];
+  Check(Assigned(InlineMemo.OnKeyUp),
+    'Inline editor did not install its caret tracking handler');
+  InlineMemo.OnKeyUp(InlineMemo, TestKey, TestShift);
+  StableInlineText := InlineMemo.EditText;
+  StableInlineCaret := InlineMemo.SelStart;
+  Check(TextObj.TeXText = '\beta',
+    'Inline typing changed the model before Done');
+  InlineTextView := CocoaInspectorTextView(InlineMemo);
+  InlineTextView.supressTextChangeEvent := 1;
+  try
+    CocoaSetMarkedText(InlineMemo, 'unfinished composition');
+    Check(InlineMemo.CompositionPending,
+      'Native Cocoa inline preedit did not hold the edit session');
+    CocoaCancelMarkedText(InlineMemo);
+  finally
+    InlineTextView.supressTextChangeEvent := 0;
+  end;
+  CocoaDrainTextInputQueue(InlineMemo);
+  Check(not InlineMemo.CompositionPending,
+    'Canceled native inline composition left the session pending');
+  Check(InlineMemo.EditText = StableInlineText,
+    'Canceled native inline composition replaced the stable canvas draft');
+  Check(InlineMemo.SelStart = StableInlineCaret,
+    'Canceled native inline composition moved the canvas caret');
+  Check((TextObj.TeXText = '\beta') and
+    (TextObj.Text = StablePlainStorage),
+    'Canceled native inline composition changed saved object text');
+  Check(MainForm.CommitInlineTextEdit,
+    'Stable inline source draft did not commit after composition cancel');
+  Check((TextObj.TeXText = 'stable source draft') and
+    (TextObj.Text = StablePlainStorage),
+    'Inline source commit did not preserve the independent Text fallback');
   {$ENDIF}
 
   StarObj := TStar2D.CreateSpec(-1, Point2D(8, 9));

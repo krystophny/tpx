@@ -28,7 +28,6 @@ jobs:
       WASM_FPC: ${{ github.workspace }}/toolchain/fpc-lcl-wasm
       WASM_PAS2JS: ${{ github.workspace }}/toolchain/pas2js
       WASM_BIN: ${{ github.workspace }}/toolchain/bin
-      CHROMIUM: ${{ github.workspace }}/chromium/chrome-linux/chrome
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -44,10 +43,33 @@ jobs:
           sudo apt-get install -y fpc make git curl python3-pip libpng-tools nodejs npm
           python3 -m pip install --break-system-packages playwright
 
-      - name: Install Chromium for Playwright
+      - name: Install browser dependencies and fixed Chromium
         run: |
           mkdir -p "$RUNNER_TEMP/chromium"
-          python3 -m playwright install --with-deps chromium
+          python3 -m playwright install-deps chromium
+          # Chromium issue 556160935 is fixed upstream in Chrome 155; the old
+          # Playwright-bundled Chromium 153 crashes during repeated downloads.
+          # https://issues.chromium.org/issues/556160935
+          curl --fail --location --retry 3 \
+            https://storage.googleapis.com/chrome-for-testing-public/155.0.8059.39/linux64/chrome-linux64.zip \
+            --output "$RUNNER_TEMP/chrome-linux64.zip"
+          python3 - "$RUNNER_TEMP/chrome-linux64.zip" "$RUNNER_TEMP/chromium" <<'PY'
+          import sys
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          destination = Path(sys.argv[2])
+          with ZipFile(sys.argv[1]) as archive:
+              archive.extractall(sys.argv[2])
+              for entry in archive.infolist():
+                  mode = (entry.external_attr >> 16) & 0o777
+                  path = destination / entry.filename
+                  if mode and path.exists():
+                      path.chmod(mode)
+          PY
+          chromium="$RUNNER_TEMP/chromium/chrome-linux64/chrome"
+          "$chromium" --version
+          echo "CHROMIUM=$chromium" >> "$GITHUB_ENV"
 
       - name: Read toolchain cache pins
         id: pins
@@ -86,11 +108,7 @@ jobs:
 
       - name: Run the headless browser behavioral suite
         run: |
-          # CHROMIUM must point at the real binary; playwright's install path varies.
-          if [ ! -x "$CHROMIUM" ]; then
-            CHROMIUM=$(find "$HOME/.cache/ms-playwright" -name chrome -type f | head -1)
-            echo "CHROMIUM=$CHROMIUM" >> "$GITHUB_ENV"
-          fi
+          test -x "$CHROMIUM"
           python3 tests/browser/playtest.py --chromium "$CHROMIUM"
 
       - name: Performance gates
