@@ -1752,6 +1752,7 @@ var
   TextObj: TText2D;
   DisplayText: TEditUtf8Text;
   ErrorText: string;
+  TargetID: Integer;
   Session: TObjectEditSession;
 begin
   Result := False;
@@ -1762,8 +1763,9 @@ begin
     if not TrySettleEditSession then Exit;
 
   TextObj := Obj as TText2D;
+  TargetID := TheDrawing.EnsureUniqueObjectID(TextObj);
   Session := TObjectEditSession.Create(TheDrawing,
-    CurrentDocumentEpoch, [TextObj.ID]);
+    CurrentDocumentEpoch, [TargetID]);
   Session.Presentation := espInlineText;
   if not RegisterEditSession(Session) then
   begin
@@ -1771,7 +1773,7 @@ begin
     Exit;
   end;
   FInlineSession := Session;
-  FInlineTargetID := TextObj.ID;
+  FInlineTargetID := TargetID;
   FInlineNewTextObject := False;
   if TextObj.TeXText <> '' then
   begin
