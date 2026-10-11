@@ -42,7 +42,7 @@ OUT = Path(args.outdir)
 OUT.mkdir(parents=True, exist_ok=True)
 SCENARIOS = SCENARIOS + RECOVERY_SCENARIOS
 RESTART_SCENARIOS = {'recovery-restart-geometry', 'recovery-restart-raw-label',
-                     'recovery-source-assets'}
+                     'recovery-restart-composition', 'recovery-source-assets'}
 
 class QuietHandler(SimpleHTTPRequestHandler):
     def log_message(self, *args):
