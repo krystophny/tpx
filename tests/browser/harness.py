@@ -128,7 +128,8 @@ class App:
     def observe_input(self, event):
         self.page.evaluate('''(event) => {
           window.tpxInputPresented = false;
-          document.querySelector('#lcl').addEventListener(event, () => {
+          const target = document.querySelector(event === 'wheel' ? '#lcl-surface' : '#lcl');
+          target.addEventListener(event, () => {
             requestAnimationFrame(() => requestAnimationFrame(() => window.tpxInputPresented = true));
           }, {once: true});
         }''', event)

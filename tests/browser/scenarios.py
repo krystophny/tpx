@@ -1238,7 +1238,76 @@ def s_nested_coordinates(app):
     app.key('Escape')
     app.menu('Edit', 'Select all')
     app.menu('Edit', 'Object properties')
-    app.page.get_by_role('button', name='Point coordinates…', exact=True).click()
+    coordinates = app.page.get_by_role('button', name='Point coordinates…', exact=True)
+    initial = coordinates.bounding_box()
+    if initial is None:
+        raise AssertionError('coordinate editor action has no rendered bounds')
+    canvas = app.box()
+    # Wheel over the right-side Inspector gutter; its event can target either
+    # the painted LCL surface or one of its DOM overlays while it scrolls.
+    page_x = canvas['x'] + canvas['w'] - 6
+    page_y = canvas['y'] + canvas['h'] * 0.55
+    wheel_x = (page_x - canvas['x']) * canvas['nw'] / canvas['w']
+    wheel_y = (page_y - canvas['y']) * canvas['nh'] / canvas['h']
+    wheel_point = {'x': page_x, 'y': page_y}
+    in_app_surface = '''p => {
+      const surface=document.querySelector('#lcl-surface');
+      const target=document.elementFromPoint(p.x,p.y);
+      return !!surface && !!target && (target === surface || surface.contains(target));
+    }'''
+    if not app.page.evaluate(in_app_surface, wheel_point):
+        raise AssertionError('Inspector wheel point is outside the application surface')
+    page_scroll = app.page.evaluate('window.scrollY')
+    shown = None
+    last_y = initial['y']
+    stable_ticks = 0
+    moved = False
+    for _ in range(256):
+        if not app.page.evaluate(in_app_surface, wheel_point):
+            raise AssertionError('Inspector wheel point left the application surface')
+        app.wheel(wheel_x, wheel_y, 120)
+        shown = coordinates.bounding_box()
+        if shown and shown['y'] < last_y - 0.5:
+            moved = True
+        if shown and abs(shown['y'] - last_y) < 0.5:
+            stable_ticks += 1
+        else:
+            stable_ticks = 0
+        if shown:
+            last_y = shown['y']
+        if (shown and stable_ticks >= 2 and canvas['y'] <= shown['y']
+                and shown['y'] + shown['height'] <= canvas['y'] + canvas['h']):
+            break
+    canvas_after = app.box()
+    if (shown is None or not moved or stable_ticks < 2
+            or shown['x'] < canvas['x']
+            or shown['x'] + shown['width'] > canvas['x'] + canvas['w']
+            or shown['y'] < canvas['y'] or shown['y'] >= initial['y']
+            or shown['y'] + shown['height'] > canvas['y'] + canvas['h']
+            or app.page.evaluate('window.scrollY') != page_scroll
+            or any(canvas_after[key] != canvas[key] for key in ('x', 'y', 'w', 'h'))):
+        raise AssertionError(
+            'real Inspector wheel input did not reveal the coordinate action '
+            f'without scrolling the page (y {initial["y"]:.0f} → '
+            f'{shown["y"] if shown else "missing"})')
+    paper_before = app.pixels(region(cx, cy, 240, 180))
+    if not app.page.evaluate(in_app_surface, wheel_point):
+        raise AssertionError('Inspector boundary wheel point left the application surface')
+    app.wheel(wheel_x, wheel_y, 120)
+    boundary = coordinates.bounding_box()
+    if (boundary is None or abs(boundary['y'] - shown['y']) >= 0.5
+            or diff(paper_before, app.pixels(region(cx, cy, 240, 180))) != 0
+            or app.page.evaluate('window.scrollY') != page_scroll
+            or any(app.box()[key] != canvas[key] for key in ('x', 'y', 'w', 'h'))):
+        raise AssertionError('Inspector boundary wheel changed the paper or page position')
+    hit_button = coordinates.evaluate('''(button,p) => {
+      const hit=document.elementFromPoint(p.x,p.y);
+      return hit === button || button.contains(hit);
+    }''', {'x': shown['x'] + shown['width'] / 2,
+           'y': shown['y'] + shown['height'] / 2})
+    if not hit_button:
+        raise AssertionError('coordinate action is not the hit target after scrolling')
+    coordinates.click()
     app.page.wait_for_function('document.querySelector("#lcl").width === 530')
     app.click(155, 55)  # First x-coordinate cell in the fixed-size Table LFM
     app.key('F2')
