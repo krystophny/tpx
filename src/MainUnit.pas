@@ -3873,7 +3873,6 @@ end;
 
 initialization
 {$IFDEF FPC}
-{$I MainUnit.lrs}
   DecimalSeparator := '.';
 {$ELSE}
 {$R *.dfm}
