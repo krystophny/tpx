@@ -613,22 +613,24 @@ var
   OuterGroup, InnerGroup, RestoredOuter, RestoredInner: TGroup2D;
   Anchor, Sibling, Target, RestoredAnchor, RestoredSibling, RestoredTarget,
     AddedObject, OutsideObject: TText2D;
-  Session, RestoredSession: TObjectEditSession;
+  Session, RestoredSession, GroupSession: TObjectEditSession;
   Patch: TObjectPropertyPatch;
   ModelBytes, AuxiliaryState: RawByteString;
   ErrorText, DisplayText: string;
   CodecContext: TObject;
   Diagnostics: TStringList;
   CanSaveBack: Boolean;
-  TargetIDs: TEditTargetIDs;
+  TargetIDs, GroupTargetIDs: TEditTargetIDs;
   ObjectsToAssign: array of TGraphicObject;
   AssignedIDs: array of Integer;
+  ModelGeneration: QWord;
   RejectedOutsideObject: Boolean;
 begin
   Drawing := TDrawing2D.CreateDetached;
   Candidate := nil;
   Session := nil;
   RestoredSession := nil;
+  GroupSession := nil;
   CodecContext := nil;
   Diagnostics := TStringList.Create;
   try
@@ -663,9 +665,10 @@ begin
     RestoredSibling := RestoredInner.Objects.FirstObj as TText2D;
     RestoredTarget := RestoredInner.Objects.NextObj as TText2D;
     Check((RestoredAnchor.Text = 'anchor') and
+      (RestoredAnchor.ID = -1) and (RestoredSibling.ID = -1) and
       (RestoredTarget.ID = -1) and
       (RestoredTarget.Text = 'committed target'),
-      'native loading must reproduce the unassigned nested target');
+      'native loading must reproduce unassigned nested group children');
     OutsideObject := TText2D.CreateSpec(-1, Point2D(7, 7), 5,
       'outside object');
     RejectedOutsideObject := False;
@@ -708,12 +711,38 @@ begin
       (RestoredSibling.Text = 'sibling'),
       'cancel must restore the committed target without changing its sibling');
 
+    ModelGeneration := Candidate.ModelGeneration;
+    Check(Candidate.History = nil,
+      'a detached candidate should not initialize drawing history');
+    GroupSession := TObjectEditSession.Create(Candidate, 2,
+      [RestoredOuter.ID]);
+    GroupTargetIDs := GroupSession.CopyTargetIDs;
+    Check((Length(GroupTargetIDs) = 3) and
+      (GroupTargetIDs[0] = RestoredAnchor.ID) and
+      (GroupTargetIDs[1] = RestoredSibling.ID) and
+      (GroupTargetIDs[2] = RestoredTarget.ID) and
+      (RestoredAnchor.ID >= 0) and
+      (RestoredAnchor.ID <> RestoredSibling.ID) and
+      (RestoredAnchor.ID <> RestoredTarget.ID) and
+      (RestoredSibling.ID <> RestoredTarget.ID),
+      'selecting a native-loaded group must assign distinct IDs to its leaves');
+    Check((Candidate.ModelGeneration = ModelGeneration) and
+      (Candidate.History = nil),
+      'group target expansion must not initialize history or change generation');
+    Check(GroupSession.Cancel(2),
+      'the group selection session could not be canceled');
+    FreeAndNil(GroupSession);
+
     AddedObject := TText2D.CreateSpec(-1, Point2D(8, 8), 5, 'new object');
     Candidate.AddObject(-1, AddedObject);
-    Check((AddedObject.ID > RestoredTarget.ID) and
+    Check((AddedObject.ID > RestoredAnchor.ID) and
+      (AddedObject.ID > RestoredTarget.ID) and
       (AddedObject.ID <> RestoredSibling.ID),
       'the drawing allocator must continue beyond the rebound nested ID');
   finally
+    if (GroupSession <> nil) and GroupSession.IsActive then
+      GroupSession.Cancel(2);
+    GroupSession.Free;
     if (RestoredSession <> nil) and RestoredSession.IsActive then
       RestoredSession.Cancel(2);
     RestoredSession.Free;
