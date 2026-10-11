@@ -264,19 +264,158 @@ def s_keyboard_shortcut(app):
 
 
 def s_text_input(app):
-    """Accept the text dialog, place text, and verify saved content."""
-    app.menu('Insert', 'Insert text')
-    app.page.wait_for_function('document.querySelector("#lcl").width < 500')
-    app.type('WASM Grüße λ 漢字 🐈')
-    app.key('Enter')  # Accept through the ordinary LCL default button
-    app.page.wait_for_function('document.querySelector("#lcl").width > 500')
+    """Create, save, reopen and edit Unicode text without a modal dialog."""
+    import re
+
     v, cx, cy = box(app)
+    text = 'WASM Grüße λ 漢字 🐈 & &#946;'
+    app.menu('Insert', 'Insert text')
     app.click(cx-60, cy-20)
-    app.key('Escape')
-    saved = app.save('text-roundtrip.tpx').read_text()
-    if 'WASM Grüße λ 漢字 🐈' not in saved:
-        raise AssertionError('accepted text is missing from the saved drawing')
-    return 'accepted and placed text survives save'
+    editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    editor.wait_for()
+    if app.page.locator('dialog[open]').count():
+        raise AssertionError('creating text opened a modal dialog')
+    editor.click()
+    shortcut_letters = 'lrceapgtb'
+    typed = ''
+    for letter in shortcut_letters:
+        app.page.keyboard.type(letter)
+        typed += letter
+        if editor.input_value() != typed:
+            raise AssertionError(f'canvas shortcut intercepted typed {letter!r}: '
+                                 f'{editor.input_value()!r}')
+    editor.fill('')
+    app.page.keyboard.type(text)
+    if editor.input_value() != text:
+        raise AssertionError('Unicode browser input changed before commit: '
+                             f'{editor.input_value()!r}')
+    app.page.get_by_role('button', name='Done', exact=True).click()
+    app.page.wait_for_timeout(150)
+    if editor.count():
+        raise AssertionError(f'Done did not settle the inline text session: {app.errors!r}')
+    if app.page.locator('dialog[open]').count():
+        raise AssertionError('committing inline text opened a modal dialog')
+
+    saved = app.save('text-roundtrip.tpx')
+    # The generated TikZ block can contain local-codepage bytes even though
+    # the TpX XML text attributes are ASCII numeric references. Preserve the
+    # downloaded bytes while inspecting or cloning the fixture.
+    raw = saved.read_bytes().decode('latin-1')
+    tag = re.search(r'<text\b[^>]*>', raw)
+    if tag is None or 't=' not in tag.group(0):
+        raise AssertionError('saved drawing has no text object')
+
+    app.menu('File', 'Open')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('Choose file').set_input_files(saved)
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    app.page.wait_for_timeout(300)
+    def reopen_existing_text():
+        v2, x2, y2 = box(app)
+        px, py = app.at(x2 + 40, y2 + 250)
+        app.page.mouse.dblclick(px, py)
+
+    reopen_existing_text()
+    editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    editor.wait_for()
+    if editor.input_value() != text:
+        raise AssertionError(f'save/reopen changed Unicode text: {editor.input_value()!r}')
+    app.page.keyboard.type('!')
+    if editor.input_value() != text + '!':
+        raise AssertionError('Unicode text caret was not at the end after reopening')
+    app.page.keyboard.press('Backspace')
+    if editor.input_value() != text:
+        raise AssertionError('native text editing changed Unicode caret content')
+
+    app.page.get_by_role('button', name='Done', exact=True).click()
+    v2, x2, y2 = box(app)
+    app.click(TOOL_X, tool('text'))
+    app.click(x2 + 40, y2 + 250)
+    editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    editor.wait_for()
+    if editor.input_value() != text:
+        raise AssertionError('Text tool click did not edit the existing label')
+
+    # A deliberate final line break is user content and must survive the
+    # actual save/reopen path.
+    multiline = 'first line\nsecond line\n'
+    editor.fill(multiline)
+    app.page.get_by_role('button', name='Done', exact=True).click()
+    multiline_saved = app.save('text-trailing-newline.tpx')
+    multiline_xml = multiline_saved.read_bytes().decode('latin-1')
+    multiline_tag = re.search(r'<text\b[^>]*>', multiline_xml)
+    if len(re.findall(r'<text\b', multiline_xml)) != 1 or not multiline_tag:
+        raise AssertionError('Text-tool editing created a duplicate label')
+    initial_attrs = dict(re.findall(r'([A-Za-z][A-Za-z0-9]*)="([^"]*)"',
+                                   tag.group(0)))
+    multiline_attrs = dict(re.findall(
+        r'([A-Za-z][A-Za-z0-9]*)="([^"]*)"', multiline_tag.group(0)))
+    for name in ('x', 'y', 'h', 'halign', 'rotdeg'):
+        if multiline_attrs.get(name) != initial_attrs.get(name):
+            raise AssertionError(f'text edit changed saved {name}: '
+                                 f'{initial_attrs.get(name)!r} -> '
+                                 f'{multiline_attrs.get(name)!r}')
+    app.menu('File', 'Open')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('Choose file').set_input_files(multiline_saved)
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    app.page.wait_for_timeout(300)
+    reopen_existing_text()
+    editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    editor.wait_for()
+    if editor.input_value() != multiline:
+        raise AssertionError(f'save/reopen changed an intentional trailing newline: '
+                             f'{editor.input_value()!r}')
+
+    # Add a TeX source to the saved fixture, edit only that field, and compare
+    # the serialized plain-text attribute before and after the source edit.
+    tex_tag = tag.group(0)
+    insert_at = -2 if tex_tag.endswith('/>') else -1
+    tex_fixture = app.output / 'text-with-tex-source.tpx'
+    tex_fixture.write_bytes(raw.replace(tex_tag,
+        tex_tag[:insert_at] + ' tex="\\alpha"' + tex_tag[insert_at:], 1)
+        .encode('latin-1'))
+    app.page.get_by_role('button', name='Cancel', exact=True).click()
+    app.menu('File', 'Open')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('Choose file').set_input_files(tex_fixture)
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    app.page.wait_for_timeout(300)
+    reopen_existing_text()
+    tex_editor = app.page.get_by_role('textbox', name='TeX source (canvas)', exact=True)
+    tex_editor.wait_for()
+    if tex_editor.input_value() != r'\alpha':
+        raise AssertionError('editing did not select the independent TeX source')
+    tex_editor.fill(r'\beta')
+    app.page.get_by_role('button', name='Done', exact=True).click()
+    tex_saved = app.save('text-tex-source.tpx').read_bytes().decode('latin-1')
+    final_tag = re.search(r'<text\b[^>]*>', tex_saved)
+    before_attrs = dict(re.findall(r'([A-Za-z][A-Za-z0-9]*)="([^"]*)"',
+                                   tag.group(0)))
+    after_attrs = dict(re.findall(r'([A-Za-z][A-Za-z0-9]*)="([^"]*)"',
+                                  final_tag.group(0))) if final_tag else {}
+    if not final_tag or after_attrs.get('t') != before_attrs.get('t') or after_attrs.get('tex') != r'\beta':
+        raise AssertionError('editing TeX source changed plain Text or failed to save')
+    for name in ('x', 'y', 'h', 'halign', 'rotdeg'):
+        if after_attrs.get(name) != before_attrs.get(name):
+            raise AssertionError(f'TeX edit changed saved {name}: '
+                                 f'{before_attrs.get(name)!r} -> '
+                                 f'{after_attrs.get(name)!r}')
+
+    # Escape cancels a newly placed provisional label without leaving a blank
+    # object in the document.
+    app.menu('Insert', 'Insert text')
+    app.click(cx+100, cy+70)
+    app.page.get_by_role('textbox', name='Text (canvas)', exact=True).wait_for()
+    app.page.keyboard.press('Escape')
+    app.page.wait_for_timeout(150)
+    cancelled = re.findall(r'<text\b',
+                           app.save('text-cancel.tpx').read_bytes().decode('latin-1'))
+    if len(cancelled) != 1:
+        raise AssertionError(f'cancel left a phantom text object: {len(cancelled)}')
+    if app.page.locator('dialog[open]').count():
+        raise AssertionError('inline editing displayed an unexpected dialog')
+    return 'Unicode Text and independent TeX source survive edit/save/reopen; Escape leaves no phantom label'
 
 
 def s_idle_stops_repainting(app):
