@@ -289,6 +289,7 @@ begin
   if Drawing = nil then Exit;
   AssetDirectory := IncludeTrailingPathDelimiter(FRootPath) + 'bitmaps';
   SourcePaths := TStringList.Create;
+  SourcePaths.CaseSensitive := True;
   TargetPaths := TStringList.Create;
   CreatedPaths := TStringList.Create;
   try
