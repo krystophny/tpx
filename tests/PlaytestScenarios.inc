@@ -565,12 +565,19 @@ var
   Combo: TComboBox;
   Edit: TEdit;
   Memo: TCompositionAwareMemo;
+  InlineMemo: TCompositionAwareMemo;
+{$IFDEF LCLCOCOA}
+  InlineTextView: TCocoaTextView;
+{$ENDIF}
   CheckBox: TCheckBox;
   ErrorText: string;
   FileName: string;
   Reloaded: TDrawing2D;
   Loader: T_TpX_Loader;
   ReloadedText: TText2D;
+  StableInlineText: string;
+  StablePlainStorage: AnsiString;
+  StableInlineCaret: Integer;
 
   function InspectorTop(Control: TControl): Integer;
   begin
@@ -858,6 +865,42 @@ begin
   CheckCompositionEndWithoutTextChange;
   SelectObject(RectObj);
   CheckFieldEditorCompositionEndWithoutTextChange;
+  StablePlainStorage := TextObj.Text;
+  Check(MainForm.BeginInlineTextEdit(TextObj as TObject2D),
+    'Existing text did not open the inline canvas editor');
+  InlineMemo := MainForm.InlineTextMemo;
+  InlineMemo.Text := 'stable source draft';
+  InlineMemo.SelStart := 7;
+  InlineMemo.SelLength := 0;
+  StableInlineText := InlineMemo.EditText;
+  StableInlineCaret := InlineMemo.SelStart;
+  Check(TextObj.TeXText = '\beta',
+    'Inline typing changed the model before Done');
+  InlineTextView := CocoaInspectorTextView(InlineMemo);
+  InlineTextView.supressTextChangeEvent := 1;
+  try
+    CocoaSetMarkedText(InlineMemo, 'unfinished composition');
+    Check(InlineMemo.CompositionPending,
+      'Native Cocoa inline preedit did not hold the edit session');
+    CocoaCancelMarkedText(InlineMemo);
+  finally
+    InlineTextView.supressTextChangeEvent := 0;
+  end;
+  CocoaDrainTextInputQueue;
+  Check(not InlineMemo.CompositionPending,
+    'Canceled native inline composition left the session pending');
+  Check(InlineMemo.EditText = StableInlineText,
+    'Canceled native inline composition replaced the stable canvas draft');
+  Check(InlineMemo.SelStart = StableInlineCaret,
+    'Canceled native inline composition moved the canvas caret');
+  Check((TextObj.TeXText = '\beta') and
+    (TextObj.Text = StablePlainStorage),
+    'Canceled native inline composition changed saved object text');
+  Check(MainForm.CommitInlineTextEdit,
+    'Stable inline source draft did not commit after composition cancel');
+  Check((TextObj.TeXText = 'stable source draft') and
+    (TextObj.Text = StablePlainStorage),
+    'Inline source commit did not preserve the independent Text fallback');
   {$ENDIF}
 
   StarObj := TStar2D.CreateSpec(-1, Point2D(8, 9));
