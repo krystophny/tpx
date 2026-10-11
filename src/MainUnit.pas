@@ -888,7 +888,7 @@ uses Output, Input, Settings0, ColorEtc, Geometry, Options,
 {$IFNDEF CPUWASM32}
   , DocumentIO, FileWatchNative
 {$ELSE}
-  , BrowserDocumentStatus
+  , BrowserDocumentStatus, DocumentIO
 {$ENDIF}
 {$ENDIF}
   ;
@@ -2167,6 +2167,7 @@ begin
     Assigned(TheDrawing.History) and
     (TheDrawing.History.IsChanged or
     ((FEditSession <> nil) and FEditSession.HasUncommittedWork)));
+{$ENDIF}
 {$ENDIF}
 end;
 
