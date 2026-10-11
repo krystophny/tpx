@@ -1618,11 +1618,12 @@ begin
     EventManager.DocumentSession.AcceptSourceNormalized('', FormatId,
       Entry.BaseSourceBytes, Entry.BaseRevision, False, RecoveryAssets);
     RecoveryAssets := nil;
+    ReplaceBrowserDocument(False);
     TheDrawing.SetFileNameKeepingBitmapParents(Drawing_NewFileName);
     TheDrawing.History.MarkDirty;
     EventManager.DocumentSession.AdvanceLocalRevision;
+    BrowserDocumentDidChange(True);
     Caption := Drawing_NewFileName;
-    ResetBrowserRecoveryDocument;
     UpdateBrowserDocumentDirty;
     if AuxiliaryState <> '' then
     begin
