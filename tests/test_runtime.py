@@ -11,6 +11,8 @@ import tempfile
 import time
 import uuid
 import unittest
+from contextlib import contextmanager
+from unittest import mock
 
 BINARY = Path(os.environ["RUNTIME_BINARY"]).resolve()
 SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-empty-cancel", "exit-yes",
@@ -41,7 +43,81 @@ def storage_environment(home, config, state, cache):
             "LOCALAPPDATA": str(state)}
 
 
+@contextmanager
+def runtime_temp_directory(prefix):
+    temporary = tempfile.TemporaryDirectory(prefix=prefix)
+    directory = Path(temporary.name)
+    try:
+        yield directory
+    finally:
+        # Windows may retain a launched executable briefly after it exits.
+        # Fifty 100 ms attempts bound persistent cleanup failures to five seconds.
+        for attempt in range(50):
+            try:
+                temporary.cleanup()
+                if directory.exists():
+                    # Python 3.9 detaches its finalizer even when cleanup fails.
+                    temporary._rmtree(temporary.name)
+                break
+            except PermissionError as error:
+                if getattr(error, "winerror", None) != 32 or attempt == 49:
+                    raise
+                time.sleep(0.1)
+
+
 class RuntimeTests(unittest.TestCase):
+    def test_runtime_temp_cleanup_retries_transient_windows_lock(self):
+        real_cleanup = tempfile.TemporaryDirectory.cleanup
+        attempts = []
+        sharing_violation = PermissionError("file is in use")
+        sharing_violation.winerror = 32
+
+        def fail_once(temporary):
+            attempts.append(temporary)
+            if len(attempts) == 1:
+                raise sharing_violation
+            real_cleanup(temporary)
+
+        with mock.patch.object(tempfile.TemporaryDirectory, "cleanup",
+                               autospec=True, side_effect=fail_once), \
+                mock.patch.object(time, "sleep") as sleep:
+            with runtime_temp_directory("tpx-runtime-cleanup-") as directory:
+                (directory / "marker").write_text("present")
+
+        self.assertFalse(directory.exists())
+        self.assertEqual(len(attempts), 2)
+        sleep.assert_called_once_with(0.1)
+
+    def test_runtime_temp_cleanup_reports_persistent_windows_lock(self):
+        sharing_violation = PermissionError("file is in use")
+        sharing_violation.winerror = 32
+        real_cleanup = tempfile.TemporaryDirectory.cleanup
+        directory = None
+        with mock.patch.object(tempfile.TemporaryDirectory, "cleanup",
+                               autospec=True, side_effect=sharing_violation) as cleanup, \
+                mock.patch.object(time, "sleep") as sleep:
+            with self.assertRaises(PermissionError):
+                with runtime_temp_directory("tpx-runtime-cleanup-") as directory:
+                    pass
+
+        self.assertEqual(cleanup.call_count, 50)
+        self.assertEqual(sleep.call_count, 49)
+        if directory.exists():
+            real_cleanup(cleanup.call_args.args[0])
+
+    def test_runtime_temp_cleanup_does_not_retry_other_permission_errors(self):
+        error = PermissionError("access denied")
+        real_cleanup = tempfile.TemporaryDirectory.cleanup
+        directory = None
+        with mock.patch.object(tempfile.TemporaryDirectory, "cleanup",
+                               autospec=True, side_effect=error) as cleanup:
+            with self.assertRaises(PermissionError):
+                with runtime_temp_directory("tpx-runtime-cleanup-") as directory:
+                    pass
+
+        self.assertEqual(cleanup.call_count, 1)
+        real_cleanup(cleanup.call_args.args[0])
+
     def test_transactional_pstoedit_emf_import(self):
         with tempfile.TemporaryDirectory(prefix="tpx-pstoedit-") as directory:
             root = Path(directory).resolve()
@@ -138,8 +214,8 @@ class RuntimeTests(unittest.TestCase):
                      beside_executable=(), runtime_directory=None,
                      readonly_runtime=False, portable=False,
                      portable_argument=False, unicode_profile=False):
-        with tempfile.TemporaryDirectory(prefix=directory_prefix) as directory:
-            root = Path(directory).resolve()
+        with runtime_temp_directory(directory_prefix) as directory:
+            root = directory.resolve()
             suffix = " space-Ünicode-Καλημέρα-ß" if unicode_profile else ""
             home = root / ("home" + suffix)
             config = root / ("config" + suffix)
