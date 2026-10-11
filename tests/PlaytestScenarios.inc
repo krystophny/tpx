@@ -77,10 +77,41 @@ begin
   end;
 end;
 
+{$IFDEF WINDOWS}
+function ReadAsyncScenarioFile(const Directory, FileName: string): string;
+var
+  Values: TStringList;
+begin
+  Result := '<missing>';
+  if not FileExists(Directory + PathDelim + FileName) then Exit;
+  Values := TStringList.Create;
+  try
+    try
+      Values.LoadFromFile(Directory + PathDelim + FileName);
+      Result := Trim(Values.Text);
+      if Result = '' then Result := '<empty>';
+    except
+      on E: Exception do Result := '<read failed: ' + E.Message + '>';
+    end;
+  finally
+    Values.Free;
+  end;
+  if Length(Result) > 1024 then
+    Result := Copy(Result, 1, 1024) + ' [truncated]';
+end;
+
+function AsyncChildFailureDetails(const Directory: string): string;
+begin
+  Result := Format('started=%s; status=%s; error=%s',
+    [ReadAsyncScenarioFile(Directory, 'async-child.started'),
+     ReadAsyncScenarioFile(Directory, 'async-child.status'),
+     ReadAsyncScenarioFile(Directory, 'async-child.error')]);
+end;
+{$ENDIF}
+
 procedure TestAsyncTools;
 const
 {$IFDEF WINDOWS}
-  AsyncCommand = 'powershell -NoProfile -NonInteractive -Command "Start-Sleep -Seconds 1; Set-Content finished done"';
   WaitCommand = 'powershell -NoProfile -NonInteractive -Command "Start-Sleep -Milliseconds 100; Set-Content finished waited"';
 {$ELSE}
   AsyncCommand = 'printf %s "$$" > childpid; sleep 1; printf done > finished';
@@ -90,10 +121,23 @@ var
   Directory, Marker, ChildPID: string;
   Started: QWord;
   Contents: TStringList;
+  FailureDetails: string;
+{$IFDEF WINDOWS}
+  AsyncCommand: string;
+{$ENDIF}
 begin
   Directory := GetTempFileName(SysUtils.GetTempDir(False), 'tpx-async-');
   DeleteFile(Directory); Check(CreateDir(Directory), 'Could not make async directory');
   Marker := Directory + PathDelim + 'finished';
+{$IFDEF WINDOWS}
+  AsyncCommand := 'powershell -NoProfile -NonInteractive -Command "' +
+    '$ErrorActionPreference = ''Stop''; try { Set-Content ' +
+    QuotedStr(Directory + PathDelim + 'async-child.started') + ' started; ' +
+    'Start-Sleep -Seconds 1; Set-Content finished done; Set-Content ' +
+    QuotedStr(Directory + PathDelim + 'async-child.status') + ' completed ' +
+    '} catch { $_ | Out-File ' +
+    QuotedStr(Directory + PathDelim + 'async-child.error') + '; exit 1 }"';
+{$ENDIF}
   Started := GetTickCount64;
   try
     Check(FileExec(AsyncCommand, '', '', Directory, True, False),
@@ -102,7 +146,13 @@ begin
     Check(not FileExists(Marker), 'Child finished before async return');
     { Keep the prompt-return bound above; allow slower child startup on CI. }
     while not FileExists(Marker) and (GetTickCount64 - Started < 10000) do Sleep(20);
-    Check(FileExists(Marker), 'Async child did not finish');
+    if not FileExists(Marker) then begin
+      FailureDetails := 'Async child did not finish';
+{$IFDEF WINDOWS}
+      FailureDetails := FailureDetails + ' (' + AsyncChildFailureDetails(Directory) + ')';
+{$ENDIF}
+      Check(False, FailureDetails);
+    end;
 {$IFDEF LINUX}
     Contents := TStringList.Create;
     try
