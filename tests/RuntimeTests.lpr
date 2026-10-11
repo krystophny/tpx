@@ -1,11 +1,12 @@
 program RuntimeTests;
 {$mode Delphi}
+{$IFDEF LCLCOCOA}{$modeswitch objectivec2}{$ENDIF}
 uses
   {$IFDEF UNIX}{$IFNDEF CPUWASM32}cthreads,{$ENDIF}{$ENDIF}
   {$IFDEF UNIX}BaseUnix,{$ENDIF}
   Interfaces, Forms, SysUtils, Classes, Types, Math, Controls, Dialogs, ExtCtrls, Clipbrd, InterfaceBase, LCLType, LMessages, Process, LazFileUtils, LazUTF8,
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
-  {$IFDEF LCLcocoa}CocoaInt,{$ENDIF}
+  {$IFDEF LCLcocoa}CocoaInt, CocoaAll, CocoaTextEdits, CocoaUtils,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
   Settings0, MainUnit, Options, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, AutoSaveStore, AutoSaveRuntime, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, SvgCodec, EditSessions, PropertyEdits, PropertyEditCore, CompositionAwareControls, UserStorage, gzio;
 
