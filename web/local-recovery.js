@@ -389,7 +389,11 @@ export function localRecoveryImports(runtime) {
 
   initialize();
   return {tpx: {
-    recovery_initialized: () => { wasmReady = true; notifyEnabled(); },
+    recovery_initialized: () => {
+      wasmReady = true;
+      notifyEnabled();
+      updateRestoreButtons();
+    },
     recovery_new_id: newId,
     recovery_put: put,
     recovery_copy: copy,
