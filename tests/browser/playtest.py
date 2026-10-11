@@ -36,6 +36,9 @@ parser.add_argument('--chromium', default=os.environ.get('CHROMIUM', '/usr/bin/c
 args = parser.parse_args()
 
 wanted = set(n for n in args.only.split(',') if n)
+unknown = wanted - {name for name, _ in SCENARIOS}
+if unknown:
+    parser.error('unknown scenario name(s): ' + ', '.join(sorted(unknown)))
 OUT = Path(args.outdir)
 OUT.mkdir(parents=True, exist_ok=True)
 

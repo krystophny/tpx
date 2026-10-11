@@ -144,6 +144,104 @@ begin
   end;
 end;
 
+{$IFDEF LCLCOCOA}
+procedure TestInspectorCompositionReloadBarrier(const FileName: string;
+  const ExternalBytes: RawByteString);
+var
+  TextObject: TText2D;
+  ReloadedText: TText2D;
+  ReloadedMemo: TCompositionAwareMemo;
+  InspectorMemo: TCompositionAwareMemo;
+  OldGeneration, Deadline, DeferredDeadline: QWord;
+  AcceptedRevision: TDiskRevision;
+  ErrorText: string;
+begin
+  Check(MainForm.TheDrawing.ObjectsCount = 2,
+    'Composition reload fixture must contain a line and a label');
+  TextObject := MainForm.TheDrawing.GetObject(1) as TText2D;
+  Check((TextObject.Text = 'Composition baseline') and
+    (TextObject.TeXText = '\beta'),
+    'Composition reload fixture did not load its independent text sources');
+  MainForm.TheDrawing.SelectionClear;
+  MainForm.TheDrawing.SelectionAdd(TextObject);
+  MainForm.RefreshInspectorSelection;
+  MainForm.Inspector.FocusField(opfText);
+  InspectorMemo := MainForm.Inspector.EditorFor(opfText) as
+    TCompositionAwareMemo;
+  InspectorMemo.HandleNeeded;
+  InspectorMemo.SetFocus;
+  Application.ProcessMessages;
+  CocoaSetMarkedText(InspectorMemo, 'unfinished composition');
+  CocoaDrainTextInputQueue;
+  MainForm.Inspector.RefreshCompositionState;
+  Check(InspectorMemo.CompositionPending and
+    MainForm.Inspector.HasActiveEdit,
+    'Native marked text did not hold the inspector edit gate (pending=' +
+    BoolToStr(InspectorMemo.CompositionPending, True) + ', edit=' +
+    BoolToStr(MainForm.Inspector.HasActiveEdit, True) + ')');
+
+  OldGeneration := MainForm.TheDrawing.ModelGeneration;
+  AcceptedRevision := MainForm.EventManager.DocumentSession.AcceptedRevision;
+  WriteReloadSource(FileName, ExternalBytes);
+  Deadline := GetTickCount64 + 6000;
+  repeat
+    Application.ProcessMessages;
+    MainForm.ProcessPendingReload(GetTickCount64 + 1000);
+    if MainForm.AutoReloadState.SettlePending then Break;
+    Sleep(10);
+  until GetTickCount64 >= Deadline;
+  Check(MainForm.AutoReloadState.SettlePending,
+    'An external update did not reach the pending reload state');
+  { Keep the native composition active beyond the settle deadline. Passing
+    only the initial pending-state check would also pass if the settled read
+    reached the independent dirty-conflict path. }
+  DeferredDeadline := GetTickCount64 + 500;
+  repeat
+    Application.ProcessMessages;
+    MainForm.ProcessPendingReload(GetTickCount64 + 5000);
+    Sleep(10);
+  until GetTickCount64 >= DeferredDeadline;
+  Check(MainForm.AutoReloadState.SettlePending and
+    not MainForm.AutoReloadState.Conflict and
+    not MainForm.AutoReloadState.InvalidExternal and
+    (MainForm.TheDrawing.ModelGeneration = OldGeneration) and
+    (Abs(ReloadLineX2 - 48) < 0.0001) and
+    (TextObject.TeXText = '\beta') and
+    SameDiskRevision(MainForm.EventManager.DocumentSession.AcceptedRevision,
+      AcceptedRevision) and
+    not MainForm.TheDrawing.History.IsChanged and
+    MainForm.Inspector.HasActiveEdit and InspectorMemo.Visible and
+    InspectorMemo.CompositionPending,
+    'The settled external read was not deferred intact behind marked text');
+
+  CocoaCancelMarkedText(InspectorMemo);
+  CocoaDrainTextInputQueue;
+  InspectorMemo.RefreshCompositionState;
+  Check(not InspectorMemo.CompositionPending,
+    'Canceled native marked text remained pending');
+  MainForm.Inspector.CancelActiveEdit;
+  DriveReloadUntil(49, False, False);
+  ReloadedText := MainForm.TheDrawing.GetObject(1) as TText2D;
+  ReloadedMemo := MainForm.Inspector.EditorFor(opfTeXText) as
+    TCompositionAwareMemo;
+  ErrorText := Format('generation=%d>%d, objects=%d, plain="%s", tex="%s", field="%s", active=%s, dirty=%s',
+    [MainForm.TheDrawing.ModelGeneration, OldGeneration,
+     MainForm.TheDrawing.ObjectsCount, ReloadedText.Text,
+     ReloadedText.TeXText, ReloadedMemo.EditText,
+     BoolToStr(MainForm.Inspector.HasActiveEdit, True),
+     BoolToStr(MainForm.TheDrawing.History.IsChanged, True)]);
+  Check((MainForm.TheDrawing.ModelGeneration > OldGeneration) and
+    (MainForm.TheDrawing.ObjectsCount = 2) and
+    (ReloadedText.Text = 'Composition baseline') and
+    (ReloadedText.TeXText = '\omega') and
+    (ReloadedMemo.EditText = '\omega') and
+    not MainForm.Inspector.HasActiveEdit and
+    not MainForm.TheDrawing.History.IsChanged,
+    'Reload after composition cancel left a stale inspector target or source: ' +
+    ErrorText);
+end;
+{$ENDIF}
+
 function FindMenuCaption(Root: TMenuItem; const Caption: string): TMenuItem;
 var I: Integer;
 begin
@@ -233,6 +331,12 @@ const
   DraftSource: RawByteString =
     '%<TpX v="5" TeXFormat="tikz" PdfTeXFormat="tikz">' + LineEnding +
     '%<line x1="0" y1="0" x2="48" y2="10"/>' + LineEnding +
+    '%<text x="8" y="11" h="7" t="Composition baseline" tex="\beta"/>' + LineEnding +
+    '%</TpX>' + LineEnding;
+  CompositionExternalSource: RawByteString =
+    '%<TpX v="5" TeXFormat="tikz" PdfTeXFormat="tikz">' + LineEnding +
+    '%<line x1="0" y1="0" x2="49" y2="10"/>' + LineEnding +
+    '%<text x="8" y="11" h="7" t="Composition baseline" tex="\omega"/>' + LineEnding +
     '%</TpX>' + LineEnding;
   ConflictSource: RawByteString =
     '%<TpX v="5" TeXFormat="tikz" PdfTeXFormat="tikz">' + LineEnding +
@@ -470,6 +574,10 @@ begin
        BoolToStr(MainForm.AutoReloadState.SettlePending, True),
        BoolToStr(MainForm.AutoReloadState.Paused, True)]));
   TestInspectorDraftReloadBarrier(FileName, DraftSource, 45);
+  {$IFDEF LCLCOCOA}
+  TestInspectorCompositionReloadBarrier(FileName,
+    CompositionExternalSource);
+  {$ENDIF}
   MainForm.TheDrawing.Clear;
   MainForm.TheDrawing.History.Save;
   MainForm.TheDrawing.History.MarkDirty;

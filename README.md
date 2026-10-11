@@ -137,6 +137,16 @@ edit it. Enter inserts a line break, while
 Ctrl+Enter (or Command+Enter on macOS), Tab, or **Done** finishes the edit.
 Escape cancels the uncommitted edit after any active input-method composition
 ends.
+
+Use **Edit → Object properties** to open the Object Inspector on the right;
+**View → Object inspector** toggles it, and its splitter can be dragged to
+resize the panel. Collapse a section to make room for the drawing. When a
+selection contains different values for a field, the Inspector shows **Mixed**;
+editing that field applies only that property to the selected objects and
+preserves their other individual values. Coordinates, transforms, scale and
+preferences keep their dedicated dialogs. File pickers and explicit
+discard/replacement confirmations remain dialogs as well.
+
 Desktop live previews typeset TeX text in the canvas using LaTeX and `dvipng`,
 with reusable SVG output when `dvisvgm` is available. **View → Live LaTeX
 Preview** toggles this behavior; it is enabled by default. Without the tools,

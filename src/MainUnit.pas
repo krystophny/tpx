@@ -727,6 +727,8 @@ type
     procedure BuildObjectInspector;
     function InspectorSessionChanged(Sender: TObject;
       Session: TObjectEditSession; RegisterSession: Boolean): Boolean;
+    function InspectorBeforeFieldInput(Sender: TObject;
+      CurrentSession: TObjectEditSession): Boolean;
     function InspectorCurrentEpoch: QWord;
     procedure InspectorEditCommitted(Sender: TObject);
     procedure InspectorOpenCoordinates(Sender: TObject);
@@ -2071,6 +2073,7 @@ begin
   Inspector.Parent := FInspectorHost;
   Inspector.Align := alClient;
   Inspector.OnSessionChanged := InspectorSessionChanged;
+  Inspector.OnBeforeFieldInput := InspectorBeforeFieldInput;
   Inspector.OnEditCommitted := InspectorEditCommitted;
   Inspector.OnOpenCoordinates := InspectorOpenCoordinates;
   Inspector.OnShouldSkipFieldRefresh :=
@@ -2129,6 +2132,14 @@ begin
     UnregisterEditSession(Session);
     Result := True;
   end;
+end;
+
+function TMainForm.InspectorBeforeFieldInput(Sender: TObject;
+  CurrentSession: TObjectEditSession): Boolean;
+begin
+  if (CurrentSession <> nil) and CurrentSession.IsActive and
+    (FEditSession = CurrentSession) then Exit(True);
+  Result := TrySettleEditSession;
 end;
 
 function TMainForm.InspectorCurrentEpoch: QWord;

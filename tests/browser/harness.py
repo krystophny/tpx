@@ -151,7 +151,12 @@ class App:
         menu = self.page.locator('#lcl-menus > details').filter(
             has=self.page.locator('summary').get_by_text(group, exact=True))
         menu.locator(':scope > summary').click()
-        menu.get_by_role('button', name=item, exact=True).click()
+        item_button = menu.get_by_role('button', name=item, exact=True)
+        if item_button.count() == 0:
+            item_button = menu.get_by_role('button', name='✓ ' + item, exact=True)
+        if item_button.count() != 1:
+            raise AssertionError(f'menu item {group} → {item} is not unique')
+        item_button.click()
         self.page.wait_for_timeout(150)
 
     def save(self, filename):

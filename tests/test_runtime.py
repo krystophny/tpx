@@ -6,9 +6,11 @@ import subprocess
 import shutil
 import struct
 import sys
+import time
 import tempfile
 import uuid
 import unittest
+from contextlib import contextmanager
 
 BINARY = Path(os.environ["RUNTIME_BINARY"]).resolve()
 SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-empty-cancel", "exit-yes",
@@ -39,6 +41,27 @@ def storage_environment(home, config, state, cache):
             "XDG_CONFIG_HOME": str(config), "XDG_STATE_HOME": str(state),
             "XDG_CACHE_HOME": str(cache), "APPDATA": str(config),
             "LOCALAPPDATA": str(state)}
+
+
+@contextmanager
+def runtime_temp_directory(prefix):
+    temporary = tempfile.TemporaryDirectory(prefix=prefix)
+    directory = Path(temporary.name)
+    try:
+        yield directory
+    finally:
+        # Windows may retain a launched executable briefly after it exits.
+        # Fifty 100 ms attempts bound persistent cleanup failures to five seconds.
+        for attempt in range(50):
+            try:
+                temporary.cleanup()
+                if directory.exists():
+                    temporary._rmtree(temporary.name)
+                break
+            except PermissionError as error:
+                if getattr(error, "winerror", None) != 32 or attempt == 49:
+                    raise
+                time.sleep(0.1)
 
 
 class RuntimeTests(unittest.TestCase):
@@ -246,6 +269,58 @@ class RuntimeTests(unittest.TestCase):
         for scenario in SCENARIOS:
             with self.subTest(scenario=scenario):
                 self.run_scenario(scenario)
+
+    def test_nonmodal_text_recovery_across_process_restart(self):
+        fixture = Path(__file__).parent / "fixtures" / "nonmodal-recovery-scene.tpx"
+        with runtime_temp_directory("tpx-nonmodal-recovery-") as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            config = root / "config"
+            home.mkdir()
+            config.mkdir()
+            source = root / "nested-recovery.tpx"
+            shutil.copy2(fixture, source)
+            original_source = source.read_bytes()
+            ready_path = root / "draft-ready"
+            env = os.environ.copy()
+            env.update(HOME=str(home), USERPROFILE=str(home), APPDATA=str(config),
+                       XDG_CONFIG_HOME=str(config), TMPDIR=str(root),
+                       TPX_NONMODAL_RECOVERY_SOURCE=str(source),
+                       TPX_NONMODAL_RECOVERY_OLD_ID="30000",
+                       TPX_NONMODAL_RECOVERY_READY_FILE=str(ready_path))
+            with self.subTest(scenario="nonmodal-recovery-create"):
+                process = subprocess.Popen(
+                    [str(BINARY), "nonmodal-recovery-create"], cwd=root,
+                    env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    text=True, encoding="utf-8", errors="replace")
+                deadline = time.monotonic() + 40
+                while not ready_path.exists():
+                    if process.poll() is not None:
+                        stdout, stderr = process.communicate()
+                        self.fail(stdout + stderr or
+                                  "create process exited before persisting its recovery draft")
+                    if time.monotonic() >= deadline:
+                        process.kill()
+                        stdout, stderr = process.communicate()
+                        self.fail("create process did not persist its recovery draft: " +
+                                  stdout + stderr)
+                    time.sleep(0.02)
+                process.kill()
+                process.communicate(timeout=5)
+                self.assertEqual(source.read_bytes(), original_source,
+                                 "recovery changed the accepted source file")
+
+            with self.subTest(scenario="nonmodal-recovery-restore"):
+                result = subprocess.run([str(BINARY), "nonmodal-recovery-restore"],
+                                        cwd=root, env=env, capture_output=True,
+                                        text=True, encoding="utf-8", errors="replace",
+                                        timeout=40)
+                self.assertEqual(result.returncode, 0,
+                                 result.stdout + result.stderr)
+                self.assertIn("PASS nonmodal-recovery-restore", result.stdout,
+                              result.stderr)
+                self.assertEqual(source.read_bytes(), original_source,
+                                 "restoring and committing recovery changed the source file")
 
     def test_registered_tikz_open_materializes_native_scene(self):
         fixture_dir = Path(__file__).parent / "core" / "fixtures" / "tikz"

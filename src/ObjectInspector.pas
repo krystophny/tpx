@@ -14,6 +14,8 @@ type
   TInspectorEpochProvider = function: QWord of object;
   TInspectorSessionEvent = function(Sender: TObject;
     Session: TObjectEditSession; RegisterSession: Boolean): Boolean of object;
+  TInspectorBeforeFieldInput = function(Sender: TObject;
+    CurrentSession: TObjectEditSession): Boolean of object;
   TInspectorFieldRefreshGuard = function(Sender: TObject;
     Field: TObjectPropertyField; const TargetIDs: TEditTargetIDs): Boolean of object;
 
@@ -57,12 +59,15 @@ type
     FStableFieldSelStart: array[TObjectPropertyField] of Integer;
     FStableFieldSelLength: array[TObjectPropertyField] of Integer;
     FRefreshing: Integer;
+    FRestoringFieldInput: Boolean;
     FHasSelection: Boolean;
     FOnEditCommitted: TNotifyEvent;
     FOnOpenCoordinates: TNotifyEvent;
     FOnSessionChanged: TInspectorSessionEvent;
+    FOnBeforeFieldInput: TInspectorBeforeFieldInput;
     FOnShouldSkipFieldRefresh: TInspectorFieldRefreshGuard;
     procedure BuildView;
+    function ContentWidth: Integer;
     procedure LayoutSections;
     procedure AddSection(Index: Integer; const Title: string);
     procedure AddField(Section: Integer; Field: TObjectPropertyField;
@@ -74,10 +79,15 @@ type
     procedure FieldChanged(Sender: TObject);
     procedure CompositionChanged(Sender: TObject; Composing: Boolean);
     procedure CaptureStableField(Field: TObjectPropertyField);
+    procedure CaptureStableSelection(Field: TObjectPropertyField);
     function EditorText(Field: TObjectPropertyField): string;
     procedure RestoreCompositionBaseline(Field: TObjectPropertyField);
     procedure FieldKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
+    procedure FieldKeyUp(Sender: TObject; var Key: Word;
+      Shift: TShiftState);
+    procedure FieldMouseUp(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
     procedure CoordinatesClick(Sender: TObject);
     procedure CancelButtonClick(Sender: TObject);
     function FieldFromControl(Sender: TObject): TObjectPropertyField;
@@ -125,6 +135,8 @@ type
       write FOnOpenCoordinates;
     property OnSessionChanged: TInspectorSessionEvent
       read FOnSessionChanged write FOnSessionChanged;
+    property OnBeforeFieldInput: TInspectorBeforeFieldInput
+      read FOnBeforeFieldInput write FOnBeforeFieldInput;
     property OnShouldSkipFieldRefresh: TInspectorFieldRefreshGuard
       read FOnShouldSkipFieldRefresh write FOnShouldSkipFieldRefresh;
     property HasActiveEdit: Boolean read FHasSessionField;
@@ -231,6 +243,12 @@ begin
   BuildView;
 end;
 
+function TObjectInspector.ContentWidth: Integer;
+begin
+  Result := FContent.ClientWidth;
+  if Result < 8 then Result := 264;
+end;
+
 destructor TObjectInspector.Destroy;
 begin
   if FSession <> nil then
@@ -326,7 +344,7 @@ begin
   FEmptyLabel.WordWrap := True;
   FEmptyLabel.Caption := 'No object selected. New-object defaults remain available in the property toolbars.';
   FEmptyLabel.BorderSpacing.Around := 8;
-  FEmptyLabel.SetBounds(0, 0, 264, 54);
+  FEmptyLabel.SetBounds(0, 0, ContentWidth, 54);
   FEmptyLabel.Anchors := [akTop, akLeft, akRight];
   FEmptyLabel.Visible := False;
 
@@ -334,7 +352,7 @@ begin
   FCoordinateButton.Parent := FContent;
   FCoordinateButton.Align := alNone;
   FCoordinateButton.Caption := 'Point coordinates…';
-  FCoordinateButton.SetBounds(0, 0, 264, 30);
+  FCoordinateButton.SetBounds(0, 0, ContentWidth, 30);
   FCoordinateButton.Anchors := [akTop, akLeft, akRight];
   FCoordinateButton.OnClick := CoordinatesClick;
   FCoordinateButton.Visible := False;
@@ -349,27 +367,30 @@ end;
 
 procedure TObjectInspector.LayoutSections;
 var
-  I, Y: Integer;
+  I, Y, Width: Integer;
 begin
+  Width := ContentWidth;
   Y := 0;
   for I := 0 to SectionCount - 1 do
   begin
-    FSectionButtons[I].SetBounds(0, Y, 264, 28);
+    FSectionButtons[I].SetBounds(0, Y, Width, 28);
     Inc(Y, 28);
     if FSectionBodies[I].Visible then
-      FSectionBodies[I].SetBounds(0, Y, 264, FSectionHeights[I])
+      FSectionBodies[I].SetBounds(0, Y, Width, FSectionHeights[I])
     else
-      FSectionBodies[I].SetBounds(0, Y, 264, 0);
+      FSectionBodies[I].SetBounds(0, Y, Width, 0);
     Inc(Y, FSectionBodies[I].Height);
   end;
   if FEmptyLabel.Visible then
   begin
     FEmptyLabel.Top := Y;
+    FEmptyLabel.Width := Width;
     Inc(Y, FEmptyLabel.Height);
   end;
   if FCoordinateButton.Visible then
   begin
     FCoordinateButton.Top := Y;
+    FCoordinateButton.Width := Width;
     Inc(Y, FCoordinateButton.Height);
   end;
   FContent.Height := Y;
@@ -393,7 +414,7 @@ begin
   FSectionBodies[Index].Anchors := [akTop, akLeft, akRight];
   FSectionBodies[Index].BevelOuter := bvNone;
   FSectionBodies[Index].AutoSize := False;
-  FSectionBodies[Index].Height := 0;
+  FSectionBodies[Index].SetBounds(0, 0, ContentWidth, 0);
   FSectionBodies[Index].Visible := Index < 3;
   if Index >= 3 then FSectionButtons[Index].Caption := '▸ ' + Title;
 end;
@@ -414,7 +435,8 @@ begin
   Row.Anchors := [akTop, akLeft, akRight];
   Row.BevelOuter := bvNone;
   if IsText then Row.Height := 132 else Row.Height := 64;
-  Row.SetBounds(0, FSectionHeights[Section], 264, Row.Height);
+  Row.SetBounds(0, FSectionHeights[Section],
+    FSectionBodies[Section].ClientWidth, Row.Height);
   Inc(FSectionHeights[Section], Row.Height);
   FSectionBodies[Section].Height := FSectionHeights[Section];
 
@@ -429,7 +451,8 @@ begin
   begin
     FWidgets[Field].HintText := TLabel.Create(Self);
     FWidgets[Field].HintText.Parent := Row;
-    FWidgets[Field].HintText.SetBounds(4, 91, 270, 16);
+    FWidgets[Field].HintText.Anchors := [akTop, akLeft, akRight];
+    FWidgets[Field].HintText.SetBounds(4, 91, Row.ClientWidth - 8, 16);
     FWidgets[Field].HintText.AutoSize := False;
     if Field = opfText then
       FWidgets[Field].HintText.Caption :=
@@ -444,14 +467,16 @@ begin
   FWidgets[Field].StateText.Name := 'Inspector' + FieldName(Field) + 'State';
   FWidgets[Field].StateText.Parent := Row;
   FWidgets[Field].StateText.Anchors := [akTop, akRight];
-  FWidgets[Field].StateText.SetBounds(172, 3, 100, 18);
+  FWidgets[Field].StateText.SetBounds(Row.ClientWidth - 104, 3, 100, 18);
   FWidgets[Field].StateText.Alignment := taRightJustify;
   FWidgets[Field].StateText.Caption := '';
 
   FWidgets[Field].ErrorText := TLabel.Create(Self);
   FWidgets[Field].ErrorText.Name := 'Inspector' + FieldName(Field) + 'Error';
   FWidgets[Field].ErrorText.Parent := Row;
-  FWidgets[Field].ErrorText.SetBounds(4, Row.Height - 20, 270, 16);
+  FWidgets[Field].ErrorText.Anchors := [akTop, akLeft, akRight];
+  FWidgets[Field].ErrorText.SetBounds(4, Row.Height - 20,
+    Row.ClientWidth - 8, 16);
   FWidgets[Field].ErrorText.AutoSize := False;
   FWidgets[Field].ErrorText.Font.Color := clRed;
   FWidgets[Field].ErrorText.Visible := False;
@@ -462,7 +487,7 @@ begin
     (Control as TCheckBox).Caption := Caption;
     LabelControl.Visible := False;
     FWidgets[Field].StateText.Visible := False;
-    Control.SetBounds(4, 26, 260, 21);
+    Control.SetBounds(4, 26, Row.ClientWidth - 8, 21);
   end
   else if IsCombo then
   begin
@@ -493,12 +518,12 @@ begin
       end;
       DropDownCount := 12;
     end;
-    Control.SetBounds(4, 23, 264, 23);
+    Control.SetBounds(4, 23, Row.ClientWidth - 8, 23);
   end
   else if IsText then
   begin
     Control := TCompositionAwareMemo.Create(Self);
-    Control.SetBounds(4, 23, 264, 66);
+    Control.SetBounds(4, 23, Row.ClientWidth - 8, 66);
     (Control as TMemo).ScrollBars := ssVertical;
     (Control as TMemo).WordWrap := True;
     (Control as TMemo).OnChange := FieldChanged;
@@ -508,7 +533,7 @@ begin
   else
   begin
     Control := TCompositionAwareEdit.Create(Self);
-    Control.SetBounds(4, 23, 264, 23);
+    Control.SetBounds(4, 23, Row.ClientWidth - 8, 23);
     (Control as TEdit).OnChange := FieldChanged;
     (Control as TCompositionAwareEdit).OnCompositionChanged :=
       CompositionChanged;
@@ -521,6 +546,11 @@ begin
   Control.TabOrder := 1;
   Control.OnEnter := FieldEnter;
   Control.OnKeyDown := FieldKeyDown;
+  Control.OnKeyUp := FieldKeyUp;
+  if Control is TCompositionAwareEdit then
+    (Control as TCompositionAwareEdit).OnMouseUp := FieldMouseUp
+  else if Control is TCompositionAwareMemo then
+    (Control as TCompositionAwareMemo).OnMouseUp := FieldMouseUp;
   LabelControl.FocusControl := Control;
   if Control is TComboBox then
     (Control as TComboBox).OnChange := FieldChanged
@@ -1252,15 +1282,44 @@ end;
 procedure TObjectInspector.FieldEnter(Sender: TObject);
 var
   Field: TObjectPropertyField;
+  ErrorText: string;
 begin
   if FRefreshing > 0 then Exit;
   Field := FieldFromControl(Sender);
   if (FSession <> nil) and FSession.IsActive and
-    (Field <> FSessionField) and
-    (FSession.HasRawDraftPending or FSession.CompositionPending) then
+    (Field <> FSessionField) then
   begin
-    RejectBlockedField(Field);
-    Exit;
+    if FSession.HasRawDraftPending or FSession.CompositionPending then
+    begin
+      RejectBlockedField(Field);
+      Exit;
+    end;
+    if (FWidgets[Field].Editor is TCustomEdit) or
+      (FWidgets[Field].Editor is TCheckBox) then
+      if not CommitSession(ErrorText) then
+      begin
+        RejectBlockedField(Field);
+        Exit;
+      end;
+  end;
+  if Assigned(FOnBeforeFieldInput) and not FRestoringFieldInput then
+  begin
+    if not FOnBeforeFieldInput(Self, FSession) then
+    begin
+      FSelectionLabel.Caption :=
+        'Finish or cancel the active edit before editing a property';
+      Exit;
+    end;
+    if not FWidgets[Field].Editor.Focused and
+      FWidgets[Field].Editor.CanFocus then
+    begin
+      FRestoringFieldInput := True;
+      try
+        FWidgets[Field].Editor.SetFocus;
+      finally
+        FRestoringFieldInput := False;
+      end;
+    end;
   end;
   FSelectionLabel.Caption := 'Editing ' + FWidgets[Field].Editor.Hint;
 end;
@@ -1455,6 +1514,21 @@ begin
   Include(FStableFieldTextValid, Field);
 end;
 
+procedure TObjectInspector.CaptureStableSelection(
+  Field: TObjectPropertyField);
+var
+  Editor: TWinControl;
+begin
+  Editor := FWidgets[Field].Editor;
+  if Editor is TCompositionAwareEdit then
+    (Editor as TCompositionAwareEdit).RefreshCompositionState
+  else if Editor is TCompositionAwareMemo then
+    (Editor as TCompositionAwareMemo).RefreshCompositionState;
+  if not EditorCompositionPending(Editor) and
+    ((FSession = nil) or not FSession.CompositionPending) then
+    CaptureStableField(Field);
+end;
+
 procedure TObjectInspector.RestoreCompositionBaseline(
   Field: TObjectPropertyField);
 begin
@@ -1490,14 +1564,16 @@ procedure TObjectInspector.FieldKeyDown(Sender: TObject;
 var
   ErrorText: string;
   Field: TObjectPropertyField;
+  TabMoved: Boolean;
 begin
   Field := FieldFromControl(Sender);
-  if Sender is TCompositionAwareEdit then
-    (Sender as TCompositionAwareEdit).RefreshCompositionState
-  else if Sender is TCompositionAwareMemo then
-    (Sender as TCompositionAwareMemo).RefreshCompositionState;
+  CaptureStableSelection(Field);
   if EditorCompositionPending(FWidgets[Field].Editor) or
-    ((FSession <> nil) and FSession.CompositionPending) then Exit;
+    ((FSession <> nil) and FSession.CompositionPending) then
+  begin
+    if Key = VK_TAB then Key := 0;
+    Exit;
+  end;
   if (Key = VK_ESCAPE) and FHasSessionField and
     (FSessionField = Field) then
   begin
@@ -1512,11 +1588,33 @@ begin
     CommitSession(ErrorText);
     Key := 0;
   end
-  else if (Key = VK_TAB) and FHasSessionField and
-    (FSessionField = Field) then
+  else if Key = VK_TAB then
   begin
-    if not CommitSession(ErrorText) then Key := 0;
+    if FHasSessionField and (FSessionField = Field) and
+      not CommitSession(ErrorText) then
+    begin
+      Key := 0;
+      Exit;
+    end;
+    TabMoved := FWidgets[Field].Editor.PerformTab(not (ssShift in Shift));
+    if TabMoved and
+      not FWidgets[Field].Editor.Focused then
+      Key := 0;
   end;
+end;
+
+procedure TObjectInspector.FieldKeyUp(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  if FRefreshing > 0 then Exit;
+  CaptureStableSelection(FieldFromControl(Sender));
+end;
+
+procedure TObjectInspector.FieldMouseUp(Sender: TObject;
+  Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  if FRefreshing > 0 then Exit;
+  CaptureStableSelection(FieldFromControl(Sender));
 end;
 
 procedure TObjectInspector.CoordinatesClick(Sender: TObject);

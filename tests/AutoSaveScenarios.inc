@@ -32,6 +32,41 @@ begin
   end;
 end;
 
+procedure CheckSavedSourceText(const FileName, ExpectedText,
+  ExpectedTeX: string);
+var
+  Snapshot: TDocumentSnapshot;
+  Candidate: TDrawing2D;
+  CodecContext: TObject;
+  CanSaveBack: Boolean;
+  Diagnostics: TStringList;
+  TextObject: TText2D;
+begin
+  Snapshot := ReadDocumentSnapshot(FileName);
+  Diagnostics := TStringList.Create;
+  CodecContext := nil;
+  Candidate := nil;
+  try
+    Candidate := LoadDocumentCandidate('tpx', FileName,
+      Snapshot.SourceBytes, CanSaveBack, CodecContext, Diagnostics);
+    Check((Candidate <> nil) and CanSaveBack,
+      'AutoSaved TpX text source did not reopen: ' + Diagnostics.Text);
+    Check((Candidate.ObjectsCount = 2) and
+      (Candidate.GetObject(1) is TText2D),
+      'AutoSaved TpX text source changed its independent scene objects');
+    TextObject := Candidate.GetObject(1) as TText2D;
+    Check((UTF8ToSys(DecodeTpXTextForEdit(TextObject.Text)) = ExpectedText) and
+      (TextObject.TeXText = ExpectedTeX),
+      'AutoSaved TpX text and TeX values changed independently: plain="' +
+      UTF8ToSys(DecodeTpXTextForEdit(TextObject.Text)) + '" tex="' +
+      TextObject.TeXText + '"');
+  finally
+    Candidate.Free;
+    CodecContext.Free;
+    Diagnostics.Free;
+  end;
+end;
+
 function SavedSourcePicScale(const FileName: string): Double;
 var
   Snapshot: TDocumentSnapshot;
@@ -113,7 +148,8 @@ begin
   Check(False, 'Completed edit was not AutoSaved within six seconds');
 end;
 
-function AutoSaveSourceLineX2(const FormatId, FileName: string): Double;
+function AutoSaveSourceLineX2(const FormatId, FileName: string;
+  out LineWidth: Double): Double;
 var
   Snapshot: TDocumentSnapshot;
   Candidate: TDrawing2D;
@@ -138,6 +174,7 @@ begin
     Check(Primitive.Points.Count >= 2,
       FormatId + ' AutoSave output lost a line endpoint');
     Result := Primitive.Points[1].X;
+    LineWidth := Primitive.LineWidth;
   finally
     Candidate.Free;
     CodecContext.Free;
@@ -147,42 +184,59 @@ end;
 
 procedure TestAutoSaveSourceFormats;
 const
+  TpXSource: RawByteString =
+    '%<TpX v="5" TeXFormat="none" PdfTeXFormat="none">' + LineEnding +
+    '%<line x1="1" y1="2" x2="20" y2="10"/>' + LineEnding +
+    '%</TpX>' + LineEnding;
   SvgSource: RawByteString =
     '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 100 100">' +
     '<line x1="1" y1="2" x2="20" y2="10" stroke="#000000"/>' +
     '</svg>';
   TikZSource: RawByteString =
     '\begin{tikzpicture}' + LineEnding +
-    '\draw (1mm,2mm) -- (20mm,10mm);' + LineEnding +
+    '\draw[line width=0.4mm] (1mm,2mm) -- (20mm,10mm);' + LineEnding +
     '\end{tikzpicture}' + LineEnding;
+  ExternalTpXSource: RawByteString =
+    '%<TpX v="5" TeXFormat="none" PdfTeXFormat="none">' + LineEnding +
+    '%<line x1="1" y1="2" x2="41" y2="10" lw="0.75"/>' + LineEnding +
+    '%</TpX>' + LineEnding;
   ExternalSvgSource: RawByteString =
     '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 100 100">' +
-    '<line x1="1" y1="2" x2="41" y2="10" stroke="#000000"/>' +
+    '<line x1="1" y1="2" x2="41" y2="10" stroke="#000000" stroke-width="0.75"/>' +
     '</svg>';
   ExternalTikZSource: RawByteString =
     '\begin{tikzpicture}' + LineEnding +
-    '\draw (1mm,2mm) -- (41mm,10mm);' + LineEnding +
+    '\draw[line width=0.75mm] (1mm,2mm) -- (41mm,10mm);' + LineEnding +
     '\end{tikzpicture}' + LineEnding;
-  FormatIds: array[0..1] of string = ('svg', 'tikz');
+  FormatIds: array[0..2] of string = ('tpx', 'svg', 'tikz');
 var
   I: Integer;
   FormatId, FileName, ErrorText: string;
   Extension: string;
   SourceBytes, ExternalBytes, SavedBytes: RawByteString;
-  ExternalRevision: TDiskRevision;
+  ExternalRevision, SavedRevision: TDiskRevision;
   Deadline: QWord;
   Primitive: TPrimitive2D;
-  Endpoint: TPoint2D;
+  WidthEditor: TEdit;
+  SavedLineWidth, ExpectedExternalWidth: Double;
+  OriginalBytes: RawByteString;
   Unsupported: TObject2D;
 begin
   RegisterTikZDocumentCodec;
+  MainForm.Show;
+  Application.ProcessMessages;
   AutoRefreshEnabled := True;
   MainForm.ApplyAutoReloadSettings;
   MainForm.ApplyAutoSavePreference(False);
   for I := Low(FormatIds) to High(FormatIds) do
   begin
     FormatId := FormatIds[I];
-    if FormatId = 'svg' then
+    if FormatId = 'tpx' then
+    begin
+      Extension := '.tpx';
+      SourceBytes := TpXSource;
+    end
+    else if FormatId = 'svg' then
     begin
       Extension := '.svg';
       SourceBytes := SvgSource;
@@ -199,8 +253,9 @@ begin
       FormatId + ' production open failed: ' + ErrorText);
     Check(not MainForm.AutoReloadState.WatchUnavailable,
       FormatId + ' production open route did not bind a native source watch');
-    Check(Pos(LiveTeXTrustStatus, MainForm.StatusBar1.Hint) > 0,
-      FormatId + ' source hint lost the TeX preview trust notice after open');
+    if FormatId <> 'tpx' then
+      Check(Pos(LiveTeXTrustStatus, MainForm.StatusBar1.Hint) > 0,
+        FormatId + ' source hint lost the TeX preview trust notice after open');
     Check((MainForm.EventManager.DocumentSession.SourceFormatId = FormatId) and
       MainForm.EventManager.DocumentSession.CanSaveBack,
       FormatId + ' source session is not safely writable');
@@ -211,15 +266,53 @@ begin
     Primitive := MainForm.TheDrawing.GetObject(0) as TPrimitive2D;
     Check(Primitive.Points.Count >= 2,
       FormatId + ' fixture did not produce an editable line');
-    Endpoint := Primitive.Points[1];
-    Endpoint.X := 31;
-    Primitive.Points[1] := Endpoint;
-    MainForm.TheDrawing.History.Save;
-    MainForm.NotifyDocumentEdited;
+    MainForm.TheDrawing.SelectionClear;
+    MainForm.TheDrawing.SelectionAdd(Primitive);
+    MainForm.ShowInspector;
+    MainForm.Inspector.FocusField(opfLineWidth);
+    WidthEditor := MainForm.Inspector.EditorFor(opfLineWidth) as TEdit;
+    OriginalBytes := ReadDocumentSnapshot(TDocumentPath(FileName)).SourceBytes;
+    WidthEditor.Text := '2.25';
+    Application.ProcessMessages;
+    Check(MainForm.HasActiveEditSession and
+      not MainForm.TheDrawing.History.IsChanged and
+      (Abs(Primitive.LineWidth - 2.25) < 0.0001),
+      FormatId + ' inspector edit did not create a clean in-place preview');
+    Deadline := GetTickCount64 + 1200;
+    repeat
+      Application.ProcessMessages;
+      Sleep(10);
+    until GetTickCount64 >= Deadline;
+    Check(ReadDocumentSnapshot(TDocumentPath(FileName)).SourceBytes =
+      OriginalBytes,
+      FormatId + ' AutoSave published an uncommitted inspector preview');
+    Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+      FormatId + ' inspector edit did not commit: ' + ErrorText);
+    Check(not MainForm.HasActiveEditSession and
+      MainForm.TheDrawing.History.IsChanged,
+      FormatId + ' completed inspector edit did not create one dirty command');
     WaitForAutoSaveClean(FileName);
-    Check(Abs(AutoSaveSourceLineX2(FormatId, FileName) - 31) < 0.001,
-      FormatId + ' AutoSave did not publish the edited source geometry');
-    if FormatId = 'svg' then ExternalBytes := ExternalSvgSource
+    Check((Abs(AutoSaveSourceLineX2(FormatId, FileName,
+      SavedLineWidth) - 20) < 0.001) and
+      (Abs(SavedLineWidth - 2.25) < 0.0001),
+      FormatId + ' AutoSave did not reopen with the committed inspector width');
+    SavedRevision := MainForm.EventManager.DocumentSession.AcceptedRevision;
+    SavedBytes := ReadDocumentSnapshot(TDocumentPath(FileName)).SourceBytes;
+    Deadline := GetTickCount64 + 1400;
+    repeat
+      Application.ProcessMessages;
+      MainForm.ProcessPendingReload(GetTickCount64 + 1000);
+      Sleep(10);
+    until GetTickCount64 >= Deadline;
+    Check(ReadDocumentSnapshot(TDocumentPath(FileName)).SourceBytes = SavedBytes,
+      FormatId + ' self-save caused an extra source publication');
+    Check(SameDiskRevision(ReadDocumentRevision(TDocumentPath(FileName)),
+      SavedRevision) and
+      SameDiskRevision(MainForm.EventManager.DocumentSession.AcceptedRevision,
+        SavedRevision),
+      FormatId + ' self-save changed the accepted disk revision after settling');
+    if FormatId = 'tpx' then ExternalBytes := ExternalTpXSource
+    else if FormatId = 'svg' then ExternalBytes := ExternalSvgSource
     else ExternalBytes := ExternalTikZSource;
     WriteReloadSource(FileName, ExternalBytes);
     Deadline := GetTickCount64 + 6000;
@@ -235,8 +328,26 @@ begin
     Check((Abs(Primitive.Points[1].X - 41) < 0.001) and
       (MainForm.EventManager.DocumentSession.SourceFormatId = FormatId) and
       (MainForm.EventManager.DocumentSession.OriginalSourceBytes =
-        ExternalBytes),
-      FormatId + ' external source edit did not auto-refresh the live scene');
+        ExternalBytes) and
+      (WidthEditor.Text = RealTypeToStr(Primitive.LineWidth)),
+      Format(FormatId + ' external source edit did not auto-refresh the live scene: ' +
+      'x2=%.6f, width=%.6f, field="%s", source-format="%s", bytes-match=%s',
+      [Primitive.Points[1].X, Primitive.LineWidth, WidthEditor.Text,
+       MainForm.EventManager.DocumentSession.SourceFormatId,
+       BoolToStr(MainForm.EventManager.DocumentSession.OriginalSourceBytes =
+         ExternalBytes, True)]));
+    if FormatId = 'tikz' then
+    begin
+      Check(MainForm.TheDrawing.LineWidthBase > 0,
+        'TikZ reload lost its physical line width base');
+      ExpectedExternalWidth := 0.75 / MainForm.TheDrawing.LineWidthBase;
+    end
+    else
+      ExpectedExternalWidth := 0.75;
+    Check(Abs(Primitive.LineWidth - ExpectedExternalWidth) < 0.0001,
+      Format('%s external line width changed its source units: value=%.6f, ' +
+      'base=%.6f', [FormatId, Primitive.LineWidth,
+       MainForm.TheDrawing.LineWidthBase]));
     Check(SameDiskRevision(ReadDocumentRevision(TDocumentPath(FileName)),
       MainForm.EventManager.DocumentSession.AcceptedRevision),
       FormatId + ' refresh did not accept the external disk revision');
@@ -260,19 +371,22 @@ begin
       FormatId + ' external refresh caused a source write after acceptance');
     SavedBytes := ExternalBytes;
 
-    Unsupported := TArc2D.CreateSpec(-1, Point2D(0, 0), 1, 0, Pi / 2);
-    MainForm.TheDrawing.AddObject(-1, Unsupported);
-    MainForm.TheDrawing.History.Save;
-    MainForm.NotifyDocumentEdited;
-    Deadline := GetTickCount64 + 1800;
-    repeat
-      Application.ProcessMessages;
-      Sleep(10);
-    until GetTickCount64 >= Deadline;
-    Check(ReadDocumentSnapshot(TDocumentPath(FileName)).SourceBytes = SavedBytes,
-      FormatId + ' unsupported-shape AutoSave changed accepted source bytes');
-    Check(MainForm.TheDrawing.History.IsChanged,
-      FormatId + ' unsupported-shape AutoSave marked the edit clean');
+    if FormatId <> 'tpx' then
+    begin
+      Unsupported := TArc2D.CreateSpec(-1, Point2D(0, 0), 1, 0, Pi / 2);
+      MainForm.TheDrawing.AddObject(-1, Unsupported);
+      MainForm.TheDrawing.History.Save;
+      MainForm.NotifyDocumentEdited;
+      Deadline := GetTickCount64 + 1800;
+      repeat
+        Application.ProcessMessages;
+        Sleep(10);
+      until GetTickCount64 >= Deadline;
+      Check(ReadDocumentSnapshot(TDocumentPath(FileName)).SourceBytes = SavedBytes,
+        FormatId + ' unsupported-shape AutoSave changed accepted source bytes');
+      Check(MainForm.TheDrawing.History.IsChanged,
+        FormatId + ' unsupported-shape AutoSave marked the edit clean');
+    end;
     MainForm.ApplyAutoSavePreference(False);
   end;
 end;
@@ -287,6 +401,11 @@ const
     '%<TpX v="5" TeXFormat="tikz" PdfTeXFormat="tikz">' + LineEnding +
     '%<line x1="0" y1="0" x2="55" y2="10"/>' + LineEnding +
     '%</TpX>' + LineEnding;
+  ExternalInlineSource: RawByteString =
+    '%<TpX v="5" TeXFormat="tikz" PdfTeXFormat="tikz">' + LineEnding +
+    '%<line x1="0" y1="0" x2="31" y2="10"/>' + LineEnding +
+    '%<text x="9" y="12" h="5" t="External label Ω" tex="\omega_j"/>' + LineEnding +
+    '%</TpX>' + LineEnding;
 var
   FileName, ErrorText: string;
   Deadline: QWord;
@@ -294,6 +413,11 @@ var
   ExpectedDelta, ExpectedEndX, ActualStartX, ActualEndX, SavedEndX: Double;
   CanvasX, CanvasY: Integer;
   MappedStart, MappedEnd: TPoint2D;
+  TextObject: TText2D;
+  SourceBeforeInline, InlineSavedBytes: RawByteString;
+  InlineExternalRevision: TDiskRevision;
+  InlineMemo: TCompositionAwareMemo;
+  InspectorTeXMemo: TCompositionAwareMemo;
   AutoSaveItem: TMenuItem;
   ScaleDriver: TPictureScaleDriver;
   procedure CanvasPosition(const World: TPoint2D; out X, Y: Integer;
@@ -444,6 +568,82 @@ begin
   WaitForAutoSaveClean(FileName);
   Check(Abs(SavedSourceLineX2(FileName) - 30) < 0.0001,
     'AutoSave did not resume after restoring a safe output profile');
+
+  { Exercise the real canvas editor and native source writer on a committed
+    TpX text edit, then make an external edit after AutoSave accepted it. }
+  TextObject := TText2D.CreateSpec(-1, Point2D(9, 12), 5,
+    'Autosave baseline');
+  TextObject.TeXText := '\beta';
+  MainForm.TheDrawing.AddObject(-1, TextObject);
+  MainForm.TheDrawing.History.Save;
+  MainForm.NotifyDocumentEdited;
+  WaitForAutoSaveClean(FileName);
+  SourceBeforeInline := ReadDocumentSnapshot(FileName).SourceBytes;
+  Check(MainForm.BeginInlineTextEdit(TextObject),
+    'The existing TpX text label did not open the canvas editor');
+  InlineMemo := MainForm.InlineTextMemo;
+  Check((InlineMemo <> nil) and InlineMemo.Visible,
+    'AutoSave integration did not create the inline text control');
+  InlineMemo.Text := '\gamma_{j}';
+  Check((TextObject.TeXText = '\beta') and
+    MainForm.HasActiveEditSession,
+    'Typing inline TeX changed the committed model before Done');
+  MainForm.InlineTextDoneButton.Click;
+  Check((TextObject.TeXText = '\gamma_{j}') and
+    MainForm.TheDrawing.History.IsChanged and
+    not MainForm.HasActiveEditSession,
+    'Done did not commit one inline TeX edit before AutoSave');
+  WaitForAutoSaveClean(FileName);
+  CheckSavedSourceText(FileName, 'Autosave baseline', '\gamma_{j}');
+  InlineSavedBytes := ReadDocumentSnapshot(FileName).SourceBytes;
+  Check((InlineSavedBytes <> SourceBeforeInline) and
+    (MainForm.EventManager.DocumentSession.OriginalSourceBytes =
+      InlineSavedBytes),
+    'Inline AutoSave did not publish and accept the changed TpX source bytes');
+
+  MainForm.TheDrawing.SelectionClear;
+  MainForm.TheDrawing.SelectionAdd(TextObject);
+  MainForm.ShowInspector;
+  MainForm.RefreshInspectorSelection;
+  InspectorTeXMemo := MainForm.Inspector.EditorFor(opfTeXText) as
+    TCompositionAwareMemo;
+  Check(InspectorTeXMemo.EditText = '\gamma_{j}',
+    'Inspector did not show the committed inline TeX value');
+  WriteReloadSource(FileName, ExternalInlineSource);
+  Deadline := GetTickCount64 + 6000;
+  repeat
+    Application.ProcessMessages;
+    MainForm.ProcessPendingReload(GetTickCount64 + 1000);
+    Line := MainForm.TheDrawing.GetObject(0) as TLine2D;
+    if (Abs(Line.Points[1].X - 31) < 0.0001) and
+      (MainForm.EventManager.DocumentSession.OriginalSourceBytes =
+        ExternalInlineSource) then Break;
+    Sleep(10);
+  until GetTickCount64 >= Deadline;
+  Check((Abs(Line.Points[1].X - 31) < 0.0001) and
+    (MainForm.TheDrawing.GetObject(1) is TText2D) and
+    (UTF8ToSys(DecodeTpXTextForEdit(
+      (MainForm.TheDrawing.GetObject(1) as TText2D).Text)) =
+      'External label Ω') and
+    ((MainForm.TheDrawing.GetObject(1) as TText2D).TeXText = '\omega_j') and
+    (InspectorTeXMemo.EditText = '\omega_j') and
+    (MainForm.EventManager.DocumentSession.OriginalSourceBytes =
+      ExternalInlineSource) and
+    SameDiskRevision(ReadDocumentRevision(FileName),
+      MainForm.EventManager.DocumentSession.AcceptedRevision) and
+    not MainForm.TheDrawing.History.IsChanged and
+    not MainForm.HasActiveEditSession,
+    'External TpX change did not replace the saved inline value and inspector');
+  InlineExternalRevision := MainForm.EventManager.DocumentSession.AcceptedRevision;
+  Deadline := GetTickCount64 + 1200;
+  repeat
+    Application.ProcessMessages;
+    MainForm.ProcessPendingReload(GetTickCount64 + 1000);
+    Sleep(10);
+  until GetTickCount64 >= Deadline;
+  Check((ReadDocumentSnapshot(FileName).SourceBytes = ExternalInlineSource) and
+    SameDiskRevision(ReadDocumentRevision(FileName), InlineExternalRevision),
+    'External TpX reload triggered an AutoSave source publication');
 
   MainForm.ApplyAutoSavePreference(True);
   Line := MainForm.TheDrawing.GetObject(0) as TLine2D;
