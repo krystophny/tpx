@@ -615,6 +615,7 @@ var
   ShortcutHandled: Boolean;
   SelectedID: Integer;
   SelectedAfter: Integer;
+  TextObjectID: Integer;
   TextAnchor: TPoint2D;
 
   function InspectorTop(Control: TControl): Integer;
@@ -975,13 +976,14 @@ begin
     'Second combo did not commit after a combo-to-combo handoff: ' + ErrorText);
   Check(Drawing.History.Count = HandoffHistory + 2,
     'The two combo edits did not produce separate undo boundaries');
+  TextObjectID := TextObj.ID;
   Drawing.History.Undo;
-  TextObj := Drawing.GetObject(TextObj.ID) as TText2D;
+  TextObj := Drawing.GetObject(TextObjectID) as TText2D;
   Check((fsBold in TextObj.Font.Style) and
     (TextObj.HAlignment = ahLeft),
     'Undo did not restore only the second combo edit');
   Drawing.History.Undo;
-  TextObj := Drawing.GetObject(TextObj.ID) as TText2D;
+  TextObj := Drawing.GetObject(TextObjectID) as TText2D;
   Check(not (fsBold in TextObj.Font.Style) and
     (TextObj.HAlignment = ahLeft),
     'Undo did not restore the first combo edit');
