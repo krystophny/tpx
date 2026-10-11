@@ -309,7 +309,7 @@ def s_recovery_retains_source_and_linked_asset(app):
     app.drag(cx - 70, cy - 50, cx + 70, cy + 50)
     app.key('Escape')
     app.menu('Insert', 'Insert text')
-    text_prompt = app.page.locator('#lcl-dom input[aria-label="Edit text"]:visible')
+    text_prompt = app.page.locator('#lcl-dom input[aria-label="Edit text"]:focus:visible')
     if text_prompt.count():
         text_prompt.fill('Uploaded source label')
         text_prompt.press('Enter')
