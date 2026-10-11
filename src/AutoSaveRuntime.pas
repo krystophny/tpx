@@ -334,7 +334,7 @@ begin
       if not SameDocumentPath(DocumentPathDirectory(SourcePath),
         AssetDirectory) then Continue;
       J := SourcePaths.IndexOf(string(SourcePath));
-      if J >= 0 then Entry.SetImageLink(string(TargetPaths[J]));
+      if J >= 0 then Entry.AdoptImageLink(string(TargetPaths[J]));
     end;
   except
     for I := 0 to CreatedPaths.Count - 1 do
