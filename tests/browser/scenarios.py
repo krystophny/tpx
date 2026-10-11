@@ -59,7 +59,7 @@ def focus_document(app, v):
     Clicking a toolbar button must not take that focus away (fixed in the WASI
     CustomDrawn backend), which is what makes Ctrl+Z and Escape work here.
     """
-    app.click(v['x'] + v['w'] - 60, v['y'] + 40)
+    app.click(v['x'] + v['w'] - 60, v['y'] + v['h'] - 60)
     app.page.wait_for_timeout(200)
 
 
@@ -1615,6 +1615,10 @@ def s_nonmodal_editing_workflow(app):
             raise AssertionError(f'{name} changed the committed text font: {saved_font}')
         return attrs[2]
 
+    def focus_canvas_for_history():
+        focus_document(app, v)
+        expect(app.page.locator('#lcl')).to_be_focused(timeout=3000)
+
     # An over-limit live draft must keep its buffer, caret and editor when an
     # Inspector handoff is refused; Cancel then restores the committed source.
     px, py = app.at(cx - 80, cy - 40)
@@ -1717,8 +1721,7 @@ def s_nonmodal_editing_workflow(app):
     # draft first, then gives keyboard focus to the new field before its first
     # character is typed. This catches a commit callback that refocuses canvas.
     height.click()
-    if not height.evaluate('(e) => document.activeElement === e'):
-        raise AssertionError('Inspector field did not receive focus after inline settlement')
+    expect(height).to_be_focused(timeout=3000)
     height.press('Control+A')
     height.type('3.125')
     if height.input_value() != '3.125':
@@ -1738,34 +1741,34 @@ def s_nonmodal_editing_workflow(app):
     if edited != expected_edited:
         raise AssertionError(f'cross-view edits changed source, anchor, style or unrelated fields: {edited}')
 
-    focus_document(app, v)
+    focus_canvas_for_history()
     app.key('Control+z')
     undone_height = snapshot('nonmodal-height-undone.tpx')
     expected_gamma = copy.deepcopy(baseline_attrs[2])
     expected_gamma['tex'] = r'$\gamma_{j}$'
     if undone_height != expected_gamma:
         raise AssertionError(f'height undo crossed the inline text edit: {undone_height}')
-    focus_document(app, v)
+    focus_canvas_for_history()
     app.key('Control+Shift+z')
     redone_height = snapshot('nonmodal-height-redone.tpx')
     if redone_height != expected_edited:
         raise AssertionError(f'height redo did not restore its own committed edit: {redone_height}')
-    focus_document(app, v)
+    focus_canvas_for_history()
     app.key('Control+z')
     undone_height_again = snapshot('nonmodal-height-undone-again.tpx')
     if undone_height_again != expected_gamma:
         raise AssertionError(f'second height undo crossed the inline text edit: {undone_height_again}')
-    focus_document(app, v)
+    focus_canvas_for_history()
     app.key('Control+z')
     undone_text = snapshot('nonmodal-text-undone.tpx')
     if undone_text != baseline_attrs[2]:
         raise AssertionError(f'text undo did not restore the complete prior object: {undone_text}')
-    focus_document(app, v)
+    focus_canvas_for_history()
     app.key('Control+Shift+z')
     redone_text = snapshot('nonmodal-text-redone.tpx')
     if redone_text != expected_gamma:
         raise AssertionError(f'text redo changed the inspector edit or other fields: {redone_text}')
-    focus_document(app, v)
+    focus_canvas_for_history()
     app.key('Control+Shift+z')
     redone_height = snapshot('nonmodal-height-redone-again.tpx')
     if redone_height != expected_edited:
