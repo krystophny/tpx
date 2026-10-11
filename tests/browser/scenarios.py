@@ -264,19 +264,158 @@ def s_keyboard_shortcut(app):
 
 
 def s_text_input(app):
-    """Accept the text dialog, place text, and verify saved content."""
-    app.menu('Insert', 'Insert text')
-    app.page.wait_for_function('document.querySelector("#lcl").width < 500')
-    app.type('WASM Grüße λ 漢字 🐈')
-    app.key('Enter')  # Accept through the ordinary LCL default button
-    app.page.wait_for_function('document.querySelector("#lcl").width > 500')
+    """Create, save, reopen and edit Unicode text without a modal dialog."""
+    import re
+
     v, cx, cy = box(app)
+    text = 'WASM Grüße λ 漢字 🐈 & &#946;'
+    app.menu('Insert', 'Insert text')
     app.click(cx-60, cy-20)
-    app.key('Escape')
-    saved = app.save('text-roundtrip.tpx').read_text()
-    if 'WASM Grüße λ 漢字 🐈' not in saved:
-        raise AssertionError('accepted text is missing from the saved drawing')
-    return 'accepted and placed text survives save'
+    editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    editor.wait_for()
+    if app.page.locator('dialog[open]').count():
+        raise AssertionError('creating text opened a modal dialog')
+    editor.click()
+    shortcut_letters = 'lrceapgtb'
+    typed = ''
+    for letter in shortcut_letters:
+        app.page.keyboard.type(letter)
+        typed += letter
+        if editor.input_value() != typed:
+            raise AssertionError(f'canvas shortcut intercepted typed {letter!r}: '
+                                 f'{editor.input_value()!r}')
+    editor.fill('')
+    app.page.keyboard.type(text)
+    if editor.input_value() != text:
+        raise AssertionError('Unicode browser input changed before commit: '
+                             f'{editor.input_value()!r}')
+    app.page.get_by_role('button', name='Done', exact=True).click()
+    app.page.wait_for_timeout(150)
+    if editor.count():
+        raise AssertionError(f'Done did not settle the inline text session: {app.errors!r}')
+    if app.page.locator('dialog[open]').count():
+        raise AssertionError('committing inline text opened a modal dialog')
+
+    saved = app.save('text-roundtrip.tpx')
+    # The generated TikZ block can contain local-codepage bytes even though
+    # the TpX XML text attributes are ASCII numeric references. Preserve the
+    # downloaded bytes while inspecting or cloning the fixture.
+    raw = saved.read_bytes().decode('latin-1')
+    tag = re.search(r'<text\b[^>]*>', raw)
+    if tag is None or 't=' not in tag.group(0):
+        raise AssertionError('saved drawing has no text object')
+
+    app.menu('File', 'Open')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('Choose file').set_input_files(saved)
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    app.page.wait_for_timeout(300)
+    def reopen_existing_text():
+        v2, x2, y2 = box(app)
+        px, py = app.at(x2 + 40, y2 + 250)
+        app.page.mouse.dblclick(px, py)
+
+    reopen_existing_text()
+    editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    editor.wait_for()
+    if editor.input_value() != text:
+        raise AssertionError(f'save/reopen changed Unicode text: {editor.input_value()!r}')
+    app.page.keyboard.type('!')
+    if editor.input_value() != text + '!':
+        raise AssertionError('Unicode text caret was not at the end after reopening')
+    app.page.keyboard.press('Backspace')
+    if editor.input_value() != text:
+        raise AssertionError('native text editing changed Unicode caret content')
+
+    app.page.get_by_role('button', name='Done', exact=True).click()
+    v2, x2, y2 = box(app)
+    app.click(TOOL_X, tool('text'))
+    app.click(x2 + 40, y2 + 250)
+    editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    editor.wait_for()
+    if editor.input_value() != text:
+        raise AssertionError('Text tool click did not edit the existing label')
+
+    # A deliberate final line break is user content and must survive the
+    # actual save/reopen path.
+    multiline = 'first line\nsecond line\n'
+    editor.fill(multiline)
+    app.page.get_by_role('button', name='Done', exact=True).click()
+    multiline_saved = app.save('text-trailing-newline.tpx')
+    multiline_xml = multiline_saved.read_bytes().decode('latin-1')
+    multiline_tag = re.search(r'<text\b[^>]*>', multiline_xml)
+    if len(re.findall(r'<text\b', multiline_xml)) != 1 or not multiline_tag:
+        raise AssertionError('Text-tool editing created a duplicate label')
+    initial_attrs = dict(re.findall(r'([A-Za-z][A-Za-z0-9]*)="([^"]*)"',
+                                   tag.group(0)))
+    multiline_attrs = dict(re.findall(
+        r'([A-Za-z][A-Za-z0-9]*)="([^"]*)"', multiline_tag.group(0)))
+    for name in ('x', 'y', 'h', 'halign', 'rotdeg'):
+        if multiline_attrs.get(name) != initial_attrs.get(name):
+            raise AssertionError(f'text edit changed saved {name}: '
+                                 f'{initial_attrs.get(name)!r} -> '
+                                 f'{multiline_attrs.get(name)!r}')
+    app.menu('File', 'Open')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('Choose file').set_input_files(multiline_saved)
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    app.page.wait_for_timeout(300)
+    reopen_existing_text()
+    editor = app.page.get_by_role('textbox', name='Text (canvas)', exact=True)
+    editor.wait_for()
+    if editor.input_value() != multiline:
+        raise AssertionError(f'save/reopen changed an intentional trailing newline: '
+                             f'{editor.input_value()!r}')
+
+    # Add a TeX source to the saved fixture, edit only that field, and compare
+    # the serialized plain-text attribute before and after the source edit.
+    tex_tag = tag.group(0)
+    insert_at = -2 if tex_tag.endswith('/>') else -1
+    tex_fixture = app.output / 'text-with-tex-source.tpx'
+    tex_fixture.write_bytes(raw.replace(tex_tag,
+        tex_tag[:insert_at] + ' tex="\\alpha"' + tex_tag[insert_at:], 1)
+        .encode('latin-1'))
+    app.page.get_by_role('button', name='Cancel', exact=True).click()
+    app.menu('File', 'Open')
+    dialog = app.page.get_by_role('dialog')
+    dialog.get_by_label('Choose file').set_input_files(tex_fixture)
+    dialog.get_by_role('button', name='OK', exact=True).click()
+    app.page.wait_for_timeout(300)
+    reopen_existing_text()
+    tex_editor = app.page.get_by_role('textbox', name='TeX source (canvas)', exact=True)
+    tex_editor.wait_for()
+    if tex_editor.input_value() != r'\alpha':
+        raise AssertionError('editing did not select the independent TeX source')
+    tex_editor.fill(r'\beta')
+    app.page.get_by_role('button', name='Done', exact=True).click()
+    tex_saved = app.save('text-tex-source.tpx').read_bytes().decode('latin-1')
+    final_tag = re.search(r'<text\b[^>]*>', tex_saved)
+    before_attrs = dict(re.findall(r'([A-Za-z][A-Za-z0-9]*)="([^"]*)"',
+                                   tag.group(0)))
+    after_attrs = dict(re.findall(r'([A-Za-z][A-Za-z0-9]*)="([^"]*)"',
+                                  final_tag.group(0))) if final_tag else {}
+    if not final_tag or after_attrs.get('t') != before_attrs.get('t') or after_attrs.get('tex') != r'\beta':
+        raise AssertionError('editing TeX source changed plain Text or failed to save')
+    for name in ('x', 'y', 'h', 'halign', 'rotdeg'):
+        if after_attrs.get(name) != before_attrs.get(name):
+            raise AssertionError(f'TeX edit changed saved {name}: '
+                                 f'{before_attrs.get(name)!r} -> '
+                                 f'{after_attrs.get(name)!r}')
+
+    # Escape cancels a newly placed provisional label without leaving a blank
+    # object in the document.
+    app.menu('Insert', 'Insert text')
+    app.click(cx+100, cy+70)
+    app.page.get_by_role('textbox', name='Text (canvas)', exact=True).wait_for()
+    app.page.keyboard.press('Escape')
+    app.page.wait_for_timeout(150)
+    cancelled = re.findall(r'<text\b',
+                           app.save('text-cancel.tpx').read_bytes().decode('latin-1'))
+    if len(cancelled) != 1:
+        raise AssertionError(f'cancel left a phantom text object: {len(cancelled)}')
+    if app.page.locator('dialog[open]').count():
+        raise AssertionError('inline editing displayed an unexpected dialog')
+    return 'Unicode Text and independent TeX source survive edit/save/reopen; Escape leaves no phantom label'
 
 
 def s_idle_stops_repainting(app):
@@ -671,34 +810,76 @@ def s_bitmap_roundtrip(app):
     return 'bitmap save has no converter dialog; EPS contains pixels; related PNG reopens'
 
 
-def s_modal_properties(app):
+def s_object_inspector(app):
     v, cx, cy = box(app)
     app.menu('Insert', 'Insert rectangle')
-    app.drag(cx-70, cy-50, cx+70, cy+50)
+    app.drag(cx-150, cy-55, cx-35, cy+45)
+    app.key('Escape')
+    app.menu('Insert', 'Insert rectangle')
+    app.drag(cx+35, cy-45, cx+145, cy+55)
     app.key('Escape')
     app.menu('Edit', 'Select all')
     app.menu('Edit', 'Object properties')
-    app.click(335, 17)  # Line color combo's dropdown arrow in the Properties LFM
-    choices = app.page.get_by_role('dialog').get_by_role('listbox')
-    choices.press('Escape')
-    app.page.get_by_role('dialog').wait_for(state='hidden')
-    app.click(335, 17)
-    choices = app.page.get_by_role('dialog').get_by_role('listbox')
-    choices.select_option('1')  # Custom, after Default; preserves Pascal item order
-    choices.press('Enter')
-    color = app.page.get_by_role('dialog').get_by_label('Color', exact=True)
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('opening the inspector created a modal dialog')
+    width = app.page.get_by_role('textbox', name='Width multiplier', exact=True)
+    width.fill('2.5')
+    width.press('Enter')
+    color = app.page.get_by_role('combobox', name='Line color', exact=True)
     color.fill('#1278b5')
-    app.page.get_by_role('dialog').get_by_role('button', name='OK', exact=True).click()
-    app.page.get_by_role('textbox', name='RX', exact=True).fill('2.5')
-    app.page.get_by_role('textbox', name='RY', exact=True).fill('3.5')
-    app.page.get_by_role('button', name='OK', exact=True).click()
-    objects = drawing_xml(app.save('properties.tpx'))
-    if len(objects) != 1 or float(objects[0].get('rx', '0')) != 2.5 or float(objects[0].get('ry', '0')) != 3.5 or objects[0].get('lc') != '#1278B5':
-        raise AssertionError(f'edited corner radii did not survive save: {[o.attrib for o in objects]}')
+    color.press('Enter')
+    app.page.get_by_role('textbox', name='Horizontal radius (mm)', exact=True).fill('2.5')
+    app.page.get_by_role('textbox', name='Vertical radius (mm)', exact=True).fill('3.5')
+    app.page.get_by_role('textbox', name='Vertical radius (mm)', exact=True).press('Enter')
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('routine inspector edits opened a modal dialog')
+    width.fill('4.5')
+    style = app.page.get_by_role('combobox', name='Line style', exact=True)
+    style.click()
+    style.press('Escape')
+    width.press('Escape')
+    if width.input_value() != '3.5':
+        raise AssertionError('opening a property dropdown committed the other field draft')
+    if app.capture_requested:
+        app.shot('wide-open')
+    width.fill('3.5')
+    # Leaving the field for another canvas selection commits the pending edit.
+    app.click(cx+210, cy+160)
+    if app.page.get_by_role('dialog').count():
+        raise AssertionError('committing the inspector edit opened a modal dialog')
+    app.menu('Edit', 'Select all')
     app.menu('Edit', 'Object properties')
-    if app.page.get_by_role('textbox', name='RX', exact=True).input_value() != '2.5':
-        raise AssertionError('reopened properties lost the edited value')
-    app.page.get_by_role('button', name='Cancel', exact=True).click()
+    if width.input_value() != '3.5':
+        raise AssertionError('selection refresh lost the last committed width')
+    before = app.viewport()
+    app.menu('View', 'Object inspector')
+    hidden = app.viewport()
+    if hidden['w'] <= before['w']:
+        raise AssertionError('collapsing the inspector did not restore canvas width')
+    if app.capture_requested:
+        app.shot('wide-collapsed')
+    app.menu('View', 'Object inspector')
+    if width.input_value() != '3.5':
+        raise AssertionError('reopening the inspector lost the selection values')
+    app.page.set_viewport_size({'width': 760, 'height': 900})
+    app.page.wait_for_timeout(250)
+    rounded = app.page.get_by_role('button').filter(has_text='Rounded corners')
+    rounded.click()
+    radius = app.page.get_by_role('textbox', name='Horizontal radius (mm)', exact=True)
+    radius.fill('-1')
+    if not app.page.get_by_text('Enter a nonnegative number', exact=True).is_visible():
+        raise AssertionError('invalid inspector input did not show inline validation')
+    if app.capture_requested:
+        app.shot('narrow-inline-error-advanced')
+    radius.fill('2.5')
+    radius.press('Enter')
+    objects = drawing_xml(app.save('properties.tpx'))
+    if (len(objects) != 2 or any(
+            float(obj.get('lw', '0')) != 3.5 or
+            float(obj.get('rx', '0')) != 2.5 or
+            float(obj.get('ry', '0')) != 3.5 or
+            obj.get('lc', '').upper() != '#1278B5' for obj in objects)):
+        raise AssertionError(f'inspector edits did not survive save: {[o.attrib for o in objects]}')
     app.menu('Help', 'About')
     app.page.get_by_role('button', name='Acknowledgements').click()
     memo = app.page.locator('textarea:visible')
@@ -707,7 +888,7 @@ def s_modal_properties(app):
     app.page.get_by_role('button', name='Acknowledgements').focus()
     app.key('Escape')
     app.page.wait_for_function('document.querySelector("#lcl").width > 500')
-    return 'custom color and property edits survive save; read-only memo and modal Escape work'
+    return 'two-object property edits, inline validation, collapse and save work without a modal'
 
 
 def s_clipboard_roundtrip(app):
@@ -739,15 +920,13 @@ def s_nested_coordinates(app):
     app.key('Escape')
     app.menu('Edit', 'Select all')
     app.menu('Edit', 'Object properties')
-    app.page.get_by_role('button', name='Points', exact=True).click()
-    app.page.wait_for_function('document.querySelector("#lcl").width === 530')
+    app.page.get_by_role('button', name='Point coordinates…', exact=True).click()
+    app.page.wait_for_function('document.querySelector("#lcl").width === 460')
     app.click(155, 55)  # First x-coordinate cell in the fixed-size Table LFM
     app.key('F2')
     editor = app.page.get_by_role('textbox').last
     editor.fill('125.5')
     app.key('Enter')
-    app.page.get_by_role('button', name='OK', exact=True).click()
-    app.page.wait_for_function('document.querySelector("#lcl").width === 460')
     app.page.get_by_role('button', name='OK', exact=True).click()
     app.page.wait_for_function('document.querySelector("#lcl").width > 600')
     objects = drawing_xml(app.save('coordinates.tpx'))
@@ -896,7 +1075,7 @@ SCENARIOS = [
     ('export-formats', s_export_formats),
     ('download-status-unload', s_download_status_and_unload),
     ('bitmap-roundtrip', s_bitmap_roundtrip),
-    ('modal-properties', s_modal_properties),
+    ('object-inspector', s_object_inspector),
     ('nested-coordinates', s_nested_coordinates),
     ('unsaved-confirmation', s_unsaved_confirmation),
     ('tex-preview', s_tex_preview),

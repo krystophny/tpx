@@ -425,7 +425,6 @@ end;
 
 initialization
 {$IFDEF FPC}
-{$I Propert.lrs}
 {$ELSE}
 {$R *.dfm}
 {$ENDIF}

@@ -68,6 +68,8 @@ end;
 {$ENDIF}
 
 function ReloadLineX2: Double; forward;
+procedure DriveReloadUntil(const TargetX: Double; WantInvalid,
+  WantConflict: Boolean); forward;
 
 type
   TTrackedReloadContext = class
@@ -76,21 +78,13 @@ type
     destructor Destroy; override;
   end;
 
-  TModalReloadDriver = class
+  TInspectorReloadDriver = class
   public
-    Timer: TTimer;
     FileName: string;
     Bytes: RawByteString;
     ExpectedOldX2: Double;
-    destructor Destroy; override;
-    procedure ChangeSourceAndClose(Sender: TObject);
+    procedure ChangeSourceWhileDraftPending;
   end;
-
-destructor TModalReloadDriver.Destroy;
-begin
-  Timer.Free;
-  inherited Destroy;
-end;
 
 destructor TTrackedReloadContext.Destroy;
 begin
@@ -98,10 +92,9 @@ begin
   inherited Destroy;
 end;
 
-procedure TModalReloadDriver.ChangeSourceAndClose(Sender: TObject);
+procedure TInspectorReloadDriver.ChangeSourceWhileDraftPending;
 var Deadline: QWord;
 begin
-  Timer.Enabled := False;
   WriteReloadSource(FileName, Bytes);
   Deadline := GetTickCount64 + 6000;
   repeat
@@ -110,32 +103,42 @@ begin
     if MainForm.AutoReloadState.SettlePending then
     begin
       Check(Abs(ReloadLineX2 - ExpectedOldX2) < 0.0001,
-        'External reload replaced scene objects while Properties was modal');
-      PropertiesForm.ModalResult := mrCancel;
+        'External reload replaced scene objects with a raw property draft');
+      Check((MainForm.Inspector.EditorFor(opfLineWidth) as TEdit).Text = '-',
+        'External reload discarded the incomplete numeric draft');
       Exit;
     end;
     Sleep(10);
   until GetTickCount64 >= Deadline;
-  PropertiesForm.ModalResult := mrCancel;
-  Check(False, 'Native file event did not reach the modal Properties barrier');
+  Check(False, 'Native file event did not defer behind the property draft');
 end;
 
-procedure TestModalReloadBarrier(const FileName: string;
+procedure TestInspectorDraftReloadBarrier(const FileName: string;
   const SourceBytes: RawByteString; OldX2: Double);
-var Driver: TModalReloadDriver;
+var
+  Driver: TInspectorReloadDriver;
+  Line: TLine2D;
+  DraftEditor: TEdit;
 begin
-  Driver := TModalReloadDriver.Create;
+  Line := MainForm.TheDrawing.GetObject(0) as TLine2D;
+  MainForm.TheDrawing.SelectionClear;
+  MainForm.TheDrawing.SelectionAdd(Line);
+  MainForm.RefreshInspectorSelection;
+  MainForm.Inspector.FocusField(opfLineWidth);
+  DraftEditor := MainForm.Inspector.EditorFor(opfLineWidth) as TEdit;
+  DraftEditor.Text := '-';
+  Check(MainForm.Inspector.HasActiveEdit,
+    'Incomplete numeric input did not open a property edit session');
+  Driver := TInspectorReloadDriver.Create;
   try
     Driver.FileName := FileName;
     Driver.Bytes := SourceBytes;
     Driver.ExpectedOldX2 := OldX2;
-    Driver.Timer := TTimer.Create(PropertiesForm);
-    Driver.Timer.Interval := 100;
-    Driver.Timer.OnTimer := Driver.ChangeSourceAndClose;
-    Driver.Timer.Enabled := True;
-    PropertiesForm.PObject := MainForm.TheDrawing.GetObject(0) as TObject2D;
-    PropertiesForm.ModalResult := mrNone;
-    PropertiesForm.ShowModal;
+    Driver.ChangeSourceWhileDraftPending;
+    MainForm.Inspector.CancelActiveEdit;
+    DriveReloadUntil(48, False, False);
+    Check(Abs(ReloadLineX2 - 48) < 0.0001,
+      'External source was not applied after cancelling the raw draft');
   finally
     Driver.Free;
   end;
@@ -227,7 +230,7 @@ const
     '%<TpX v="5" TeXFormat="tikz" PdfTeXFormat="tikz">' + LineEnding +
     '%<line x1="0" y1="0" x2="45" y2="10"/>' + LineEnding +
     '%</TpX>' + LineEnding;
-  ModalSource: RawByteString =
+  DraftSource: RawByteString =
     '%<TpX v="5" TeXFormat="tikz" PdfTeXFormat="tikz">' + LineEnding +
     '%<line x1="0" y1="0" x2="48" y2="10"/>' + LineEnding +
     '%</TpX>' + LineEnding;
@@ -466,8 +469,7 @@ begin
       [ReloadLineX2, BoolToStr(MainForm.AutoReloadState.InvalidExternal, True),
        BoolToStr(MainForm.AutoReloadState.SettlePending, True),
        BoolToStr(MainForm.AutoReloadState.Paused, True)]));
-  TestModalReloadBarrier(FileName, ModalSource, 45);
-  DriveReloadUntil(48, False, False);
+  TestInspectorDraftReloadBarrier(FileName, DraftSource, 45);
   MainForm.TheDrawing.Clear;
   MainForm.TheDrawing.History.Save;
   MainForm.TheDrawing.History.MarkDirty;

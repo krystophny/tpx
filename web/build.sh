@@ -56,7 +56,7 @@ grep -q '^library TpXWasm;' "$BUILD/TpXWasm.lpr"
 
 # Form resources. lazres produces the same .lrs bytes that lazbuild produces for
 # the desktop build; those bytes are the oracle for this step.
-for unit in MainUnit Propert Table; do
+for unit in MainUnit PropertyImages Table; do
   "$LAZRES" "$LRS/$unit.lrs" "$ROOT/src/$unit.lfm" >/dev/null
 done
 

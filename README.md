@@ -109,6 +109,12 @@ points farther away still use the grid when it is enabled.
 Text can be selected across its visible area. Text properties offer left,
 center, and right alignment. Enter a complete math expression such as
 `$(a+b)$` in the text field, or use the TeX text field for other LaTeX code.
+Choose the Text tool and click the canvas to type at a new label's position;
+click an existing label with that tool or double-click it in selection mode to
+edit it. Enter inserts a line break, while
+Ctrl+Enter (or Command+Enter on macOS), Tab, or **Done** finishes the edit.
+Escape cancels the uncommitted edit after any active input-method composition
+ends.
 Desktop live previews typeset TeX text in the canvas using LaTeX and `dvipng`,
 with reusable SVG output when `dvisvgm` is available. **View → Live LaTeX
 Preview** toggles this behavior; it is enabled by default. Without the tools,
