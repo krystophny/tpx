@@ -1123,7 +1123,8 @@ begin
     if not CommitSession(ErrorText) then
     begin
       FSelectionLabel.Caption := 'Complete or cancel ' +
-        FieldName(FSessionField) + ' before editing another field';
+        FWidgets[FSessionField].Editor.Hint +
+        ' before editing another field';
       Exit;
     end;
   end;
@@ -1229,8 +1230,8 @@ begin
   ActiveField := FSessionField;
   if FWidgets[ActiveField].Editor.CanFocus then
     FWidgets[ActiveField].Editor.SetFocus;
-  FSelectionLabel.Caption := 'Finish or cancel ' + FieldName(ActiveField) +
-    ' before editing another field';
+  FSelectionLabel.Caption := 'Finish or cancel ' +
+    FWidgets[ActiveField].Editor.Hint + ' before editing another field';
   if (FSession <> nil) and (FSession.LastError <> '') then
     SetFieldError(ActiveField, FSession.LastError);
 end;
@@ -1248,8 +1249,7 @@ begin
     RejectBlockedField(Field);
     Exit;
   end;
-  FSelectionLabel.Caption := 'Editing ' +
-    FieldName(Field);
+  FSelectionLabel.Caption := 'Editing ' + FWidgets[Field].Editor.Hint;
 end;
 
 procedure TObjectInspector.FieldChanged(Sender: TObject);
