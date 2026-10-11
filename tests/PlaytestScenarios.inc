@@ -372,24 +372,47 @@ var
   HistoryCount: Integer;
   Key: Word;
   Shift: TShiftState;
+  Loader: T_TpX_Loader;
+  FileName: string;
 begin
   MainForm.Show;
   Application.ProcessMessages;
   Drawing := MainForm.TheDrawing;
-  FirstLine := TLine2D.CreateSpec(102, Point2D(3, 4), Point2D(20, 10));
+  FirstLine := TLine2D.CreateSpec(-1, Point2D(3, 4), Point2D(20, 10));
   FirstLine.LineWidth := 0.5;
   FirstLine.LineStyle := liDashed;
   FirstLine.LineColor := clRed;
-  SecondLine := TLine2D.CreateSpec(103, Point2D(7, 9), Point2D(31, 18));
+  SecondLine := TLine2D.CreateSpec(-1, Point2D(7, 9), Point2D(31, 18));
   SecondLine.LineWidth := 1.5;
   SecondLine.LineStyle := liDotted;
   SecondLine.LineColor := clBlue;
   InnerGroup := TGroup2D.CreateSpec(101, [FirstLine, SecondLine]);
   OuterGroup := TGroup2D.CreateSpec(100, [InnerGroup]);
   Drawing.AddObject(100, OuterGroup);
+
+  FileName := GetTempFileName(SysUtils.GetTempDir(False),
+    'tpx-inspector-mixed-');
+  try
+    Check(StoreToFile_TpX(Drawing, FileName, False),
+      'Could not save the nested mixed-selection fixture');
+    Drawing.Clear;
+    Loader := T_TpX_Loader.Create(Drawing);
+    try
+      Loader.LoadFromFile(FileName);
+    finally
+      Loader.Free;
+    end;
+  finally
+    DeleteFile(FileName);
+  end;
+  OuterGroup := Drawing.ObjectList.FirstObj as TGroup2D;
+  InnerGroup := OuterGroup.Objects.FirstObj as TGroup2D;
+  FirstLine := InnerGroup.Objects.FirstObj as TLine2D;
+  SecondLine := InnerGroup.Objects.NextObj as TLine2D;
+  Check((FirstLine.ID < 0) and (SecondLine.ID < 0),
+    'Native reload did not preserve unassigned nested group children');
   Drawing.SelectionClear;
   Drawing.SelectionAdd(OuterGroup);
-  Drawing.SelectionAdd(FirstLine);
   MainForm.RefreshInspectorSelection;
   WidthEditor := MainForm.Inspector.EditorFor(opfLineWidth) as TEdit;
   StateLabel := MainForm.Inspector.FindComponent(
@@ -558,12 +581,26 @@ var
   var
     TextView: TCocoaTextView;
     InspectorMemo: TCompositionAwareMemo;
+    OriginalStorageText: AnsiString;
+    OriginalDisplayText: string;
+    Selection: NSRange;
   begin
     MainForm.Inspector.FocusField(opfText);
     InspectorMemo := MainForm.Inspector.EditorFor(opfText) as
       TCompositionAwareMemo;
     InspectorMemo.HandleNeeded;
     TextView := CocoaInspectorTextView(InspectorMemo);
+    OriginalStorageText := TextObj.Text;
+    OriginalDisplayText := InspectorMemo.Text;
+    TextView.setSelectedRange(NSMakeRange(2, 3));
+    Selection := TextView.selectedRange;
+    Check((Selection.location = 2) and (Selection.length = 3),
+      'Native Cocoa selection setup failed');
+    Check(Assigned(InspectorMemo.OnMouseUp),
+      'Inspector memo does not observe native caret/selection movement');
+    InspectorMemo.OnMouseUp(InspectorMemo, mbLeft, [], 0, 0);
+    Check((InspectorMemo.SelStart = 2) and (InspectorMemo.SelLength = 3),
+      'Inspector memo did not observe the native selection before composition');
     TextView.supressTextChangeEvent := 1;
     try
       CocoaSetMarkedText(InspectorMemo, 'unfinished composition');
@@ -577,6 +614,13 @@ var
     CocoaDrainTextInputQueue;
     Check(not InspectorMemo.CompositionPending,
       'Native Cocoa END without text change left the inspector memo pending');
+    Selection := TextView.selectedRange;
+    Check((TextObj.Text = OriginalStorageText) and
+      (InspectorMemo.Text = OriginalDisplayText),
+      'Canceling native composition changed the inspector text value');
+    Check((Selection.location = 2) and (Selection.length = 3) and
+      (InspectorMemo.SelStart = 2) and (InspectorMemo.SelLength = 3),
+      'Canceling native composition did not restore the moved selection');
     Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
       'Canceled native composition still blocked inspector settlement: ' +
       ErrorText);
@@ -717,10 +761,12 @@ begin
   Drawing.AddObject(-1, LineObj);
   SelectObject(LineObj);
   ChangeCombo(opfLineStyle, Ord(liDashed));
+  ChangeText(opfLineColor, '#1278B5');
   ChangeCombo(opfBeginArrowKind, Ord(arrH43));
   ChangeCombo(opfEndArrowKind, Ord(arrT20));
   ChangeText(opfArrowSizeFactor, '1.25');
   Check((LineObj.LineStyle = liDashed) and
+    (LineObj.LineColor = HtmlToColor('#1278B5')) and
     (LineObj.BeginArrowKind = arrH43) and
     (LineObj.EndArrowKind = arrT20) and
     (Abs(LineObj.ArrowSizeFactor - 1.25) < 0.0001),
