@@ -37,7 +37,8 @@ clone_at() { # url rev dir
   if have "$dir/.git"; then
     cd "$dir"
     if [ "$(git rev-parse HEAD)" = "$rev" ]; then log "at pin   $(basename "$dir")"; return 0; fi
-    # A branch pin may move; a sha pin must match exactly.
+    # A restored cache may come from an older pin URL; a sha pin must match exactly.
+    git remote set-url origin "$url"
     git fetch --quiet origin "$rev" 2>/dev/null || git fetch --quiet origin
     git checkout --quiet "$rev"
   else
