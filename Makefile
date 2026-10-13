@@ -10,7 +10,7 @@ BUILD_OPTIONS = --pcp="$(LAZARUS_CONFIG)" $(if $(LAZARUS_DIR),--lazarusdir="$(LA
 
 WEB_PORT ?= 8791
 
-.PHONY: all build run test web web-check web-serve
+.PHONY: all build run test web web-check web-probe web-serve
 
 all: build
 
@@ -32,6 +32,10 @@ web:
 
 web-check:
 	web/build.sh check
+
+# CustomDrawn WASI widgetset regression probe (tests/browser/lcl).
+web-probe:
+	web/build.sh probe
 
 web-serve: web
 	@echo "serving $(CURDIR)/web/dist on http://127.0.0.1:$(WEB_PORT)/"

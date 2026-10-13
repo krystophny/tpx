@@ -93,6 +93,11 @@ jobs:
           fi
           python3 tests/browser/playtest.py --chromium "$CHROMIUM"
 
+      - name: Run the LCL widgetset probe
+        run: |
+          make web-probe
+          python3 tests/browser/lcl/browser.py --chromium "$CHROMIUM"
+
       - name: Performance gates
         run: python3 tests/browser/perf.py
 

@@ -104,7 +104,7 @@ case ${1:-build} in
     clone_at "$WASM_FPC_URL" "$WASM_FPC_REV" "$WASM_FPC"
     build_fpc
     clone_at "$WASM_LCL_URL" "$WASM_LCL_REV" "$WASM_LCL"
-    (cd "$WASM_LCL/examples/customdrawnwasm" && npm ci --no-audit --no-fund)
+    (cd "$ROOT/web" && npm ci --ignore-scripts --no-audit --no-fund)
     mkdir -p "$WASM_BIN/lazres-units"
     fpc -Fu"$WASM_LCL/components/lazutils" -Fu"$WASM_LCL/lcl" \
       -FU"$WASM_BIN/lazres-units" -FE"$WASM_BIN" "$WASM_LCL/tools/lazres.pp"

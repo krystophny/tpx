@@ -1,0 +1,206 @@
+object DemoForm: TDemoForm
+  Left = 0
+  Top = 0
+  Width = 720
+  Height = 480
+  Caption = 'LCL WebAssembly experiment'
+  OnCreate = DemoFormCreate
+  Color = clBtnFace
+  Font.Height = -18
+  DesignTimePPI = 96
+  object CounterButton: TButton
+    Left = 24
+    Top = 24
+    Width = 164
+    Height = 44
+    Caption = 'Count: 0'
+    OnClick = CounterButtonClick
+    TabOrder = 0
+  end
+  object ResetButton: TButton
+    Left = 208
+    Top = 24
+    Width = 112
+    Height = 44
+    Caption = 'Reset'
+    OnClick = ResetButtonClick
+    TabOrder = 1
+  end
+  object SaveFileButton: TButton
+    Left = 600
+    Top = 24
+    Width = 100
+    Height = 44
+    Caption = 'Save file'
+    OnClick = SaveFileButtonClick
+    TabOrder = 2
+  end
+  object SaveAgainButton: TButton
+    Left = 480
+    Top = 24
+    Width = 100
+    Height = 44
+    Caption = 'Save again'
+    Enabled = False
+    OnClick = SaveAgainButtonClick
+    TabOrder = 3
+  end
+  object AtomicRenameCheckBox: TCheckBox
+    Left = 580
+    Top = 82
+    Width = 130
+    Height = 30
+    Caption = 'Atomic rename'
+    TabOrder = 4
+  end
+  object FailRenameCheckBox: TCheckBox
+    Left = 580
+    Top = 190
+    Width = 130
+    Height = 30
+    Caption = 'Fail rename'
+    TabOrder = 5
+  end
+  object FilledCheckBox: TCheckBox
+    Left = 344
+    Top = 30
+    Width = 130
+    Height = 36
+    Caption = 'Filled shape'
+    Checked = True
+    State = cbChecked
+    OnChange = FilledCheckBoxChange
+    TabOrder = 6
+  end
+  object CompositionSaveButton: TButton
+    Left = 24
+    Top = 72
+    Width = 120
+    Height = 24
+    Caption = 'Save text'
+    OnClick = CompositionSaveButtonClick
+    TabOrder = 7
+  end
+  object DestroyMemoButton: TButton
+    Left = 156
+    Top = 72
+    Width = 136
+    Height = 24
+    Caption = 'Destroy on change'
+    OnClick = DestroyMemoButtonClick
+    TabOrder = 9
+  end
+  object SetMemoTextButton: TButton
+    Left = 300
+    Top = 72
+    Width = 96
+    Height = 24
+    Caption = 'Set memo text'
+    OnClick = SetMemoTextButtonClick
+    TabOrder = 10
+  end
+  object RecreateMemoButton: TButton
+    Left = 404
+    Top = 72
+    Width = 112
+    Height = 24
+    Caption = 'Recreate memo'
+    OnClick = RecreateMemoButtonClick
+    TabOrder = 11
+  end
+  object CompositionChangeCount: TEdit
+    Left = 534
+    Top = 156
+    Width = 166
+    Height = 26
+    ReadOnly = True
+    Text = 'Changes: 0'
+    Hint = 'Memo change count'
+    TabOrder = 12
+  end
+  object HintLabel: TLabel
+    Left = 344
+    Top = 156
+    Width = 180
+    Height = 26
+    AutoSize = False
+    Caption = 'Click canvas; Reset clears marker.'
+  end
+  object CompositionMemo: TCompositionMemo
+    Left = 24
+    Top = 96
+    Width = 300
+    Height = 44
+    Lines.Strings = (
+      'seed'
+    )
+    OnChange = CompositionMemoChange
+    OnCompositionChange = CompositionMemoCompositionChange
+    OnKeyDown = CompositionMemoKeyDown
+    TabOrder = 8
+  end
+  object CompositionStatus: TEdit
+    Left = 344
+    Top = 96
+    Width = 220
+    Height = 26
+    ReadOnly = True
+    Text = 'Composition: idle'
+    Hint = 'Composition status'
+    OnEnter = CompositionStatusEnter
+  end
+  object CompositionValue: TEdit
+    Left = 344
+    Top = 126
+    Width = 220
+    Height = 26
+    Text = 'Value: seed'
+    Hint = 'Composition value'
+    TabOrder = 13
+  end
+  object PaintedCombo: TComboBox
+    Left = 566
+    Top = 126
+    Width = 134
+    Height = 26
+    Hint = 'Painted combo keyboard target'
+    Items.Strings = (
+      'Regular'
+      'Bold'
+      'Italic'
+    )
+    ItemIndex = 0
+    Style = csDropDownList
+    TabOrder = 14
+    OnEnter = PaintedComboEnter
+    OnChange = PaintedComboChange
+  end
+  object CompositionSaved: TEdit
+    Left = 24
+    Top = 150
+    Width = 300
+    Height = 26
+    ReadOnly = True
+    Text = 'Saved: none'
+    Hint = 'Saved text'
+  end
+  object Drawing: TPaintBox
+    Left = 24
+    Top = 184
+    Width = 672
+    Height = 272
+    Anchors = [akTop, akLeft, akRight, akBottom]
+    OnPaint = DrawingPaint
+    OnMouseDown = DrawingMouseDown
+  end
+  object FocusMemoPanel: TPanel
+    Left = 344
+    Top = 156
+    Width = 180
+    Height = 26
+    Caption = 'Double-click to edit text'
+    TabOrder = 15
+    TabStop = True
+    OnDblClick = FocusMemoPanelDblClick
+  end
+end
