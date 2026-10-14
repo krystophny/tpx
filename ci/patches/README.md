@@ -47,30 +47,19 @@ The patch is the GTK2 provider owner's commit
 source; its SHA-256 is
 `db7174e55e69ef88172c4d5bee8a4c9f0654e37ff1e09eb55a6f9139097fbde2`.
 
-`lazarus-4.8-cocoa-text-composition.patch` forwards marked-text start, replace,
-commit and cancel/end events from Cocoa text views. A generation-tagged queued
-END is delivered after the final text notification and is canceled if a newer
-composition starts. The 4.8 backport is owner commit
-`937501906f5261c66c0f1462a29f83f9ce730e4d`, derived from the reviewed upstream
-provider change `f7a6b515ceaa3c79f8fb4d02743c8c0c7433d5e5`; its SHA-256 is
-`b8f71505a24d573795c3baa71dc5b7ecac6e5647e3c7cb0310ab7b5a5a9ac7e1`.
+Cocoa composition handling lives in TpX's custom edit and memo controls
+(`src/CompositionAwareControls.pas` and `src/CocoaComposition.pas`). Their
+native subclasses observe marked-text start, insertion and cancellation only
+for TpX-owned editors, retaining LCL's native text and undo handling. They add
+no native instance fields; attachment checks the original class and instance
+size. Detachment restores that class while preserving any observer subclass
+installed by AppKit. Shared field-editor bindings follow their owner.
+Deferred completion is canceled on restart or destruction.
+No Cocoa composition forwarding patch is applied to Lazarus.
 
-The Unix bootstrap applies both versioned provider patches to Lazarus 4.8, and
-candidate/release manifests record both patch hashes. The native Cocoa inspector
-scenario drives marked text through the real `NSTextView`, cancels without a
-text-change notification, and verifies that the inspector's composition gate
-releases. This checks the consumer boundary; it does not claim a manual or
-physical-device IME session.
-
-`lazarus-4.8-cocoa-field-editor-ime.patch` adds the corresponding lifecycle
-forwarding to Cocoa's shared field editor for `TEdit` controls. It is the
-pinned 4.8 backport `981660ebd79833a30c67ac08024b8b6812a354a8`, following the
-memo backport and derived from merged provider fix
-`143c7f4b77b12a9d3b78355aac37b9a32b9205d8`. Its SHA-256 is
-`b5ea976248a4f918d6cd1a5477090972cb29c6d822abc9fba598a4f69008b45a`. The
-inspector scenario also marks and cancels text through a focused native field
-editor, checking that the edit value stays unchanged and the composition gate
-releases.
+The native inspector regression exercises both memo and field-editor
+cancellation without a text-change notification. These tests invoke Cocoa's
+text-input APIs; they do not claim a physical-device IME session.
 
 `lazarus-4.8-cocoa-focus-handoff.patch` prevents an older queued Cocoa first-
 responder request from overriding a newer focus choice, and cancels pending

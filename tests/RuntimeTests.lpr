@@ -28,6 +28,15 @@ type
     function PromptUser(const Caption, Message: string; DialogType: LongInt;
       Buttons: PLongInt; ButtonCount, DefaultIndex, EscapeResult: LongInt): LongInt; override;
   end;
+  {$IFDEF LCLCOCOA}
+  TCompositionObserver = class
+    Starts, Ends: Integer;
+    Committed: Boolean;
+    FinalText: string;
+    DestroyOnEnd: Boolean;
+    procedure Changed(Sender: TObject; Composing: Boolean);
+  end;
+  {$ENDIF}
   TObserver = class
     CloseRequests: Integer;
     OSOpenFirst, OSOpenSecond, OSOpenMarkerFirst,
@@ -1956,6 +1965,9 @@ begin
     else if ParamStr(1) = 'default-opener' then TestDefaultOpener
     else if ParamStr(1) = 'property-dimensions' then TestPropertyDimensions
     else if ParamStr(1) = 'inspector-mixed-selection' then TestInspectorMixedSelection
+    {$IFDEF LCLCOCOA}
+    else if ParamStr(1) = 'cocoa-local-composition' then TestCocoaLocalComposition
+    {$ENDIF}
     else if ParamStr(1) = 'inspector-property-families' then TestInspectorPropertyFamilies
     else if ParamStr(1) = 'font-choice' then TestFontChoice
     else if ParamStr(1) = 'conversion-save' then TestConversionSave

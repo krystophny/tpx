@@ -5,7 +5,8 @@ unit CompositionAwareControls;
 
 interface
 
-uses Classes, StdCtrls, LCLType, LMessages;
+uses Classes, StdCtrls, LCLType, LMessages
+  {$IFDEF LCLCOCOA}, CocoaComposition{$ENDIF};
 
 type
   TCompositionChangedEvent = procedure(Sender: TObject;
@@ -16,8 +17,17 @@ type
     FCompositionPending: Boolean;
     FCompositionCommitted: Boolean;
     FOnCompositionChanged: TCompositionChangedEvent;
+    {$IFDEF LCLCOCOA}
+    FNativeComposition: TCocoaComposition;
+    procedure NativeCompositionChanged(Composing, Committed: Boolean);
+    procedure AttachNativeComposition;
+    {$ENDIF}
     procedure SetCompositionPending(Value: Boolean);
   protected
+    {$IFDEF LCLCOCOA}
+    procedure DestroyWnd; override;
+    procedure DoEnter; override;
+    {$ENDIF}
     procedure WndProc(var Message: TLMessage); override;
   public
     function SampleCompositionState: Boolean;
@@ -33,9 +43,19 @@ type
     FCompositionPending: Boolean;
     FCompositionCommitted: Boolean;
     FOnCompositionChanged: TCompositionChangedEvent;
+    {$IFDEF LCLCOCOA}
+    FNativeComposition: TCocoaComposition;
+    procedure NativeCompositionChanged(Composing, Committed: Boolean);
+    procedure AttachNativeComposition;
+    {$ENDIF}
     procedure SetCompositionPending(Value: Boolean);
     function GetEditText: string;
   protected
+    {$IFDEF LCLCOCOA}
+    procedure CreateWnd; override;
+    procedure DestroyWnd; override;
+    procedure DoEnter; override;
+    {$ENDIF}
     procedure WndProc(var Message: TLMessage); override;
   public
     function SampleCompositionState: Boolean;
@@ -50,7 +70,7 @@ type
 implementation
 
 {$IFDEF LCLCOCOA}
-uses CocoaAll;
+uses CocoaAll, SysUtils;
 
 function NativeViewHasMarkedText(View: NSView): Boolean;
 begin
@@ -85,6 +105,73 @@ begin
   NativeMemo := NSScrollView(Control.Handle);
   Result := NativeViewHasMarkedText(NativeMemo.documentView);
 end;
+procedure TCompositionAwareEdit.NativeCompositionChanged(
+  Composing, Committed: Boolean);
+begin
+  FCompositionCommitted := Committed;
+  SetCompositionPending(Composing);
+end;
+
+procedure TCompositionAwareEdit.AttachNativeComposition;
+var NativeEdit: NSTextField; Editor: NSTextView;
+begin
+  if not HandleAllocated then Exit;
+  if FNativeComposition = nil then
+    FNativeComposition := TCocoaComposition.Create(@NativeCompositionChanged);
+  NativeEdit := NSTextField(Handle);
+  if not Assigned(NativeEdit.window) then Exit;
+  Editor := NSTextView(NativeEdit.window.fieldEditor_forObject(True, NativeEdit));
+  FNativeComposition.Attach(Editor, NativeEdit);
+end;
+
+procedure TCompositionAwareEdit.DestroyWnd;
+begin
+  FreeAndNil(FNativeComposition);
+  FCompositionPending := False;
+  inherited DestroyWnd;
+end;
+
+procedure TCompositionAwareEdit.DoEnter;
+begin
+  AttachNativeComposition;
+  inherited DoEnter;
+end;
+
+procedure TCompositionAwareMemo.NativeCompositionChanged(
+  Composing, Committed: Boolean);
+begin
+  FCompositionCommitted := Committed;
+  SetCompositionPending(Composing);
+end;
+
+procedure TCompositionAwareMemo.AttachNativeComposition;
+begin
+  if not HandleAllocated then Exit;
+  if FNativeComposition = nil then
+    FNativeComposition := TCocoaComposition.Create(@NativeCompositionChanged);
+  FNativeComposition.Attach(
+    NSTextView(NSScrollView(Handle).documentView), nil);
+end;
+
+procedure TCompositionAwareMemo.CreateWnd;
+begin
+  inherited CreateWnd;
+  AttachNativeComposition;
+end;
+
+procedure TCompositionAwareMemo.DestroyWnd;
+begin
+  FreeAndNil(FNativeComposition);
+  FCompositionPending := False;
+  inherited DestroyWnd;
+end;
+
+procedure TCompositionAwareMemo.DoEnter;
+begin
+  inherited DoEnter;
+  AttachNativeComposition;
+end;
+
 {$ENDIF}
 
 procedure TCompositionAwareEdit.SetCompositionPending(Value: Boolean);
@@ -120,20 +207,7 @@ var
   CompositionEnded: Boolean;
 begin
   CompositionEnded := False;
-  {$IFDEF LCLCOCOA}
-  if (Message.Msg = LM_IM_COMPOSITION) and
-    ((Message.WParam and (GTK_IM_FLAG_START or GTK_IM_FLAG_PREEDIT)) =
-    (GTK_IM_FLAG_START or GTK_IM_FLAG_PREEDIT)) then
-  begin
-    FCompositionCommitted := False;
-    SetCompositionPending(True);
-  end;
-  if (Message.Msg = LM_IM_COMPOSITION) and
-    ((Message.WParam and GTK_IM_FLAG_COMMIT) <> 0) then
-    FCompositionCommitted := True;
-  if (Message.Msg = LM_IM_COMPOSITION) then
-    CompositionEnded := (Message.WParam and GTK_IM_FLAG_END) <> 0;
-  {$ELSE}
+  {$IFNDEF LCLCOCOA}
   if Message.Msg = LM_IM_COMPOSITION then
   begin
     if (Message.WParam and GTK_IM_FLAG_START) <> 0 then
@@ -212,20 +286,7 @@ var
   CompositionEnded: Boolean;
 begin
   CompositionEnded := False;
-  {$IFDEF LCLCOCOA}
-  if (Message.Msg = LM_IM_COMPOSITION) and
-    ((Message.WParam and (GTK_IM_FLAG_START or GTK_IM_FLAG_PREEDIT)) =
-    (GTK_IM_FLAG_START or GTK_IM_FLAG_PREEDIT)) then
-  begin
-    FCompositionCommitted := False;
-    SetCompositionPending(True);
-  end;
-  if (Message.Msg = LM_IM_COMPOSITION) and
-    ((Message.WParam and GTK_IM_FLAG_COMMIT) <> 0) then
-    FCompositionCommitted := True;
-  if (Message.Msg = LM_IM_COMPOSITION) then
-    CompositionEnded := (Message.WParam and GTK_IM_FLAG_END) <> 0;
-  {$ELSE}
+  {$IFNDEF LCLCOCOA}
   if Message.Msg = LM_IM_COMPOSITION then
   begin
     if (Message.WParam and GTK_IM_FLAG_START) <> 0 then

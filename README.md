@@ -296,8 +296,6 @@ git apply ~/code/tpx/ci/patches/lazarus-4.8-opendocument.patch
 git apply ~/code/tpx/ci/patches/lazarus-4.8-cocoa-font-cancel.patch
 git apply ~/code/tpx/ci/patches/lazarus-4.8-cocoa-text-shortcuts.patch
 git apply ~/code/tpx/ci/patches/lazarus-4.8-gtk2-text-composition.patch
-git apply ~/code/tpx/ci/patches/lazarus-4.8-cocoa-text-composition.patch
-git apply ~/code/tpx/ci/patches/lazarus-4.8-cocoa-field-editor-ime.patch
 git apply ~/code/tpx/ci/patches/lazarus-4.8-cocoa-focus-handoff.patch
 make lazbuild LCL_PLATFORM=cocoa CPU_TARGET=aarch64 FPC="$HOME/.local/tpx-fpc/bin/fpc"
 cd ~/code/tpx

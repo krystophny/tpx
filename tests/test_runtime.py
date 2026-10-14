@@ -321,6 +321,10 @@ class RuntimeTests(unittest.TestCase):
         self.run_scenario("storage-paths", portable=True,
                           portable_argument=True, unicode_profile=True)
 
+    @unittest.skipUnless(sys.platform == "darwin", "native Cocoa is required")
+    def test_cocoa_local_composition(self):
+        self.run_scenario("cocoa-local-composition")
+
     def test_runtime_scenarios(self):
         for scenario in SCENARIOS:
             with self.subTest(scenario=scenario):

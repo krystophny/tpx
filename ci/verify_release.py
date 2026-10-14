@@ -48,8 +48,6 @@ def toolchain(platform):
                      "lazarus-4.8-cocoa-font-cancel.patch",
                      "lazarus-4.8-cocoa-text-shortcuts.patch",
                      "lazarus-4.8-gtk2-text-composition.patch",
-                     "lazarus-4.8-cocoa-text-composition.patch",
-                     "lazarus-4.8-cocoa-field-editor-ime.patch",
                      "lazarus-4.8-cocoa-focus-handoff.patch")
     }
     return {

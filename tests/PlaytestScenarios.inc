@@ -582,6 +582,198 @@ begin
 end;
 {$ENDIF}
 
+{$IFDEF LCLCOCOA}
+procedure TCompositionObserver.Changed(Sender: TObject; Composing: Boolean);
+begin
+  if Composing then Inc(Starts)
+  else
+  begin
+    Inc(Ends);
+    if Sender is TCompositionAwareEdit then
+    begin
+      Committed := TCompositionAwareEdit(Sender).CompositionCommitted;
+      FinalText := TCompositionAwareEdit(Sender).Text;
+    end
+    else
+    begin
+      Committed := TCompositionAwareMemo(Sender).CompositionCommitted;
+      FinalText := TCompositionAwareMemo(Sender).Text;
+    end;
+    if DestroyOnEnd then TWinControl(Sender).Parent.Free;
+  end;
+end;
+
+procedure TestCocoaLocalComposition;
+var
+  Form: TForm;
+  Control: TWinControl;
+  Edit: TCompositionAwareEdit;
+  SecondEdit: TCompositionAwareEdit;
+  Memo: TCompositionAwareMemo;
+  Observer: TCompositionObserver;
+  Native: NSTextView;
+  Text: NSString;
+  IsMemo: Boolean;
+  Deadline: QWord;
+  procedure Mark(const Value: string);
+  begin
+    Text := NSStringUtf8(Value);
+    try
+      Native.setMarkedText_selectedRange_replacementRange(Text,
+        NSMakeRange(Text.length, 0), NSMakeRange(NSNotFound, 0));
+    finally
+      Text.release;
+    end;
+  end;
+  procedure Drain;
+  begin
+    NSRunLoop.currentRunLoop.runMode_beforeDate(NSDefaultRunLoopMode,
+      NSDate.dateWithTimeIntervalSinceNow(0.02));
+  end;
+begin
+  for IsMemo := False to True do
+  begin
+    Form := TForm.CreateNew(nil);
+    Observer := TCompositionObserver.Create;
+    try
+      if IsMemo then
+      begin
+        Memo := TCompositionAwareMemo.Create(Form);
+        Memo.Parent := Form;
+        Memo.Text := 'original';
+        Memo.OnCompositionChanged := Observer.Changed;
+        Control := Memo;
+      end
+      else
+      begin
+        Edit := TCompositionAwareEdit.Create(Form);
+        Edit.Parent := Form;
+        Edit.Text := 'original';
+        Edit.OnCompositionChanged := Observer.Changed;
+        Control := Edit;
+      end;
+      Form.Show;
+      Control.SetFocus;
+      Application.ProcessMessages;
+      if IsMemo then Native := NSTextView(NSScrollView(Control.Handle).documentView)
+      else Native := NSTextView(NSTextField(Control.Handle).currentEditor);
+      Check(Native <> nil, 'Local composition control has no native editor');
+      Native.setSelectedRange(NSMakeRange(0, 8));
+      Mark('preedit');
+      Check((Observer.Starts = 1) and CocoaControlCompositionPending(Control),
+        'TpX control did not observe native composition start');
+      Mark('replacement');
+      Check(Observer.Starts = 1, 'Preedit replacement delivered a second start');
+      Text := NSStringUtf8('committed');
+      try
+        Native.insertText_replacementRange(Text, NSMakeRange(NSNotFound, 0));
+      finally
+        Text.release;
+      end;
+      CocoaDrainTextInputQueue(Control);
+      Check((Observer.Ends = 1) and Observer.Committed and
+        (Observer.FinalText = 'committed'),
+        'Composition end preceded committed text or lost commit intent');
+      Mark('cancel');
+      Mark('');
+      // A new composition must cancel the previous deferred completion.
+      Mark('restart');
+      Drain;
+      Check((Observer.Ends = 1) and CocoaControlCompositionPending(Control),
+        'Stale cancellation completed a restarted composition');
+      Native.unmarkText;
+      CocoaDrainTextInputQueue(Control);
+      Check((Observer.Ends = 2) and not Observer.Committed,
+        Format('Unmark cancellation did not complete locally (memo=%s, ends=%d, committed=%s, marked=%s)',
+          [BoolToStr(IsMemo, True), Observer.Ends,
+           BoolToStr(Observer.Committed, True), BoolToStr(Native.hasMarkedText, True)]));
+      Mark('destroy');
+      Mark('');
+      Form.Free;
+      Form := nil;
+      Drain;
+      Check(Observer.Ends = 2, 'Completion called a destroyed control');
+    finally
+      Form.Free;
+      Observer.Free;
+    end;
+
+    if not IsMemo then
+    begin
+      Form := TForm.CreateNew(nil);
+      Observer := TCompositionObserver.Create;
+      try
+        Edit := TCompositionAwareEdit.Create(Form);
+        Edit.Parent := Form;
+        Edit.OnCompositionChanged := Observer.Changed;
+        SecondEdit := TCompositionAwareEdit.Create(Form);
+        SecondEdit.Parent := Form;
+        SecondEdit.Top := 35;
+        SecondEdit.OnCompositionChanged := Observer.Changed;
+        Form.Show;
+        Edit.SetFocus;
+        Application.ProcessMessages;
+        Native := NSTextView(NSTextField(Edit.Handle).currentEditor);
+        Mark('old control');
+        Mark('');
+        SecondEdit.SetFocus;
+        Application.ProcessMessages;
+        Native := NSTextView(NSTextField(SecondEdit.Handle).currentEditor);
+        Mark('new control');
+        Edit.Free;
+        Drain;
+        Check(SecondEdit.CompositionPending,
+          'Old field-editor owner released the new control composition');
+        Mark('');
+        CocoaDrainTextInputQueue(SecondEdit);
+        Check(not SecondEdit.CompositionPending,
+          'Rebound field editor did not complete the new composition');
+      finally
+        Form.Free;
+        Observer.Free;
+      end;
+    end;
+
+    // Completion is permitted to destroy the control and its native parent.
+    Form := TForm.CreateNew(nil);
+    Observer := TCompositionObserver.Create;
+    try
+      if IsMemo then
+      begin
+        Memo := TCompositionAwareMemo.Create(Form);
+        Memo.Parent := Form;
+        Memo.OnCompositionChanged := Observer.Changed;
+        Control := Memo;
+      end
+      else
+      begin
+        Edit := TCompositionAwareEdit.Create(Form);
+        Edit.Parent := Form;
+        Edit.OnCompositionChanged := Observer.Changed;
+        Control := Edit;
+      end;
+      Form.Show;
+      Control.SetFocus;
+      Application.ProcessMessages;
+      if IsMemo then Native := NSTextView(NSScrollView(Control.Handle).documentView)
+      else Native := NSTextView(NSTextField(Control.Handle).currentEditor);
+      Mark('destroy in callback');
+      Observer.DestroyOnEnd := True;
+      Mark('');
+      Deadline := GetTickCount64 + 1000;
+      repeat
+        Drain;
+      until (Observer.Ends = 1) or (GetTickCount64 >= Deadline);
+      Check(Observer.Ends = 1, 'Destructive completion was not delivered');
+      Form := nil;
+    finally
+      Form.Free;
+      Observer.Free;
+    end;
+  end;
+end;
+{$ENDIF}
+
 procedure TestInspectorPropertyFamilies;
 var
   Drawing: TDrawing2D;
