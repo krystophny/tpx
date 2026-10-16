@@ -150,10 +150,10 @@ renderer changes.
 ## CI
 
 `.github/workflows/web.yml` builds the toolchain from `web/pins.env`
-(via `ci/web-toolchain.sh`, cached on the pins), runs `make web` and the bounded
-headless Chromium suite. A separate job runs the performance gates on the same
-build. Each push to `master` whose build and behavioral suite pass is deployed
-to <https://krystophny.github.io/tpx/>. The pinned toolchain build
+(via `ci/web-toolchain.sh`, cached on the pins) and runs `make web`. Separate
+jobs run the bounded headless Chromium suite and the performance gates on that
+build. Each push to `master` that builds is deployed to
+<https://krystophny.github.io/tpx/> without waiting for those checks. The pinned toolchain build
 and all 19 scenarios passed in
 [run 37909825292](https://github.com/krystophny/tpx/actions/runs/37909825292).
 The same 19 scenarios also passed locally in Firefox and WebKit.
