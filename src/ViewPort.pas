@@ -1785,7 +1785,6 @@ var
   PreviousCanvas: TCanvas;
   SavedPen: TPen;
   P: TPoint;
-  Clip: TRect;
 begin
   PreviousCanvas := OnScreenDevice.Cnv;
   try
@@ -1808,17 +1807,10 @@ begin
       Target.Pen.Style := psSolid;
       Target.Pen.Width := 1;
       P := Point2DToPoint(ViewportToScreen(fLastCursorPos));
-      Clip := Target.ClipRect;
-      if (P.X >= Clip.Left) and (P.X < Clip.Right) then
-      begin
-        Target.MoveTo(P.X, Max(0, Clip.Top));
-        Target.LineTo(P.X, Min(ClientHeight, Clip.Bottom));
-      end;
-      if (P.Y >= Clip.Top) and (P.Y < Clip.Bottom) then
-      begin
-        Target.MoveTo(Max(0, Clip.Left), P.Y);
-        Target.LineTo(Min(ClientWidth, Clip.Right), P.Y);
-      end;
+      Target.MoveTo(P.X, 0);
+      Target.LineTo(P.X, ClientHeight);
+      Target.MoveTo(0, P.Y);
+      Target.LineTo(ClientWidth, P.Y);
     finally
       Target.Pen.Assign(SavedPen);
       SavedPen.Free;

@@ -202,12 +202,7 @@ def s_draw_cancel(app):
 
 
 def s_crosshair(app):
-    """Pointer motion must update the coordinate readout in the status bar.
-
-    The browser paints the whole window surface, so hovering does not dirty the
-    paper; the observable effect of a move is the status-bar position readout,
-    which is the same feedback a native build gives.
-    """
+    """Moving guides must restore old pixels and update the coordinate readout."""
     v, cx, cy = box(app)
     b = app.box()
     status = [0, int(b['nh']) - 24, int(b['nw']), 22]
@@ -218,7 +213,27 @@ def s_crosshair(app):
         moved = max(moved, diff(base, app.pixels(status)))
     if moved < 40:
         raise AssertionError(f'pointer move changed the status bar by only {moved} pixels')
-    return f'status readout updated {moved} px over 4 moves'
+    paper = region(cx, cy, 300, 220)
+
+    def blue_pixels():
+        pixels = app.pixels(paper)
+        return {i // 4 for i in range(0, len(pixels), 4)
+                if pixels[i+2] > 160 and pixels[i+2] > pixels[i] + 80
+                and pixels[i+2] > pixels[i+1] + 80}
+
+    app.observe_input('pointermove')
+    app.move(cx-60, cy-40)
+    app.input_presented()
+    first = blue_pixels()
+    app.observe_input('pointermove')
+    app.move(cx+60, cy+40)
+    app.input_presented()
+    second = blue_pixels()
+    restored, drawn = len(first-second), len(second-first)
+    if restored < 400 or drawn < 400:
+        raise AssertionError(f'crosshair restored {restored} old pixels and drew '
+                             f'{drawn} new pixels; damaged strips were lost or retained')
+    return f'status updated {moved} px; guides restored {restored} and drew {drawn} px'
 
 
 def s_wheel_zoom(app):

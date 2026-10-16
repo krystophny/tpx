@@ -145,15 +145,16 @@ Precise damage tracking, clipped control paints and coalesced pointer delivery
 avoid whole-form repaint work. The host renders only when Pascal invalidates
 pixels, so a stationary drawing does not run an animation loop. Measurements
 vary by machine and drawing complexity; rerun the performance gates after
-renderer changes.
+renderer changes. The gates also require at least 25 presented pointer frames
+per second and real mouse events below 100 ms.
 
 ## CI
 
 `.github/workflows/web.yml` builds the toolchain from `web/pins.env`
 (via `ci/web-toolchain.sh`, cached on the pins) and runs `make web`. Separate
 jobs run the bounded headless Chromium suite and the performance gates on that
-build. Each push to `master` that builds is deployed to
-<https://krystophny.github.io/tpx/> without waiting for those checks. The pinned toolchain build
+build. Pushes to `master` deploy to <https://krystophny.github.io/tpx/> only
+after the build and performance gates pass. The pinned toolchain build
 and all 19 scenarios passed in
 [run 37909825292](https://github.com/krystophny/tpx/actions/runs/37909825292).
 The same 19 scenarios also passed locally in Firefox and WebKit.
