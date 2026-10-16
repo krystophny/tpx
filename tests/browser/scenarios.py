@@ -689,6 +689,7 @@ def s_open_examples(app):
     )
     blank = app.pixels()
     for title, filename, expected_count, formula in examples:
+        app.page.evaluate('document.querySelector("#tpx-examples").open = true')
         link = app.page.get_by_role('link', name=title, exact=True)
         with app.page.expect_download(timeout=5000) as downloaded:
             link.click()
@@ -727,19 +728,41 @@ def s_open_examples(app):
     return 'all three downloads open through File → Open, render, and save with their scene geometry and TeX labels intact'
 
 
+def watch_downloads(page):
+    """Record the MIME type of each started blob download and its revocation."""
+    page.evaluate('''() => {
+      window.tpxDownloadBlobs = [];
+      window.tpxRevokedBlobs = [];
+      const types = new Map(), started = new Set();
+      const create = URL.createObjectURL.bind(URL);
+      const revoke = URL.revokeObjectURL.bind(URL);
+      const click = HTMLAnchorElement.prototype.click;
+      URL.createObjectURL = blob => {
+        const url = create(blob);
+        types.set(url, blob.type);
+        return url;
+      };
+      HTMLAnchorElement.prototype.click = function () {
+        const result = click.call(this);
+        if (this.download && types.has(this.href)) {
+          started.add(this.href);
+          window.tpxDownloadBlobs.push(types.get(this.href));
+        }
+        return result;
+      };
+      URL.revokeObjectURL = url => {
+        if (started.has(url)) window.tpxRevokedBlobs.push(url);
+        return revoke(url);
+      };
+    }''')
+
+
 def s_export_formats(app):
     v, cx, cy = box(app)
     app.menu('Insert', 'Insert rectangle')
     app.drag(cx-70, cy-50, cx+70, cy+50)
     app.key('Escape')
-    app.page.evaluate('''() => {
-      window.tpxExportBlobTypes = [];
-      const create = URL.createObjectURL.bind(URL);
-      URL.createObjectURL = blob => {
-        window.tpxExportBlobTypes.push(blob.type);
-        return create(blob);
-      };
-    }''')
+    watch_downloads(app.page)
     formats = [('SVG', b'<svg'), ('EPS', b'%!PS'), ('PDF', b'%PDF'), ('.mp', b'beginfig')]
     for name, signature in formats:
         app.menu('File', 'Save as...')
@@ -754,7 +777,7 @@ def s_export_formats(app):
         download.save_as(path)
         if signature not in path.read_bytes()[:1000]:
             raise AssertionError(f'{name} export has the wrong content')
-    if app.page.evaluate('window.tpxExportBlobTypes') != [
+    if app.page.evaluate('window.tpxDownloadBlobs') != [
             'image/svg+xml', 'application/postscript', 'application/pdf', 'text/plain']:
         raise AssertionError('export download MIME type did not match its selected format')
     return 'SVG, EPS, PDF and MetaPost downloads contain the selected format'
@@ -795,20 +818,7 @@ def s_download_status_and_unload(app):
     if not unload_is_blocked():
         raise AssertionError('real unsaved geometry did not guard beforeunload')
 
-    app.page.evaluate('''() => {
-      window.tpxDownloadBlobs = [];
-      window.tpxRevokedBlobs = [];
-      const create = URL.createObjectURL.bind(URL);
-      const revoke = URL.revokeObjectURL.bind(URL);
-      URL.createObjectURL = blob => {
-        window.tpxDownloadBlobs.push(blob.type);
-        return create(blob);
-      };
-      URL.revokeObjectURL = url => {
-        window.tpxRevokedBlobs.push(url);
-        return revoke(url);
-      };
-    }''')
+    watch_downloads(app.page)
     saved = app.save('browser-copy.tpx')
     if saved.name != 'browser-copy.tpx':
         raise AssertionError(f'download used an unexpected filename: {saved.name}')

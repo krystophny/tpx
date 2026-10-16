@@ -1,4 +1,67 @@
 // Browser copies live only in the virtual filesystem until the user downloads them.
+// A TpX save downloads the drawing together with its linked assets. Pascal
+// reads each bundle member from the virtual filesystem; the downloads start
+// only after every member arrived, so a failed save downloads nothing.
+const DOWNLOAD_TYPES = {tpx: 'application/xml', xml: 'application/xml', svg: 'image/svg+xml',
+  eps: 'application/postscript', ps: 'application/postscript', pdf: 'application/pdf',
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp',
+  tif: 'image/tiff', tiff: 'image/tiff', webp: 'image/webp', tex: 'text/plain',
+  mp: 'text/plain', tikz: 'text/plain'};
+let downloadBundle = null;
+// The widgetset host downloads files written to names chosen in a save
+// dialog. While a bundle is open, TpX starts those downloads itself, so the
+// anchors the host creates meanwhile only release their blob when clicked.
+const createElement = document.createElement;
+document.createElement = function (tagName, ...options) {
+  const element = createElement.call(this, tagName, ...options);
+  if (downloadBundle && element instanceof HTMLAnchorElement)
+    Object.defineProperty(element, 'click', {configurable: true, value() {
+      if (this.href.startsWith('blob:')) URL.revokeObjectURL(this.href);
+    }});
+  return element;
+};
+const bundleName = name => name.replace(/^\/+/, '');
+const validBundleName = name => name !== '' && !name.includes('/') && !name.includes('\\');
+
+function downloadFile(name, bytes) {
+  let url = '', link;
+  try {
+    const type = DOWNLOAD_TYPES[name.split('.').pop().toLowerCase()] || 'application/octet-stream';
+    url = URL.createObjectURL(new Blob([bytes], {type}));
+    link = document.createElement('a');
+    link.href = url; link.download = name;
+    document.body.append(link);
+    link.click();
+  } finally {
+    link?.remove();
+    if (url) setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+}
+
+function beginBundle(name) {
+  name = bundleName(name);
+  if (downloadBundle || !validBundleName(name)) return false;
+  downloadBundle = {names: [name], files: new Map()};
+  return true;
+}
+
+function addBundlePath(name) {
+  name = bundleName(name);
+  if (!downloadBundle || !validBundleName(name)) return false;
+  if (!downloadBundle.names.includes(name)) downloadBundle.names.push(name);
+  return true;
+}
+
+function finishBundle(success) {
+  const bundle = downloadBundle;
+  downloadBundle = null;
+  if (!bundle || !success || bundle.names.some(name => !bundle.files.has(name))) return false;
+  try {
+    for (const name of bundle.names) downloadFile(name, bundle.files.get(name));
+    return true;
+  } catch (_) { return false; }
+}
+
 export function documentStatusImports(runtime) {
   const status = document.querySelector('#document-status');
   const decoder = new TextDecoder();
@@ -62,12 +125,19 @@ export function documentStatusImports(runtime) {
     browser_download_begin: (pointer, length) => {
       errorMessage = '';
       downloadState = '';
-      return Number(runtime.downloads.begin(read(pointer, length)));
+      return Number(beginBundle(read(pointer, length)));
+    },
+    browser_download_file: (namePointer, nameLength, dataPointer, dataLength) => {
+      const name = bundleName(read(namePointer, nameLength));
+      if (!downloadBundle || !downloadBundle.names.includes(name)) return 0;
+      downloadBundle.files.set(name, new Uint8Array(runtime.memory().buffer,
+        dataPointer, dataLength).slice());
+      return 1;
     },
     browser_download_add: (pointer, length) =>
-      Number(runtime.downloads.add(read(pointer, length))),
+      Number(addBundlePath(read(pointer, length))),
     browser_download_finish: success => {
-      const started = runtime.downloads.finish(Boolean(success));
+      const started = finishBundle(Boolean(success));
       downloadState = started ? 'started' : 'failed';
       if (started) downloadUnconfirmed = true;
       errorMessage = '';

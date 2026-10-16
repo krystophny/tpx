@@ -80,14 +80,22 @@ canvas{display:block;background:var(--paper);touch-action:none;outline:0}
   const closeAll = except => tops().forEach(d => { if (d !== except) d.open = false; });
   bar.addEventListener('toggle', event => {
     const d = event.target;
+    if (!d.open) delete d.dataset.hoverOpened;
     if (d.open && d.parentElement && (d.parentElement === bar || d.parentElement.id === 'lcl-menus')) closeAll(d);
   }, true);
   bar.addEventListener('pointerover', event => {
     const summary = event.target.closest('summary');
     const d = summary?.parentElement;
     if (!d || d.open || !(d.parentElement === bar || d.parentElement.id === 'lcl-menus')) return;
-    if ([...tops()].some(t => t.open)) d.open = true;
+    if ([...tops()].some(t => t.open)) { d.dataset.hoverOpened = ''; d.open = true; }
   });
+  // A click on a menu that hovering just opened keeps it open.
+  bar.addEventListener('click', event => {
+    const d = event.target.closest('summary')?.parentElement;
+    if (!d || !('hoverOpened' in d.dataset)) return;
+    delete d.dataset.hoverOpened;
+    if (d.open) event.preventDefault();
+  }, true);
   document.addEventListener('pointerdown', event => {
     if (!event.target.closest?.('#topbar')) closeAll(null);
   });
