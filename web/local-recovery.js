@@ -103,7 +103,8 @@ function makePanel() {
   panel.innerHTML = `<div class="head"><strong>Browser-local draft recovery</strong><label><input id="tpx-recovery-enabled" type="checkbox"> Enable</label></div>
     <p>When enabled, drafts stay in this browser profile for this site. Anyone using the profile may see them. Browser storage can be cleared or evicted, so keep using Download for a separate copy. Recovery creates a new TpX drawing; it does not update the original file or trust TeX.</p>
     <p id="tpx-recovery-state" class="state" role="status">Off. No draft is stored until you enable recovery.</p><div id="tpx-recovery-drafts"></div>`;
-  const anchor = document.querySelector('main') || document.body;
+  const anchor = document.querySelector('#tpx-drafts-panel') || document.querySelector('main') ||
+    document.body;
   anchor.append(panel);
   return panel;
 }
@@ -290,6 +291,11 @@ export function localRecoveryImports(runtime) {
       show(enabled ? 'Enabled. Browser storage may still be cleared or evicted.' :
         'Off. No draft is stored until you enable recovery.');
       if (enabled) await refresh();
+      // Offer stored drafts once at startup when the panel sits in a closed drawer.
+      if (list.querySelector('[data-restore]')) {
+        const drawer = panel.closest('details');
+        if (drawer) drawer.open = true;
+      }
       enabledControl.disabled = false;
       notifyEnabled();
     } catch (_) { enabledControl.disabled = true; show(statusText.get(9)); notifyEnabled(); }

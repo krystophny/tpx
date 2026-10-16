@@ -38,7 +38,6 @@ check() {
   need "FPC wasm32-wasip1 RTL" "$WASM_FPC/rtl/units/wasm32-wasip1"
   need pas2js "$PAS2JS"
   need lazres "$LAZRES"
-  need esbuild "$ESBUILD"
   echo "toolchain ok"
 }
 
@@ -82,6 +81,12 @@ PATH="$(dirname "$FPCRES"):$PATH" "$PPCWASM32" "@$CFG" "$BUILD/TpXWasm.lpr" > "$
   grep -E 'Error|Fatal' "$BUILD/compile.log" | head -30 >&2; exit 1; }
 cp "$BIN" "$DIST/tpx.wasm"
 
+# Browser host dependencies (esbuild, WASI shim, MathJax) are pinned by
+# web/package-lock.json.
+if ! cmp -s "$ROOT/web/package-lock.json" "$ROOT/web/node_modules/.tpx-package-lock.json"; then
+  (cd "$ROOT/web" && npm ci --ignore-scripts --no-audit --no-fund)
+  cp "$ROOT/web/package-lock.json" "$ROOT/web/node_modules/.tpx-package-lock.json"
+fi
 # Browser host: the JOB bridge is pas2js, the host loop is plain JavaScript.
 PASFLAGS="-n -Jc -Jirtl.js -Fu$WASM_FPC/utils/pas2js/dist"
 for pkg in "$WASM_PAS2JS"/packages/*/src; do
@@ -94,10 +99,6 @@ done
 cp "$ROOT/web/index.html" "$ROOT/web/host.js" "$DIST/"
 mkdir -p "$DIST/examples"
 cp "$ROOT/examples/README.md" "$ROOT/examples/"*.TpX "$DIST/examples/"
-if ! cmp -s "$ROOT/web/package-lock.json" "$ROOT/web/node_modules/.tpx-package-lock.json"; then
-  (cd "$ROOT/web" && npm ci --ignore-scripts --no-audit --no-fund)
-  cp "$ROOT/web/package-lock.json" "$ROOT/web/node_modules/.tpx-package-lock.json"
-fi
 "$ESBUILD" "$ROOT/web/tex-svg.js" --bundle --minify --format=esm --outfile="$DIST/tex-svg.bundle.js" \
   --alias:#default-font/svg/default.js="$ROOT/web/node_modules/@mathjax/mathjax-tex-font/mjs/svg/default.js" \
   --log-level=warning
@@ -109,7 +110,7 @@ cp "$ROOT/web/mathjax-tex-OFL.txt" "$DIST/"
 "$ESBUILD" "$ROOT/web/host.js" --bundle --format=esm --outfile="$DIST/host.bundle.js" \
   --external:./tex-svg.bundle.js \
   --alias:@lcl/browser-host="$WASM_LCL/examples/customdrawnwasm/web/lcl-host.js" \
-  --alias:@bjorn3/browser_wasi_shim="$(dirname "$ESBUILD")/../@bjorn3/browser_wasi_shim" \
+  --alias:@bjorn3/browser_wasi_shim="$ROOT/web/node_modules/@bjorn3/browser_wasi_shim" \
   --log-level=warning
 
 printf 'web ready: %s (%s bytes) -> %s\n' "$BIN" "$(wc -c < "$BIN")" "$DIST"

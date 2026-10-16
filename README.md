@@ -15,6 +15,11 @@ run the editor; no compiler is needed. See [INSTALL.md](INSTALL.md) for the
 short installation steps, dependencies and Mac first-launch instructions.
 The Mac app is ad hoc signed and not notarized.
 
+To try TpX without installing it, open the
+[browser build](https://krystophny.github.io/tpx/). It is deployed from the
+latest `master` and runs on the Lazarus CustomDrawn WASI backend proposed in
+[Lazarus MR !813](https://gitlab.com/freepascal.org/lazarus/lazarus/-/merge_requests/813).
+
 ### Preferences and recovery files
 
 TpX keeps preferences, recovery drafts and preview caches in your user profile,

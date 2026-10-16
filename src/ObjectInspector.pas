@@ -538,6 +538,8 @@ begin
     (Control as TCompositionAwareEdit).OnCompositionChanged :=
       CompositionChanged;
   end;
+  // Naming an empty control would otherwise copy the name into its text.
+  Control.ControlStyle := Control.ControlStyle - [csSetCaption];
   Control.Name := 'Inspector' + FieldName(Field) + 'Control';
   Control.Hint := Caption;
   Control.Parent := Row;

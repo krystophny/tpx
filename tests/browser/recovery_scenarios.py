@@ -12,7 +12,12 @@ def wait_ready(page):
     page.wait_for_function('Number(document.querySelector("#lcl").dataset.frames)>0')
 
 
+def open_drafts(page):
+    page.evaluate('document.querySelector("#tpx-drafts").open = true')
+
+
 def opt_in(page):
+    open_drafts(page)
     page.locator('#tpx-recovery-enabled').check()
     page.wait_for_function('document.querySelector("#tpx-recovery-enabled").checked')
 
@@ -581,6 +586,7 @@ def s_recovery_opt_out_keeps_drafts_and_ignores_stale_reads(app):
       change.close();
     }''')
     app.page.wait_for_function('window.tpxHeldDraftReads.length === 1')
+    open_drafts(app.page)
     app.page.locator('#tpx-recovery-enabled').uncheck()
     app.page.wait_for_function('!document.querySelector("#tpx-recovery-enabled").checked && document.querySelector("#tpx-recovery-state").textContent.startsWith("Off.") && document.querySelector("#tpx-recovery-drafts").children.length === 0')
     app.page.evaluate('''async () => {

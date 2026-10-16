@@ -11,6 +11,11 @@ function mergeImports(...groups) {
   return result;
 }
 
-startLCL({moduleURL: './tpx.wasm', argv: ['tpx'], createImports: runtime =>
+// Modal LCL loops need WebAssembly JSPI; say so instead of failing mid-start.
+if (typeof WebAssembly.Suspending !== 'function') {
+  const status = document.querySelector('#status');
+  status.dataset.state = 'error';
+  status.textContent = 'This browser lacks WebAssembly JSPI; use a current version of Chrome, Edge, Firefox or Safari.';
+} else startLCL({moduleURL: './tpx.wasm', argv: ['tpx'], createImports: runtime =>
   mergeImports(texPreviewImports(runtime), documentStatusImports(runtime),
     localRecoveryImports(runtime))});

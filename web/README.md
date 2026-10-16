@@ -28,7 +28,7 @@ against `WASM_LCL_REV` before compiling. To test a local fork, set both
 
 | Component | Source | Role |
 | --- | --- | --- |
-| Lazarus | `krystophny/Lazarus` `feature/customdrawn-wasm-first-app` | CustomDrawn WASI widgetset, JOB DOM controls |
+| Lazarus | `gitlab.com/krystophny/lazarus` `showcase/customdrawn-browser`: MR !813 merged with MR !826 | CustomDrawn WASI widgetset, JOB DOM controls |
 | FPC | `freepascal.org/fpc/source` main, see pin | `ppcrosswasm32`, wasm32-wasip1 RTL and fcl packages |
 | pas2js | `krystophny/pas2js` `fix/job-packed-strings` | JOB object-release and packed-string repairs |
 
@@ -150,8 +150,10 @@ renderer changes.
 ## CI
 
 `.github/workflows/web.yml` builds the toolchain from `web/pins.env`
-(via `ci/web-toolchain.sh`, cached on the pins), runs `make web`, the bounded
-headless Chromium suite and the performance gates. The pinned toolchain build
+(via `ci/web-toolchain.sh`, cached on the pins), runs `make web` and the bounded
+headless Chromium suite. A separate job runs the performance gates on the same
+build. Each push to `master` whose build and behavioral suite pass is deployed
+to <https://krystophny.github.io/tpx/>. The pinned toolchain build
 and all 19 scenarios passed in
 [run 37909825292](https://github.com/krystophny/tpx/actions/runs/37909825292).
 The same 19 scenarios also passed locally in Firefox and WebKit.

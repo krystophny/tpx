@@ -4,21 +4,97 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:,">
 <title>TpX in the browser</title>
+<meta name="description" content="TpX, the Lazarus drawing program for LaTeX pictures, running in the browser on the CustomDrawn WASI widgetset.">
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f3f5f7;color:#1c2635;font:15px system-ui,sans-serif}main{margin:16px auto;padding:0 16px;max-width:1100px}h1{font-size:22px;margin:4px 0}#status{font-size:14px;color:#345477}#status[data-state=error]{color:#a62121}#document-status{margin:6px 0 10px;padding:6px 9px;background:#eef6ff;border-left:3px solid #79a9da;color:#193b5c;font-size:13px}#document-status[data-state=unsaved]{background:#fff8e1;border-color:#d9a406;color:#4a3608}#document-status[data-state=error]{background:#fff0f0;border-color:#c44;color:#731b1b}
-canvas{display:block;border:1px solid #bcc7d4;background:white;touch-action:none}
-#notice,#source-snapshot-status{position:fixed;left:50%;transform:translateX(-50%);max-width:min(680px,92vw);display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:6px;box-shadow:0 2px 10px rgba(20,30,45,.18);font-size:14px;z-index:40}#notice{bottom:82px;background:#fff8e1;border:1px solid #d9a406;border-left:4px solid #d9a406;color:#4a3608}#source-snapshot-status{bottom:18px;background:#eef6ff;border:1px solid #79a9da;border-left:4px solid #3478b8;color:#193b5c}#notice[hidden],#source-snapshot-status[hidden]{display:none}#notice button,#source-snapshot-status button{border:1px solid #b58900;background:#fff;border-radius:4px;color:#6b4d00;padding:3px 12px;cursor:pointer}
+:root{--face:#ece9d8;--edge:#aca899;--ink:#1c2635;--muted:#55606e;--hi:#316ac5;--paper:#fff;--bar:24px;--foot:16px}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;overflow:hidden;background:var(--face);color:var(--ink);font:13px system-ui,sans-serif}
+#topbar{position:relative;z-index:35;display:flex;align-items:stretch;height:var(--bar);padding:0 4px;background:var(--face);border-bottom:1px solid var(--edge);user-select:none}
+#topbar summary{list-style:none;cursor:default}#topbar summary::-webkit-details-marker{display:none}
+#lcl-menus{display:flex!important;flex-wrap:nowrap!important;gap:0!important;padding:0!important;align-items:stretch}
+#lcl-menus>details{position:relative}
+#lcl-menus>details>summary,#topbar .extra>summary{display:flex;align-items:center;height:100%;padding:0 9px}
+#lcl-menus>details>summary:hover,#lcl-menus>details[open]>summary,#topbar .extra>summary:hover,#topbar .extra[open]>summary{background:var(--hi);color:#fff}
+#lcl-menus details>div{min-width:230px!important;padding:2px!important;background:var(--paper)!important;border:1px solid #8a877a!important;box-shadow:2px 3px 8px rgba(0,0,0,.28)!important}
+#lcl-menus>details>div{top:100%;left:0}
+#lcl-menus details details>summary{display:flex;justify-content:space-between;padding:4px 10px 4px 22px}
+#lcl-menus details details>summary::after{content:"\25B8";padding-left:16px}
+#lcl-menus details details>summary:hover,#lcl-menus details details[open]>summary{background:var(--hi);color:#fff}
+#lcl-menus details details>div{left:100%;top:-3px}
+#lcl-menus button{font:inherit!important;color:inherit!important;padding:4px 22px!important;white-space:nowrap;cursor:default!important}
+#lcl-menus button:hover:not(:disabled),#lcl-menus button:focus-visible{background:var(--hi)!important;color:#fff!important;outline:0}
+#lcl-menus button:disabled{color:#9a988e!important}
+#lcl-menus hr{border:0;border-top:1px solid #cfccbf;margin:3px 2px}
+#topbar .spacer{flex:1}
+#status{display:flex;align-items:center;margin:0 10px;color:var(--muted)}#status[data-state=error]{color:#a62121;font-weight:600}
+#topbar .extra{position:relative}
+#topbar .extra>div{position:absolute;right:0;top:100%;width:min(460px,96vw);padding:10px 12px;background:var(--paper);border:1px solid #8a877a;box-shadow:2px 3px 8px rgba(0,0,0,.28);line-height:1.45;user-select:text;cursor:auto}
+#topbar .extra p{margin:0 0 8px}#topbar .extra p:last-child{margin:0}#topbar .extra ul{margin:0 0 8px;padding-left:18px}
+#topbar a{color:#1f4f9a}
+#tpx-local-recovery{margin:0!important;border:0!important;padding:0!important}
+.scroller{overflow:hidden}
+#lcl-surface{position:relative;width:max-content}
+canvas{display:block;background:var(--paper);touch-action:none;outline:0}
+#lcl-dom{position:absolute;inset:0;pointer-events:none}#lcl-dom>*{pointer-events:auto;font-family:system-ui}
+#lcl-dom button{border:1px solid #8f8c7f;border-radius:3px;background:linear-gradient(#fdfdfb,#e3e0d2);color:var(--ink);cursor:default}
+#lcl-dom button:hover{background:linear-gradient(#fff,#ebe8dc);border-color:var(--hi)}#lcl-dom button:active{background:#dcd8c6}
+#lcl-dom button:focus-visible{outline:2px solid var(--hi);outline-offset:-3px}
+#lcl-dom label{display:flex;align-items:center;gap:6px}
+#footer{position:fixed;left:0;right:0;bottom:0;height:var(--foot);display:flex;align-items:center;gap:12px;padding:0 8px;border-top:1px solid var(--edge);background:var(--face);color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden}
+#document-status{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;margin:0}
+#document-status[data-state=unsaved],#document-status[data-state=unconfirmed]{color:#7a4f00;font-weight:600}#document-status[data-state=error]{color:#a62121;font-weight:600}
+#footer a{color:inherit}
+#notice,#source-snapshot-status{position:fixed;left:50%;transform:translateX(-50%);max-width:min(680px,92vw);display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:6px;box-shadow:0 2px 10px rgba(20,30,45,.18);font-size:14px;z-index:40}#notice{bottom:82px;background:#fff8e1;border:1px solid #d9a406;border-left:4px solid #d9a406;color:#4a3608}#source-snapshot-status{bottom:30px;background:#eef6ff;border:1px solid #79a9da;border-left:4px solid #3478b8;color:#193b5c}#notice[hidden],#source-snapshot-status[hidden]{display:none}#notice button,#source-snapshot-status button{border:1px solid #b58900;background:#fff;border-radius:4px;color:#6b4d00;padding:3px 12px;cursor:pointer}
 #tpx-copy-fallback{position:fixed;left:50%;transform:translateX(-50%);bottom:132px;max-height:min(360px,70vh);overflow:auto;width:min(680px,92vw);padding:12px;background:white;border:1px solid #7890ad;border-left:4px solid #42678f;border-radius:6px;box-shadow:0 2px 10px rgba(20,30,45,.2);z-index:50}#tpx-copy-fallback[hidden]{display:none}#tpx-copy-fallback p{margin:0 0 8px}#tpx-copy-fallback textarea{display:block;width:100%;height:min(180px,40vh);margin:0 0 8px;font:13px ui-monospace,monospace;white-space:pre;user-select:text}#tpx-copy-fallback button{margin-right:8px;padding:4px 10px}
-#lcl-surface{position:relative;max-width:100%}canvas{max-width:100%;height:auto}#lcl-dom{position:absolute;inset:0;pointer-events:none}#lcl-dom>*{pointer-events:auto;font-family:system-ui}#lcl-dom button{border:1px solid #a5b8ce;background:#fff;border-radius:4px;color:#203e69;cursor:pointer}#lcl-dom label{display:flex;align-items:center;gap:8px}.scroller{overflow:auto}
 </style>
 </head>
-<body><main>
-<h1>TpX</h1><p id="status" data-state="loading" role="status">Loading TpX…</p>
-<p>Start with a <a href="./examples/quadratic-function.TpX" download="quadratic-function.TpX">Quadratic function</a>,
-<a href="./examples/vector-addition.TpX" download="vector-addition.TpX">Vector addition</a>, or
-<a href="./examples/double-slit.TpX" download="double-slit.TpX">Double-slit diagram</a>.
-Then choose <strong>File → Open</strong> and select the downloaded <code>.TpX</code> file.
-<p id="document-status" data-state="clean" role="status" aria-live="polite">This browser drawing is not saved to the original file. Download a copy to keep it outside this browser.</p>
+<body>
+<header id="topbar">
+<nav id="lcl-menus" aria-label="Application menu"></nav>
+<span class="spacer"></span>
+<p id="status" data-state="loading" role="status">Loading TpX…</p>
+<details class="extra" id="tpx-examples"><summary>Examples</summary><div>
+<p>Download an example, then choose <strong>File → Open</strong> and select it.</p>
+<ul>
+<li><a href="./examples/quadratic-function.TpX" download="quadratic-function.TpX">Quadratic function</a></li>
+<li><a href="./examples/vector-addition.TpX" download="vector-addition.TpX">Vector addition</a></li>
+<li><a href="./examples/double-slit.TpX" download="double-slit.TpX">Double-slit diagram</a></li>
+</ul></div></details>
+<details class="extra" id="tpx-drafts"><summary>Drafts</summary><div id="tpx-drafts-panel"></div></details>
+<details class="extra" id="tpx-about"><summary>About</summary><div>
+<p><strong>TpX</strong> is a drawing program for LaTeX pictures, written with Lazarus. This page runs the unchanged LCL application compiled to WebAssembly (<code>wasm32-wasip1</code>) on the CustomDrawn widgetset’s WASI browser backend.</p>
+<p>Built automatically from the latest TpX <code>master</code> against Lazarus <a href="https://gitlab.com/freepascal.org/lazarus/lazarus/-/merge_requests/813">MR !813</a> (browser backend) with <a href="https://gitlab.com/freepascal.org/lazarus/lazarus/-/merge_requests/826">MR !826</a> (masked image copies).</p>
+<p>Desktop-only features such as LaTeX/MetaPost compilation and printing are unavailable here. Files stay in this browser until you download them.</p>
+<p><a href="https://github.com/krystophny/tpx">Source on GitHub</a></p>
+</div></details>
+</header>
 <div class="scroller"><div id="lcl-surface"><canvas id="lcl" width="720" height="480" tabindex="0" aria-label="TpX drawing application"></canvas><div id="lcl-dom"></div></div></div>
-</main><script src="./jobhost.js"></script><script>rtl.run();</script><script type="module" src="./host.bundle.js"></script></body>
+<footer id="footer"><p id="document-status" data-state="clean" role="status" aria-live="polite">This browser drawing is not saved to the original file. Download a copy to keep it outside this browser.</p><span id="build-info"></span></footer>
+<script>
+// Desktop menu behaviour for the host's <details> menus and the page menus:
+// one menu open at a time, hover switches while open, outside clicks close.
+(() => {
+  const bar = document.querySelector('#topbar');
+  const tops = () => bar.querySelectorAll(':scope > details, #lcl-menus > details');
+  const closeAll = except => tops().forEach(d => { if (d !== except) d.open = false; });
+  bar.addEventListener('toggle', event => {
+    const d = event.target;
+    if (d.open && d.parentElement && (d.parentElement === bar || d.parentElement.id === 'lcl-menus')) closeAll(d);
+  }, true);
+  bar.addEventListener('pointerover', event => {
+    const summary = event.target.closest('summary');
+    const d = summary?.parentElement;
+    if (!d || d.open || !(d.parentElement === bar || d.parentElement.id === 'lcl-menus')) return;
+    if ([...tops()].some(t => t.open)) d.open = true;
+  });
+  document.addEventListener('pointerdown', event => {
+    if (!event.target.closest?.('#topbar')) closeAll(null);
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && [...tops()].some(t => t.open)) closeAll(null);
+  });
+})();
+</script>
+<script src="./jobhost.js"></script><script>rtl.run();</script><script type="module" src="./host.bundle.js"></script></body>
 </html>

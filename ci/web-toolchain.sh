@@ -24,7 +24,7 @@ check() {
   rc=0
   for pair in "ppcrosswasm32:$PPCWASM32" "fpcres:$FPCRES" "Lazarus fork lcl:$WASM_LCL/lcl" \
               "FPC wasm32-wasip1 RTL:$WASM_FPC/rtl/units/wasm32-wasip1" "pas2js:$PAS2JS" \
-              "esbuild:$ESBUILD" "lazres:$LAZRES"; do
+              "lazres:$LAZRES"; do
     name=${pair%%:*}; path=${pair#*:}
     if have "$path"; then log "ok      $name"
     else log "MISSING $name  ($path)"; rc=1; fi
@@ -37,7 +37,9 @@ clone_at() { # url rev dir
   if have "$dir/.git"; then
     cd "$dir"
     if [ "$(git rev-parse HEAD)" = "$rev" ]; then log "at pin   $(basename "$dir")"; return 0; fi
-    # A branch pin may move; a sha pin must match exactly.
+    # A branch pin may move; a sha pin must match exactly. A cached checkout
+    # may predate a change of the pinned repository.
+    git remote set-url origin "$url"
     git fetch --quiet origin "$rev" 2>/dev/null || git fetch --quiet origin
     git checkout --quiet "$rev"
   else
@@ -104,7 +106,6 @@ case ${1:-build} in
     clone_at "$WASM_FPC_URL" "$WASM_FPC_REV" "$WASM_FPC"
     build_fpc
     clone_at "$WASM_LCL_URL" "$WASM_LCL_REV" "$WASM_LCL"
-    (cd "$WASM_LCL/examples/customdrawnwasm" && npm ci --no-audit --no-fund)
     mkdir -p "$WASM_BIN/lazres-units"
     fpc -Fu"$WASM_LCL/components/lazutils" -Fu"$WASM_LCL/lcl" \
       -FU"$WASM_BIN/lazres-units" -FE"$WASM_BIN" "$WASM_LCL/tools/lazres.pp"
