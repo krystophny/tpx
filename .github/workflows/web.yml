@@ -216,9 +216,8 @@ jobs:
 
   pages:
     name: Deploy the browser build to GitHub Pages
-    # Deploy as soon as the page is built; the behavioral suite and the
-    # performance gates report from their own jobs on the same build.
-    needs: web
+    # Keep CPU/latency regressions off Pages while behavioral tests run separately.
+    needs: [web, perf]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
     permissions:

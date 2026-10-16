@@ -61,7 +61,7 @@ done
 
 CFG=$BUILD/compiler.cfg
 {
-  printf '%s\n' -n -Twasip1 -Pwasm32 -O2 -Mdelphi \
+  printf '%s\n' -n -Twasip1 -Pwasm32 -O2 -Mdelphi -Sc \
     -dBorland -dVer150 -dDelphi7 -dCompiler6_Up -dPUREPASCAL \
     -dLCL -dLCLcustomdrawn -dCPUWASM32 \
     "-Fi$ROOT" "-Fu$ROOT" "-Fisrc" "-Fusrc" "-Fusrc/lib/PowerPdf" "-Fusrc/lib/XML" \

@@ -28,7 +28,7 @@ against `WASM_LCL_REV` before compiling. To test a local fork, set both
 
 | Component | Source | Role |
 | --- | --- | --- |
-| Lazarus | `gitlab.com/krystophny/lazarus` `showcase/customdrawn-browser`: MR !813 merged with MR !826 | CustomDrawn WASI widgetset, JOB DOM controls |
+| Lazarus | `gitlab.com/krystophny/lazarus` MR !813 merged with MR !826, plus clipped canvas raster repair (see pin) | CustomDrawn WASI widgetset, JOB DOM controls |
 | FPC | `freepascal.org/fpc/source` main, see pin | `ppcrosswasm32`, wasm32-wasip1 RTL and fcl packages |
 | pas2js | `krystophny/pas2js` `fix/job-packed-strings` | JOB object-release and packed-string repairs |
 

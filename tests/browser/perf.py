@@ -31,6 +31,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 MAX_IDLE_FRAMES = 1          # nothing is dirty, so nothing may repaint
 MAX_IDLE_CPU = 1.0           # percent of one core, averaged over the window
+MAX_POINTER_FRAME_MS = 40.0 # sustain at least 25 presented frames per second
+MAX_POINTER_MOVE_MS = 100.0 # a real mouse event must not block the browser
 MAX_POINTER_CPU = 10.0       # percent of one core at continuous pointer move
 MAX_STARTUP_MS = 2000.0
 MAX_WASM_GZIP_MB = 10.0
@@ -150,8 +152,19 @@ def main():
             }""", {'x': bounds['x'] + cx, 'y': bounds['y'] + cy,
                     'ms': args.pointer*1000})
             cpu_b = renderer_cpu(pids)
-            pointer_cpu = 100.0 * (cpu_b - cpu_a) / (time.monotonic() - t1)
+            pointer_wall = time.monotonic() - t1
+            pointer_cpu = 100.0 * (cpu_b - cpu_a) / pointer_wall
             moved_frames = app.frames() - f1
+            pointer_frame_ms = pointer_wall * 1000.0 / max(1, moved_frames)
+
+            # Exercise the browser input path too: queued synthetic events can
+            # conceal how long real user input waits behind a slow render.
+            move_ms = []
+            for i in range(24):
+                started = time.monotonic()
+                page.mouse.move(bounds['x'] + cx + (i % 12 - 6) * 8,
+                                bounds['y'] + cy + (i % 8 - 4) * 8)
+                move_ms.append((time.monotonic() - started) * 1000.0)
 
             # Park off canvas so the next measurement starts clean.
             b = app.box()
@@ -172,6 +185,8 @@ def main():
                 ('idle cpu', idle_cpu, MAX_IDLE_CPU, '% core'),
                 ('pointer cpu (%.0fs @120Hz)' % args.pointer, pointer_cpu,
                  MAX_POINTER_CPU, '% core'),
+                ('pointer frame interval', pointer_frame_ms, MAX_POINTER_FRAME_MS, 'ms'),
+                ('real pointer event max', max(move_ms), MAX_POINTER_MOVE_MS, 'ms'),
                 ('idle cpu after activity', idle_after_cpu, MAX_IDLE_CPU, '% core'),
                 ('wasm gzipped', gz / 1048576.0, MAX_WASM_GZIP_MB, 'MB'),
             ]
