@@ -624,6 +624,11 @@ class RuntimeTests(unittest.TestCase):
     def test_gtk_editable_shortcut_routing(self):
         self.run_scenario("editable-shortcut-routing")
 
+    @unittest.skipUnless(sys.platform.startswith("linux"),
+                         "fine transform bindings are Linux-specific")
+    def test_linux_fine_transform_shortcuts(self):
+        self.run_scenario("fine-transform-shortcuts")
+
     def test_startup_document_identity(self):
         # Keep scenario selection out of argv so production startup sees real input.
         with tempfile.TemporaryDirectory(prefix="tpx startup-") as directory:

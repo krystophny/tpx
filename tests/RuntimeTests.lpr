@@ -758,8 +758,13 @@ begin
     KeySender.Parameters.Add('key');
     KeySender.Parameters.Add('--clearmodifiers');
     KeySender.Parameters.Add(Key);
-    KeySender.Options := [poWaitOnExit];
     KeySender.Execute;
+    { Deliver events while modifiers are held, as in a real event loop. }
+    while KeySender.Running do
+    begin
+      Application.ProcessMessages;
+      Sleep(1);
+    end;
     Check(KeySender.ExitStatus = 0, 'xdotool failed to send ' + Key);
   finally
     KeySender.Free;
@@ -872,6 +877,8 @@ begin
   Check(MainForm.TheDrawing.ObjectsCount = 0,
     'Delete with canvas focus did not delete the selected drawing object');
 end;
+
+{$I FineTransformShortcutScenarios.inc}
 
 procedure TestCanvasFocusTransfer;
 begin
@@ -1858,7 +1865,8 @@ begin
     end;
     if (ParamStr(1) <> 'clipboard-format-width') and
       (ParamStr(1) <> 'clipboard-roundtrip') and
-      (ParamStr(1) <> 'copy-as-tikz') then
+      (ParamStr(1) <> 'copy-as-tikz') and
+      (ParamStr(1) <> 'fine-transform-shortcuts') then
       WidgetSet := TTestWidgetSet.Create;
     Application.Initialize;
     RequireDerivedFormResource := True;
@@ -1917,6 +1925,7 @@ begin
     else if ParamStr(1) = 'clipboard-roundtrip' then TestClipboardRoundTrip
     else if ParamStr(1) = 'copy-as-tikz' then TestCopyAsTikZ
     else if ParamStr(1) = 'editable-shortcut-routing' then TestEditableShortcutRouting
+    else if ParamStr(1) = 'fine-transform-shortcuts' then TestFineTransformShortcuts
     else if ParamStr(1) = 'canvas-focus-transfer' then TestCanvasFocusTransfer
     else if ParamStr(1) = 'platform-shortcuts' then TestPlatformShortcuts
     else if ParamStr(1) = 'document-io' then TestDocumentIO

@@ -2986,6 +2986,18 @@ var
   Action: TAction;
   ShortcutBelongsToCanvas: Boolean;
 begin
+{$IFDEF LINUX}
+  if ActiveControl <> LocalView then
+  begin
+    Shortcut := Menus.ShortCut(Message.CharCode,
+      KeyDataToShiftState(Message.KeyData));
+    { Fine-transform keys belong to the canvas; editors retain text selection. }
+    if (Shortcut = RotateCounterclockWDegree.ShortCut) or
+      (Shortcut = RotateClockWDegree.ShortCut) or
+      (Shortcut = Grow1.ShortCut) or (Shortcut = Shrink1.ShortCut) then
+      Exit(False);
+  end;
+{$ENDIF}
   if (Inspector <> nil) and (ActiveControl <> nil) and
     Inspector.ContainsControl(ActiveControl) then
   begin
@@ -3050,7 +3062,22 @@ function BrowserCopyTikZ(Source: PChar; Count: LongInt): LongInt;
 {$ENDIF}
 
 procedure TMainForm.UpdatePlatformShortcuts;
+{$IFDEF LINUX}
+  procedure SetFineTransformShortcut(Action: TAction; Key: Word;
+    const LegacyShortcut: string);
+  begin
+    Action.ShortCut := Menus.ShortCut(Key, [ssCtrl, ssShift]);
+    Action.SecondaryShortCuts.Add(LegacyShortcut);
+  end;
+{$ENDIF}
 begin
+{$IFDEF LINUX}
+  { Ctrl+Alt+Arrow is reserved for workspace switching by Linux desktops. }
+  SetFineTransformShortcut(RotateCounterclockWDegree, VK_LEFT, 'Ctrl+Alt+Left');
+  SetFineTransformShortcut(RotateClockWDegree, VK_RIGHT, 'Ctrl+Alt+Right');
+  SetFineTransformShortcut(Grow1, VK_UP, 'Ctrl+Alt+Up');
+  SetFineTransformShortcut(Shrink1, VK_DOWN, 'Ctrl+Alt+Down');
+{$ENDIF}
   Undo.ShortCut := StandardShortcut(Ord('Z'), []);
   Redo.ShortCut := StandardShortcut(Ord('Z'), [ssShift]);
   ClipboardCopy.ShortCut := StandardShortcut(Ord('C'), []);
