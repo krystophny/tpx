@@ -624,12 +624,35 @@ begin
 end;
 
 procedure WriteConsoleMessage(const MsgStr: string);
+{$IFDEF MSWINDOWS}
+var
+  ErrorHandle: THandle;
+  Line: string;
+  Offset: Integer;
+  Written: DWORD;
+{$ENDIF}
 begin
+{$IFDEF MSWINDOWS}
+  { The GUI RTL turns StdErr into a modal message box at shutdown, even
+    when a CLI caller supplied a pipe. Write to that inherited handle. }
+  ErrorHandle := Windows.GetStdHandle(Windows.STD_ERROR_HANDLE);
+  if (ErrorHandle = 0) or (ErrorHandle = INVALID_HANDLE_VALUE) then Exit;
+  Line := MsgStr + #13#10;
+  Offset := 1;
+  while Offset <= Length(Line) do
+  begin
+    if not Windows.WriteFile(ErrorHandle, Line[Offset],
+      Length(Line) - Offset + 1, Written, nil) then Break;
+    if Written = 0 then Break;
+    Inc(Offset, Written);
+  end;
+{$ELSE}
 {$I-}
   WriteLn(StdErr, MsgStr);
   Flush(StdErr);
 {$I+}
   if IOResult <> 0 then ;
+{$ENDIF}
 end;
 
 procedure MessageBoxInfo(MsgStr: string);
