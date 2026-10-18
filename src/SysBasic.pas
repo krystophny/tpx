@@ -265,7 +265,7 @@ var
             Entry.Name + Suffix);
       until FindNext(Entry) <> 0;
     finally
-      FindClose(Entry);
+      SysUtils.FindClose(Entry);
     end;
   end;
 {$ENDIF}
