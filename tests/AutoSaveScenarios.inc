@@ -373,7 +373,16 @@ begin
 
     if FormatId <> 'tpx' then
     begin
-      Unsupported := TArc2D.CreateSpec(-1, Point2D(0, 0), 1, 0, Pi / 2);
+      { TikZ source saves arcs but has no serializer for new ellipses. }
+      if FormatId = 'tikz' then
+      begin
+        Unsupported := TEllipse2D.Create(-1);
+        TEllipse2D(Unsupported).Points[0] := Point2D(0, 0);
+        TEllipse2D(Unsupported).Points[1] := Point2D(2, 1);
+        TEllipse2D(Unsupported).Points[2] := Point2D(0, 1);
+      end
+      else
+        Unsupported := TArc2D.CreateSpec(-1, Point2D(0, 0), 1, 0, Pi / 2);
       MainForm.TheDrawing.AddObject(-1, Unsupported);
       MainForm.TheDrawing.History.Save;
       MainForm.NotifyDocumentEdited;

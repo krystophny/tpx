@@ -16,7 +16,8 @@ type
   TTikZDependencyKind = (tdLineWidth, tdTextSize, tdTextBaseline, tdDashSize,
     tdDotSize, tdStrokeColor, tdFillColor, tdTextColor, tdTextBody,
     tdCoordinateX, tdCoordinateY, tdWidth, tdHeight, tdRadius,
-    tdRotation, tdStartAngle, tdEndAngle, tdTextAnchor, tdTextRotation);
+    tdRotation, tdStartAngle, tdEndAngle, tdTextAnchor, tdTextRotation,
+    tdArrows);
   TTikZDependencySource = (tdepLocalLiteral, tdepSharedDefaultMacro,
     tdepLocalStyle, tdepNamedColor, tdepNamedCoordinate, tdepUnsupported);
 
@@ -75,6 +76,7 @@ type
     TextHeightMM, TextBaselineMM: Double;
     TextAnchor: string;
     ImageKeepAspectRatio: Boolean;
+    { Normalized arrow tips ('', 'to', 'latex' or 'stealth'). }
     BeginArrow, EndArrow: string;
     Dependencies: TTikZPropertyDependencies;
   end;
@@ -1295,6 +1297,30 @@ begin
     end;
 end;
 
+{ Accept the core TikZ arrow specifications TpX writes: "-", "->", "<-",
+  "<->" and the named "latex" and "stealth" tips at either end. }
+function ParseTikZArrowSpec(const Spec: string;
+  out BeginTip, EndTip: string): Boolean;
+var
+  Dash: SizeInt;
+  Left, Right: string;
+begin
+  Result := False;
+  BeginTip := '';
+  EndTip := '';
+  Dash := Pos('-', Spec);
+  if (Dash = 0) or (Pos('-', Copy(Spec, Dash + 1, MaxInt)) > 0) then Exit;
+  Left := TrimASCII(Copy(Spec, 1, Dash - 1));
+  Right := TrimASCII(Copy(Spec, Dash + 1, MaxInt));
+  if (Left = '<') or (Left = 'to') then BeginTip := 'to'
+  else if (Left = 'latex') or (Left = 'stealth') then BeginTip := Left
+  else if Left <> '' then Exit;
+  if (Right = '>') or (Right = 'to') then EndTip := 'to'
+  else if (Right = 'latex') or (Right = 'stealth') then EndTip := Right
+  else if Right <> '' then Exit;
+  Result := True;
+end;
+
 function TTikZEvaluator.ParseRGB(const Name: string; out RGB: LongWord): Boolean;
 var
   Value: string;
@@ -1902,9 +1928,21 @@ var
           AObj.StrokeEnabled := True
         else if Item.Key = 'fill' then
           AObj.FillEnabled := True
-        else if (Item.Key = 'dashed') or (Item.Key = 'dotted') then
+        else if (not IsNodeStyle) and
+          ParseTikZArrowSpec(Item.Key, AObj.BeginArrow, AObj.EndArrow) then
+          AddDependency(AObj, tdArrows, tdepLocalStyle, Item.Key,
+            Item.KeySpan, Item.KeySpan, OptSpan, SpanAtZero, True,
+            -1, -1, 1, '', False)
+        else if (Item.Key = 'dashed') or (Item.Key = 'dotted') or
+          (Item.Key = 'solid') then
         begin
-          if Item.Key = 'dashed' then
+          if Item.Key = 'solid' then
+          begin
+            AObj.LineKind := tlSolid;
+            AObj.DashOnMM := 0;
+            AObj.DashOffMM := 0;
+          end
+          else if Item.Key = 'dashed' then
           begin
             AObj.LineKind := tlDashed;
             AObj.DashOnMM := 2 * FResult.Scene.DashSizeMM;
@@ -2031,6 +2069,10 @@ var
       else
         Unsupported(Item.OptionSpan, 'Unsupported TikZ option: ' + Item.Key);
     end;
+    if ((AObj.BeginArrow <> '') or (AObj.EndArrow <> '')) and
+      not AObj.StrokeEnabled then
+      Unsupported(OptSpan,
+        'Arrow tips on an unstroked TikZ path are not native arrowheads');
   end;
 
   procedure AddPointDependencies(AObj: TTikZSceneObject; CommandIndex,

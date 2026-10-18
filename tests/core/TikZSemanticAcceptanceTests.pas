@@ -237,7 +237,7 @@ begin
   Text := RawFromBytes(Source);
   EndAt := Pos('\end{tikzpicture}', Text);
   CheckCore(EndAt > 0, 'Fixture lost its selected picture terminator');
-  Insert('\path[->] (0,0) -- (1,1);' + #10, Text, EndAt);
+  Insert('\draw[->>] (0,0) -- (1,1);' + #10, Text, EndAt);
   Source := BytesFromRaw(Text);
   Evaluated := ParseAndEvaluate(Source, Syntax);
   try

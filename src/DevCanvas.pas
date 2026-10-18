@@ -1045,6 +1045,7 @@ var
   BrushColor0: TColor;
   PenStyle, PenStyle0: TPenStyle;
   PenColor0: TColor;
+  PenWidth: Integer;
 begin
   PenStyle0 := Cnv.Pen.Style;
   PenColor0 := Cnv.Pen.Color;
@@ -1069,30 +1070,38 @@ begin
   else
   begin
     //SetMiterLimit(Cnv.Handle, MiterLimit, nil);
+    PenWidth := Max(Round(LineWidthBase * Line_Width * FactorMM), 1);
+    { Wide pens draw their own dash pattern; scale it with the stroke width
+      so dashed and dotted strokes stay legible at every zoom. }
     case LineStyle of
       liSolid:
         Cnv.Pen.Style := psSolid;
       liDotted:
-        Cnv.Pen.Style := psDot;
+        if PenWidth > 1 then
+          Cnv.Pen.SetPattern([PenWidth, 2 * PenWidth])
+        else
+          Cnv.Pen.Style := psDot;
       liDashed:
-        Cnv.Pen.Style := psDash;
+        if PenWidth > 1 then
+          Cnv.Pen.SetPattern([4 * PenWidth, 2 * PenWidth])
+        else
+          Cnv.Pen.Style := psDash;
     end;
-    Cnv.Pen.Width :=
-      Max(Round(LineWidthBase * Line_Width * FactorMM), 1);
+    if (LineStyle <> liSolid) and (PenWidth > 1) then
+    begin
+      Cnv.Pen.Style := psPattern;
+      Cnv.Pen.Cosmetic := False;
+      Cnv.Pen.EndCap := pecFlat;
+    end;
+    Cnv.Pen.Width := PenWidth;
     if LineColor = clDefault then
       Cnv.Pen.Color := clBlack
     else
       Cnv.Pen.Color := LineColor;
   end;
   PathProc(Cnv, IsClosed, Pnts, GP, Transf);
-  if (LineStyle <> liNone) and (LineStyle <> liSolid) and
-    (Cnv.Pen.Width > 1) then
-  begin
-    Cnv.Pen.Width := 1;
-    Cnv.Brush.Style := bsClear;
-    Cnv.Pen.Mode := pmNotCopy;
-    PathProc(Cnv, IsClosed, Pnts, GP, Transf);
-  end;
+  Cnv.Pen.Cosmetic := True;
+  Cnv.Pen.EndCap := pecRound;
   Cnv.Pen.Style := PenStyle0;
   Cnv.Pen.Color := PenColor0;
   Cnv.Brush.Style := BrushStyle0;

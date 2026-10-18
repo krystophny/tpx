@@ -4,7 +4,7 @@ unit TikZImportDrawing;
 
 interface
 
-uses Classes, SysUtils, Drawings, TikZImport, DocumentFormats;
+uses Classes, SysUtils, Drawings, GObjects, TikZImport, DocumentFormats;
 
 type
   TTikZAssetResolver = function(const DocumentFileName, Reference: string;
@@ -19,10 +19,14 @@ function TikZDocumentLoader(Candidate: TDrawing2D; const FileName: TDocumentPath
   const SourceBytes: RawByteString; Diagnostics: TStrings;
   out CodecContext: TObject): Boolean;
 procedure RegisterTikZDocumentLoader;
+{ Native arrowheads with a core TikZ arrow tip: h40 is the open "to" tip,
+  h44 the filled "latex" triangle and h42 the notched "stealth" tip. }
+function TikZTipArrowKind(const Tip: string): TArrowKind;
+function ArrowKindTikZTip(Kind: TArrowKind; out Tip: string): Boolean;
 
 implementation
 
-uses Contnrs, Types, Math, Graphics, Devices, Geometry, GObjBase, GObjects, Bitmaps,
+uses Contnrs, Types, Math, Graphics, Devices, Geometry, GObjBase, Bitmaps,
   TikZSyntax, TikZLexer, DocumentIO;
 
 type
@@ -74,6 +78,28 @@ begin
   Result := FileExists(LocalPath);
 end;
 
+function TikZTipArrowKind(const Tip: string): TArrowKind;
+begin
+  if Tip = 'to' then Result := arrH40
+  else if Tip = 'latex' then Result := arrH44
+  else if Tip = 'stealth' then Result := arrH42
+  else Result := arrNone;
+end;
+
+function ArrowKindTikZTip(Kind: TArrowKind; out Tip: string): Boolean;
+begin
+  Result := True;
+  case Kind of
+    arrNone: Tip := '';
+    arrH40: Tip := 'to';
+    arrH44: Tip := 'latex';
+    arrH42: Tip := 'stealth';
+  else
+    Tip := '';
+    Result := False;
+  end;
+end;
+
 procedure ApplyStyle(Primitive: TPrimitive2D; const Obj: TTikZSceneObject;
   Drawing: TDrawing2D);
 begin
@@ -100,6 +126,8 @@ begin
     else Primitive.LineWidth := 1;
   end
   else Primitive.LineStyle := liNone;
+  Primitive.BeginArrowKind := TikZTipArrowKind(Obj.BeginArrow);
+  Primitive.EndArrowKind := TikZTipArrowKind(Obj.EndArrow);
   if Obj.FillEnabled then Primitive.FillColor := SceneColor(Obj.FillRGB)
   else Primitive.FillColor := clDefault;
 end;
