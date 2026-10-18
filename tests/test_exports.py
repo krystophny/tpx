@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 import re
+import shutil
+import stat
 import struct
 import subprocess
 import tempfile
@@ -45,11 +47,19 @@ class ExportTests(unittest.TestCase):
         source.write_text("\n".join("%" + line for line in xml.splitlines()) + "\n")
         return source
 
-    def run_tpx(self, *arguments):
+    def run_tpx(self, *arguments, expect_success=True):
         result = subprocess.run([str(BINARY), *map(str, arguments)],
                                 cwd=self.root, capture_output=True,
                                 env=self.env, text=True, timeout=20)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        if expect_success:
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        else:
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+        return result
+
+    def save_leftovers(self):
+        return sorted(path.name for path in self.root.iterdir()
+                      if path.suffix == ".tmp" or path.name.startswith("tpx-stage"))
 
     @staticmethod
     def read_tpx(path):
@@ -238,6 +248,65 @@ class ExportTests(unittest.TestCase):
         self.run_tpx("-f", source, "-o", "saved.TpX")
         saved = self.read_tpx(self.root / "saved.TpX")
         self.assertEqual(len(saved.findall("./group/line")), 2)
+
+    def test_cli_saves_tikz_by_output_extension(self):
+        self.run_tpx("-f", self.drawing(), "-o", "drawing.tikz")
+        tikz = (self.root / "drawing.tikz").read_text()
+        self.assertNotIn("%<TpX", tikz)
+        self.assertIn("\\begin{tikzpicture}", tikz)
+        self.assertIn("rectangle", tikz)
+        self.run_tpx("-f", "drawing.tikz", "-o", "from-tikz.TpX")
+        rectangle = self.read_tpx(self.root / "from-tikz.TpX").find("rect")
+        self.assertEqual(float(rectangle.get("w")), 20)
+
+    def test_cli_opens_svg_like_the_gui(self):
+        self.run_tpx("-f", self.drawing(), "-x", "svg", "-o", "drawing")
+        self.run_tpx("-f", "drawing.svg", "-o", "from-svg.TpX")
+        rectangle = self.read_tpx(self.root / "from-svg.TpX").find("rect")
+        self.assertEqual(float(rectangle.get("w")), 20)
+
+    def test_cli_rejects_unsupported_output_clearly(self):
+        source = self.drawing()
+        result = self.run_tpx("-f", source, "-o", "drawing.pdf", expect_success=False)
+        self.assertIn("drawing.pdf", result.stderr)
+        self.assertFalse((self.root / "drawing.pdf").exists())
+        result = self.run_tpx("-f", source, "-x", "emf", expect_success=False)
+        self.assertIn('Export format "emf"', result.stderr)
+        result = self.run_tpx("-f", "missing.TpX", "-o", "out.TpX",
+                              expect_success=False)
+        self.assertIn("missing.TpX", result.stderr)
+
+    @unittest.skipUnless(shutil.which("gs"), "Ghostscript is not installed")
+    def test_cli_png_export(self):
+        self.run_tpx("-f", self.drawing(), "-x", "png", "-o", "drawing")
+        image = (self.root / "drawing.png").read_bytes()
+        self.assertEqual(image[:8], b"\x89PNG\r\n\x1a\n")
+        width, height = struct.unpack(">II", image[16:24])
+        self.assertGreater(width, height)
+
+    def test_saves_leave_no_temporary_files(self):
+        source = self.drawing()
+        target = self.root / "saved.TpX"
+        self.run_tpx("-f", source, "-o", target)
+        self.run_tpx("-f", source, "-o", target)
+        self.assertEqual(self.save_leftovers(), [])
+        (self.root / "folder.TpX").mkdir()
+        self.run_tpx("-f", source, "-o", "folder.TpX", expect_success=False)
+        self.assertEqual(self.save_leftovers(), [])
+
+    @unittest.skipIf(os.name == "nt", "POSIX file modes")
+    def test_saved_file_modes_follow_umask_and_existing_file(self):
+        source = self.drawing()
+        target = self.root / "saved.TpX"
+        previous = os.umask(0o022)
+        try:
+            self.run_tpx("-f", source, "-o", target)
+            self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o644)
+            target.chmod(0o640)
+            self.run_tpx("-f", source, "-o", target)
+            self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o640)
+        finally:
+            os.umask(previous)
 
 
 if __name__ == "__main__":

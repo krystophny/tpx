@@ -358,7 +358,7 @@ var
 implementation
 
 uses Math, StrUtils, ColorEtc, Preview,
-  Settings0, Input, SysBasic,
+  Settings0, Input, SysBasic, DocumentFormats, DocumentIO,
 {$IFDEF VER140}
   Gr32Add, DevGr32,
 {$ENDIF}
@@ -1057,9 +1057,41 @@ begin
 {$IFDEF VER140}
   Result := True;
 {$ELSE}
+{$IFDEF CPUWASM32}
   Result := not (Format in [export_EMF, export_PNG, export_BMP]);
+{$ELSE}
+  { PNG and BMP are rasterized from the EPS export by Ghostscript. }
+  Result := Format <> export_EMF;
+{$ENDIF}
 {$ENDIF}
 end;
+
+{$IFNDEF VER140}
+procedure StoreToFile_GhostscriptRaster(const Drawing: TDrawing2D;
+  const FileName: TOutputPath; const Keys: string);
+var
+  TempEPS, TempImage: TOutputPath;
+begin
+  TempEPS := OutputPathFromString(GetTempDir) + '(raster)TpX.eps';
+  TempImage := OutputPathFromString(GetTempDir) + '(raster)TpX' +
+    ExtractFileExt(FileName);
+  OutputTryDeleteFile(TempEPS);
+  OutputTryDeleteFile(TempImage);
+  try
+    StoreToFile_Saver(Drawing, TempEPS, T_PostScript_Export);
+    GhostScriptConvert(TempEPS, Keys, TempImage);
+    { Leave an existing destination untouched unless rasterizing worked. }
+    if not OutputFileExists(TempImage) then
+      raise EWriteError.Create('Ghostscript did not create the image ' +
+        '(check the GhostscriptPath setting)');
+    if not SysBasic.CopyFile(TempImage, FileName) then
+      raise EWriteError.CreateFmt('Could not write %s', [FileName]);
+  finally
+    OutputTryDeleteFile(TempEPS);
+    OutputTryDeleteFile(TempImage);
+  end;
+end;
+{$ENDIF}
 
 procedure ExportToFile(const Drawing: TDrawing2D;
   const FileName: TOutputPath; const ExportFormat:
@@ -1084,6 +1116,13 @@ begin
     //TheDrawing.SaveToFile_Bitmap(FileName)
       StoreToFile_Saver(Drawing,
         FileName, T_BMP_Export);
+{$ELSE}
+    export_PNG:
+      StoreToFile_GhostscriptRaster(Drawing, FileName,
+        '-r300 -sDEVICE=png16m -dTextAlphaBits=4 -dGraphicsAlphaBits=4');
+    export_BMP:
+      StoreToFile_GhostscriptRaster(Drawing, FileName,
+        '-r300 -sDEVICE=bmp16m');
 {$ENDIF}
     export_PDF:
       StoreToFile_Saver(Drawing,
@@ -2660,12 +2699,93 @@ begin
     ADrawing.PdfTeXFormat := PdfTeXFormatKind(I - 1);
 end;
 
+function CommandLineSaveFormat(var OutputFile: string;
+  out FormatId: string): Boolean;
+var
+  Ext, Extensions, Item: string;
+  I, Sep: Integer;
+  Format: TDocumentFormat;
+begin
+  Result := False;
+  FormatId := '';
+  Ext := ExtractFileExt(OutputFile);
+  if Ext = '' then
+  begin
+    { Historical behavior: an output name without extension is a TpX file. }
+    FormatId := 'tpx';
+    OutputFile := OutputFile + '.tpx';
+    Exit(True);
+  end;
+  for I := 0 to DocumentFormatCount - 1 do
+  begin
+    Format := DocumentFormatAt(I);
+    if not Format.CanSaveBack or not IsDocumentCodecRegistered(Format.Id) then
+      Continue;
+    Extensions := Format.Extensions;
+    while Extensions <> '' do
+    begin
+      Sep := Pos(';', Extensions);
+      if Sep = 0 then Sep := Length(Extensions) + 1;
+      Item := Copy(Extensions, 1, Sep - 1);
+      Delete(Extensions, 1, Sep);
+      if SameText(Item, Ext) then
+      begin
+        FormatId := Format.Id;
+        Exit(True);
+      end;
+    end;
+  end;
+end;
+
+function LoadCommandLineDrawing(const FileName: string): TDrawing2D;
+var
+  Path: TDocumentPath;
+  Snapshot: TDocumentSnapshot;
+  Format: TDocumentFormat;
+  CanSaveBack: Boolean;
+  CodecContext: TObject;
+begin
+  { Use the codec registry, exactly like File > Open in the GUI. }
+  Path := NormalizeDocumentPath(TDocumentPath(FileName));
+  Snapshot := ReadDocumentSnapshot(Path);
+  if not DetectDocumentFormat(Path, Snapshot.SourceBytes, Format) then
+    raise EReadError.CreateFmt('The format of %s is not supported for opening',
+      [FileName]);
+  if not IsDocumentCodecRegistered(Format.Id) then
+    raise EReadError.CreateFmt('No loader is registered for %s',
+      [Format.DisplayName]);
+  CodecContext := nil;
+  try
+    Result := LoadDocumentCandidate(Format.Id, Path, Snapshot.SourceBytes,
+      CanSaveBack, CodecContext, nil);
+  finally
+    CodecContext.Free;
+  end;
+end;
+
+procedure SaveCommandLineDrawing(const Drawing: TDrawing2D;
+  const FileName, FormatId: string);
+var
+  Path, BackupFileName: TDocumentPath;
+  NewRevision: TDiskRevision;
+  Transaction: TDocumentSaveTransaction;
+begin
+  { Use the GUI save transaction: staged, verified and atomically replaced. }
+  Path := NormalizeDocumentPath(TDocumentPath(FileName));
+  Transaction := TDocumentSaveTransaction.Create(FormatId, Drawing, Path,
+    ReadDocumentRevision(Path), nil, True);
+  try
+    Transaction.Publish(NewRevision, BackupFileName);
+  finally
+    Transaction.Free;
+  end;
+end;
+
 function CheckCommandLine: Boolean;
 var
   FileName, IncludePath: string;
-  OutputFile, OutputFormats, ExportFormats: string;
+  OutputFile, OutputFormats, ExportFormats, FormatId: string;
   ADrawing: TDrawing2D;
-  Loader: T_TpX_Loader;
   Ext: string;
   I, J: Integer;
   function GetExportDefaultExt(const J: Integer): string;
@@ -2685,66 +2805,59 @@ begin
     OutputFile, OutputFormats, ExportFormats);
   if (OutputFile = '') and (ExportFormats = '') then Exit;
   if FileName = '' then Exit;
-    //ShowMessage(FileName);
-  if not FileExists(FileName) then Exit;
-  LoadSettings;
-  ADrawing := TDrawing2D.Create(nil);
-  ADrawing.IncludePath := IncludePath;
+  Result := False;
+  ConsoleMessages := True;
+  ExitCode := 1;
+  ADrawing := nil;
   try
-    Ext := LowerCase(ExtractFileExt(FileName));
-    if (Ext = '.emf') or (Ext = '.wmf') then
-      Import_Metafile(ADrawing, FileName, nil)
-    else if (Ext = '.eps') or (Ext = '.ps') or (Ext =
-      '.pdf') then
-      Import_Eps(ADrawing, FileName)
-    else
-    begin
-      Loader := T_TpX_Loader.Create(ADrawing);
-      try
-        if Ext = '' then
-        begin
-          Ext := '.tpx';
-          FileName := ChangeFileExt(FileName, '.tpx');
-        end;
-        Loader.LoadFromFile(FileName);
-      finally
-        Loader.Free;
-      end;
-    end;
-    if ExportFormats <> '' then
-    begin
-      if (OutputFile = '') or (OutputFile = '$Default')
-        then
-        OutputFile := ChangeFileExt(FileName, '') +
-          '-export';
-      I := 1;
-      repeat
-        Ext := Trim(CSV_Item(ExportFormats, I));
-        if Ext <> '' then
-        begin
-          J := CSV_Find(ExportFormat_Choice, Ext);
-          if J > 0 then
+    try
+      if ExtractFileExt(FileName) = '' then
+        FileName := ChangeFileExt(FileName, '.tpx');
+      if not FileExists(FileName) then
+        raise EReadError.CreateFmt('Input file not found: %s', [FileName]);
+      LoadSettings;
+      ADrawing := LoadCommandLineDrawing(FileName);
+      ADrawing.IncludePath := IncludePath;
+      if ExportFormats <> '' then
+      begin
+        if (OutputFile = '') or (OutputFile = '$Default') then
+          OutputFile := ChangeFileExt(FileName, '') + '-export';
+        I := 1;
+        repeat
+          Ext := Trim(CSV_Item(ExportFormats, I));
+          if Ext <> '' then
+          begin
+            J := CSV_Find(ExportFormat_Choice, Ext);
+            if (J <= 0) or not IsExportFormatAvailable(J - 1) then
+              raise EWriteError.CreateFmt(
+                'Export format "%s" is not available in this build', [Ext]);
             ExportToFile(ADrawing,
-              ChangeFileExt(OutputFile, '.' +
-              GetExportDefaultExt(J)),
+              ChangeFileExt(OutputFile, '.' + GetExportDefaultExt(J)),
               ExportFormatKind(J - 1));
-        end;
-        Inc(I);
-      until Ext = '';
-    end
-    else
-    begin
-      SetOutputFormats(OutputFormats, ADrawing);
-      if (OutputFile = '') or (OutputFile = '$Default') or
-        (Ext = '') then
-        OutputFile := ChangeFileExt(FileName, '.tpx');
-      ADrawing.FileName := OutputFile;
-      StoreToFile_TpX(ADrawing, OutputFile, False);
+          end;
+          Inc(I);
+        until Ext = '';
+      end
+      else
+      begin
+        SetOutputFormats(OutputFormats, ADrawing);
+        if (OutputFile = '') or (OutputFile = '$Default') then
+          OutputFile := ChangeFileExt(FileName, '.tpx');
+        OutputFile := OutputExpandFileName(OutputFile);
+        if not CommandLineSaveFormat(OutputFile, FormatId) then
+          raise EWriteError.CreateFmt(
+            'Cannot save %s: use .tpx, .tikz, .tex or .svg with -o, ' +
+            'or -x for export formats', [OutputFile]);
+        SaveCommandLineDrawing(ADrawing, OutputFile, FormatId);
+      end;
+      ExitCode := 0;
+    except
+      on E: Exception do
+        WriteConsoleMessage('TpX: ' + E.Message);
     end;
   finally
     ADrawing.Free;
   end;
-  Result := False;
 end;
 
 procedure ParseParameters(
