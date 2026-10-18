@@ -32,6 +32,7 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "edit-session-deferred-reload",
              "edit-session-form-destroy",
              "property-dimensions", "inspector-mixed-selection", "inspector-property-families",
+             "inspector-visibility",
              "font-choice", "conversion-save",
              "unsupported-exports", "live-tex-missing-tool", "clipboard-format-width",
              "clipboard-roundtrip", "color-box-custom-state", "open-examples", "open-dialog-all-formats",

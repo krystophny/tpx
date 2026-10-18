@@ -8,7 +8,7 @@ uses
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt, CocoaAll, CocoaTextEdits, CocoaUtils,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Options, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, AutoSaveStore, AutoSaveRuntime, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, SvgCodec, EditSessions, PropertyEdits, PropertyEditCore, CompositionAwareControls, UserStorage, gzio;
+  Settings0, MainUnit, Options, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, AutoSaveStore, AutoSaveRuntime, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, SvgCodec, EditSessions, PropertyEdits, PropertyEditCore, CompositionAwareControls, UserStorage, ObjectInspector, Buttons, gzio;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Options.lfm}
@@ -425,6 +425,8 @@ end;
 procedure TestUserPreferencesWrite;
 begin
   SetLiveTeXEnabled(False);
+  (MainForm.FindComponent('InspectorMenuItem') as TMenuItem).Click;
+  MainForm.Inspector.ShowMore := True;
   SaveSettings;
 end;
 
@@ -432,6 +434,10 @@ procedure TestUserPreferencesRead;
 begin
   Check(not LiveTeXEnabled,
     'user preferences did not survive replacing the executable');
+  Check(not MainForm.InspectorPanelVisible and
+    not MainForm.Inspector.Parent.Visible and MainForm.InspectorShowMore and
+    MainForm.Inspector.ShowMore,
+    'inspector visibility or More state did not persist');
 end;
 
 procedure TestStoragePaths;
@@ -2004,6 +2010,7 @@ begin
     else if ParamStr(1) = 'cocoa-local-composition' then TestCocoaLocalComposition
     {$ENDIF}
     else if ParamStr(1) = 'inspector-property-families' then TestInspectorPropertyFamilies
+    else if ParamStr(1) = 'inspector-visibility' then TestInspectorVisibility
     else if ParamStr(1) = 'font-choice' then TestFontChoice
     else if ParamStr(1) = 'conversion-save' then TestConversionSave
     else if ParamStr(1) = 'unsupported-exports' then TestUnsupportedExports

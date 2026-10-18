@@ -1012,21 +1012,28 @@ def s_object_inspector(app):
     app.menu('Edit', 'Object properties')
     if app.page.get_by_role('dialog').count():
         raise AssertionError('opening the inspector created a modal dialog')
-    rounded = app.page.get_by_role('button').filter(has_text='Rounded corners')
-    width = app.page.get_by_role('textbox', name='Width multiplier', exact=True)
-    arrow_size = app.page.get_by_role(
-        'textbox', name='Arrow size multiplier', exact=True)
+    more = app.page.get_by_role('checkbox', name='More properties', exact=True)
+    width = app.page.get_by_role('textbox', name='Line width', exact=True)
+    horizontal = app.page.get_by_role('textbox', name='Corner rx (mm)', exact=True)
+    vertical = app.page.get_by_role('textbox', name='Corner ry (mm)', exact=True)
+    # Only the rectangles' own fields show until More reveals the styles.
+    if not horizontal.is_visible() or width.is_visible():
+        raise AssertionError('collapsed inspector did not show only the corner fields')
+    if app.page.get_by_role('textbox', name='Text', exact=True).count():
+        raise AssertionError('rectangle selection exposed text fields')
+    more.click()
+    width.wait_for(state='visible')
 
     def open_combo_from_width(rows_away):
         bounds = width.bounding_box()
-        size_bounds = arrow_size.bounding_box()
-        if bounds is None or size_bounds is None:
+        rx_bounds = horizontal.bounding_box()
+        ry_bounds = vertical.bounding_box()
+        if bounds is None or rx_bounds is None or ry_bounds is None:
             raise AssertionError('inspector anchor fields have no browser bounds')
         width_center = bounds['y'] + bounds['height'] / 2
-        size_center = size_bounds['y'] + size_bounds['height'] / 2
-        # The Line section's owner-drawn combos share rows with the two
-        # accessible edit controls; interpolation keeps the hit test scaled.
-        row_pitch = (size_center - width_center) / 3
+        # Painted combos share the fixed row pitch of the two adjacent corner
+        # edits; measuring it keeps the hit test scaled.
+        row_pitch = ry_bounds['y'] - rx_bounds['y']
         click_x = bounds['x'] + bounds['width'] - 16
         click_y = width_center + rows_away * row_pitch
         app.page.mouse.click(click_x, click_y)
@@ -1074,22 +1081,9 @@ def s_object_inspector(app):
     if width.input_value() != '3.5':
         raise AssertionError('selection refresh lost the last committed width')
 
-    def section_button(title):
-        return app.page.get_by_role('button').filter(has_text=re.compile(
-            rf'^(?:(?:▾|▸)\s*)?{re.escape(title)}$'))
-
-    for title in ('Line', 'Fill and hatching', 'Text'):
-        button = section_button(title)
-        if button.count() != 1 or not button.is_visible():
-            raise AssertionError(f'inspector section button is missing: {title}')
-        button.click()
-    if width.is_visible():
-        raise AssertionError('collapsing Line left its width control visible')
-
-    rounded = section_button('Rounded corners')
-    if rounded.count() != 1 or not rounded.is_visible():
-        raise AssertionError('Rounded corners section is not visible')
-    rounded.click()
+    more.click()
+    if width.is_visible() or more.is_checked():
+        raise AssertionError('collapsing More left its width control visible')
 
     def assert_editor_in_viewport(editor):
         bounds = editor.bounding_box()
@@ -1105,11 +1099,8 @@ def s_object_inspector(app):
             raise AssertionError(
                 f'inspector editor is outside the visible canvas: {bounds}')
 
-    horizontal = app.page.get_by_role(
-        'textbox', name='Horizontal radius (mm)', exact=True)
     assert_editor_in_viewport(horizontal)
     horizontal.fill('2.5')
-    vertical = app.page.get_by_role('textbox', name='Vertical radius (mm)', exact=True)
     assert_editor_in_viewport(vertical)
     vertical.fill('3.5')
     vertical.press('Enter')
@@ -1117,17 +1108,17 @@ def s_object_inspector(app):
         raise AssertionError(
             f'vertical radius did not remain after Enter: {vertical.input_value()!r}')
     vertical.press('Tab')
-    expect(section_button('Bitmap')).to_be_focused()
+    expect(more).to_be_focused()
     focus_after_tab = app.page.evaluate('''() => {
         const e = document.activeElement;
-        return e ? {tag: e.tagName, text: (e.textContent || '').trim()} : null;
+        return e ? {tag: e.tagName, type: e.type || ''} : null;
     }''')
     if (not vertical.is_enabled() or vertical.input_value() != '3.5' or
-            focus_after_tab is None or focus_after_tab['tag'] != 'BUTTON' or
-            'Bitmap' not in focus_after_tab['text']):
+            focus_after_tab is None or focus_after_tab['tag'] != 'INPUT' or
+            focus_after_tab['type'] != 'checkbox'):
         raise AssertionError(
-            'Tab from Vertical radius did not preserve selection and move to '
-            f'the next Inspector control (Bitmap section): {focus_after_tab}')
+            'Tab from Corner ry did not preserve selection and move to '
+            f'the next Inspector control (More properties): {focus_after_tab}')
     app.page.keyboard.type('9')
     if vertical.input_value() != '3.5':
         raise AssertionError(
@@ -1139,7 +1130,7 @@ def s_object_inspector(app):
         const e = document.activeElement;
         return e ? `${e.tagName}[${e.getAttribute('aria-label') || ''}]` : 'none';
     }''')
-    if (focus_after_shift_tab != 'INPUT[Vertical radius (mm)]' or
+    if (focus_after_shift_tab != 'INPUT[Corner ry (mm)]' or
             not vertical.is_enabled() or vertical.input_value() != '3.5'):
         raise AssertionError(
             'Shift+Tab did not return to the committed Inspector field: '
@@ -1150,21 +1141,20 @@ def s_object_inspector(app):
         raise AssertionError(
             f'vertical radius was not committed before selection refresh: {vertical.input_value()!r}')
     before = app.viewport()
-    inspector_menu_item = re.compile(r'^(?:✓ )?Object inspector$')
-    app.menu('View', inspector_menu_item)
+    app.menu('View', 'Inspector')
     hidden = app.viewport()
     if hidden['w'] <= before['w']:
         raise AssertionError('collapsing the inspector did not restore canvas width')
     if app.capture_requested:
         app.shot('wide-collapsed')
-    app.menu('View', inspector_menu_item)
+    app.menu('View', 'Inspector')
     if vertical.input_value() != '3.5':
         raise AssertionError('reopening the inspector lost the rounded-corner value')
     app.page.set_viewport_size({'width': 760, 'height': 900})
     app.page.wait_for_timeout(250)
-    radius = app.page.get_by_role('textbox', name='Horizontal radius (mm)', exact=True)
+    radius = horizontal
     if not radius.is_visible():
-        raise AssertionError('Rounded corners editor left the visible inspector on narrow resize')
+        raise AssertionError('corner radius editor left the visible inspector on narrow resize')
     assert_editor_in_viewport(radius)
     radius.fill('-1')
     radius.press('Enter')
@@ -1265,9 +1255,20 @@ def s_nested_coordinates(app):
     app.menu('Edit', 'Object properties')
     coordinates = app.page.get_by_role('button', name='Point coordinates…', exact=True)
     initial = coordinates.bounding_box()
-    if initial is None:
-        raise AssertionError('coordinate editor action has no rendered bounds')
     canvas = app.box()
+    if (initial is None or initial['y'] < canvas['y']
+            or initial['y'] + initial['height'] > canvas['y'] + canvas['h']):
+        raise AssertionError('coordinate action is not visible when the line is selected')
+    # Overflow the Inspector (More plus a short window) so the action can be
+    # scrolled away and must be brought back by real wheel input.
+    browser_size = app.page.viewport_size
+    more = app.page.get_by_role('checkbox', name='More properties', exact=True)
+    if not more.is_checked():
+        more.click()
+    app.resize(browser_size['width'], 380)
+    v, cx, cy = box(app)
+    canvas = app.box()
+    last_field = app.page.get_by_role('textbox', name='Arrow size', exact=True)
     # Wheel over the right-side Inspector gutter; its event can target either
     # the painted LCL surface or one of its DOM overlays while it scrolls.
     page_x = canvas['x'] + canvas['w'] - 6
@@ -1283,42 +1284,51 @@ def s_nested_coordinates(app):
     if not app.page.evaluate(in_app_surface, wheel_point):
         raise AssertionError('Inspector wheel point is outside the application surface')
     page_scroll = app.page.evaluate('window.scrollY')
-    shown = None
-    last_y = initial['y']
-    stable_ticks = 0
-    moved = False
-    for _ in range(256):
-        if not app.page.evaluate(in_app_surface, wheel_point):
-            raise AssertionError('Inspector wheel point left the application surface')
-        app.wheel(wheel_x, wheel_y, 120)
-        shown = coordinates.bounding_box()
-        if shown and shown['y'] < last_y - 0.5:
-            moved = True
-        if shown and abs(shown['y'] - last_y) < 0.5:
-            stable_ticks += 1
-        else:
-            stable_ticks = 0
-        if shown:
-            last_y = shown['y']
-        if (shown and stable_ticks >= 2 and canvas['y'] <= shown['y']
-                and shown['y'] + shown['height'] <= canvas['y'] + canvas['h']):
-            break
-    canvas_after = app.box()
-    if (shown is None or not moved or stable_ticks < 2
-            or shown['x'] < canvas['x']
-            or shown['x'] + shown['width'] > canvas['x'] + canvas['w']
-            or shown['y'] < canvas['y'] or shown['y'] >= initial['y']
-            or shown['y'] + shown['height'] > canvas['y'] + canvas['h']
-            or app.page.evaluate('window.scrollY') != page_scroll
-            or any(canvas_after[key] != canvas[key] for key in ('x', 'y', 'w', 'h'))):
-        raise AssertionError(
-            'real Inspector wheel input did not reveal the coordinate action '
-            f'without scrolling the page (y {initial["y"]:.0f} → '
-            f'{shown["y"] if shown else "missing"})')
+
+    def wheel_until_shown(control, delta, label):
+        start = control.bounding_box()
+        if start is None:
+            raise AssertionError(f'{label} has no rendered bounds')
+        shown = None
+        last_y = start['y']
+        stable_ticks = 0
+        moved = False
+        for _ in range(256):
+            if not app.page.evaluate(in_app_surface, wheel_point):
+                raise AssertionError('Inspector wheel point left the application surface')
+            app.wheel(wheel_x, wheel_y, delta)
+            shown = control.bounding_box()
+            if shown and (shown['y'] - last_y) * delta < -0.25:
+                moved = True
+            if shown and abs(shown['y'] - last_y) < 0.5:
+                stable_ticks += 1
+            else:
+                stable_ticks = 0
+            if shown:
+                last_y = shown['y']
+            if (shown and stable_ticks >= 2 and canvas['y'] <= shown['y']
+                    and shown['y'] + shown['height'] <= canvas['y'] + canvas['h']):
+                break
+        canvas_after = app.box()
+        if (shown is None or not moved or stable_ticks < 2
+                or shown['x'] < canvas['x']
+                or shown['x'] + shown['width'] > canvas['x'] + canvas['w']
+                or shown['y'] < canvas['y']
+                or shown['y'] + shown['height'] > canvas['y'] + canvas['h']
+                or app.page.evaluate('window.scrollY') != page_scroll
+                or any(canvas_after[key] != canvas[key] for key in ('x', 'y', 'w', 'h'))):
+            raise AssertionError(
+                f'real Inspector wheel input did not reveal the {label} '
+                f'without scrolling the page (y {start["y"]:.0f} → '
+                f'{shown["y"] if shown else "missing"})')
+        return shown
+
+    wheel_until_shown(last_field, 120, 'last More field')
+    shown = wheel_until_shown(coordinates, -120, 'coordinate action')
     paper_before = app.pixels(region(cx, cy, 240, 180))
     if not app.page.evaluate(in_app_surface, wheel_point):
         raise AssertionError('Inspector boundary wheel point left the application surface')
-    app.wheel(wheel_x, wheel_y, 120)
+    app.wheel(wheel_x, wheel_y, -120)
     boundary = coordinates.bounding_box()
     if (boundary is None or abs(boundary['y'] - shown['y']) >= 0.5
             or diff(paper_before, app.pixels(region(cx, cy, 240, 180))) != 0
@@ -1332,6 +1342,7 @@ def s_nested_coordinates(app):
            'y': shown['y'] + shown['height'] / 2})
     if not hit_button:
         raise AssertionError('coordinate action is not the hit target after scrolling')
+    app.resize(browser_size['width'], browser_size['height'])
     coordinates.click()
     app.page.wait_for_function('document.querySelector("#lcl").width === 530')
     app.click(155, 55)  # First x-coordinate cell in the fixed-size Table LFM
@@ -1487,9 +1498,9 @@ def s_nonmodal_editing_workflow(app):
     # End with the inspector visible: if the first toggle hid it, paper grows
     # and the second toggle restores it. This scenario checks coexistence.
     previous_width = app.viewport()['w']
-    app.menu('View', 'Object inspector')
+    app.menu('View', 'Inspector')
     if app.viewport()['w'] > previous_width:
-        app.menu('View', 'Object inspector')
+        app.menu('View', 'Inspector')
     # Recompute canvas coordinates after the side panel changes its layout.
     v, cx, cy = box(app)
     app.menu('Insert', 'Insert line')
@@ -1503,7 +1514,11 @@ def s_nonmodal_editing_workflow(app):
     # These values also make the later undo/redo and reopen oracle non-default.
     app.click(cx - 20, cy - 50)
     app.menu('Edit', 'Object properties')
-    line_width = app.page.get_by_role('textbox', name='Width multiplier', exact=True)
+    # Line style fields are shared with the toolbars and live behind More.
+    more = app.page.get_by_role('checkbox', name='More properties', exact=True)
+    if not more.is_checked():
+        more.click()
+    line_width = app.page.get_by_role('textbox', name='Line width', exact=True)
     line_width.fill('2.25')
     line_width.press('Enter')
 
@@ -1527,14 +1542,9 @@ def s_nonmodal_editing_workflow(app):
         picker.locator('select').select_option(label=value)
         picker.get_by_role('button', name='OK', exact=True).click()
 
-    arrow_size = app.page.get_by_role('textbox', name='Arrow size multiplier', exact=True)
+    arrow_size = app.page.get_by_role('textbox', name='Arrow size', exact=True)
     # End arrow sits two rows after Width and one before Arrow size.
     choose_painted_item(line_width, arrow_size, 2 / 3, 'h40')
-
-    # Collapse unrelated sections while the Line section is still in view.
-    # Later text-field focus scrolls the Inspector to keep its editor visible.
-    app.page.get_by_role('button', name='▾ Line', exact=True).click()
-    app.page.get_by_role('button', name='▾ Fill and hatching', exact=True).click()
 
     app.menu('Insert', 'Insert text')
     if app.page.get_by_role('dialog').count():
@@ -1554,8 +1564,8 @@ def s_nonmodal_editing_workflow(app):
     if app.page.get_by_role('dialog').count():
         raise AssertionError('Object properties opened a dialog')
     tex = app.page.get_by_role('textbox', name='TeX source', exact=True)
-    height = app.page.get_by_role('textbox', name='Text height (mm)', exact=True)
-    font_family = app.page.get_by_role('textbox', name='Font family', exact=True)
+    height = app.page.get_by_role('textbox', name='Height (mm)', exact=True)
+    font_family = app.page.get_by_role('textbox', name='Font', exact=True)
     if tex.input_value() != '':
         raise AssertionError(f'new label inspector started with unexpected TeX: {tex.input_value()}')
     if not tex.is_enabled() or not height.is_enabled():
@@ -1568,7 +1578,8 @@ def s_nonmodal_editing_workflow(app):
     font_family.press('Enter')
     if font_family.input_value() != 'Arial':
         raise AssertionError('committing the font family changed its inspector value')
-    rotation = app.page.get_by_role('textbox', name='Text angle (degrees)', exact=True)
+    rotation = app.page.get_by_role('textbox', name='Angle (°)', exact=True)
+    coordinates = app.page.get_by_role('button', name='Point coordinates…', exact=True)
 
     def assert_control_inside_lcl(control, stage):
         control_box = control.bounding_box()
@@ -1585,15 +1596,15 @@ def s_nonmodal_editing_workflow(app):
                 f'{stage}: Inspector control escaped the visible LCL canvas: '
                 f'control={control_box}, canvas={lcl_box}')
 
-    # The Inspector owns its own scrollbox; unrelated sections were collapsed
-    # before the selected Text fields took focus.
+    # The Inspector owns its own scrollbox; focusing a field scrolls it into
+    # view without changing the selection.
     if not height.is_enabled():
-        raise AssertionError('collapsing unrelated Inspector sections changed the selected label')
+        raise AssertionError('scrolling the Inspector changed the selected label')
     height.fill('2.75')
     if height.input_value() != '2.75' or not tex.is_enabled():
         raise AssertionError('starting the height edit changed the selected label or text')
     height.press('Tab')
-    expect(font_family).to_be_focused(timeout=3000)
+    expect(rotation).to_be_focused(timeout=3000)
     if not height.is_enabled() or height.input_value() != '2.75':
         raise AssertionError('Tab did not commit height and focus the next Inspector field')
     app.page.keyboard.press('Shift+Tab')
@@ -1603,12 +1614,13 @@ def s_nonmodal_editing_workflow(app):
 
     # Continue through the painted style and alignment controls using the
     # actual keyboard route. The chooser's checked option independently
-    # confirms each owner-drawn control received ArrowDown.
-    height.press('Tab')
+    # confirms each owner-drawn control received ArrowDown. Arrow size is
+    # four rows above Font; Font style and Alignment follow Font.
+    font_family.focus()
     expect(font_family).to_be_focused(timeout=3000)
     font_family.press('Tab')
     app.page.keyboard.press('ArrowDown')
-    style_picker = open_painted_picker(font_family, rotation, 1 / 3,
+    style_picker = open_painted_picker(arrow_size, font_family, 5 / 4,
                                        'Font style')
     style_selection = style_picker.locator('select').locator(
         'option:checked').inner_text()
@@ -1620,52 +1632,53 @@ def s_nonmodal_editing_workflow(app):
 
     app.page.keyboard.press('Tab')
     app.page.keyboard.press('ArrowDown')
-    alignment_picker = open_painted_picker(height, rotation, 3 / 4,
-                                           'Horizontal alignment')
+    alignment_picker = open_painted_picker(arrow_size, font_family, 6 / 4,
+                                           'Alignment')
     alignment_selection = alignment_picker.locator('select').locator(
         'option:checked').inner_text()
     if alignment_selection != 'Center':
         alignment_picker.get_by_role('button', name='Cancel', exact=True).click()
         raise AssertionError(
-            f'Tab/ArrowDown left Horizontal alignment at {alignment_selection!r}, expected Center')
+            f'Tab/ArrowDown left Alignment at {alignment_selection!r}, expected Center')
     alignment_picker.get_by_role('button', name='OK', exact=True).click()
 
+    # Back across Font style to Font, then forward again to Alignment.
+    font_value = font_family.input_value()
+    app.page.keyboard.press('Shift+Tab')
+    app.page.keyboard.press('Shift+Tab')
+    expect(font_family).to_be_focused(timeout=3000)
+    font_family.press('Tab')
     app.page.keyboard.press('Tab')
-    expect(rotation).to_be_focused(timeout=3000)
-    rotation_value = rotation.input_value()
-    rotation.press('Shift+Tab')
     app.page.keyboard.press('ArrowDown')
-    alignment_picker = open_painted_picker(height, rotation, 3 / 4,
-                                           'Horizontal alignment')
+    alignment_picker = open_painted_picker(arrow_size, font_family, 6 / 4,
+                                           'Alignment')
     alignment_selection = alignment_picker.locator('select').locator(
         'option:checked').inner_text()
-    if alignment_selection != 'Right' or rotation.input_value() != rotation_value:
+    if alignment_selection != 'Right' or font_family.input_value() != font_value:
         alignment_picker.get_by_role('button', name='Cancel', exact=True).click()
         raise AssertionError(
-            'Shift+Tab did not return to alignment without changing Text angle')
+            'Shift+Tab/Tab did not return to Alignment without changing Font')
     alignment_picker.locator('select').select_option(label='Center')
     alignment_picker.get_by_role('button', name='OK', exact=True).click()
-    app.page.keyboard.press('Tab')
+
+    rotation.focus()
     expect(rotation).to_be_focused(timeout=3000)
+    rotation_value = rotation.input_value()
     assert_control_inside_lcl(rotation, 'Text angle focus')
     if app.capture_requested:
         app.shot('inspector-text-angle-focused')
     rotation.press('Tab')
-    stars_section = app.page.get_by_role('button').filter(has_text=re.compile(
-        r'^(?:(?:▾|▸)\s*)?Stars and symbols$'))
-    expect(stars_section).to_be_focused(timeout=3000)
-    assert_control_inside_lcl(stars_section, 'Tab destination')
+    expect(coordinates).to_be_focused(timeout=3000)
+    assert_control_inside_lcl(coordinates, 'Tab destination')
     active_field = app.page.evaluate(
         '() => document.activeElement?.getAttribute("aria-label") || ""')
-    if active_field in {
-            'Text', 'TeX source', 'Text height (mm)', 'Font family',
-            'Font style', 'Horizontal alignment', 'Text angle (degrees)'}:
-        raise AssertionError('Tab from the final Inspector field wrapped inside the Inspector')
+    if active_field in {'Text', 'TeX source', 'Height (mm)', 'Angle (°)'}:
+        raise AssertionError('Tab from the last text field wrapped inside the Inspector')
     app.page.keyboard.press('Shift+Tab')
     expect(rotation).to_be_focused(timeout=3000)
     assert_control_inside_lcl(rotation, 'Shift+Tab destination')
     if rotation.input_value() != rotation_value:
-        raise AssertionError('Shift+Tab changed Text angle while returning from Stars and symbols')
+        raise AssertionError('Shift+Tab changed Angle while returning from Point coordinates')
 
     # Finish the numeric editor explicitly before opening the canvas editor.
     # This keeps the cross-view check independent of blur-commit behavior.
@@ -1810,11 +1823,11 @@ def s_nonmodal_editing_workflow(app):
     if not editor.is_visible() or not tex.is_visible():
         raise AssertionError('the inline editor and inspector did not remain visible together')
     editor.fill(r'$\gamma_{j}$')
-    app.menu('View', 'Object inspector')
+    app.menu('View', 'Inspector')
     app.page.wait_for_timeout(200)
     if not editor.is_visible() or editor.input_value() != r'$\gamma_{j}$':
         raise AssertionError('collapsing the inspector lost or hid the active text buffer')
-    app.menu('View', 'Object inspector')
+    app.menu('View', 'Inspector')
     app.page.wait_for_timeout(200)
     if (not editor.is_visible() or not tex.is_visible() or
             editor.input_value() != r'$\gamma_{j}$'):

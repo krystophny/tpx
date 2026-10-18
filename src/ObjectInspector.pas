@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Variants, Graphics, Controls, Forms, ExtCtrls,
-  StdCtrls, ComCtrls, ImgList, Drawings, GObjects, GObjBase,
+  StdCtrls, ComCtrls, Buttons, ImgList, Drawings, GObjects, GObjBase,
   PropertyEdits, PropertyEditCore, EditSessions, PropertyImages, Devices,
   CompositionAwareControls;
 
@@ -24,7 +24,6 @@ type
     LabelText: TLabel;
     HintText: TLabel;
     Editor: TWinControl;
-    StateText: TLabel;
     ErrorText: TLabel;
   end;
 
@@ -34,15 +33,16 @@ type
     FHeader: TPanel;
     FSelectionLabel: TLabel;
     FCancelButton: TButton;
+    FCloseButton: TSpeedButton;
     FScroll: TScrollBox;
     FContent: TPanel;
     FEmptyLabel: TLabel;
     FCoordinateButton: TButton;
+    FMoreButton: TCheckBox;
+    FShowMore: Boolean;
     FWidgets: array[TObjectPropertyField] of TInspectorFieldWidgets;
-    FSectionBodies: array[0..5] of TPanel;
-    FSectionButtons: array[0..5] of TButton;
-    FSectionTitles: array[0..5] of string;
-    FSectionHeights: array[0..5] of Integer;
+    FApplicable: array[TObjectPropertyField] of Boolean;
+    FTitle: string;
     FDrawing: TDrawing2D;
     FTargetIDs: TEditTargetIDs;
     FEpochProvider: TInspectorEpochProvider;
@@ -66,15 +66,23 @@ type
     FOnSessionChanged: TInspectorSessionEvent;
     FOnBeforeFieldInput: TInspectorBeforeFieldInput;
     FOnShouldSkipFieldRefresh: TInspectorFieldRefreshGuard;
+    FOnCloseRequest: TNotifyEvent;
+    FOnShowMoreChanged: TNotifyEvent;
     procedure BuildView;
     function ContentWidth: Integer;
-    procedure LayoutSections;
-    procedure AddSection(Index: Integer; const Title: string);
-    procedure AddField(Section: Integer; Field: TObjectPropertyField;
+    procedure LayoutRows;
+    procedure ContentResize(Sender: TObject);
+    procedure AddField(Field: TObjectPropertyField;
       const Caption: string; IsCombo, IsColor, IsCheck: Boolean);
     procedure PopulateCombo(Field: TObjectPropertyField;
       Combo: TComboBox);
-    procedure SectionClick(Sender: TObject);
+    procedure MoreClick(Sender: TObject);
+    procedure CloseClick(Sender: TObject);
+    procedure SetShowMore(Value: Boolean);
+    procedure SetFieldState(Field: TObjectPropertyField; Mixed: Boolean;
+      const Hint: string);
+    function SelectionTitle(SelectedCount: Integer): string;
+    procedure ShowEmptySelection;
     procedure FieldEnter(Sender: TObject);
     procedure FieldChanged(Sender: TObject);
     procedure CompositionChanged(Sender: TObject; Composing: Boolean);
@@ -103,7 +111,6 @@ type
     procedure ClearFieldEditor(Field: TObjectPropertyField);
     procedure SetFieldValue(Field: TObjectPropertyField;
       const Value: Variant);
-    procedure RefreshDefaults;
     function IsNumericField(Field: TObjectPropertyField): Boolean;
     function NumericRange(Field: TObjectPropertyField): TNumericEditRange;
     function DisplayValue(Field: TObjectPropertyField;
@@ -139,8 +146,16 @@ type
       read FOnBeforeFieldInput write FOnBeforeFieldInput;
     property OnShouldSkipFieldRefresh: TInspectorFieldRefreshGuard
       read FOnShouldSkipFieldRefresh write FOnShouldSkipFieldRefresh;
+    property OnCloseRequest: TNotifyEvent read FOnCloseRequest
+      write FOnCloseRequest;
+    property OnShowMoreChanged: TNotifyEvent read FOnShowMoreChanged
+      write FOnShowMoreChanged;
+    property ShowMore: Boolean read FShowMore write SetShowMore;
     property HasActiveEdit: Boolean read FHasSessionField;
+    function FieldShown(Field: TObjectPropertyField): Boolean;
   end;
+
+function InspectorNumberText(const Value: Double): string;
 
 implementation
 
@@ -154,7 +169,48 @@ uses
   ;
 
 const
-  SectionCount = 6;
+  { Object-specific properties come first; the style properties that the
+    toolbars above the canvas also edit stay behind "More". }
+  PrimaryFields: array[0..10] of TObjectPropertyField = (opfText,
+    opfTeXText, opfTextHeight, opfTextRotation, opfSymbolKind,
+    opfSymbolDiameter, opfSymbolRotation, opfRectangleRX, opfRectangleRY,
+    opfBitmapLink, opfKeepAspectRatio);
+  MoreFields: array[0..13] of TObjectPropertyField = (opfLineStyle,
+    opfLineColor, opfLineWidth, opfBeginArrowKind, opfEndArrowKind,
+    opfArrowSizeFactor, opfHatching, opfHatchColor, opfFillColor,
+    opfFontName, opfFontStyle, opfHAlignment, opfStarKind,
+    opfStarSizeFactor);
+  LabelWidth = 112;
+  RowHeight = 30;
+  MemoHeight = 50;
+
+function InspectorNumberText(const Value: Double): string;
+var
+  Settings: TFormatSettings;
+begin
+  Settings := DefaultFormatSettings;
+  Settings.DecimalSeparator := '.';
+  { Values are stored in single precision; seven digits hide its noise. }
+  Result := FloatToStrF(Value, ffGeneral, 7, 0, Settings);
+end;
+
+{ Changing a label's colour or style detaches it from the parent font; keep
+  the size and face the rest of the panel uses. }
+procedure StyleLabel(LabelControl: TLabel; Style: TFontStyles;
+  Color: TColor);
+begin
+  LabelControl.Font.Assign(LabelControl.Parent.Font);
+  LabelControl.Font.Style := Style;
+  LabelControl.Font.Color := Color;
+end;
+
+function IsMoreField(Field: TObjectPropertyField): Boolean;
+var I: Integer;
+begin
+  Result := False;
+  for I := Low(MoreFields) to High(MoreFields) do
+    if MoreFields[I] = Field then Exit(True);
+end;
 
 function FieldName(Field: TObjectPropertyField): string;
 begin
@@ -260,14 +316,32 @@ begin
 end;
 
 procedure TObjectInspector.BuildView;
-var
-  I: Integer;
 begin
   FHeader := TPanel.Create(Self);
   FHeader.Parent := Self;
   FHeader.Align := alTop;
-  FHeader.Height := 38;
-  FHeader.BevelOuter := bvLowered;
+  FHeader.Height := 30;
+  FHeader.BevelOuter := bvNone;
+
+  FCloseButton := TSpeedButton.Create(Self);
+  FCloseButton.Name := 'InspectorCloseButton';
+  FCloseButton.Parent := FHeader;
+  FCloseButton.Align := alRight;
+  FCloseButton.Width := 26;
+  FCloseButton.Flat := True;
+  FCloseButton.Caption := '×';
+  FCloseButton.Font.Size := 13;
+  FCloseButton.Hint := 'Hide the inspector';
+  FCloseButton.ShowHint := True;
+  FCloseButton.OnClick := CloseClick;
+
+  FCancelButton := TButton.Create(Self);
+  FCancelButton.Parent := FHeader;
+  FCancelButton.Align := alRight;
+  FCancelButton.Width := 72;
+  FCancelButton.Caption := 'Cancel';
+  FCancelButton.Visible := False;
+  FCancelButton.OnClick := CancelButtonClick;
 
   FSelectionLabel := TLabel.Create(Self);
   FSelectionLabel.Name := 'InspectorSelectionState';
@@ -278,18 +352,19 @@ begin
   FSelectionLabel.Caption := 'No selection';
   FSelectionLabel.BorderSpacing.Left := 8;
 
-  FCancelButton := TButton.Create(Self);
-  FCancelButton.Parent := FHeader;
-  FCancelButton.Align := alRight;
-  FCancelButton.Width := 72;
-  FCancelButton.Caption := 'Cancel';
-  FCancelButton.Visible := False;
-  FCancelButton.OnClick := CancelButtonClick;
+  with TBevel.Create(Self) do
+  begin
+    Parent := Self;
+    Align := alTop;
+    Top := FHeader.Height;
+    Height := 2;
+    Shape := bsBottomLine;
+  end;
 
   FScroll := TScrollBox.Create(Self);
   FScroll.Parent := Self;
   FScroll.Align := alClient;
-  FScroll.BorderSpacing.Around := 4;
+  FScroll.BorderStyle := bsNone;
   FScroll.AutoScroll := True;
   FScroll.HorzScrollBar.Visible := False;
 
@@ -298,130 +373,152 @@ begin
   FContent.Align := alTop;
   FContent.BevelOuter := bvNone;
   FContent.AutoSize := False;
+  FContent.OnResize := ContentResize;
 
-  AddSection(0, 'Line');
-  AddField(0, opfLineStyle, 'Line style', True, False, False);
-  AddField(0, opfLineColor, 'Line color', True, True, False);
-  AddField(0, opfLineWidth, 'Width multiplier', False, False, False);
-  AddField(0, opfBeginArrowKind, 'Start arrow', True, False, False);
-  AddField(0, opfEndArrowKind, 'End arrow', True, False, False);
-  AddField(0, opfArrowSizeFactor, 'Arrow size multiplier', False, False, False);
-
-  AddSection(1, 'Fill and hatching');
-  AddField(1, opfHatching, 'Hatching', True, False, False);
-  AddField(1, opfHatchColor, 'Hatch color', True, True, False);
-  AddField(1, opfFillColor, 'Fill color', True, True, False);
-
-  AddSection(2, 'Text');
-  AddField(2, opfText, 'Text', False, False, False);
-  AddField(2, opfTeXText, 'TeX source', False, False, False);
-  AddField(2, opfTextHeight, 'Text height (mm)', False, False, False);
-  AddField(2, opfFontName, 'Font family', False, False, False);
-  AddField(2, opfFontStyle, 'Font style', True, False, False);
-  AddField(2, opfHAlignment, 'Horizontal alignment', True, False, False);
-  AddField(2, opfTextRotation, 'Text angle (degrees)', False, False, False);
-
-  AddSection(3, 'Stars and symbols');
-  AddField(3, opfStarKind, 'Star shape', True, False, False);
-  AddField(3, opfStarSizeFactor, 'Star size multiplier', False, False, False);
-  AddField(3, opfSymbolKind, 'Symbol', True, False, False);
-  AddField(3, opfSymbolDiameter, 'Symbol diameter (mm)', False, False, False);
-  AddField(3, opfSymbolRotation, 'Symbol angle (degrees)', False, False, False);
-
-  AddSection(4, 'Rounded corners');
-  AddField(4, opfRectangleRX, 'Horizontal radius (mm)', False, False, False);
-  AddField(4, opfRectangleRY, 'Vertical radius (mm)', False, False, False);
-
-  AddSection(5, 'Bitmap');
-  AddField(5, opfBitmapLink, 'Image link', False, False, False);
-  AddField(5, opfKeepAspectRatio, 'Keep aspect ratio', False, False, True);
-
-  FEmptyLabel := TLabel.Create(Self);
-  FEmptyLabel.Parent := FContent;
-  FEmptyLabel.Align := alNone;
-  FEmptyLabel.AutoSize := False;
-  FEmptyLabel.Height := 54;
-  FEmptyLabel.WordWrap := True;
-  FEmptyLabel.Caption := 'No object selected. New-object defaults remain available in the property toolbars.';
-  FEmptyLabel.BorderSpacing.Around := 8;
-  FEmptyLabel.SetBounds(0, 0, ContentWidth, 54);
-  FEmptyLabel.Anchors := [akTop, akLeft, akRight];
-  FEmptyLabel.Visible := False;
+  { Creation order is the Tab order: object properties, then "More". }
+  AddField(opfText, 'Text', False, False, False);
+  AddField(opfTeXText, 'TeX source', False, False, False);
+  AddField(opfTextHeight, 'Height (mm)', False, False, False);
+  AddField(opfTextRotation, 'Angle (°)', False, False, False);
+  AddField(opfSymbolKind, 'Symbol', True, False, False);
+  AddField(opfSymbolDiameter, 'Diameter (mm)', False, False, False);
+  AddField(opfSymbolRotation, 'Symbol angle (°)', False, False, False);
+  AddField(opfRectangleRX, 'Corner rx (mm)', False, False, False);
+  AddField(opfRectangleRY, 'Corner ry (mm)', False, False, False);
+  AddField(opfBitmapLink, 'Image', False, False, False);
+  AddField(opfKeepAspectRatio, 'Keep aspect ratio', False, False, True);
 
   FCoordinateButton := TButton.Create(Self);
+  FCoordinateButton.Name := 'InspectorCoordinatesButton';
   FCoordinateButton.Parent := FContent;
-  FCoordinateButton.Align := alNone;
   FCoordinateButton.Caption := 'Point coordinates…';
-  FCoordinateButton.SetBounds(0, 0, ContentWidth, 30);
-  FCoordinateButton.Anchors := [akTop, akLeft, akRight];
   FCoordinateButton.OnClick := CoordinatesClick;
   FCoordinateButton.Visible := False;
 
-  for I := 0 to SectionCount - 1 do
-  begin
-    FSectionButtons[I].Name := 'InspectorSection' + IntToStr(I) + 'Header';
-    FSectionBodies[I].Name := 'InspectorSection' + IntToStr(I) + 'Body';
-  end;
-  LayoutSections;
+  FMoreButton := TCheckBox.Create(Self);
+  FMoreButton.Name := 'InspectorMoreButton';
+  FMoreButton.Parent := FContent;
+  FMoreButton.Caption := 'More properties';
+  FMoreButton.Hint := 'Line, fill and font properties, also on the toolbars';
+  FMoreButton.ShowHint := True;
+  FMoreButton.OnClick := MoreClick;
+
+  AddField(opfLineStyle, 'Line style', True, False, False);
+  AddField(opfLineColor, 'Line color', True, True, False);
+  AddField(opfLineWidth, 'Line width', False, False, False);
+  AddField(opfBeginArrowKind, 'Start arrow', True, False, False);
+  AddField(opfEndArrowKind, 'End arrow', True, False, False);
+  AddField(opfArrowSizeFactor, 'Arrow size', False, False, False);
+  AddField(opfHatching, 'Hatching', True, False, False);
+  AddField(opfHatchColor, 'Hatch color', True, True, False);
+  AddField(opfFillColor, 'Fill color', True, True, False);
+  AddField(opfFontName, 'Font', False, False, False);
+  AddField(opfFontStyle, 'Font style', True, False, False);
+  AddField(opfHAlignment, 'Alignment', True, False, False);
+  AddField(opfStarKind, 'Star shape', True, False, False);
+  AddField(opfStarSizeFactor, 'Star size', False, False, False);
+
+  FEmptyLabel := TLabel.Create(Self);
+  FEmptyLabel.Parent := FContent;
+  FEmptyLabel.AutoSize := False;
+  FEmptyLabel.WordWrap := True;
+  FEmptyLabel.Caption :=
+    'Select an object to edit it here. New objects use the toolbar settings.';
+  StyleLabel(FSelectionLabel, [fsBold], clWindowText);
+  FEmptyLabel.Visible := False;
+
+  ShowEmptySelection;
 end;
 
-procedure TObjectInspector.LayoutSections;
-var
-  I, Y, Width: Integer;
+procedure TObjectInspector.ContentResize(Sender: TObject);
 begin
-  Width := ContentWidth;
-  Y := 0;
-  for I := 0 to SectionCount - 1 do
+  LayoutRows;
+end;
+
+procedure TObjectInspector.LayoutRows;
+var
+  W, Y: Integer;
+  MoreCount: Integer;
+  Field: TObjectPropertyField;
+  procedure PlaceRow(F: TObjectPropertyField; Show: Boolean);
+  var
+    Row: TPanel;
+    H, EditorTop: Integer;
+    Editor: TWinControl;
   begin
-    FSectionButtons[I].SetBounds(0, Y, Width, 28);
-    Inc(Y, 28);
-    if FSectionBodies[I].Visible then
-      FSectionBodies[I].SetBounds(0, Y, Width, FSectionHeights[I])
+    Row := FWidgets[F].Row;
+    Row.Visible := Show;
+    if not Show then Exit;
+    Editor := FWidgets[F].Editor;
+    if Editor is TMemo then
+    begin
+      FWidgets[F].LabelText.SetBounds(6, 4, W - 12, 18);
+      Editor.SetBounds(6, 24, W - 12, MemoHeight);
+      H := 24 + MemoHeight + 4;
+    end
+    else if Editor is TCheckBox then
+    begin
+      Editor.SetBounds(6, 4, W - 12, 22);
+      H := RowHeight;
+    end
     else
-      FSectionBodies[I].SetBounds(0, Y, Width, 0);
-    Inc(Y, FSectionBodies[I].Height);
+    begin
+      EditorTop := (RowHeight - Editor.Height) div 2;
+      if EditorTop < 1 then EditorTop := 1;
+      FWidgets[F].LabelText.SetBounds(6, 0, LabelWidth - 6, RowHeight);
+      Editor.SetBounds(LabelWidth + 4, EditorTop, W - LabelWidth - 10,
+        Editor.Height);
+      H := RowHeight;
+    end;
+    if FWidgets[F].ErrorText.Visible then
+    begin
+      FWidgets[F].ErrorText.SetBounds(6, H, W - 12, 16);
+      Inc(H, 18);
+    end;
+    Row.SetBounds(0, Y, W, H);
+    Inc(Y, H);
   end;
-  if FEmptyLabel.Visible then
+var
+  I: Integer;
+begin
+  if FContent = nil then Exit;
+  W := ContentWidth;
+  Y := 4;
+  FEmptyLabel.Visible := not FHasSelection;
+  if not FHasSelection then
   begin
-    FEmptyLabel.Top := Y;
-    FEmptyLabel.Width := Width;
-    Inc(Y, FEmptyLabel.Height);
+    for Field := Low(TObjectPropertyField) to High(TObjectPropertyField) do
+      FWidgets[Field].Row.Visible := False;
+    FCoordinateButton.Visible := False;
+    FMoreButton.Visible := False;
+    FEmptyLabel.SetBounds(8, Y, W - 16, 48);
+    FContent.Height := Y + 52;
+    Exit;
   end;
+  for I := Low(PrimaryFields) to High(PrimaryFields) do
+    PlaceRow(PrimaryFields[I], FApplicable[PrimaryFields[I]]);
   if FCoordinateButton.Visible then
   begin
-    FCoordinateButton.Top := Y;
-    FCoordinateButton.Width := Width;
-    Inc(Y, FCoordinateButton.Height);
+    FCoordinateButton.SetBounds(6, Y + 3, W - 12, 26);
+    Inc(Y, 32);
   end;
-  FContent.Height := Y;
+  MoreCount := 0;
+  for I := Low(MoreFields) to High(MoreFields) do
+    if FApplicable[MoreFields[I]] then Inc(MoreCount);
+  FMoreButton.Visible := MoreCount > 0;
+  if FMoreButton.Visible then
+  begin
+    FMoreButton.Checked := FShowMore;
+    FMoreButton.SetBounds(6, Y + 4, W - 12, 22);
+    Inc(Y, 30);
+  end;
+  for I := Low(MoreFields) to High(MoreFields) do
+    PlaceRow(MoreFields[I], FShowMore and FApplicable[MoreFields[I]]);
+  FContent.Height := Y + 6;
 end;
 
-procedure TObjectInspector.AddSection(Index: Integer; const Title: string);
-begin
-  FSectionTitles[Index] := Title;
-  FSectionButtons[Index] := TButton.Create(Self);
-  FSectionButtons[Index].Parent := FContent;
-  FSectionButtons[Index].Align := alNone;
-  FSectionButtons[Index].Anchors := [akTop, akLeft, akRight];
-  FSectionButtons[Index].Height := 28;
-  FSectionButtons[Index].Tag := Index;
-  FSectionButtons[Index].Caption := '▾ ' + Title;
-  FSectionButtons[Index].OnClick := SectionClick;
-
-  FSectionBodies[Index] := TPanel.Create(Self);
-  FSectionBodies[Index].Parent := FContent;
-  FSectionBodies[Index].Align := alNone;
-  FSectionBodies[Index].Anchors := [akTop, akLeft, akRight];
-  FSectionBodies[Index].BevelOuter := bvNone;
-  FSectionBodies[Index].AutoSize := False;
-  FSectionBodies[Index].SetBounds(0, 0, ContentWidth, 0);
-  FSectionBodies[Index].Visible := Index < 3;
-  if Index >= 3 then FSectionButtons[Index].Caption := '▸ ' + Title;
-end;
-
-procedure TObjectInspector.AddField(Section: Integer;
-  Field: TObjectPropertyField; const Caption: string;
-  IsCombo, IsColor, IsCheck: Boolean);
+procedure TObjectInspector.AddField(Field: TObjectPropertyField;
+  const Caption: string; IsCombo, IsColor, IsCheck: Boolean);
 var
   Row: TPanel;
   LabelControl: TLabel;
@@ -430,55 +527,25 @@ var
 begin
   IsText := Field in [opfText, opfTeXText];
   Row := TPanel.Create(Self);
-  Row.Parent := FSectionBodies[Section];
-  Row.Align := alNone;
-  Row.Anchors := [akTop, akLeft, akRight];
+  Row.Parent := FContent;
   Row.BevelOuter := bvNone;
-  if IsText then Row.Height := 132 else Row.Height := 64;
-  Row.SetBounds(0, FSectionHeights[Section],
-    FSectionBodies[Section].ClientWidth, Row.Height);
-  Inc(FSectionHeights[Section], Row.Height);
-  FSectionBodies[Section].Height := FSectionHeights[Section];
+  Row.Caption := '';
+  Row.Visible := False;
+  Row.SetBounds(0, 0, ContentWidth, RowHeight);
 
   LabelControl := TLabel.Create(Self);
   LabelControl.Parent := Row;
-  LabelControl.SetBounds(4, 3, 170, 18);
+  LabelControl.AutoSize := False;
+  LabelControl.Layout := tlCenter;
   LabelControl.Caption := Caption;
-  LabelControl.AutoSize := True;
 
   FWidgets[Field].HintText := nil;
-  if IsText then
-  begin
-    FWidgets[Field].HintText := TLabel.Create(Self);
-    FWidgets[Field].HintText.Parent := Row;
-    FWidgets[Field].HintText.Anchors := [akTop, akLeft, akRight];
-    FWidgets[Field].HintText.SetBounds(4, 91, Row.ClientWidth - 8, 16);
-    FWidgets[Field].HintText.AutoSize := False;
-    if Field = opfText then
-      FWidgets[Field].HintText.Caption :=
-        'Used when the TeX source is empty.'
-    else
-      FWidgets[Field].HintText.Caption :=
-        'Takes precedence when present.';
-    FWidgets[Field].HintText.Font.Color := clGrayText;
-  end;
-
-  FWidgets[Field].StateText := TLabel.Create(Self);
-  FWidgets[Field].StateText.Name := 'Inspector' + FieldName(Field) + 'State';
-  FWidgets[Field].StateText.Parent := Row;
-  FWidgets[Field].StateText.Anchors := [akTop, akRight];
-  FWidgets[Field].StateText.SetBounds(Row.ClientWidth - 104, 3, 100, 18);
-  FWidgets[Field].StateText.Alignment := taRightJustify;
-  FWidgets[Field].StateText.Caption := '';
 
   FWidgets[Field].ErrorText := TLabel.Create(Self);
   FWidgets[Field].ErrorText.Name := 'Inspector' + FieldName(Field) + 'Error';
   FWidgets[Field].ErrorText.Parent := Row;
-  FWidgets[Field].ErrorText.Anchors := [akTop, akLeft, akRight];
-  FWidgets[Field].ErrorText.SetBounds(4, Row.Height - 20,
-    Row.ClientWidth - 8, 16);
   FWidgets[Field].ErrorText.AutoSize := False;
-  FWidgets[Field].ErrorText.Font.Color := clRed;
+  StyleLabel(FWidgets[Field].ErrorText, [], clRed);
   FWidgets[Field].ErrorText.Visible := False;
 
   if IsCheck then
@@ -486,8 +553,6 @@ begin
     Control := TCheckBox.Create(Self);
     (Control as TCheckBox).Caption := Caption;
     LabelControl.Visible := False;
-    FWidgets[Field].StateText.Visible := False;
-    Control.SetBounds(4, 26, Row.ClientWidth - 8, 21);
   end
   else if IsCombo then
   begin
@@ -495,36 +560,27 @@ begin
     with Control as TComboBox do
     begin
       if IsColor then
-      begin
-        Style := csDropDown;
-        PopulateCombo(Field, Control as TComboBox);
-      end
+        Style := csDropDown
       else if Field in [opfBeginArrowKind, opfEndArrowKind] then
       begin
         Style := csOwnerDrawFixed;
         OnDrawItem := DrawArrowComboItem;
-        PopulateCombo(Field, Control as TComboBox);
       end
       else if Field = opfStarKind then
       begin
         Style := csOwnerDrawFixed;
         OnDrawItem := DrawStarComboItem;
-        PopulateCombo(Field, Control as TComboBox);
       end
       else
-      begin
         Style := csDropDownList;
-        PopulateCombo(Field, Control as TComboBox);
-      end;
+      PopulateCombo(Field, Control as TComboBox);
       DropDownCount := 12;
     end;
-    Control.SetBounds(4, 23, Row.ClientWidth - 8, 23);
   end
   else if IsText then
   begin
     Control := TCompositionAwareMemo.Create(Self);
-    Control.SetBounds(4, 23, Row.ClientWidth - 8, 66);
-    (Control as TMemo).ScrollBars := ssVertical;
+    (Control as TMemo).ScrollBars := ssAutoVertical;
     (Control as TMemo).WordWrap := True;
     (Control as TMemo).OnChange := FieldChanged;
     (Control as TCompositionAwareMemo).OnCompositionChanged :=
@@ -533,7 +589,6 @@ begin
   else
   begin
     Control := TCompositionAwareEdit.Create(Self);
-    Control.SetBounds(4, 23, Row.ClientWidth - 8, 23);
     (Control as TEdit).OnChange := FieldChanged;
     (Control as TCompositionAwareEdit).OnCompositionChanged :=
       CompositionChanged;
@@ -545,7 +600,7 @@ begin
   Control.Parent := Row;
   Control.Anchors := [akTop, akLeft, akRight];
   Control.Tag := Ord(Field);
-  Control.TabOrder := 1;
+  Control.TabOrder := 0;
   Control.OnEnter := FieldEnter;
   Control.OnKeyDown := FieldKeyDown;
   Control.OnKeyUp := FieldKeyUp;
@@ -562,6 +617,90 @@ begin
   FWidgets[Field].Row := Row;
   FWidgets[Field].LabelText := LabelControl;
   FWidgets[Field].Editor := Control;
+  FApplicable[Field] := False;
+end;
+
+procedure TObjectInspector.SetShowMore(Value: Boolean);
+begin
+  if FShowMore = Value then Exit;
+  FShowMore := Value;
+  LayoutRows;
+  if Assigned(FOnShowMoreChanged) then FOnShowMoreChanged(Self);
+end;
+
+procedure TObjectInspector.MoreClick(Sender: TObject);
+begin
+  SetShowMore(FMoreButton.Checked);
+end;
+
+procedure TObjectInspector.CloseClick(Sender: TObject);
+begin
+  if Assigned(FOnCloseRequest) then FOnCloseRequest(Self);
+end;
+
+function TObjectInspector.FieldShown(Field: TObjectPropertyField): Boolean;
+begin
+  Result := FHasSelection and FApplicable[Field] and
+    (FShowMore or not IsMoreField(Field));
+end;
+
+procedure TObjectInspector.SetFieldState(Field: TObjectPropertyField;
+  Mixed: Boolean; const Hint: string);
+var
+  Editor: TWinControl;
+begin
+  if Mixed then StyleLabel(FWidgets[Field].LabelText, [fsItalic], clWindowText)
+  else StyleLabel(FWidgets[Field].LabelText, [], clWindowText);
+  Editor := FWidgets[Field].Editor;
+  if Editor is TEdit then (Editor as TEdit).TextHint := Hint
+  else if (Editor is TComboBox) and
+    ((Editor as TComboBox).Style = csDropDown) then
+    (Editor as TComboBox).TextHint := Hint;
+  if Mixed then Editor.Hint := FWidgets[Field].LabelText.Caption + ' (mixed)'
+  else Editor.Hint := FWidgets[Field].LabelText.Caption;
+end;
+
+function TObjectInspector.SelectionTitle(SelectedCount: Integer): string;
+var
+  Obj: TGraphicObject;
+  Name: string;
+  I: Integer;
+begin
+  if SelectedCount <> 1 then Exit(Format('%d objects', [SelectedCount]));
+  Obj := nil;
+  if (FDrawing <> nil) and (Length(FTargetIDs) = 1) then
+    Obj := FDrawing.GetObject(FTargetIDs[0]);
+  if Obj = nil then Exit('1 object');
+  { Use the Insert menu's words where the class name differs. }
+  if Obj is TClosedSmoothPath2D then Exit('Closed curve');
+  if Obj is TSmoothPath2D then Exit('Curve');
+  if Obj is TClosedBezierPath2D then Exit('Closed Bezier path');
+  if Obj is TBezierPath2D then Exit('Bezier path');
+  if Obj is TContainer2D then Exit('Group');
+  Name := Obj.ClassName;
+  if (Name <> '') and (Name[1] = 'T') then Delete(Name, 1, 1);
+  if Copy(Name, Length(Name) - 1, 2) = '2D' then
+    SetLength(Name, Length(Name) - 2);
+  Result := '';
+  for I := 1 to Length(Name) do
+    if (I > 1) and (Name[I] in ['A'..'Z']) then
+      Result := Result + ' ' + LowerCase(Name[I])
+    else Result := Result + Name[I];
+end;
+
+procedure TObjectInspector.ShowEmptySelection;
+var
+  Field: TObjectPropertyField;
+begin
+  FHasSelection := False;
+  for Field := Low(TObjectPropertyField) to High(TObjectPropertyField) do
+  begin
+    FApplicable[Field] := False;
+    SetFieldError(Field, '');
+  end;
+  FTitle := 'No selection';
+  FSelectionLabel.Caption := FTitle;
+  LayoutRows;
 end;
 
 procedure TObjectInspector.PopulateCombo(Field: TObjectPropertyField;
@@ -677,23 +816,6 @@ begin
   end;
 end;
 
-procedure TObjectInspector.SectionClick(Sender: TObject);
-var
-  Index: Integer;
-  Expanded: Boolean;
-begin
-  if not (Sender is TButton) then Exit;
-  Index := (Sender as TButton).Tag;
-  if (Index < 0) or (Index >= SectionCount) then Exit;
-  Expanded := not FSectionBodies[Index].Visible;
-  FSectionBodies[Index].Visible := Expanded;
-  if Expanded then
-    (Sender as TButton).Caption := '▾ ' + FSectionTitles[Index]
-  else
-    (Sender as TButton).Caption := '▸ ' + FSectionTitles[Index];
-  LayoutSections;
-end;
-
 procedure TObjectInspector.Bind(Drawing: TDrawing2D;
   const TargetIDs: TEditTargetIDs;
   const EpochProvider: TInspectorEpochProvider);
@@ -753,12 +875,12 @@ begin
     opfTextRotation, opfSymbolRotation:
       begin
         Number := RadToDeg(Double(Value));
-        Result := FloatToStr(Number);
+        Result := InspectorNumberText(Number);
       end;
     opfLineWidth, opfArrowSizeFactor, opfTextHeight,
     opfStarSizeFactor, opfSymbolDiameter, opfRectangleRX,
     opfRectangleRY:
-      Result := RealTypeToStr(TRealType(Value));
+      Result := InspectorNumberText(TRealType(Value));
   else
     Result := VarToStr(Value);
   end;
@@ -820,80 +942,31 @@ begin
   if (FHasSessionField) and (FSessionField = Field) and
     ((FSession <> nil) or Editor.Focused) then Exit;
   Value := ReadObjectProperty(FDrawing, FTargetIDs, Field);
+  FApplicable[Field] := Value.State <> pvsUnavailable;
   case Value.State of
     pvsUnavailable:
       begin
-        FWidgets[Field].StateText.Caption := 'Unavailable';
-        Editor.Enabled := False;
+        SetFieldState(Field, False, '');
         ClearFieldEditor(Field);
       end;
     pvsMixed:
       begin
-        FWidgets[Field].StateText.Caption := 'Mixed';
         Editor.Enabled := True;
         ClearFieldEditor(Field);
+        SetFieldState(Field, True, 'mixed');
       end;
     pvsUniform:
       begin
-        FWidgets[Field].StateText.Caption := '';
         Editor.Enabled := True;
         SetFieldValue(Field, Value.Value);
         if (Field = opfFontName) and (VarToStr(Value.Value) = ' ') then
-          FWidgets[Field].StateText.Caption := 'Inherited';
+          SetFieldState(Field, False, 'inherited')
+        else
+          SetFieldState(Field, False, '');
       end;
   end;
   SetFieldError(Field, '');
   CaptureStableField(Field);
-end;
-
-procedure TObjectInspector.RefreshDefaults;
-var
-  D: TDrawing2D;
-  Field: TObjectPropertyField;
-begin
-  if FDrawing = nil then Exit;
-  D := FDrawing;
-  FEmptyLabel.Caption :=
-    'No selection. These are new-object defaults; the property toolbars change them.';
-  FEmptyLabel.Visible := True;
-  for Field := Low(TObjectPropertyField) to High(TObjectPropertyField) do
-  begin
-    FWidgets[Field].StateText.Caption := 'Unavailable';
-    FWidgets[Field].Editor.Enabled := False;
-    ClearFieldEditor(Field);
-    SetFieldError(Field, '');
-  end;
-  FWidgets[opfLineStyle].StateText.Caption := '';
-  FWidgets[opfLineColor].StateText.Caption := '';
-  FWidgets[opfLineWidth].StateText.Caption := '';
-  FWidgets[opfHatching].StateText.Caption := '';
-  FWidgets[opfHatchColor].StateText.Caption := '';
-  FWidgets[opfFillColor].StateText.Caption := '';
-  FWidgets[opfBeginArrowKind].StateText.Caption := '';
-  FWidgets[opfEndArrowKind].StateText.Caption := '';
-  FWidgets[opfArrowSizeFactor].StateText.Caption := '';
-  FWidgets[opfTextHeight].StateText.Caption := '';
-  FWidgets[opfHAlignment].StateText.Caption := '';
-  FWidgets[opfStarKind].StateText.Caption := '';
-  FWidgets[opfStarSizeFactor].StateText.Caption := '';
-  SetFieldValue(opfLineStyle, Ord(D.New_LineStyle));
-  SetFieldValue(opfLineColor, Integer(D.New_LineColor));
-  SetFieldValue(opfLineWidth, D.New_LineWidth);
-  SetFieldValue(opfHatching, Ord(D.New_Hatching));
-  SetFieldValue(opfHatchColor, Integer(D.New_HatchColor));
-  SetFieldValue(opfFillColor, Integer(D.New_FillColor));
-  SetFieldValue(opfBeginArrowKind, D.New_Arr1);
-  SetFieldValue(opfEndArrowKind, D.New_Arr2);
-  SetFieldValue(opfArrowSizeFactor, D.New_ArrSizeFactor);
-  SetFieldValue(opfTextHeight, D.New_FontHeight);
-  SetFieldValue(opfHAlignment, D.New_HAlignment);
-  SetFieldValue(opfStarKind, D.New_StarKind);
-  SetFieldValue(opfStarSizeFactor, D.New_StarSizeFactor);
-  for Field in [opfLineStyle, opfLineColor, opfLineWidth,
-    opfHatching, opfHatchColor, opfFillColor, opfBeginArrowKind,
-    opfEndArrowKind, opfArrowSizeFactor, opfTextHeight,
-    opfHAlignment, opfStarKind, opfStarSizeFactor] do
-    FWidgets[Field].Editor.Enabled := False;
 end;
 
 procedure TObjectInspector.RefreshSelection(
@@ -913,22 +986,18 @@ begin
   FTargetIDs := Copy(TargetIDs);
   FRefreshing := FRefreshing + 1;
   try
-    FHasSelection := Length(FTargetIDs) > 0;
-    FEmptyLabel.Visible := not FHasSelection;
-    FCoordinateButton.Visible := FHasSelection;
-    FCoordinateButton.Enabled := HasCoordinateTable;
-    LayoutSections;
-    if FHasSelection then
+    if Length(FTargetIDs) > 0 then
     begin
-      FSelectionLabel.Caption := Format('%d object(s) selected', [SelectedCount]);
+      FHasSelection := True;
+      FCoordinateButton.Visible := HasCoordinateTable;
+      FTitle := SelectionTitle(SelectedCount);
+      FSelectionLabel.Caption := FTitle;
       for Field := Low(TObjectPropertyField) to High(TObjectPropertyField) do
         RefreshField(Field);
+      LayoutRows;
     end
     else
-    begin
-      FSelectionLabel.Caption := 'New-object defaults';
-      RefreshDefaults;
-    end;
+      ShowEmptySelection;
   finally
     Dec(FRefreshing);
   end;
@@ -965,18 +1034,18 @@ begin
   FHasSessionField := True;
   FTargetIDs := Copy(Targets);
   FHasSelection := Length(FTargetIDs) > 0;
-  FEmptyLabel.Visible := not FHasSelection;
-  FCoordinateButton.Visible := FHasSelection;
-  FCoordinateButton.Enabled := False;
+  FCoordinateButton.Visible := False;
   FCancelButton.Visible := True;
-  FSelectionLabel.Caption := Format('Recovered edit · %d object(s)',
-    [Length(FTargetIDs)]);
+  FTitle := SelectionTitle(Length(FTargetIDs));
+  FSelectionLabel.Caption := 'Recovered edit · ' + FTitle;
 
   FRefreshing := FRefreshing + 1;
   try
     for I := Ord(Low(TObjectPropertyField)) to
       Ord(High(TObjectPropertyField)) do
       RefreshField(TObjectPropertyField(I));
+    if IsMoreField(Drafts[0].Field) then FShowMore := True;
+    LayoutRows;
     for I := 0 to High(Drafts) do
     begin
       Field := Drafts[I].Field;
@@ -1022,6 +1091,7 @@ begin
   FSession := nil;
   FHasSessionField := False;
   FCancelButton.Visible := False;
+  FSelectionLabel.Caption := FTitle;
   if Assigned(FOnSessionChanged) then
     FOnSessionChanged(Self, OldSession, False);
   OldSession.Free;
@@ -1035,10 +1105,13 @@ begin
   FRefreshing := FRefreshing + 1;
   try
     if Length(FTargetIDs) = 0 then
-      RefreshDefaults
+      ShowEmptySelection
     else
+    begin
       for Field := Low(TObjectPropertyField) to High(TObjectPropertyField) do
         RefreshField(Field);
+      LayoutRows;
+    end;
   finally
     Dec(FRefreshing);
   end;
@@ -1253,8 +1326,11 @@ end;
 procedure TObjectInspector.SetFieldError(Field: TObjectPropertyField;
   const ErrorText: string);
 begin
+  if (FWidgets[Field].ErrorText.Caption = ErrorText) and
+    (FWidgets[Field].ErrorText.Visible = (ErrorText <> '')) then Exit;
   FWidgets[Field].ErrorText.Caption := ErrorText;
   FWidgets[Field].ErrorText.Visible := ErrorText <> '';
+  if FWidgets[Field].Row.Visible then LayoutRows;
 end;
 
 procedure TObjectInspector.RejectBlockedField(Field: TObjectPropertyField);
@@ -1327,7 +1403,7 @@ begin
     end;
   end;
   FScroll.ScrollInView(FWidgets[Field].Editor);
-  FSelectionLabel.Caption := 'Editing ' + FWidgets[Field].Editor.Hint;
+  FSelectionLabel.Caption := FTitle;
 end;
 
 procedure TObjectInspector.FieldChanged(Sender: TObject);
@@ -1469,8 +1545,7 @@ begin
   end;
   FSession.SetRawDraftPendingForField(Field, False);
   SetFieldError(Field, '');
-  FSelectionLabel.Caption := Format('%d object(s) selected',
-    [Length(FTargetIDs)]);
+  FSelectionLabel.Caption := 'Editing ' + FWidgets[Field].LabelText.Caption;
 end;
 
 procedure TObjectInspector.CompositionChanged(Sender: TObject;
@@ -1695,30 +1770,9 @@ begin
 end;
 
 procedure TObjectInspector.FocusField(Field: TObjectPropertyField);
-var
-  Section: Integer;
 begin
-  if Field in [opfLineStyle, opfLineColor, opfLineWidth,
-    opfBeginArrowKind, opfEndArrowKind, opfArrowSizeFactor] then
-    Section := 0
-  else if Field in [opfHatching, opfHatchColor, opfFillColor] then
-    Section := 1
-  else if Field in [opfText, opfTeXText, opfTextHeight, opfFontName,
-    opfFontStyle, opfHAlignment, opfTextRotation] then
-    Section := 2
-  else if Field in [opfStarKind, opfStarSizeFactor,
-    opfSymbolKind, opfSymbolDiameter, opfSymbolRotation] then
-    Section := 3
-  else if Field in [opfRectangleRX, opfRectangleRY] then
-    Section := 4
-  else
-    Section := 5;
-  if not FSectionBodies[Section].Visible then
-  begin
-    FSectionBodies[Section].Visible := True;
-    FSectionButtons[Section].Caption := '▾ ' + FSectionTitles[Section];
-  end;
-  LayoutSections;
+  if IsMoreField(Field) and not FShowMore then SetShowMore(True);
+  LayoutRows;
   if FWidgets[Field].Editor.CanFocus then
   begin
     FScroll.ScrollInView(FWidgets[Field].Editor);
@@ -1747,8 +1801,9 @@ begin
   else if Obj is TStar2D then Field := opfStarKind
   else if Obj is TSymbol2D then Field := opfSymbolKind
   else if Obj is TBitmap2D then Field := opfBitmapLink
-  else if Obj is TRectangle2D then Field := opfFillColor
-  else Field := opfLineStyle;
+  else if Obj is TRectangle2D then Field := opfRectangleRX
+  else if FShowMore then Field := opfLineStyle
+  else Exit;
   FocusField(Field);
 end;
 

@@ -445,6 +445,8 @@ begin
     'Object inspector panel width');
   SettingsList.AddBoolean('ObjectInspector.Visible',
     @(MainForm.InspectorPanelVisible), 'Show object inspector');
+  SettingsList.AddBoolean('ObjectInspector.ShowMore',
+    @(MainForm.InspectorShowMore), 'Show style properties in the inspector');
 //  SettingsList.AddBoolean('ShowPropertiesToolbar1',
 //    @(MainForm.ShowPropertiesToolbar1.Checked),
 //      'Show the first properties toolbar');
