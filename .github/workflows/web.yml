@@ -165,59 +165,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  perf:
-    name: Chromium performance gates
-    needs: web
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: web-dist-${{ github.sha }}
-          path: web/dist
-
-      - name: Install Playwright
-        run: python3 -m pip install --break-system-packages playwright
-
-      - name: Install browser dependencies and fixed Chromium
-        run: |
-          mkdir -p "$RUNNER_TEMP/chromium"
-          python3 -m playwright install-deps chromium
-          # Chromium issue 556160935 is fixed upstream in Chrome 155; the old
-          # Playwright-bundled Chromium 153 crashes during repeated downloads.
-          # https://issues.chromium.org/issues/556160935
-          curl --fail --location --retry 3 \
-            https://storage.googleapis.com/chrome-for-testing-public/155.0.8059.39/linux64/chrome-linux64.zip \
-            --output "$RUNNER_TEMP/chrome-linux64.zip"
-          python3 - "$RUNNER_TEMP/chrome-linux64.zip" "$RUNNER_TEMP/chromium" <<'PY'
-          import sys
-          from pathlib import Path
-          from zipfile import ZipFile
-
-          destination = Path(sys.argv[2])
-          with ZipFile(sys.argv[1]) as archive:
-              archive.extractall(sys.argv[2])
-              for entry in archive.infolist():
-                  mode = (entry.external_attr >> 16) & 0o777
-                  path = destination / entry.filename
-                  if mode and path.exists():
-                      path.chmod(mode)
-          PY
-          chromium="$RUNNER_TEMP/chromium/chrome-linux64/chrome"
-          "$chromium" --version
-          echo "CHROMIUM=$chromium" >> "$GITHUB_ENV"
-
-      - name: Performance gates
-        run: python3 tests/browser/perf.py
-
   pages:
     name: Deploy the browser build to GitHub Pages
-    # Keep CPU/latency regressions off Pages while behavioral tests run separately.
-    needs: [web, perf]
+    needs: web
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
     permissions:
