@@ -4,7 +4,7 @@ interface
 
 uses GObjBase, GObjects, Drawings, Output, XmlOut, Classes,
   SysUtils,
-  Graphics;
+  Graphics, Solid3D;
 
 // A class for saving TpX drawing
 
@@ -29,7 +29,9 @@ type
     procedure StartGroup2D(Obj: TGroup2D); override;
     procedure FinishGroup2D(Obj: TGroup2D); override;
     procedure WriteCompound2D(Obj: TCompound2D); override;
+    procedure WriteSolid3D(Obj: TSolid3D); override;
   public
+    procedure WriteSolidElement(Obj: TSolid3D);
     constructor Create(Drawing: TDrawing2D); override;
     destructor Destroy; override;
     procedure WriteHeader; override;
@@ -37,10 +39,16 @@ type
     procedure WriteAllToStream; override;
   end;
 
+// The <solid> element of a 3D object as one line of TpX XML, for embedding
+// in SVG and TikZ sources.
+function SolidToTpXXml(Drawing: TDrawing2D; Solid: TSolid3D;
+  const PlacementElsewhere: Boolean = False;
+  const WidthElsewhere: Boolean = False): string;
+
 
 implementation
 
-uses Geometry, Devices, ColorEtc, Math;
+uses Geometry, Devices, ColorEtc, Math, Pieces;
 
 
 function FF(const X: TRealType): string;
@@ -560,6 +568,159 @@ end;
 procedure T_TpX_Saver.FinishGroup2D(Obj: TGroup2D);
 begin
   fXML.CloseTag;
+end;
+
+function FD(const X: Double): string;
+begin
+  Result := Format('%.10g', [X]);
+end;
+
+procedure T_TpX_Saver.WriteSolidElement(Obj: TSolid3D);
+var
+  I, K: Integer;
+  Body: TSolidBody;
+  Profile: TGraphicObject;
+  St: string;
+begin
+  fXML.OpenTag('solid');
+  fXML.AddAttribute('x1', FF(Obj.Points[0].X));
+  fXML.AddAttribute('y1', FF(Obj.Points[0].Y));
+  fXML.AddAttribute('x2', FF(Obj.Points[1].X));
+  fXML.AddAttribute('y2', FF(Obj.Points[1].Y));
+  fXML.AddAttribute('az', FD(Obj.Azimuth));
+  fXML.AddAttribute('el', FD(Obj.Elevation));
+  if Obj.Perspective then fXML.AddAttribute('persp', '1');
+  if Obj.Hidden <> shRemoved then
+    fXML.AddAttribute('hidden', SolidHiddenIDs[Obj.Hidden]);
+  WritePrimitiveAttr(Obj);
+  for I := 0 to Obj.BodyCount - 1 do
+  begin
+    Body := Obj.Bodies[I];
+    fXML.OpenTag('body');
+    fXML.AddAttribute('kind', SolidKindIDs[Body.Kind]);
+    case Body.Kind of
+      skBox:
+        begin
+          fXML.AddAttribute('w', FD(Body.Size1));
+          fXML.AddAttribute('d', FD(Body.Size2));
+          fXML.AddAttribute('h', FD(Body.Size3));
+        end;
+      skCylinder, skCone:
+        begin
+          fXML.AddAttribute('r', FD(Body.Size1));
+          fXML.AddAttribute('h', FD(Body.Size2));
+        end;
+      skSphere: fXML.AddAttribute('r', FD(Body.Size1));
+      skTorus:
+        begin
+          fXML.AddAttribute('r1', FD(Body.Size1));
+          fXML.AddAttribute('r2', FD(Body.Size2));
+        end;
+      skExtrude: fXML.AddAttribute('depth', FD(Body.Size1));
+      skRevolve:
+        begin
+          fXML.AddAttribute('angle', FD(Body.Size1));
+          fXML.AddAttribute('start', FD(Body.Size2));
+        end;
+    end;
+    if Body.Kind <> skBox then
+      fXML.AddAttribute('segments', IntToStr(Body.SegU));
+    if Body.Kind in [skSphere, skTorus] then
+      fXML.AddAttribute('rings', IntToStr(Body.SegV));
+    if not Body.IsIdentity then
+    begin
+      St := '';
+      for K := 0 to 11 do
+      begin
+        if K > 0 then St := St + ' ';
+        St := St + FD(Body.M[K]);
+      end;
+      fXML.AddAttribute('m', St);
+    end;
+    Profile := Body.Profiles.FirstObj;
+    while Profile <> nil do
+    begin
+      WriteEntity(Profile as TObject2D);
+      Profile := Body.Profiles.NextObj;
+    end;
+    fXML.CloseTag;
+  end;
+  fXML.CloseTag;
+end;
+
+procedure T_TpX_Saver.WriteSolid3D(Obj: TSolid3D);
+var
+  I: Integer;
+  Piece: TPiece;
+begin
+  fXML.OpenTag('group');
+  WriteSolidElement(Obj);
+  // The rendered faces follow as plain polygons, so TpX versions without
+  // 3D objects still show the picture; readers with 3D support skip them.
+  for I := 0 to Obj.Pieces.Count - 1 do
+  begin
+    Piece := Obj.Pieces[I];
+    if (Piece = nil) or (Piece.Count < 2) then Continue;
+    if Piece.Closed then fXML.OpenTag('polygon')
+    else fXML.OpenTag('polyline');
+    if Piece.GetLineStyle(Obj) <> liSolid then
+      fXML.AddAttribute('li', GetLineStyleString(Piece.GetLineStyle(Obj)));
+    if Obj.LineWidth <> 1 then
+      fXML.AddAttribute('lw', Format('%.2f', [Obj.LineWidth]));
+    if Piece.GetHatching(Obj) <> haNone then
+      fXML.AddAttribute('ha', IntToStr(Integer(Piece.GetHatching(Obj))));
+    if Obj.LineColor <> clDefault then
+      fXML.AddAttribute('lc', ColorToHtml(Obj.LineColor));
+    if (Piece.GetHatching(Obj) <> haNone) and (Obj.HatchColor <> clDefault) then
+      fXML.AddAttribute('hc', ColorToHtml(Obj.HatchColor));
+    if (Piece.Fill = pfiDefault) and (Obj.FillColor <> clDefault) then
+      fXML.AddAttribute('fill', ColorToHtml(Obj.FillColor));
+    fXML.PreserveSpace := True;
+    fXML.AddText(GetPathString(Piece, fXML.EOL_Str));
+    fXML.CloseTag;
+    fXML.PreserveSpace := False;
+  end;
+  fXML.CloseTag;
+end;
+
+function SolidToTpXXml(Drawing: TDrawing2D; Solid: TSolid3D;
+  const PlacementElsewhere, WidthElsewhere: Boolean): string;
+var
+  Saver: T_TpX_Saver;
+  Stream: TStringStream;
+  Copy: TSolid3D;
+  Origin: TPoint2D;
+  Scale, Angle: Double;
+begin
+  Saver := T_TpX_Saver.Create(Drawing);
+  Copy := nil;
+  try
+    if PlacementElsewhere or WidthElsewhere then
+    begin
+      Copy := TSolid3D.Create(-1);
+      Copy.Assign(Solid);
+      // The caller writes the placement as geometry; keep only its angle so
+      // this record does not change when the drawing is moved.
+      if PlacementElsewhere then
+      begin
+        Copy.GetPlacement(Origin, Scale, Angle);
+        Copy.SetPlacement(Point2D(0, 0), 1, Angle);
+      end;
+      // Line width is read back from the faces in the reader's units.
+      Copy.LineWidth := 1;
+      Solid := Copy;
+    end;
+    Stream := TStringStream.Create('');
+    Saver.fXML.EOL_Str := '';
+    Saver.fXML.SetStream(Stream, 0);
+    Saver.WriteSolidElement(Solid);
+    Result := Stream.DataString;
+    // SetStream releases the previous stream.
+    Saver.fXML.SetStream(nil, 0);
+  finally
+    Saver.Free;
+    Copy.Free;
+  end;
 end;
 
 procedure T_TpX_Saver.WriteCompound2D(Obj: TCompound2D);

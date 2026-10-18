@@ -6,7 +6,7 @@ unit Modify;
 interface
 
 uses
-  Geometry, Graphics, Drawings, GObjBase, GObjects;
+  Geometry, Graphics, Drawings, GObjBase, GObjects, Solid3D;
 
 type
   TMvBackwardForward = (mv_Forward, mv_Backward,
@@ -22,6 +22,15 @@ procedure DuplicateSelected(const ADrawing: TDrawing2D;
   const Shift: TVector2D);
 procedure GroupSelected(const ADrawing: TDrawing2D);
 procedure UngroupSelected(const ADrawing: TDrawing2D);
+// 3D objects
+procedure ApplySolidDefaults(const Solid: TSolid3D);
+function SolidFromSelected(const ADrawing: TDrawing2D;
+  const Kind: TSolidKind): Boolean;
+function AllSelectedAreSolids(const ADrawing: TDrawing2D): Boolean;
+procedure SetSelectedSolidsView(const ADrawing: TDrawing2D;
+  const View: TSolidView);
+procedure ToggleSelectedSolidsPerspective(const ADrawing: TDrawing2D);
+function MergeSolids(const Solids: TGraphicObjList): TSolid3D;
 procedure CompoundFromSelected(const ADrawing: TDrawing2D);
 procedure UncompoundSelected(const ADrawing: TDrawing2D);
 function ScaleStandard(const ADrawing: TDrawing2D;
@@ -221,6 +230,211 @@ begin
   end;
 end;
 
+procedure ReplaceSelectedBy(const ADrawing: TDrawing2D;
+  const NewObj: TObject2D);
+var
+  Obj: TGraphicObject;
+  OnChangeDrawing0: TOnChangeDrawing;
+begin
+  OnChangeDrawing0 := ADrawing.OnChangeDrawing;
+  ADrawing.OnChangeDrawing := nil;
+  try
+    Obj := ADrawing.SelectedObjects.Pop;
+    ADrawing.DeleteSelected;
+    ADrawing.AddObject(-1, NewObj);
+    ADrawing.MoveObject(NewObj.ID, Obj.ID);
+    ADrawing.DeleteObject(Obj.ID);
+    ADrawing.SelectionAdd(NewObj);
+  finally
+    ADrawing.OnChangeDrawing := OnChangeDrawing0;
+  end;
+  ADrawing.NotifyChanged;
+end;
+
+function AllSelectedAreSolids(const ADrawing: TDrawing2D): Boolean;
+var
+  Obj: TGraphicObject;
+begin
+  Result := ADrawing.SelectedObjects.Count > 0;
+  Obj := ADrawing.SelectedObjects.FirstObj;
+  while Obj <> nil do
+  begin
+    if not (Obj is TSolid3D) then
+    begin
+      Result := False;
+      Exit;
+    end;
+    Obj := ADrawing.SelectedObjects.NextObj;
+  end;
+end;
+
+procedure ApplySolidDefaults(const Solid: TSolid3D);
+begin
+  // Faces must be opaque for hidden surfaces; untouched default lines
+  // become the light grey edges of the clean 3D style.
+  if (Solid.FillColor = clDefault) or (Solid.FillColor = clNone) then
+    Solid.FillColor := clWhite;
+  if Solid.LineColor = clDefault then
+  begin
+    Solid.LineColor := Solid_DefaultLineColor;
+    if Solid.LineWidth = 1 then Solid.LineWidth := Solid_DefaultLineWidth;
+  end;
+end;
+
+function SolidFromSelected(const ADrawing: TDrawing2D;
+  const Kind: TSolidKind): Boolean;
+var
+  Shapes: TGraphicObjList;
+  Obj: TGraphicObject;
+  AxisX: TRealType;
+  HasAxis: Boolean;
+  R: TRect2D;
+  First: Boolean;
+  Solid: TSolid3D;
+  Body: TSolidBody;
+begin
+  Result := False;
+  Shapes := TGraphicObjList.Create;
+  Shapes.FreeOnDelete := False;
+  try
+    HasAxis := False;
+    AxisX := 0;
+    First := True;
+    Obj := ADrawing.SelectedObjects.FirstObj;
+    while Obj <> nil do
+    begin
+      if IsClosedProfile(Obj) then
+      begin
+        Shapes.Add(Obj);
+        if First then R := (Obj as TObject2D).BoundingBox
+        else R := BoxOutBox2D(R, (Obj as TObject2D).BoundingBox);
+        First := False;
+      end
+      else if (Obj is TLine2D) and (Kind = skRevolve) and not HasAxis then
+      begin
+        // A selected straight line is the axis of the revolution.
+        HasAxis := True;
+        AxisX := (TLine2D(Obj).Points[0].X + TLine2D(Obj).Points[1].X) / 2;
+      end;
+      Obj := ADrawing.SelectedObjects.NextObj;
+    end;
+    if Shapes.Count = 0 then Exit;
+    if not HasAxis then AxisX := R.Left;
+    Solid := CreateSolidFromProfiles(Shapes, Kind, AxisX);
+    ApplySolidDefaults(Solid);
+    if Kind = skRevolve then
+    begin
+      // Leave a quarter open toward the viewer, like a cut-away drawing.
+      Body := Solid.Bodies[0];
+      Body.Size1 := 270;
+      Body.Size2 := Solid.Azimuth + 45;
+    end;
+    Solid.UpdateExtension(Solid);
+    ReplaceSelectedBy(ADrawing, Solid);
+    Result := True;
+  finally
+    Shapes.Free;
+  end;
+end;
+
+// Rotation part of the camera: rows are the screen right, up and view axis.
+procedure ViewRows(const Solid: TSolid3D; out M: TMat34);
+var
+  Az, El: Double;
+begin
+  Az := Solid.Azimuth * Pi / 180;
+  El := Solid.Elevation * Pi / 180;
+  M := IdentityMat34;
+  M[0] := -Sin(Az); M[1] := Cos(Az); M[2] := 0;
+  M[4] := -Sin(El) * Cos(Az); M[5] := -Sin(El) * Sin(Az); M[6] := Cos(El);
+  M[8] := Cos(El) * Cos(Az); M[9] := Cos(El) * Sin(Az); M[10] := Sin(El);
+end;
+
+function TransposeRot(const M: TMat34): TMat34;
+begin
+  Result := IdentityMat34;
+  Result[0] := M[0]; Result[1] := M[4]; Result[2] := M[8];
+  Result[4] := M[1]; Result[5] := M[5]; Result[6] := M[9];
+  Result[8] := M[2]; Result[9] := M[6]; Result[10] := M[10];
+end;
+
+function MergeSolids(const Solids: TGraphicObjList): TSolid3D;
+var
+  Obj: TGraphicObject;
+  First, Solid: TSolid3D;
+  V1, VI, T, RZ: TMat34;
+  O1, OI: TPoint2D;
+  S1, A1, SI, AI, K: Double;
+  Offset: TVec3;
+  I: Integer;
+  Body: TSolidBody;
+begin
+  First := Solids.FirstObj as TSolid3D;
+  Result := TSolid3D.Create(-1);
+  Result.Assign(First);
+  First.GetPlacement(O1, S1, A1);
+  ViewRows(First, V1);
+  Obj := Solids.NextObj;
+  while Obj <> nil do
+  begin
+    Solid := Obj as TSolid3D;
+    Solid.GetPlacement(OI, SI, AI);
+    ViewRows(Solid, VI);
+    // Keep each body's picture: map its scene into the first camera with
+    // the relative scale, in-plane rotation and offset of its placement.
+    K := SI / S1;
+    RZ := IdentityMat34;
+    RZ[0] := Cos(AI - A1) * K; RZ[1] := -Sin(AI - A1) * K;
+    RZ[4] := Sin(AI - A1) * K; RZ[5] := Cos(AI - A1) * K;
+    RZ[10] := K;
+    T := MulMat34(TransposeRot(V1), MulMat34(RZ, VI));
+    Offset := First.UnprojectOffset(Point2D(OI.X - O1.X, OI.Y - O1.Y));
+    T[3] := Offset.X;
+    T[7] := Offset.Y;
+    T[11] := Offset.Z;
+    for I := 0 to Solid.BodyCount - 1 do
+    begin
+      Body := TSolidBody.Create(Solid.Bodies[I].Kind);
+      Body.Assign(Solid.Bodies[I]);
+      Body.M := MulMat34(T, Body.M);
+      Result.AdoptBody(Body);
+    end;
+    Obj := Solids.NextObj;
+  end;
+  Result.UpdateExtension(Result);
+end;
+
+procedure SetSelectedSolidsView(const ADrawing: TDrawing2D;
+  const View: TSolidView);
+var
+  Obj: TGraphicObject;
+begin
+  Obj := ADrawing.SelectedObjects.FirstObj;
+  while Obj <> nil do
+  begin
+    if Obj is TSolid3D then TSolid3D(Obj).ApplyView(View);
+    Obj := ADrawing.SelectedObjects.NextObj;
+  end;
+  ADrawing.NotifyChanged;
+end;
+
+procedure ToggleSelectedSolidsPerspective(const ADrawing: TDrawing2D);
+var
+  Obj: TGraphicObject;
+begin
+  Obj := ADrawing.SelectedObjects.FirstObj;
+  while Obj <> nil do
+  begin
+    if Obj is TSolid3D then
+    begin
+      TSolid3D(Obj).Perspective := not TSolid3D(Obj).Perspective;
+      TSolid3D(Obj).UpdateExtension(Obj);
+    end;
+    Obj := ADrawing.SelectedObjects.NextObj;
+  end;
+  ADrawing.NotifyChanged;
+end;
+
 procedure GroupSelected(const ADrawing: TDrawing2D);
 var
   Group: TGroup2D;
@@ -228,6 +442,12 @@ var
   OnChangeDrawing0: TOnChangeDrawing;
 begin
   if ADrawing.SelectedObjects.Count <= 1 then Exit;
+  if AllSelectedAreSolids(ADrawing) then
+  begin
+    // Grouped 3D objects become one scene with a shared camera.
+    ReplaceSelectedBy(ADrawing, MergeSolids(ADrawing.SelectedObjects));
+    Exit;
+  end;
   OnChangeDrawing0 := ADrawing.OnChangeDrawing;
   ADrawing.OnChangeDrawing := nil;
   try
@@ -255,6 +475,66 @@ begin
   ADrawing.NotifyChanged;
 end;
 
+// A scene splits into one object per body; a single extruded or revolved
+// body returns its profiles to 2D editing.
+function SplitSolid(const ADrawing: TDrawing2D; const Solid: TSolid3D;
+  const Added: TGraphicObjList): Boolean;
+var
+  Parts: TGraphicObjList;
+  Part: TSolid3D;
+  Body: TSolidBody;
+  Obj: TGraphicObject;
+  Copy: TPrimitive2D;
+  Origin: TPoint2D;
+  Scale, Angle: Double;
+  I: Integer;
+  T: TTransf2D;
+begin
+  Result := False;
+  Parts := TGraphicObjList.Create;
+  Parts.FreeOnDelete := False;
+  try
+    if Solid.BodyCount > 1 then
+      for I := 0 to Solid.BodyCount - 1 do
+      begin
+        Part := TSolid3D.Create(-1);
+        Part.Assign(Solid);
+        while Part.BodyCount > 0 do Part.ExtractBody(0).Free;
+        Body := TSolidBody.Create(Solid.Bodies[I].Kind);
+        Body.Assign(Solid.Bodies[I]);
+        Part.AdoptBody(Body);
+        Part.UpdateExtension(Part);
+        Parts.Add(Part);
+      end
+    else if (Solid.BodyCount = 1) and
+      (Solid.Bodies[0].Kind in [skExtrude, skRevolve]) then
+    begin
+      Solid.GetPlacement(Origin, Scale, Angle);
+      T := MultiplyTransform2D(Scale2D(Scale, Scale),
+        MultiplyTransform2D(Rotate2D(Angle), Translate2D(Origin.X, Origin.Y)));
+      Obj := Solid.Bodies[0].Profiles.FirstObj;
+      while Obj <> nil do
+      begin
+        Copy := TPrimitive2D(TpXFindClassByName(Obj.ClassName).Create(-1));
+        Copy.Assign(Obj);
+        Copy.Transform(T);
+        Parts.Add(Copy);
+        Obj := Solid.Bodies[0].Profiles.NextObj;
+      end;
+    end
+    else Exit;
+    ADrawing.SelectedObjects.RemoveCurrent;
+    ADrawing.InsertList(Solid.ID, Parts);
+    Added.AddFromList(Parts);
+    ADrawing.DeleteObject(Solid.ID);
+    Result := True;
+  except
+    Parts.FreeOnDelete := True;
+    raise;
+  end;
+  Parts.Free;
+end;
+
 procedure UngroupSelected(const ADrawing: TDrawing2D);
 var
   Group: TGroup2D;
@@ -272,7 +552,11 @@ begin
       ADrawing.SelectedObjects.FirstObj;
       while ADrawing.SelectedObjects.CurrentObj <> nil do
       begin
-        if ADrawing.SelectedObjects.CurrentObj is TGroup2D then
+        if (ADrawing.SelectedObjects.CurrentObj is TSolid3D) and
+          SplitSolid(ADrawing, ADrawing.SelectedObjects.CurrentObj as TSolid3D,
+          TmpLst) then
+          // SplitSolid removed the solid from the selection.
+        else if ADrawing.SelectedObjects.CurrentObj is TGroup2D then
         begin
           Group := ADrawing.SelectedObjects.CurrentObj as TGroup2D;
           ADrawing.SelectedObjects.RemoveCurrent;

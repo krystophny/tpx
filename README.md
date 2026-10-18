@@ -107,6 +107,9 @@ Download a copy** downloads a copy; closing or reloading the tab discards
 unsaved browser edits.
 See [INSTALL.md](INSTALL.md) for platform setup.
 
+Basic 3D objects (box, cylinder, sphere, cone, torus, extrusions and
+revolutions) are described in [doc/basic-3d.md](doc/basic-3d.md).
+
 ## Build and run on Linux
 
 TpX uses Free Pascal, Lazarus, the Lazarus Components Library (LCL), and the

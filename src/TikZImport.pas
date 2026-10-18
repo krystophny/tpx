@@ -122,12 +122,26 @@ type
     function BindingAt(Index: SizeInt): TTikZSourceBinding;
   end;
 
+  // A '% tpx-solid' block whose statements render one TpX 3D object.
+  TTikZSolidRegion = record
+    Span: TTikZSourceSpan;
+    NativeObjectID: Integer;
+    FirstBinding, LastBinding: SizeInt;
+  end;
+
   TTikZImportContext = class
   private
     FDocument: TTikZSyntaxResult;
     FScene: TTikZScene;
     FSource: TBytes;
+    FSolidRegions: array of TTikZSolidRegion;
   public
+    procedure AddSolidRegion(const Region: TTikZSolidRegion);
+    function SolidRegionCount: SizeInt;
+    function SolidRegionAt(Index: SizeInt): TTikZSolidRegion;
+    procedure SetSolidRegionObject(Index: SizeInt; ObjectID: Integer);
+    function FindSolidRegionForObjectID(ObjectID: Integer): SizeInt;
+    function SolidRegionOfBinding(BindingIndex: SizeInt): SizeInt;
     constructor Create(Document: TTikZSyntaxResult; Scene: TTikZScene);
     destructor Destroy; override;
     function BindingCount: SizeInt;
@@ -403,6 +417,51 @@ end;
 function TTikZImportContext.BindingAt(Index: SizeInt): TTikZSourceBinding;
 begin
   Result := FScene.BindingAt(Index);
+end;
+
+procedure TTikZImportContext.AddSolidRegion(const Region: TTikZSolidRegion);
+begin
+  SetLength(FSolidRegions, Length(FSolidRegions) + 1);
+  FSolidRegions[High(FSolidRegions)] := Region;
+end;
+
+function TTikZImportContext.SolidRegionCount: SizeInt;
+begin
+  Result := Length(FSolidRegions);
+end;
+
+function TTikZImportContext.SolidRegionAt(Index: SizeInt): TTikZSolidRegion;
+begin
+  if (Index < 0) or (Index > High(FSolidRegions)) then
+    raise ERangeError.Create('TikZ solid region index out of range');
+  Result := FSolidRegions[Index];
+end;
+
+procedure TTikZImportContext.SetSolidRegionObject(Index: SizeInt;
+  ObjectID: Integer);
+begin
+  if (Index < 0) or (Index > High(FSolidRegions)) then
+    raise ERangeError.Create('TikZ solid region index out of range');
+  FSolidRegions[Index].NativeObjectID := ObjectID;
+end;
+
+function TTikZImportContext.FindSolidRegionForObjectID(ObjectID: Integer): SizeInt;
+var
+  I: SizeInt;
+begin
+  Result := -1;
+  for I := 0 to High(FSolidRegions) do
+    if FSolidRegions[I].NativeObjectID = ObjectID then Exit(I);
+end;
+
+function TTikZImportContext.SolidRegionOfBinding(BindingIndex: SizeInt): SizeInt;
+var
+  I: SizeInt;
+begin
+  Result := -1;
+  for I := 0 to High(FSolidRegions) do
+    if (BindingIndex >= FSolidRegions[I].FirstBinding) and
+      (BindingIndex <= FSolidRegions[I].LastBinding) then Exit(I);
 end;
 
 function TTikZImportContext.FindBindingForObjectID(ObjectID: Integer): SizeInt;

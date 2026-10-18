@@ -8,7 +8,7 @@ uses
   {$IFDEF LCLgtk2}Gtk2Int,{$ENDIF}
   {$IFDEF LCLcocoa}CocoaInt, CocoaAll, CocoaTextEdits, CocoaUtils,{$ENDIF}
   {$IFDEF LCLwin32}Win32Int,{$ENDIF}
-  Settings0, MainUnit, Options, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, AutoSaveStore, AutoSaveRuntime, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, SvgCodec, EditSessions, PropertyEdits, PropertyEditCore, CompositionAwareControls, UserStorage, ObjectInspector, Buttons, gzio;
+  Settings0, MainUnit, Options, Table, Drawings, GObjects, Geometry, Manage, Modes, Input, Devices, Graphics, StdCtrls, ActnList, Menus, GObjBase, SysBasic, Preview, ViewPort, Modify, Output, Bitmaps, ClpbrdOp, ColorEtc, PlatformShortcuts, LiveTeX, DocumentFormats, DocumentIO, AutoSaveStore, AutoSaveRuntime, Pieces, TikZImport, TikZImportDrawing, TikZDocumentWriter, SvgCodec, Solid3D, StrUtils, EditSessions, PropertyEdits, PropertyEditCore, CompositionAwareControls, UserStorage, ObjectInspector, Buttons, gzio;
 
 {$R ../src/MainUnit.lfm}
 {$R ../src/Options.lfm}
@@ -221,6 +221,7 @@ end;
 {$I TikZSaveScenarios.inc}
 {$I TikZStyleScenarios.inc}
 {$I SvgCodecScenarios.inc}
+{$I Solid3DScenarios.inc}
 {$I AutoSaveScenarios.inc}
 {$I SourceFormatWorkflowScenarios.inc}
 {$I EditSessionScenarios.inc}
@@ -2022,6 +2023,9 @@ begin
     else if ParamStr(1) = 'bitmap-eps' then TestBitmapEps
     else if ParamStr(1) = 'svg-linked-image-copy' then TestSvgLinkedImageCopy
     else if ParamStr(1) = 'svg-codec' then TestSvgCodec
+    else if ParamStr(1) = 'solid3d-formats' then TestSolid3DFormats
+    else if ParamStr(1) = 'solid3d-open-save' then TestSolid3DOpenSave
+    else if ParamStr(1) = 'solid3d-editing' then TestSolid3DEditing
     else if ParamStr(1) = 'open-examples' then TestOpenExamples
     else if ParamStr(1) = 'open-dialog-all-formats' then TestOpenDialogAllFormats
     else if ParamStr(1) = 'labeled-preview' then TestLabeledPreview

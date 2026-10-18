@@ -42,6 +42,7 @@ uses
   Modes in 'src\Modes.pas',
   ViewPort in 'src\ViewPort.pas',
   Pieces in 'src\Pieces.pas',
+  Solid3D in 'src\Solid3D.pas',
   Devices in 'src\Devices.pas',
   XmlOut in 'src\XmlOut.pas',
   DevSVG in 'src\DevSVG.pas',
