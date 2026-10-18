@@ -303,6 +303,26 @@ type
     procedure OnPush; override;
   end;
 
+  // Start rotate on 3D objects turns their camera: dragging sideways
+  // changes the azimuth, up and down the elevation; Shift snaps to 15 deg.
+  TOrbitMode = class(TInterruptableMode)
+  protected
+    fCopies: TGraphicObjList;
+    fBaseAz, fBaseEl: array of Double;
+    fStartX, fStartY: Integer;
+    fStarted: Boolean;
+    procedure DrawCopies;
+    procedure UpdateCopies(X, Y: Integer; Shift: TShiftState);
+  public
+    procedure OnPush; override;
+    procedure OnPop; override;
+    procedure OnMouseMove(Sender: TObject;
+      Shift: TShiftState; X, Y: Integer); override;
+    procedure OnMouseUp(Sender: TObject;
+      Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+      override;
+  end;
+
   TMoveControlPointMode = class(TTransformingMode)
   public
     CurrentPrimitive, OriginalPrimitive: TPrimitive2D;
@@ -343,6 +363,7 @@ var
   DragCopyMode: TDragCopyMode;
   MoveMode: TMoveMode;
   RotateMode: TRotateMode;
+  OrbitMode: TOrbitMode;
   MoveControlPointMode: TMoveControlPointMode;
 
 const
@@ -466,6 +487,18 @@ const
   Msg_PictureInfo = Msg_Help + 1;
   Msg_About = Msg_PictureInfo + 1;
   Msg_SnapToShapes = Msg_About + 1;
+  Msg_InsertBox = Msg_SnapToShapes + 1;
+  Msg_InsertCylinder = Msg_InsertBox + 1;
+  Msg_InsertSphere = Msg_InsertCylinder + 1;
+  Msg_InsertCone = Msg_InsertSphere + 1;
+  Msg_InsertTorus = Msg_InsertCone + 1;
+  Msg_Extrude = Msg_InsertTorus + 1;
+  Msg_Revolve = Msg_Extrude + 1;
+  Msg_View3DIsometric = Msg_Revolve + 1;
+  Msg_View3DTop = Msg_View3DIsometric + 1;
+  Msg_View3DFront = Msg_View3DTop + 1;
+  Msg_View3DSide = Msg_View3DFront + 1;
+  Msg_View3DPerspective = Msg_View3DSide + 1;
 
 const Drag_Aperture = 4;
 
@@ -478,6 +511,7 @@ uses MainUnit, SysBasic, Options, TransForm, PreView,
 {$ELSE}
 {$ENDIF}
   Settings0, AboutUnit, Input, Output, ScaleStandardUnit, Modify,
+  Solid3D,
   InfoForm, Devices, Bitmaps
 {$IFDEF CPUWASM32}
   , BrowserDocumentStatus
@@ -1673,7 +1707,7 @@ begin
     Msg_InsertLine, Msg_InsertRectangle, Msg_InsertCircle,
       Msg_InsertEllipse,
       Msg_InsertArc, Msg_InsertSector, Msg_InsertSegment,
-      Msg_InsertBitmap:
+      Msg_InsertBitmap, Msg_InsertBox..Msg_InsertTorus:
       IMode := InsertSizedGrObjMode;
     Msg_InsertPolyline, Msg_InsertPolygon, Msg_InsertCurve,
       Msg_InsertClosedCurve, Msg_InsertBezier,
@@ -1754,11 +1788,19 @@ begin
         Drawing.DefaultSymbolSize);
     Msg_InsertBitmap:
       if not InsertBitmap then Exit;
+    Msg_InsertBox..Msg_InsertTorus:
+      begin
+        IMode.Obj := TSolid3D.Create(-1);
+        TSolid3D(IMode.Obj).AddBody(
+          TSolidKind(Ord(skBox) + Msg - Msg_InsertBox));
+        NPoints := 2;
+      end;
   end;
   if IMode.Obj is TPrimitive2D then
   begin
     Drawing.ApplyProperties(IMode.Obj);
   end;
+  if IMode.Obj is TSolid3D then ApplySolidDefaults(TSolid3D(IMode.Obj));
   if IMode is TInsertSizedGrObjMode then
     InsertSizedGrObjMode.NPoints := NPoints;
   IMode.PressedBtn := Sender;
@@ -1862,6 +1904,31 @@ begin
     Msg_SelectedProperties: ChangeSelectedProperties;
     Msg_PictureProperties: PictureProperties;
     Msg_InsertLine..Msg_InsertBitmap: OnInsertGrObj(Msg, Sender);
+    Msg_InsertBox..Msg_InsertTorus: OnInsertGrObj(Msg, Sender);
+    Msg_Extrude:
+      begin
+        if not SolidFromSelected(Drawing, skExtrude) then
+          MessageBoxError('Select one or more closed shapes to extrude.');
+        Drawing.RepaintViewports;
+      end;
+    Msg_Revolve:
+      begin
+        if not SolidFromSelected(Drawing, skRevolve) then
+          MessageBoxError('Select one or more closed shapes to revolve; ' +
+            'a selected line sets the axis.');
+        Drawing.RepaintViewports;
+      end;
+    Msg_View3DIsometric..Msg_View3DSide:
+      begin
+        SetSelectedSolidsView(Drawing,
+          TSolidView(Ord(svIsometric) + Msg - Msg_View3DIsometric));
+        Drawing.RepaintViewports;
+      end;
+    Msg_View3DPerspective:
+      begin
+        ToggleSelectedSolidsPerspective(Drawing);
+        Drawing.RepaintViewports;
+      end;
     Msg_FreehandPolyline:
       begin
         FreehandMode.PressedBtn := Sender;
@@ -1977,6 +2044,9 @@ begin
       ScaleSelected(1 / 1.01);
     Msg_StartMove: PushMode(MoveMode);
     Msg_StartRotate:
+      if AllSelectedAreSolids(Drawing) then
+        PushMode(OrbitMode)
+      else
       begin
         RotateMode.fLastPoint := fLastMousePoint;
         PushMode(RotateMode);
@@ -2975,6 +3045,116 @@ begin
     P.X - StartPoint.X) - BaseAngle, StartPoint);
 end;
 
+{* --------- TOrbitMode --------- *}
+
+procedure TOrbitMode.OnPush;
+var
+  Obj: TGraphicObject;
+  Copy: TSolid3D;
+begin
+  inherited OnPush;
+  fCopies := TGraphicObjList.Create;
+  fCopies.FreeOnDelete := True;
+  SetLength(fBaseAz, 0);
+  SetLength(fBaseEl, 0);
+  Obj := Drawing.SelectedObjects.FirstObj;
+  while Obj <> nil do
+  begin
+    if Obj is TSolid3D then
+    begin
+      Copy := TSolid3D.Create(0);
+      Copy.Assign(Obj);
+      Copy.ParentDrawing := Drawing;
+      fCopies.Add(Copy);
+      SetLength(fBaseAz, Length(fBaseAz) + 1);
+      SetLength(fBaseEl, Length(fBaseEl) + 1);
+      fBaseAz[High(fBaseAz)] := TSolid3D(Obj).Azimuth;
+      fBaseEl[High(fBaseEl)] := TSolid3D(Obj).Elevation;
+    end;
+    Obj := Drawing.SelectedObjects.NextObj;
+  end;
+  fStarted := False;
+  DrawCopies;
+end;
+
+procedure TOrbitMode.OnPop;
+begin
+  inherited OnPop;
+  FreeAndNil(fCopies);
+  Drawing.RepaintViewports;
+end;
+
+procedure TOrbitMode.DrawCopies;
+var
+  Obj: TGraphicObject;
+begin
+  if fCopies = nil then Exit;
+  Obj := fCopies.FirstObj;
+  while Obj <> nil do
+  begin
+    ViewPort.DrawObject2DWithRubber(Obj as TObject2D, IdentityTransf2D);
+    Obj := fCopies.NextObj;
+  end;
+end;
+
+procedure TOrbitMode.UpdateCopies(X, Y: Integer; Shift: TShiftState);
+var
+  Obj: TGraphicObject;
+  I: Integer;
+  Az, El: Double;
+begin
+  if not fStarted then
+  begin
+    fStartX := X;
+    fStartY := Y;
+    fStarted := True;
+  end;
+  DrawCopies;
+  I := 0;
+  Obj := fCopies.FirstObj;
+  while Obj <> nil do
+  begin
+    Az := fBaseAz[I] - (X - fStartX) * 0.5;
+    El := fBaseEl[I] + (Y - fStartY) * 0.5;
+    if ssShift in Shift then
+    begin
+      Az := Round(Az / 15) * 15;
+      El := Round(El / 15) * 15;
+    end;
+    TSolid3D(Obj).SetView(Az, El);
+    Inc(I);
+    Obj := fCopies.NextObj;
+  end;
+  DrawCopies;
+end;
+
+procedure TOrbitMode.OnMouseMove(Sender: TObject;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  UpdateCopies(X, Y, Shift);
+end;
+
+procedure TOrbitMode.OnMouseUp(Sender: TObject;
+  Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  Obj, Copy: TGraphicObject;
+begin
+  UpdateCopies(X, Y, Shift);
+  Copy := fCopies.FirstObj;
+  Obj := Drawing.SelectedObjects.FirstObj;
+  while (Obj <> nil) and (Copy <> nil) do
+  begin
+    if Obj is TSolid3D then
+    begin
+      TSolid3D(Obj).SetView(TSolid3D(Copy).Azimuth, TSolid3D(Copy).Elevation);
+      Copy := fCopies.NextObj;
+    end;
+    Obj := Drawing.SelectedObjects.NextObj;
+  end;
+  Drawing.NotifyChanged;
+  PopSelf;
+end;
+
 {* --------- TMoveControlPointMode --------- *}
 
 procedure TMoveControlPointMode.OnPush;
@@ -3035,6 +3215,7 @@ initialization
   DragCopyMode := TDragCopyMode.Create;
   MoveMode := TMoveMode.Create;
   RotateMode := TRotateMode.Create;
+  OrbitMode := TOrbitMode.Create;
   MoveControlPointMode := TMoveControlPointMode.Create;
 finalization
   BaseMode.Free;
@@ -3050,6 +3231,7 @@ finalization
   DragCopyMode.Free;
   MoveMode.Free;
   RotateMode.Free;
+  OrbitMode.Free;
   MoveControlPointMode.Free;
 end.
 

@@ -67,6 +67,10 @@ type
       const Hatching: THatching; const Transf: TTransf2D);
   public
     DevEOL: string;
+    // Geometry strings written while a 3D object is being exported.
+    Capture: TStrings;
+    procedure BeginSolid;
+    procedure EndSolid(const SolidXml: string);
     constructor Create(Drawing: TDrawing2D);
     destructor Destroy; override;
     procedure SetViewportOverride(const PageWidthMM, PageHeightMM,
@@ -82,7 +86,7 @@ type
 
 implementation
 
-uses ColorEtc, Bitmaps, SysBasic;
+uses ColorEtc, Bitmaps, SysBasic, Solid3D;
 
 function SVGFormat(const FormatString: string;
   const Args: array of const): string;
@@ -265,6 +269,8 @@ procedure TSvgDevice.RegisterPatterns;
       try
         if TmpObj is TGroup2D then
           RegisterPatterns0((TmpObj as TGroup2D).Objects)
+        else if TmpObj is TSolid3D then
+          // 3D cut faces write their hatching as lines.
         else if TmpObj is TPrimitive2D then
         begin
           Prim := TmpObj as TPrimitive2D;
@@ -468,8 +474,29 @@ begin
     PPrev := P1;
   end;
   fXML.AddAttribute0('points', PathSt);
+  if Capture <> nil then Capture.Add(PathSt);
 //  fXML.CloseAttr;
   fXML.CloseTag;
+end;
+
+procedure TSvgDevice.BeginSolid;
+begin
+  fXML.OpenTag('g');
+  FreeAndNil(Capture);
+  Capture := TStringList.Create;
+end;
+
+procedure TSvgDevice.EndSolid(const SolidXml: string);
+begin
+  // The editable 3D object rides along in the TpX namespace; renderers
+  // ignore it and TpX restores it while the faces stay untouched.
+  fXML.OpenTag('tpx:solid');
+  fXML.AddAttribute('xmlns:tpx', SvgSolidNamespace);
+  fXML.AddAttribute('digest', SolidGeometryDigest(Capture));
+  fXML.AddCData(SolidXml);
+  fXML.CloseTag;
+  fXML.CloseTag;
+  FreeAndNil(Capture);
 end;
 
 procedure TSvgDevice.Bezier(PP: TPointsSet2D;
