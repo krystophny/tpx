@@ -1477,17 +1477,97 @@ begin
   finally Before.Free; After.Free; DeleteFile(FileName); DeleteFile(ImageName) end;
 end;
 
+procedure TestArcFlip;
+const
+  Tolerance = 1e-6;
+var
+  Arc: TArc2D;
+  Group: TContainer2D;
+  Center: TPoint2D;
+  CX, CY, R, SA, EA: TRealType;
+
+  function Normalized(A: TRealType): TRealType;
+  begin
+    Result := A - 2 * Pi * Floor(A / (2 * Pi));
+    if Result > 2 * Pi - Tolerance then Result := 0;
+  end;
+
+  procedure CheckArc(const Name: string; ExpectedSA, ExpectedEA: TRealType);
+  begin
+    Arc.GetArcParams(CX, CY, R, SA, EA);
+    Check((Abs(CX - Center.X) < Tolerance) and (Abs(CY - Center.Y) < Tolerance)
+      and (Abs(R - 10) < Tolerance), Name + ' moved or resized the arc');
+    Check((Abs(Normalized(SA) - Normalized(ExpectedSA)) < Tolerance) and
+      (Abs(Normalized(EA) - Normalized(ExpectedEA)) < Tolerance),
+      Format('%s gave start %.4f and end %.4f instead of %.4f and %.4f',
+      [Name, Normalized(SA), Normalized(EA), Normalized(ExpectedSA),
+      Normalized(ExpectedEA)]));
+  end;
+
+  function NewArc(StartAngle, EndAngle: TRealType): TArc2D;
+  begin
+    Result := TArc2D.CreateSpec(-1, Center, 10, StartAngle, EndAngle);
+    Result.BeginArrowKind := arrH41;
+    Result.EndArrowKind := arrNone;
+  end;
+
+begin
+  Center := Point2D(30, 20);
+  { A 315 degree arc with its gap between 0 and 45 degrees. A mirror keeps
+    the sweep: x -> -x maps angle t to 180 - t, y -> -y maps t to -t. }
+  Arc := NewArc(Pi / 4, 2 * Pi);
+  try
+    Arc.Transform(Flip2D(Center, V2D(1, 0)));
+    CheckArc('Horizontal flip', Pi, 3 * Pi / 4);
+    Check((Arc.BeginArrowKind = arrNone) and (Arc.EndArrowKind = arrH41),
+      'Horizontal flip moved the arrowhead to the other visual end');
+    Arc.Transform(Flip2D(Center, V2D(1, 0)));
+    CheckArc('Double horizontal flip', Pi / 4, 0);
+    Check((Arc.BeginArrowKind = arrH41) and (Arc.EndArrowKind = arrNone),
+      'Double horizontal flip did not restore the arrowheads');
+    Arc.Transform(Flip2D(Center, V2D(0, 1)));
+    CheckArc('Vertical flip', 0, -Pi / 4);
+  finally
+    Arc.Free;
+  end;
+  { A rotated arc from 75 to 30 degrees: mirrored to 150 .. 105 degrees. }
+  Arc := NewArc(75 * Pi / 180, 30 * Pi / 180);
+  try
+    Arc.Transform(Flip2D(Center, V2D(1, 0)));
+    CheckArc('Rotated arc flip', 150 * Pi / 180, 105 * Pi / 180);
+    { Rotation keeps orientation, so it must not swap the ends. }
+    Arc.Transform(RotateCenter2D(Pi / 2, Center));
+    Arc.GetArcParams(CX, CY, R, SA, EA);
+    Check(Abs(Normalized(EA - SA) - Normalized(-45 * Pi / 180)) < Tolerance,
+      'Rotation changed the sweep of a mirrored arc');
+  finally
+    Arc.Free;
+  end;
+  { Grouped arcs are transformed through their compound. }
+  Arc := NewArc(Pi / 4, 2 * Pi);
+  Group := TContainer2D.CreateSpec(-1, [Arc]);
+  try
+    Group.Transform(Flip2D(Center, V2D(1, 0)));
+    CheckArc('Grouped horizontal flip', Pi, 3 * Pi / 4);
+  finally
+    Group.Free;
+  end;
+end;
+
 procedure TestUnsupportedExports;
 var
   Format: ExportFormatKind;
-  Name: string;
+  Name, OldGhostscriptPath: string;
   Failed: Boolean;
   Original, Saved: TStringList;
 begin
   Name := GetTempFileName(SysUtils.GetTempDir(False), 'tpx-export-');
   Original := TStringList.Create; Saved := TStringList.Create;
+  OldGhostscriptPath := GhostscriptPath;
   try
     Original.Text := 'preserve me'; Original.SaveToFile(Name);
+    { EMF is unsupported; PNG and BMP need Ghostscript, here missing. }
+    GhostscriptPath := ExtractFilePath(Name) + 'missing-tpx-ghostscript';
     for Format in [export_EMF, export_PNG, export_BMP] do begin
       Failed := False;
       try ExportToFile(MainForm.TheDrawing, Name, Format)
@@ -1495,11 +1575,15 @@ begin
       Saved.LoadFromFile(Name);
       Check(Failed and (Original.Text = Saved.Text), 'Unsupported export silently succeeded');
     end;
+    GhostscriptPath := OldGhostscriptPath;
     MainForm.TheDrawing.AddObject(-1, TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(20, 10)));
     ExportToFile(MainForm.TheDrawing, Name, export_SVG);
     Saved.LoadFromFile(Name);
     Check(Pos('<svg', Saved.Text) > 0, 'Supported SVG export stopped working');
-  finally Original.Free; Saved.Free; DeleteFile(Name) end;
+  finally
+    GhostscriptPath := OldGhostscriptPath;
+    Original.Free; Saved.Free; DeleteFile(Name)
+  end;
 end;
 
 procedure TestLabeledPreview;

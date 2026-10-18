@@ -71,6 +71,10 @@ type
 
 var
   StartTime: Cardinal;
+  { Command-line conversion runs without a GUI: messages go to stderr. }
+  ConsoleMessages: Boolean = False;
+
+procedure WriteConsoleMessage(const MsgStr: string);
 
 implementation
 
@@ -619,8 +623,22 @@ begin
   Result := IncludeTrailingPathDelimiter(Result);
 end;
 
+procedure WriteConsoleMessage(const MsgStr: string);
+begin
+{$I-}
+  WriteLn(StdErr, MsgStr);
+  Flush(StdErr);
+{$I+}
+  if IOResult <> 0 then ;
+end;
+
 procedure MessageBoxInfo(MsgStr: string);
 begin
+  if ConsoleMessages then
+  begin
+    WriteConsoleMessage(MsgStr);
+    Exit;
+  end;
 {$IFDEF VER140}
   Application.MessageBox(PChar(MsgStr), 'Info', MB_OK);
 {$ELSE}
@@ -630,6 +648,11 @@ end;
 
 procedure MessageBoxError(MsgStr: string);
 begin
+  if ConsoleMessages then
+  begin
+    WriteConsoleMessage('TpX: ' + MsgStr);
+    Exit;
+  end;
 {$IFDEF VER140}
   Application.MessageBox(PChar(MsgStr), 'Error', MB_OK);
 {$ELSE}
@@ -639,6 +662,11 @@ end;
 
 function MessageBoxErrorAsk(MsgStr: string): Boolean;
 begin
+  if ConsoleMessages then
+  begin
+    WriteConsoleMessage('TpX: ' + MsgStr);
+    Exit(False);
+  end;
 {$IFDEF VER140}
   Result := Application.MessageBox(PChar(MsgStr), 'Error',
     MB_OKCANCEL) = idOK;

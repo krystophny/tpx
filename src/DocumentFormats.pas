@@ -1113,15 +1113,29 @@ begin
 {$ENDIF}{$ENDIF}
 end;
 
+procedure ApplyNewFilePermissions(const StageFile: TDocumentPath);
+{$IFDEF FPC}{$IFDEF UNIX}
+var Mask: TMode;
+{$ENDIF}{$ENDIF}
+begin
+{$IFDEF FPC}{$IFDEF UNIX}
+  { Staging files are created private; a new destination gets the mode an
+    ordinary create would give it, 0666 filtered by the process umask. }
+  Mask := fpUmask(0);
+  fpUmask(Mask);
+  if fpChmod(PChar(StageFile), $1B6 and not Mask) <> 0 then
+    RaiseLastOSError;
+{$ENDIF}{$ENDIF}
+end;
+
 procedure WriteDocumentAtomically(const FileName: TDocumentPath;
   const Bytes: RawByteString; const ExpectedRevision: TDiskRevision;
   const CheckExpected: Boolean; out NewRevision: TDiskRevision;
   out BackupFileName: TDocumentPath);
-var Dest, DestDir, StageFile, ExistingBackup: TDocumentPath;
+var Dest, DestDir, StageFile: TDocumentPath;
   Existing: TDocumentSnapshot; StageRevision: TDiskRevision;
   PublishedRevision: TDiskRevision;
-  HasExisting, StageCreated,
-  BackupCreated, ReplaceSucceeded: Boolean;
+  HasExisting, StageCreated: Boolean;
 begin
   if Length(Bytes) > MaxDocumentBytes then
     raise EWriteError.CreateFmt('Document exceeds the %d byte limit',
@@ -1136,9 +1150,7 @@ begin
   StageCreated := StageFile <> '';
   if not StageCreated then
     raise EWriteError.Create('Could not create a staging file');
-  ExistingBackup := '';
-  BackupCreated := False;
-  ReplaceSucceeded := False;
+  { The rename below is atomic, so no backup copy is left beside the file. }
   BackupFileName := '';
   try
     if Assigned(DocumentIOPhaseObserver) then
@@ -1157,19 +1169,12 @@ begin
       else if ExpectedRevision.Exists then
         raise EDocumentConflict.Create('The destination was removed on disk');
     end;
-    if HasExisting then PreserveExistingPermissions(Dest, StageFile);
+    if HasExisting then PreserveExistingPermissions(Dest, StageFile)
+    else ApplyNewFilePermissions(StageFile);
     { Capture the identity and digest of our exact output before publishing.
       A destination read after rename could observe a later external writer. }
     StageRevision := ReadDocumentRevision(StageFile);
     PublishedRevision := RebindStagedRevision(StageRevision, StageFile, Dest);
-    if HasExisting then
-    begin
-      ExistingBackup := TempFileInDirectory(DestDir, 'bak');
-      if ExistingBackup = '' then
-        raise EWriteError.Create('Could not create a recoverable backup');
-      BackupCreated := True;
-      WriteSynchronizedFile(ExistingBackup, Existing.SourceBytes);
-    end;
     { Recheck immediately before replace. This detects observed conflicts but
       cannot provide compare-and-swap against uncooperative writers. }
     if HasExisting then
@@ -1183,18 +1188,10 @@ begin
       DocumentIOPhaseObserver(dipPrimaryReplace, Dest);
     if not ReplaceFileAtomically(StageFile, Dest) then
       raise EWriteError.CreateFmt('Could not replace %s', [Dest]);
-    ReplaceSucceeded := True;
     StageCreated := False;
     NewRevision := PublishedRevision;
-    if HasExisting then
-    begin
-      BackupFileName := ExistingBackup;
-      BackupCreated := False;
-    end;
   finally
     if StageCreated then DeleteDocumentFile(StageFile);
-    if BackupCreated and not ReplaceSucceeded then
-      DeleteDocumentFile(ExistingBackup);
   end;
 end;
 
@@ -1273,7 +1270,9 @@ begin
     SynchronizeExistingFile(Assets[I].StagePath);
     Assets[I].HadOriginal := DocumentFileExists(Assets[I].FinalPath);
     if Assets[I].HadOriginal then
-      PreserveExistingPermissions(Assets[I].FinalPath, Assets[I].StagePath);
+      PreserveExistingPermissions(Assets[I].FinalPath, Assets[I].StagePath)
+    else
+      ApplyNewFilePermissions(Assets[I].StagePath);
     Assets[I].StageRevision := ReadDocumentRevision(Assets[I].StagePath);
     Assets[I].StageRevision := RebindStagedRevision(Assets[I].StageRevision,
       Assets[I].StagePath, Assets[I].FinalPath);
@@ -1492,7 +1491,13 @@ begin
 {$IFDEF VER140}
     1, 3, 4: Result := True;
 {$ELSE}
-    1, 3, 4: Result := False;
+    1: Result := False;
+{$IFDEF CPUWASM32}
+    3, 4: Result := False;
+{$ELSE}
+    { PNG and BMP are rasterized from EPS with Ghostscript. }
+    3, 4: Result := True;
+{$ENDIF}
 {$ENDIF}
   else
     Result := False;

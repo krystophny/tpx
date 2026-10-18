@@ -203,10 +203,10 @@ begin
       DiskRevision := ReadDocumentRevision(FileName);
       Check(SameDiskRevision(SavedRevision, DiskRevision),
         'The writer did not return the revision of its published bytes');
-      Check((Backup <> '') and FileExists(Backup),
-        'The successful replacement did not preserve its prior version');
-      Check(ReadDocumentTestBytes(Backup) = 'before-save',
-        'The replacement backup did not contain the prior document');
+      Check(Backup = '',
+        'The successful replacement left a backup file beside the document');
+      Check(not FileExists(IncludeTrailingPathDelimiter(Directory) +
+        'bak00000.tmp'), 'The successful replacement left a bak*.tmp file');
 
       Session.AcceptSavedRevision(SavedBytes, SavedRevision);
       Check(Session.IsAcceptedRevision(DiskRevision),
@@ -240,14 +240,16 @@ end;
 
 procedure TestDocumentUnixPermissions;
 {$IFDEF UNIX}
-var Directory, FileName: string;
+var Directory, FileName, NewFileName: string;
   Backup: TDocumentPath;
   Expected, NewRevision: TDiskRevision;
-  Info, BackupInfo: BaseUnix.Stat;
+  Info: BaseUnix.Stat;
+  Mask: BaseUnix.TMode;
 {$ENDIF}
 begin
 {$IFDEF UNIX}
   PrepareDocumentTestDirectory('issue62-permissions', Directory, FileName);
+  NewFileName := '';
   try
     WriteDocumentTestBytes(FileName, 'permission-check');
     Check(fpChmod(PChar(FileName), $0180) = 0,
@@ -263,17 +265,27 @@ begin
         'Atomic replacement did not retain the existing 0600 permissions');
       Check(ReadDocumentTestBytes(FileName) = 'replacement',
         'The permissions-preserving replacement has incorrect content');
-      Check(fpStat(PChar(Backup), BackupInfo) = 0,
-        'Could not inspect replacement backup permissions');
-      Check((BackupInfo.st_mode and $0FFF) = $0180,
-        'Atomic replacement backup did not retain the existing 0600 permissions');
-      Check(ReadDocumentTestBytes(Backup) = 'permission-check',
-        'The permissions-preserving backup has incorrect content');
+      Check(Backup = '', 'Atomic replacement left a backup file');
+      { A new document gets the ordinary umask-filtered mode, not 0600. }
+      NewFileName := IncludeTrailingPathDelimiter(Directory) + 'new.tpx';
+      Mask := BaseUnix.fpUmask($12);
+      try
+        WriteDocumentAtomically(NewFileName, 'new', ReadDocumentRevision(
+          NewFileName), True, NewRevision, Backup);
+      finally
+        BaseUnix.fpUmask(Mask);
+      end;
+      Check(fpStat(PChar(NewFileName), Info) = 0,
+        'Could not inspect new document permissions');
+      Check((Info.st_mode and $0FFF) = $1A4,
+        'A new document did not follow the umask (expected 0644)');
     finally
       if (Backup <> '') and FileExists(Backup) then DeleteFile(Backup);
     end;
   finally
     if FileExists(FileName) then DeleteFile(FileName);
+    if (NewFileName <> '') and FileExists(NewFileName) then
+      DeleteFile(NewFileName);
     RemoveDir(Directory);
   end;
 {$ENDIF}

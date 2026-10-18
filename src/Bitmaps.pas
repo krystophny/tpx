@@ -259,7 +259,8 @@ function BitmapToEps(const BitmapFileName: string;
   const OutFileName: string): Boolean;
 begin
   Result := False;
-  if not CheckFilePath(Bitmap2EpsPath, 'Bitmap2Eps') then Exit;
+  if not CheckFilePath(Bitmap2EpsPath,
+    'Bitmap-to-EPS converter (setting Bitmap2EpsPath)') then Exit;
 {$IFDEF FPC}{$IFDEF MSWINDOWS}
   Result := BitmapToEpsInPrivateDirectory(BitmapFileName, OutFileName);
 {$ELSE}
