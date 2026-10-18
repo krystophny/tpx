@@ -30,6 +30,7 @@ function TryDimension(const Text: string; out Value: Single;
 function TryDeleteFile(const FileName: string): Boolean;
 function RenameFile(const FileName1, FileName2: string): Boolean;
 function CopyFile(const FileName1, FileName2: string): Boolean;
+function SameExistingFile(const FileName1, FileName2: string): Boolean;
 function GetTempDir: string;
 procedure MessageBoxInfo(MsgStr: string);
 procedure MessageBoxError(MsgStr: string);

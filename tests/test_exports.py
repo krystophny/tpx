@@ -107,6 +107,34 @@ class ExportTests(unittest.TestCase):
         self.assertIn("(10.00,20.00)", nodes[0])
         self.assertFalse((self.root / "photo.eps").exists())
 
+    def test_saved_drawing_links_images_in_place(self):
+        def chunk(kind, data):
+            return (struct.pack(">I", len(data)) + kind + data +
+                    struct.pack(">I", zlib.crc32(kind + data)))
+        png = (b"\x89PNG\r\n\x1a\n" +
+               chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 1, 8, 2, 0, 0, 0)) +
+               chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00\x00\x00\xff")) +
+               chunk(b"IEND", b""))
+        figures = self.root / "project" / "figures"
+        figures.mkdir(parents=True)
+        (self.root / "elsewhere").mkdir()
+        (figures / "quarter_torus.png").write_bytes(png)
+        (self.root / "project" / "shared.png").write_bytes(png)
+        drawing = ET.Element("TpX", v="5", TeXFormat="none",
+                             PdfTeXFormat="none", TeXFigure="none")
+        for x, image in (("10", figures / "quarter_torus.png"),
+                         ("80", self.root / "project" / "shared.png")):
+            ET.SubElement(drawing, "bitmap", x=x, y="10", w="60", h="30",
+                          link=str(image))
+        source = self.root / "elsewhere" / "src.TpX"
+        source.write_text("%" + ET.tostring(drawing, encoding="unicode") + "\n")
+        self.run_tpx("-f", source, "-o", figures / "fig.TpX")
+        links = [item.get("link")
+                 for item in self.read_tpx(figures / "fig.TpX").iter("bitmap")]
+        self.assertEqual(links, ["quarter_torus.png",
+                                 "../shared.png"])
+        self.assertEqual([path for path in self.root.rglob("bitmaps")], [])
+
     def test_saved_drawings_preserve_geometry_and_text(self):
         for text in ["", "z", "ordinary trailing text", "123.45",
                      'a&<>"\'\tZ', "alpha β and é", "<>&", "literal &amp; &lt; &#9;"]:
