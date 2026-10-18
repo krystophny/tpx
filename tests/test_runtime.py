@@ -423,6 +423,32 @@ class RuntimeTests(unittest.TestCase):
                 "TPX_TIKZ_EMPTY_FILE": str(fresh_dir / "empty.tikz"),
             })
 
+    def test_tikz_line_styles_and_example_round_trip(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-tikz-style-") as directory:
+            root = Path(directory).resolve()
+            self.run_scenario("tikz-style-roundtrip", {
+                "TPX_TIKZ_STYLE_DIR": str(root),
+            })
+            example = (root / "double_slit.tikz").read_text(encoding="utf-8")
+            self.assertIn(r"\definecolor{tpx0072B2}{rgb}", example)
+            self.assertIn("dashed", example)
+            self.assertIn("<->", example)
+            self.assertIn(" arc (", example)
+            if not shutil.which("pdflatex"):
+                return
+            for name in ("simple_line", "dashed_line", "double_slit"):
+                (root / (name + "-doc.tex")).write_text(
+                    "\\documentclass{article}\n\\usepackage{tikz}\n"
+                    "\\pagestyle{empty}\n\\begin{document}\n"
+                    "\\input{" + name + ".tikz}\n\\end{document}\n",
+                    encoding="utf-8")
+                compiled = subprocess.run(
+                    [shutil.which("pdflatex"), "-halt-on-error",
+                     "-interaction=nonstopmode", name + "-doc.tex"],
+                    cwd=root, capture_output=True, text=True, timeout=60)
+                self.assertEqual(compiled.returncode, 0,
+                                 compiled.stdout[-4000:] + compiled.stderr[-2000:])
+
     @unittest.skipUnless(shutil.which("pdflatex") and shutil.which("gs"),
                          "pdflatex and Ghostscript are required to render copied TikZ")
     def test_copy_as_tikz_compiles_and_renders_without_tex_dependency(self):

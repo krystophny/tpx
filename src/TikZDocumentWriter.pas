@@ -19,6 +19,7 @@ type
   TEditArray = array of TTikZBoundEdit;
   TPatchArray = array of TTikZSourcePatch;
   TSpanArray = array of TTikZSourceSpan;
+  TDefinitionArray = array of string;
 
 function BytesOf(const S: RawByteString): TBytes;
 var I: SizeInt;
@@ -127,6 +128,30 @@ begin
   SetLength(Patches, N + 1);
   Patches[N].Span := Span;
   Patches[N].Replacement := BytesOf(Replacement);
+end;
+
+{ Add a style patch. An insertion at the start of another patch is folded
+  into that patch so both edits can apply to the same option position. }
+procedure MergePatch(var Patches: TPatchArray; const Patch: TTikZSourcePatch);
+var I: SizeInt;
+begin
+  for I := 0 to High(Patches) do
+    if Patches[I].Span.StartByte = Patch.Span.StartByte then
+    begin
+      if Patch.Span.EndByte = Patch.Span.StartByte then
+        Patches[I].Replacement := BytesOf(RawOf(Patch.Replacement) +
+          RawOf(Patches[I].Replacement))
+      else if Patches[I].Span.EndByte = Patches[I].Span.StartByte then
+      begin
+        Patches[I].Replacement := BytesOf(RawOf(Patches[I].Replacement) +
+          RawOf(Patch.Replacement));
+        Patches[I].Span := Patch.Span;
+      end
+      else
+        raise EWriteError.Create('Two TikZ edits replace the same source option');
+      Exit;
+    end;
+  AddPatch(Patches, Patch.Span, RawOf(Patch.Replacement));
 end;
 
 function ColorToRGB24(Value: TColor): LongWord;
@@ -602,9 +627,137 @@ begin
     Result := TeXText(TextObject.Text);
 end;
 
+{ Named colors stay readable; any other RGB value gets a local rgb color
+  definition that the importer resolves back to the same 8-bit color. }
+function TikZColor(Value: LongWord; var Definitions: TDefinitionArray): string;
+var Definition: string; I: SizeInt;
+  function Component(Shift: Integer): string;
+  begin
+    Result := FormatTikZReal(((Value shr Shift) and $FF) / 255, 4);
+  end;
+begin
+  if RGBColorName(Value, Result) then Exit;
+  Result := 'tpx' + IntToHex(Value and $FFFFFF, 6);
+  Definition := '\definecolor{' + Result + '}{rgb}{' + Component(16) + ',' +
+    Component(8) + ',' + Component(0) + '}';
+  for I := 0 to High(Definitions) do
+    if Definitions[I] = Definition then Exit;
+  I := Length(Definitions);
+  SetLength(Definitions, I + 1);
+  Definitions[I] := Definition;
+end;
+
+function ArrowName(Kind: TArrowKind): string;
+begin
+  Result := string(ArrowsIDs[Ord(Kind)]);
+end;
+
+{ The TikZ arrow specification for native arrowheads, '' without arrows. }
+function ArrowSpec(Primitive: TPrimitive2D; out Spec: string): string;
+var BeginTip, EndTip: string;
+begin
+  Result := '';
+  Spec := '';
+  if (Primitive.BeginArrowKind = arrNone) and
+    (Primitive.EndArrowKind = arrNone) then Exit;
+  if not ArrowKindTikZTip(Primitive.BeginArrowKind, BeginTip) then
+    Exit('start arrow ' + ArrowName(Primitive.BeginArrowKind) +
+      ' has no TikZ arrow tip (supported: h40, h42, h44)');
+  if not ArrowKindTikZTip(Primitive.EndArrowKind, EndTip) then
+    Exit('end arrow ' + ArrowName(Primitive.EndArrowKind) +
+      ' has no TikZ arrow tip (supported: h40, h42, h44)');
+  if not NearValue(Primitive.ArrowSizeFactor, 1) then
+    Exit('arrow size multiplier ' + FormatTikZReal(Primitive.ArrowSizeFactor,
+      SizeOf(TRealType)) + ' has no TikZ source form (only 1 is supported)');
+  if BeginTip = 'to' then BeginTip := '<';
+  if EndTip = 'to' then EndTip := '>';
+  Spec := BeginTip + '-' + EndTip;
+end;
+
+function LineStyleKeyword(Style: TLineStyle): string;
+begin
+  case Style of
+    liSolid: Result := 'solid';
+    liDashed: Result := 'dashed';
+    liDotted: Result := 'dotted';
+  else Result := '';
+  end;
+end;
+
+{ Replace an object-local style keyword (line pattern or arrow tips) in
+  place, or insert it at the start of the statement's option list. }
+procedure AddStyleKeyword(Context: TTikZImportContext; BindingIndex: SizeInt;
+  Kind: TTikZDependencyKind; const Keyword, PropertyName: string;
+  const Source: TBytes; var Insertion: string; var Patches: TPatchArray);
+var
+  Binding: TTikZSourceBinding;
+  Dep: TTikZPropertyDependency;
+  Span: TTikZSourceSpan;
+  I, DepIndex: SizeInt;
+begin
+  Binding := Context.BindingAt(BindingIndex);
+  for I := 0 to Context.BindingCount - 1 do
+    if (I <> BindingIndex) and SameSpan(Context.BindingAt(I).StatementSpan,
+      Binding.StatementSpan) then
+      raise EWriteError.Create('the ' + PropertyName +
+        ' is shared by multiple paths in one TikZ statement');
+  DepIndex := FindDependency(Binding, Kind);
+  if DepIndex < 0 then
+  begin
+    if Insertion <> '' then Insertion := Insertion + ', ';
+    Insertion := Insertion + Keyword;
+    Exit;
+  end;
+  Dep := Binding.Dependencies[DepIndex];
+  Span := Dep.PropertyKeySpan;
+  if Dep.ValueSpan.EndByte > Span.EndByte then
+    Span.EndByte := Dep.ValueSpan.EndByte;
+  if (Span.StartByte < Binding.StatementSpan.StartByte) or
+    (Span.EndByte > Binding.StatementSpan.EndByte) or
+    (Span.EndByte <= Span.StartByte) or (Span.EndByte > Length(Source)) then
+    raise EWriteError.Create('the ' + PropertyName +
+      ' comes from an enclosing TikZ style and cannot be edited locally');
+  AddPatch(Patches, Span, RawByteString(Keyword));
+end;
+
+{ Insert style keywords as the first options of a statement, creating the
+  option list when the command has none. }
+procedure AddStyleInsertion(Context: TTikZImportContext; BindingIndex: SizeInt;
+  const Source: TBytes; const Insertion: string; var Patches: TPatchArray);
+var
+  Binding: TTikZSourceBinding;
+  Span: TTikZSourceSpan;
+  P, Q, Limit: SizeInt;
+begin
+  if Insertion = '' then Exit;
+  Binding := Context.BindingAt(BindingIndex);
+  P := Binding.StatementSpan.StartByte;
+  Limit := Binding.StatementSpan.EndByte;
+  if (P < 0) or (Limit > Length(Source)) or (P >= Limit) or
+    (Source[P] <> Ord('\')) then
+    raise EWriteError.Create('the TikZ statement has no command for a new style option');
+  Inc(P);
+  while (P < Limit) and (Chr(Source[P]) in ['A'..'Z', 'a'..'z']) do Inc(P);
+  Q := P;
+  while (Q < Limit) and (Source[Q] in [Ord(' '), 9, 10, 13]) do Inc(Q);
+  Span := Binding.StatementSpan;
+  if (Q < Limit) and (Source[Q] = Ord('[')) then
+  begin
+    Span.StartByte := Q + 1;
+    Span.EndByte := Q + 1;
+    AddPatch(Patches, Span, RawByteString(Insertion + ', '));
+  end
+  else
+  begin
+    Span.StartByte := P;
+    Span.EndByte := P;
+    AddPatch(Patches, Span, RawByteString('[' + Insertion + ']'));
+  end;
+end;
+
 procedure AddNativeChanges(Context: TTikZImportContext; BindingIndex: SizeInt;
   Native: TPrimitive2D; Drawing: TDrawing2D; Source: TBytes;
-  var Edits: TEditArray);
+  var Edits: TEditArray; var StylePatches: TPatchArray);
 var
   Binding: TTikZSourceBinding;
   SceneObject: TTikZSceneObject;
@@ -623,6 +776,7 @@ var
   NewBaseline, SizeRatio, TextSizeBaseMM: Extended;
   CenterPoint: TPoint2D;
   NativeRadiusX, NativeRadiusY, NativeAngle: TRealType;
+  Insertion, Problem: string;
   procedure AddScalarEdit(Kind: TTikZDependencyKind; ScalarValue: Extended);
   var D: TTikZPropertyDependency; SourceValue, PhysicalTolerance: Extended;
   begin
@@ -652,8 +806,6 @@ begin
   CheckBoundPrimitiveType(Native, SceneObject);
   if Native.Hatching <> haNone then
     raise EWriteError.Create('Native hatching cannot be represented by this TikZ source codec');
-  if (Native.BeginArrowKind <> arrNone) or (Native.EndArrowKind <> arrNone) then
-    raise EWriteError.Create('Native arrow edits are not representable by this TikZ source codec');
 
   if SceneObject.Kind in [tsoPath, tsoRectangle, tsoText, tsoCircle,
     tsoEllipse, tsoImage] then
@@ -797,10 +949,28 @@ begin
   else if Native.FillColor <> clDefault then
     raise EWriteError.Create('Adding a fill to an unfilled TikZ object is not supported');
 
-  if ((SceneObject.LineKind = tlSolid) and (Native.LineStyle <> liSolid)) or
+  Insertion := '';
+  if SceneObject.StrokeEnabled and
+    (((SceneObject.LineKind = tlSolid) and (Native.LineStyle <> liSolid)) or
     ((SceneObject.LineKind = tlDashed) and (Native.LineStyle <> liDashed)) or
-    ((SceneObject.LineKind = tlDotted) and (Native.LineStyle <> liDotted)) then
-    raise EWriteError.Create('Changing the line pattern is not supported by this source codec');
+    ((SceneObject.LineKind = tlDotted) and (Native.LineStyle <> liDotted))) then
+  begin
+    Name := LineStyleKeyword(Native.LineStyle);
+    if Name = '' then
+      raise EWriteError.Create('the line style has no TikZ source form');
+    AddStyleKeyword(Context, BindingIndex, tdDashSize, Name, 'line style',
+      Source, Insertion, StylePatches);
+  end;
+  Problem := ArrowSpec(Native, Value);
+  if Problem <> '' then raise EWriteError.Create(Problem);
+  if (Native.BeginArrowKind <> TikZTipArrowKind(SceneObject.BeginArrow)) or
+    (Native.EndArrowKind <> TikZTipArrowKind(SceneObject.EndArrow)) then
+  begin
+    if Value = '' then Value := '-';
+    AddStyleKeyword(Context, BindingIndex, tdArrows, Value, 'arrow style',
+      Source, Insertion, StylePatches);
+  end;
+  AddStyleInsertion(Context, BindingIndex, Source, Insertion, StylePatches);
   end;
 
   if SceneObject.Kind = tsoText then
@@ -900,47 +1070,54 @@ begin
   end;
 end;
 
-function ColorOption(Primitive: TPrimitive2D; Drawing: TDrawing2D;
-  out Options: string): Boolean;
-var Name: string; WidthMM: Extended;
+{ Build the option list of a new statement. The result is '' on success or
+  names the native property that has no TikZ source form. }
+function NewObjectOptions(Primitive: TPrimitive2D; Drawing: TDrawing2D;
+  var Definitions: TDefinitionArray; out Options: string): string;
+var Spec: string; WidthMM: Extended;
 begin
-  Result := False;
+  Result := '';
   Options := '';
-  if (Primitive.Hatching <> haNone) or
-    (Primitive.BeginArrowKind <> arrNone) or
-    (Primitive.EndArrowKind <> arrNone) then Exit;
+  if Primitive.Hatching <> haNone then
+    Exit('hatching has no TikZ source form');
   if Primitive is TText2D then
   begin
-    if Primitive.FillColor <> clDefault then Exit;
+    if Primitive.FillColor <> clDefault then
+      Exit('text fill color has no TikZ source form');
     if Primitive.LineColor <> clDefault then
-    begin
-      if not RGBColorName(ColorToRGB24(Primitive.LineColor), Name) then Exit;
-      Options := 'text=' + Name;
-    end;
-    Exit(True);
+      Options := 'text=' + TikZColor(ColorToRGB24(Primitive.LineColor),
+        Definitions);
+    Exit;
   end;
+  Result := ArrowSpec(Primitive, Spec);
+  if Result <> '' then Exit;
   if Primitive.LineStyle <> liNone then
   begin
-    if Drawing.LineWidthBase <= 0 then Exit;
+    if Drawing.LineWidthBase <= 0 then
+      Exit('line width has no valid drawing line-width base');
     WidthMM := Primitive.LineWidth * Drawing.LineWidthBase;
     Options := 'line width=' + FormatTikZReal(WidthMM, SizeOf(TRealType)) + 'mm';
-    if Primitive.LineColor = clDefault then Name := 'black'
-    else if not RGBColorName(ColorToRGB24(Primitive.LineColor), Name) then Exit;
-    Options := Options + ', draw=' + Name;
+    if Primitive.LineColor = clDefault then
+      Options := Options + ', draw=black'
+    else
+      Options := Options + ', draw=' +
+        TikZColor(ColorToRGB24(Primitive.LineColor), Definitions);
     case Primitive.LineStyle of
-      liDashed: Options := Options + ', dashed';
-      liDotted: Options := Options + ', dotted';
+      liDashed, liDotted:
+        Options := Options + ', ' + LineStyleKeyword(Primitive.LineStyle);
       liSolid: ;
-    else Exit;
+    else Exit('line style has no TikZ source form');
     end;
-  end;
+    if Spec <> '' then Options := Options + ', ' + Spec;
+  end
+  else if Spec <> '' then
+    Exit('arrows on an object without a stroke have no TikZ source form');
   if Primitive.FillColor <> clDefault then
   begin
-    if not RGBColorName(ColorToRGB24(Primitive.FillColor), Name) then Exit;
     if Options <> '' then Options := Options + ', ';
-    Options := Options + 'fill=' + Name;
+    Options := Options + 'fill=' +
+      TikZColor(ColorToRGB24(Primitive.FillColor), Definitions);
   end;
-  Result := True;
 end;
 
 procedure AppendTikZOption(var Options: string; const Value: string);
@@ -957,18 +1134,27 @@ begin
     FormatTikZReal(P.Y / P.W, SizeOf(TRealType)) + 'mm)';
 end;
 
+function ObjectLabel(Obj: TObject2D; Index: SizeInt): string;
+begin
+  if Obj is TPrimitive2D then
+    Result := Format('Object %d (%s)', [Index, TPrimitive2D(Obj).GetName])
+  else Result := Format('Object %d (%s)', [Index, Obj.ClassName]);
+end;
+
 function SerializeNewPrimitive(Primitive: TPrimitive2D;
-  Drawing: TDrawing2D): RawByteString;
+  Drawing: TDrawing2D; var Definitions: TDefinitionArray): RawByteString;
 var
-  Options, Body: string;
+  Options, Body, Problem: string;
   I, N: SizeInt;
   A, B, C: TPoint2D;
   TextObject: TText2D;
   SizeRatio: Extended;
   Bezier: Boolean;
+  CX, CY, Radius, StartAngle, EndAngle: TRealType;
+  ArcText: string;
 begin
-  if not ColorOption(Primitive, Drawing, Options) then
-    raise EWriteError.Create('This new object has a style the TikZ source codec cannot represent');
+  Problem := NewObjectOptions(Primitive, Drawing, Definitions, Options);
+  if Problem <> '' then raise EWriteError.Create(Problem);
   if Primitive is TText2D then
   begin
     TextObject := Primitive as TText2D;
@@ -1004,6 +1190,28 @@ begin
     else Result := '\path ';
   end
   else Result := RawByteString('\draw[' + Options + '] ');
+  if Primitive is TCircular2D then
+  begin
+    TCircular2D(Primitive).GetArcParams(CX, CY, Radius, StartAngle, EndAngle);
+    if IsNan(CX) or IsNan(CY) or IsNan(Radius) or IsInfinite(CX) or
+      IsInfinite(CY) or IsInfinite(Radius) or (Radius <= 0) then
+      raise EWriteError.Create('New TikZ arc has no finite center and radius');
+    { Native arcs run counterclockwise from the start to the end angle. }
+    if EndAngle <= StartAngle then EndAngle := EndAngle + 2 * Pi;
+    A := Point2D(CX + Radius * Cos(StartAngle), CY + Radius * Sin(StartAngle));
+    ArcText := ' arc (' + FormatTikZReal(StartAngle * 180 / Pi,
+      SizeOf(TRealType)) + ':' + FormatTikZReal(EndAngle * 180 / Pi,
+      SizeOf(TRealType)) + ':' + FormatTikZReal(Radius, SizeOf(TRealType)) +
+      'mm)';
+    if Primitive is TSector2D then
+      Result := Result + RawByteString(PointText(Point2D(CX, CY)) + ' -- ' +
+        PointText(A) + ArcText + ' -- cycle;')
+    else if Primitive is TSegment2D then
+      Result := Result + RawByteString(PointText(A) + ArcText + ' -- cycle;')
+    else
+      Result := Result + RawByteString(PointText(A) + ArcText + ';');
+    Exit;
+  end;
   if Primitive is TCircle2D then
   begin
     A := Primitive.Points[0]; B := Primitive.Points[1];
@@ -1063,13 +1271,18 @@ begin
   Result := Result + ';';
 end;
 
-function SerializeNewObject(Obj: TObject2D; Drawing: TDrawing2D): RawByteString;
+function SerializeNewObject(Obj: TObject2D; Drawing: TDrawing2D;
+  Index: SizeInt; var Definitions: TDefinitionArray): RawByteString;
 begin
-  if not (Obj is TPrimitive2D) then
-    raise EWriteError.CreateFmt(
-      'Only standalone primitive objects can be inserted into a TikZ picture (%s)',
-      [Obj.ClassName]);
-  Result := SerializeNewPrimitive(TPrimitive2D(Obj), Drawing);
+  try
+    if not (Obj is TPrimitive2D) then
+      raise EWriteError.Create(
+        'only standalone primitive objects can be inserted into a TikZ picture');
+    Result := SerializeNewPrimitive(TPrimitive2D(Obj), Drawing, Definitions);
+  except
+    on E: EWriteError do
+      raise EWriteError.Create(ObjectLabel(Obj, Index) + ': ' + E.Message);
+  end;
 end;
 
 function SerializeNewDocument(Drawing: TDrawing2D;
@@ -1077,7 +1290,9 @@ function SerializeNewDocument(Drawing: TDrawing2D;
 var
   Obj: TObject2D;
   IsTeXDocument: Boolean;
-  EOL, FontDefault: RawByteString;
+  EOL, FontDefault, Body: RawByteString;
+  Definitions: TDefinitionArray;
+  Index, I: SizeInt;
 begin
   if Drawing = nil then
     raise EWriteError.Create('A new TikZ document has no drawing');
@@ -1098,13 +1313,19 @@ begin
   else
     Result := FontDefault + EOL +
       '\begin{tikzpicture}[x=1mm,y=1mm]' + EOL;
+  Body := '';
+  Definitions := nil;
+  Index := 1;
   Obj := Drawing.ObjectList.FirstObj as TObject2D;
   while Obj <> nil do
   begin
-    Result := Result + SerializeNewObject(Obj, Drawing) + EOL;
+    Body := Body + SerializeNewObject(Obj, Drawing, Index, Definitions) + EOL;
+    Inc(Index);
     Obj := Drawing.ObjectList.NextObj as TObject2D;
   end;
-  Result := Result + '\end{tikzpicture}' + EOL;
+  for I := 0 to High(Definitions) do
+    Result := Result + RawByteString(Definitions[I]) + EOL;
+  Result := Result + Body + '\end{tikzpicture}' + EOL;
   if IsTeXDocument then Result := Result + '\end{document}' + EOL;
 end;
 
@@ -1153,6 +1374,9 @@ var
   ParseOptions: TTikZParseOptions;
   Candidate: TBytes;
   SortPatch: TTikZSourcePatch;
+  StylePatches: TPatchArray;
+  Definitions: TDefinitionArray;
+  ObjectIndex, DefinitionsBefore: SizeInt;
   function EditAffectsBounds(const Edit: TTikZBoundEdit): Boolean;
   var B: TTikZSourceBinding; Kind: TTikZDependencyKind;
   begin
@@ -1183,6 +1407,9 @@ begin
   Inserted := '';
   EOL := EOLBytes(Source);
 
+  StylePatches := nil;
+  Definitions := nil;
+  ObjectIndex := 1;
   Obj := Drawing.ObjectList.FirstObj as TObject2D;
   while Obj <> nil do
   begin
@@ -1193,7 +1420,10 @@ begin
       GeometryChanged := True;
       if not SupportsTikZStructuralOperation(tsoInsertStatement) then
         raise EWriteError.Create('TikZ statement insertion is not supported');
-      Replacement := SerializeNewObject(Obj, Drawing);
+      DefinitionsBefore := Length(Definitions);
+      Replacement := SerializeNewObject(Obj, Drawing, ObjectIndex, Definitions);
+      for K := High(Definitions) downto DefinitionsBefore do
+        Replacement := RawByteString(Definitions[K]) + EOL + Replacement;
       if Inserted = '' then
       begin
         if (Context.Document.Region.ContentSpan.EndByte > 0) and
@@ -1215,10 +1445,18 @@ begin
         raise EWriteError.Create('A bound TikZ object was replaced by a group');
       Primitive := TPrimitive2D(Obj);
       EditsBefore := Length(Edits);
-      AddNativeChanges(Context, BindingIndex, Primitive, Drawing, Source, Edits);
+      try
+        AddNativeChanges(Context, BindingIndex, Primitive, Drawing, Source,
+          Edits, StylePatches);
+      except
+        on E: EWriteError do
+          raise EWriteError.Create(ObjectLabel(Obj, ObjectIndex) + ': ' +
+            E.Message);
+      end;
       for K := EditsBefore to High(Edits) do
         if EditAffectsBounds(Edits[K]) then GeometryChanged := True;
     end;
+    Inc(ObjectIndex);
     Obj := Drawing.ObjectList.NextObj as TObject2D;
   end;
 
@@ -1254,6 +1492,8 @@ begin
   for I := 0 to High(PropertyPatches) do
     AddPatch(Patches, PropertyPatches[I].Span,
       RawOf(PropertyPatches[I].Replacement));
+  for I := 0 to High(StylePatches) do
+    MergePatch(Patches, StylePatches[I]);
 
   if Inserted <> '' then
   begin

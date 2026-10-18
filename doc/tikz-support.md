@@ -116,16 +116,28 @@ geometry is imported in source order as those paths.
 
 Inline styles support literal RGB/HTML/gray color definitions, the named
 standard colors recognized by the evaluator, path `draw`/`fill` enablement,
-node `text=<color>`, literal line widths, and solid, dashed, and dotted strokes.
+node `text=<color>`, literal line widths, and `solid`, `dashed`, and `dotted`
+strokes. On stroked paths the core arrow specifications `-`, `->`, `<-`, and
+`<->` map to the native h40 arrowhead, and `latex` and `stealth` tips at
+either end map to h44 and h42.
 Colored node frames and fills are rejected because native text has no matching
 frame or fill primitive. Generated TpX width, text,
 dash, and dot defaults are evaluated and retained as source dependencies.
 Dash patterns are accepted only when they map exactly to the native solid,
 dashed, or dotted line styles. Unsupported option keys, unresolved macros,
 library styles, opacity, clipping, gradients, and pattern fills produce a
-source-located import error. Hand-written TikZ arrow-head options such as
-`->`, `<-`, `arrows=...`, or `>=Stealth` are unsupported; TpX-generated arrow
-artwork is accepted only when it is emitted as ordinary supported geometry.
+source-located import error. Other arrow-head options such as `->>`,
+`arrows=...`, `>=Stealth`, or `arrows.meta` tips are unsupported; TpX-generated
+arrow artwork is accepted only when it is emitted as ordinary supported
+geometry.
+
+TikZ save writes the same style subset. Line-pattern and arrowhead edits replace
+the object's own style option or insert one at the start of its option list.
+New objects use named standard colors where possible and otherwise a local
+literal RGB `\definecolor`; new arcs, sectors, and segments use the legacy
+`arc (start:end:radius)` syntax. A native property outside this subset, such
+as hatching, another arrowhead kind, or an arrow size multiplier other than 1,
+rejects the save with a message naming the object and the property.
 
 Images must be existing local PNG, JPEG, or BMP files named by a basename in
 the document's directory. Nested paths, absolute paths, remote references,

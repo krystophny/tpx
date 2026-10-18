@@ -219,6 +219,7 @@ end;
 {$I AutoReloadScenarios.inc}
 {$I TikZImportScenarios.inc}
 {$I TikZSaveScenarios.inc}
+{$I TikZStyleScenarios.inc}
 {$I SvgCodecScenarios.inc}
 {$I AutoSaveScenarios.inc}
 {$I SourceFormatWorkflowScenarios.inc}
@@ -2010,6 +2011,7 @@ begin
     else if ParamStr(1) = 'tpx-staged-sidecars' then TestTpXStagedSidecars
     else if ParamStr(1) = 'tikz-import-native' then TestTikZImportNativeScene
     else if ParamStr(1) = 'tikz-source-save' then TestTikZSourceSave
+    else if ParamStr(1) = 'tikz-style-roundtrip' then TestTikZStyleRoundTrip
     else if ParamStr(1) = 'bitmap-eps' then TestBitmapEps
     else if ParamStr(1) = 'svg-linked-image-copy' then TestSvgLinkedImageCopy
     else if ParamStr(1) = 'svg-codec' then TestSvgCodec
