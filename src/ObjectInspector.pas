@@ -1091,6 +1091,7 @@ begin
   FSession := nil;
   FHasSessionField := False;
   FCancelButton.Visible := False;
+  FSelectionLabel.Caption := FTitle;
   if Assigned(FOnSessionChanged) then
     FOnSessionChanged(Self, OldSession, False);
   OldSession.Free;
@@ -1544,7 +1545,7 @@ begin
   end;
   FSession.SetRawDraftPendingForField(Field, False);
   SetFieldError(Field, '');
-  FSelectionLabel.Caption := FTitle;
+  FSelectionLabel.Caption := 'Editing ' + FWidgets[Field].LabelText.Caption;
 end;
 
 procedure TObjectInspector.CompositionChanged(Sender: TObject;
@@ -1801,7 +1802,8 @@ begin
   else if Obj is TSymbol2D then Field := opfSymbolKind
   else if Obj is TBitmap2D then Field := opfBitmapLink
   else if Obj is TRectangle2D then Field := opfRectangleRX
-  else Field := opfLineStyle;
+  else if FShowMore then Field := opfLineStyle
+  else Exit;
   FocusField(Field);
 end;
 

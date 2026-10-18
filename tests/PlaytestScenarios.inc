@@ -780,6 +780,10 @@ var
   HeightEditor: TEdit;
   Title: TLabel;
   ErrorText: string;
+  RectObj: TRectangle2D;
+  Field: TObjectPropertyField;
+  Key: Word;
+  KeyMessage: TLMKey;
   procedure SelectOnly(Obj: TObject2D);
   begin
     Drawing.SelectionClear;
@@ -850,6 +854,30 @@ begin
   Check(MainForm.InspectorPanelVisible and
     MainForm.Inspector.Parent.Visible and MenuItem.Checked,
     'View > Inspector did not show the inspector again');
+
+  { Typing into a focused field never triggers single-key canvas tools. }
+  RectObj := TRectangle2D.Create(-1);
+  RectObj.Points[0] := Point2D(30, 30);
+  RectObj.Points[1] := Point2D(50, 45);
+  RectObj.Points[2] := Point2D(30, 45);
+  Drawing.AddObject(-1, RectObj);
+  SelectOnly(RectObj);
+  for Field in [opfFillColor, opfLineWidth, opfRectangleRX] do
+  begin
+    MainForm.Inspector.FocusField(Field);
+    Application.ProcessMessages;
+    Check(MainForm.ActiveControl = MainForm.Inspector.EditorFor(Field),
+      'Field ' + IntToStr(Ord(Field)) + ' did not take focus');
+    for Key in [VK_L, VK_T, VK_G, VK_E, VK_O, VK_SPACE, VK_ADD] do
+    begin
+      FillChar(KeyMessage, SizeOf(KeyMessage), 0);
+      KeyMessage.CharCode := Key;
+      Check(not MainForm.IsShortcut(KeyMessage),
+        'Typing key ' + IntToStr(Key) + ' in field ' + IntToStr(Ord(Field)) +
+        ' ran a canvas shortcut');
+    end;
+  end;
+  MainForm.Inspector.CancelActiveEdit;
 
   { Hiding settles a pending edit instead of dropping it. }
   SelectOnly(TextObj);

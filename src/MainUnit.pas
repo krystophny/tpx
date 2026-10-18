@@ -3054,6 +3054,12 @@ begin
     if (FInlineSession <> nil) and
       (Message.CharCode in [VK_ESCAPE, VK_TAB, VK_RETURN]) then
       Exit(False);
+    { Typed characters belong to the editor, never to single-key tools. }
+    if (KeyDataToShiftState(Message.KeyData) * [ssCtrl, ssAlt, ssMeta] = []) and
+      (Message.CharCode in [VK_SPACE, VK_0..VK_9, VK_A..VK_Z,
+        VK_NUMPAD0..VK_DIVIDE, VK_OEM_1..VK_OEM_3, VK_OEM_4..VK_OEM_8,
+        VK_OEM_102]) then
+      Exit(False);
     Shortcut := Menus.ShortCut(Message.CharCode,
       KeyDataToShiftState(Message.KeyData));
     if (Shortcut <> 0) and
