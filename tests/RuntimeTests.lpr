@@ -735,6 +735,160 @@ begin
   end;
 end;
 
+type
+  TToolHintObserver = class
+    Stage: Integer;
+    ErrorText: string;
+    procedure Tick(Sender: TObject);
+  end;
+
+procedure TToolHintObserver.Tick(Sender: TObject);
+var
+  Dialog: TCustomForm;
+  I: Integer;
+  CopyButton, CancelButton, SettingsButton: TBitBtn;
+begin
+  Dialog := Screen.ActiveCustomForm;
+  if Dialog = nil then Exit;
+  if (Stage = 44) and (Dialog.Caption = 'TpX settings') then
+  begin
+    if OptionsForm.POptList <> SettingsList then
+      ErrorText := 'Open settings did not select TpX tool settings';
+    Dialog.ModalResult := mrCancel;
+    Stage := 45;
+    TTimer(Sender).Enabled := False;
+    Exit;
+  end;
+  if Dialog.Caption <> 'Install Ghostscript' then Exit;
+  if (GetEnvironmentVariable('TPX_HINT_SCREENSHOT') <> '') and
+    (Stage < 40) then
+  begin
+    Inc(Stage);
+    Exit;
+  end;
+  CopyButton := nil;
+  CancelButton := nil;
+  SettingsButton := nil;
+  for I := 0 to Dialog.ComponentCount - 1 do
+    if Dialog.Components[I] is TBitBtn then
+      case TBitBtn(Dialog.Components[I]).ModalResult of
+        mrNo: CopyButton := TBitBtn(Dialog.Components[I]);
+        mrCancel: CancelButton := TBitBtn(Dialog.Components[I]);
+        mrYes: SettingsButton := TBitBtn(Dialog.Components[I]);
+      end;
+  try
+    Check((CopyButton <> nil) and (CopyButton.Caption = 'Copy command'),
+      'Missing-tool dialog has no Copy command button');
+    Check((SettingsButton <> nil) and (SettingsButton.Caption = 'Open settings'),
+      'Missing-tool dialog has no Open settings button');
+    Check((CancelButton <> nil) and (CancelButton.Caption = 'Cancel'),
+      'Missing-tool dialog has no Cancel button');
+    Check(CopyButton.Width >= Dialog.Canvas.TextWidth(CopyButton.Caption),
+      'Missing-tool dialog clips its Copy command label');
+    if Stage = 43 then
+    begin
+      Stage := 44;
+      SettingsButton.Click;
+    end
+    else if (Stage = 0) or (Stage = 40) then
+    begin
+      CopyButton.Click;
+      Stage := 41;
+    end
+    else
+    begin
+      Check((Pos('ghostscript', LowerCase(Clipboard.AsText)) > 0),
+        'Copy command did not put the install hint on the clipboard');
+      TTimer(Sender).Enabled := False;
+      CancelButton.Click;
+      Stage := 42;
+    end;
+  except
+    on E: Exception do
+    begin
+      ErrorText := E.Message;
+      TTimer(Sender).Enabled := False;
+      Dialog.ModalResult := mrCancel;
+    end;
+  end;
+end;
+
+procedure TestRequiredTools;
+var
+  Path, Expected: string;
+  Tool: TRequiredTool;
+  HadHint: Boolean;
+begin
+  Expected := GetEnvironmentVariable('TPX_RESOLVED_TOOL');
+  Check(Expected <> '', 'Required-tool fixture path was not supplied');
+  Path := '/stale/install/tpx-test-tool';
+  Check(ResolveToolPath(Path, [ExtractFileName(Expected)]),
+    'Stale configured executable was not found via PATH');
+  Check(Path = Expected, 'Recovered executable path was not stored');
+  Path := '/stale/install/missing';
+  Check(not ResolveToolPath(Path, ['tpx-required-tool-does-not-exist-321']),
+    'Missing executable was reported as available');
+  ConsoleMessages := True;
+  try
+    for Tool := Low(TRequiredTool) to High(TRequiredTool) do
+    begin
+      HadHint := False;
+      try
+        ReportMissingTool(Tool, 'test export');
+      except
+        on E: ETpX_SysException do
+        begin
+          HadHint := True;
+          Check((Pos('test export', E.Message) > 0) and
+            (Pos('retry this action', E.Message) > 0),
+            'CLI missing-tool hint did not explain the failed feature and recovery');
+{$IFDEF DARWIN}
+          Check(Pos('brew install', E.Message) > 0, 'macOS install command is missing');
+{$ELSE}{$IFDEF MSWINDOWS}
+          Check(Pos('https://', E.Message) > 0, 'Windows download link is missing');
+{$ELSE}
+          Check((Pos('sudo ', E.Message) > 0) or (Pos('package manager', E.Message) > 0),
+            'Linux install hint is missing');
+{$ENDIF}{$ENDIF}
+        end;
+      end;
+      Check(HadHint, 'Missing tool did not propagate CLI failure');
+    end;
+  finally
+    ConsoleMessages := False;
+  end;
+end;
+
+procedure TestToolHintDialog;
+var
+  HintObserver: TToolHintObserver;
+  Timer: TTimer;
+begin
+  HintObserver := TToolHintObserver.Create;
+  Timer := TTimer.Create(nil);
+  try
+    Timer.Interval := 100;
+    Timer.OnTimer := HintObserver.Tick;
+    Timer.Enabled := True;
+    ReportMissingTool(rtGhostscript, 'PNG/BMP export');
+    Check(HintObserver.ErrorText = '', HintObserver.ErrorText);
+    Check(HintObserver.Stage = 42, 'Missing-tool dialog did not complete copy/cancel');
+    OptionsForm := TOptionsForm.Create(nil);
+    try
+      HintObserver.Stage := 43;
+      Timer.Enabled := True;
+      ReportMissingTool(rtGhostscript, 'PNG/BMP export');
+      Check(HintObserver.ErrorText = '', HintObserver.ErrorText);
+      Check(HintObserver.Stage = 45, 'Open settings did not open the settings dialog');
+    finally
+      FreeAndNil(OptionsForm);
+    end;
+  finally
+    Timer.Free;
+    HintObserver.Free;
+  end;
+end;
+
 procedure TestCheckFilePath;
 var
   FilePath: string;
@@ -1872,6 +2026,8 @@ end;
 begin
   try
     RegisterTikZDocumentCodec;
+    if SameText(ChangeFileExt(ExtractFileName(ParamStr(0)), ''),
+      'failed-tool-fixture') then Halt(7);
     // Test-only converter copies independently defined EPS fixtures, without UI.
     if SameText(ChangeFileExt(ExtractFileName(ParamStr(0)), ''), 'sam2p-fixture') then begin
       RunBitmapFixtureConverter;
@@ -1954,6 +2110,8 @@ begin
     else if ParamStr(1) = 'preview-state' then TestPreviewState
     else if ParamStr(1) = 'external-tools' then TestExternalTools
     else if ParamStr(1) = 'check-file-path' then TestCheckFilePath
+    else if ParamStr(1) = 'required-tools' then TestRequiredTools
+    else if ParamStr(1) = 'tool-hint-dialog' then TestToolHintDialog
     else if ParamStr(1) = 'clipboard-format-width' then TestClipboardFormatWidth
     else if ParamStr(1) = 'clipboard-roundtrip' then TestClipboardRoundTrip
     else if ParamStr(1) = 'copy-as-tikz' then TestCopyAsTikZ

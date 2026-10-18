@@ -7,6 +7,7 @@ import shutil
 import stat
 import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 import zlib
@@ -260,6 +261,52 @@ class ExportTests(unittest.TestCase):
         result = self.run_tpx("-f", "missing.TpX", "-o", "out.TpX",
                               expect_success=False)
         self.assertIn("missing.TpX", result.stderr)
+
+    def tool_settings(self, **values):
+        if sys.platform == "darwin":
+            directory = self.root / "home/Library/Preferences/TpX"
+        else:
+            directory = self.root / "config/TpX"
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "TpX.ini").write_text(
+            "".join(f"{key}={value}\n" for key, value in values.items()))
+
+    @unittest.skipIf(os.name == "nt", "POSIX converter fixture")
+    def test_cli_recovers_stale_ghostscript_path_from_path(self):
+        tools = self.root / "tools"
+        tools.mkdir()
+        tool = tools / "gs"
+        tool.write_text(
+            '#!/bin/sh\nfor arg do\n'
+            '  case "$arg" in -sOutputFile=*) '
+            'printf "converter output\\n" > "${arg#-sOutputFile=}";; esac\n'
+            'done\nexit 0\n')
+        tool.chmod(0o755)
+        self.tool_settings(GhostscriptPath="/stale/ghostscript/gs")
+        self.env["PATH"] = str(tools)
+        self.run_tpx("-f", self.drawing(), "-x", "png", "-o", "drawing")
+        self.assertEqual((self.root / "drawing.png").read_text(), "converter output\n")
+        # A converter can leave an output file and still report a failure.
+        tool.write_text(tool.read_text().replace("exit 0", "exit 7"))
+        result = self.run_tpx("-f", self.drawing(), "-x", "png", "-o", "failed",
+                              expect_success=False)
+        self.assertIn("External command failed", result.stderr)
+
+    @unittest.skipIf(os.name == "nt", "POSIX missing-tool search")
+    def test_cli_missing_ghostscript_explains_png_export(self):
+        common = ["/usr/bin/gs", "/bin/gs", "/usr/local/bin/gs",
+                  "/opt/homebrew/bin/gs", "/opt/local/bin/gs", "/snap/bin/gs"]
+        if any(Path(path).exists() for path in common):
+            self.skipTest("Ghostscript is installed in a common fallback directory")
+        empty = self.root / "empty-path"
+        empty.mkdir()
+        self.env["PATH"] = str(empty)
+        self.tool_settings(GhostscriptPath="/stale/ghostscript/gs")
+        result = self.run_tpx("-f", self.drawing(), "-x", "png", "-o", "drawing",
+                              expect_success=False)
+        self.assertIn("Ghostscript is needed for PNG/BMP export", result.stderr)
+        self.assertIn("install", result.stderr.lower())
+        self.assertFalse((self.root / "drawing.png").exists())
 
     @unittest.skipUnless(shutil.which("gs"), "Ghostscript is not installed")
     def test_cli_png_export(self):
