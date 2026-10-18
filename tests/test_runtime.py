@@ -34,7 +34,7 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "property-dimensions", "inspector-mixed-selection", "inspector-property-families",
              "inspector-visibility",
              "font-choice", "conversion-save",
-             "unsupported-exports", "live-tex-missing-tool", "clipboard-format-width",
+             "unsupported-exports", "arc-flip", "live-tex-missing-tool", "clipboard-format-width",
              "clipboard-roundtrip", "color-box-custom-state", "open-examples", "open-dialog-all-formats",
              "platform-shortcuts", "svg-linked-image-copy", "svg-codec")
 
@@ -786,7 +786,12 @@ class RuntimeTests(unittest.TestCase):
             first.write_text(contents, encoding="utf-8")
             second.write_text(contents, encoding="utf-8")
             marker = root / "second-opened"
+            profile = [root / name for name in ("home", "config", "state", "cache")]
+            for directory in profile:
+                directory.mkdir()
             env = os.environ.copy()
+            # Keep recent files and preferences out of the real user profile.
+            env.update(storage_environment(*profile))
             env.update(TPX_STARTUP_EXPECTED=str(second), TPX_STARTUP_OBJECTS="1",
                        TPX_STARTUP_MARKER=str(marker),
                        TPX_OS_OPEN_FIRST=str(first), TPX_OS_OPEN_SECOND=str(second))

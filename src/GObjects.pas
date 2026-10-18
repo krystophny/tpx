@@ -441,6 +441,7 @@ type
     procedure SaveToStream(const Stream: TStream); override;
     procedure FillPieces; override;
     procedure ReversePoints; override;
+    procedure Transform(const T: TTransf2D); override;
     procedure MoveControlPoint0(const Pos: Integer;
       P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
       override;
@@ -2665,6 +2666,22 @@ begin
   UpdateExtension(Self);
 end;
 
+procedure TCircular2D.Transform(const T: TTransf2D);
+var
+  Arrow: TArrowKind;
+begin
+  inherited Transform(T);
+  { The arc runs counterclockwise from start to end. A reflection turns the
+    mapped sweep clockwise, so swap the ends to keep the mirrored part of the
+    circle, and swap the arrowheads so they stay at the same visual ends. }
+  if T[1, 1] * T[2, 2] - T[1, 2] * T[2, 1] < 0 then
+  begin
+    ReversePoints;
+    Arrow := fBeginArrowKind;
+    fBeginArrowKind := fEndArrowKind;
+    fEndArrowKind := Arrow;
+  end;
+end;
 
 procedure TCircular2D.MoveControlPoint0(const Pos: Integer;
   P: TPoint2D; const Shift: TShiftState; const Final: Boolean);

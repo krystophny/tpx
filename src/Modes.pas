@@ -882,6 +882,7 @@ begin
   try
     OpenDialog.FilterIndex := OpenDialog_FilterIndex;
     OpenDialog.Filter := BuildOpenFileFilter(PstoeditEmfImportAvailable);
+    OpenDialog.Options := OpenDialog.Options + [ofFileMustExist];
     if not OpenDialog.Execute then Exit;
     if AskSaveCurrentDrawing = mrCancel then Exit;
     FileName := TDocumentPath(OpenDialog.FileName);
@@ -926,6 +927,12 @@ begin
   try
     try
       Path := NormalizeDocumentPath(FileName);
+      if Trim(string(FileName)) = '' then
+        raise EReadError.Create('no file name was given');
+      if DirectoryExists(string(Path)) then
+        raise EReadError.Create('this is a folder, not a file');
+      if not DocumentFileExists(Path) then
+        raise EReadError.Create('the file does not exist');
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
       MainForm.BeginDocumentWatchBinding(Path, WatchGeneration,
@@ -1005,7 +1012,11 @@ procedure TTpXMode.DoOpenDrawing(const FileName: TDocumentPath);
 var ErrorText: string;
 begin
   if not OpenDocumentFromPath(FileName, ErrorText) then
-    MessageBoxError('Can not open ' + string(FileName) + ': ' + ErrorText);
+    if Trim(string(FileName)) = '' then
+      MessageBoxError('Can not open the selected file: ' + ErrorText)
+    else
+      MessageBoxError('Can not open "' + string(FileName) + '": ' +
+        ErrorText);
 end;
 
 function TTpXMode.SaveDocumentToPath(const FileName: TDocumentPath;
