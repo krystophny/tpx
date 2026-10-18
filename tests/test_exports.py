@@ -153,6 +153,17 @@ class ExportTests(unittest.TestCase):
                 self.assertEqual(reloaded.find("text").get("t"), text)
                 self.assertEqual(reloaded.find("rect").get("h"), "10")
 
+    def test_comments_inside_groups_are_skipped(self):
+        source = self.root / "comments.TpX"
+        source.write_text(
+            '%<TpX v="5" PicScale="1">\n'
+            '%<group><!-- leading note --><line x1="0" y1="0" x2="10" y2="10"/>'
+            '<!-- between --><line x1="0" y1="10" x2="10" y2="0"/></group>\n'
+            '%</TpX>\n')
+        self.run_tpx("-f", source, "-o", "saved.TpX")
+        saved = self.read_tpx(self.root / "saved.TpX")
+        self.assertEqual(len(saved.findall("./group/line")), 2)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
