@@ -1611,6 +1611,32 @@ begin
 end;
 {$ENDIF}
 
+procedure TestOpenDialogAllFormats;
+const
+  Prefix = 'All supported formats|';
+var
+  Filter, AllPattern: string;
+begin
+  Check(OpenDialog_FilterIndex = 1,
+    'File Open must preselect all supported formats');
+  Filter := BuildOpenFileFilter(False);
+  Check(Copy(Filter, 1, Length(Prefix)) = Prefix,
+    'Open filter must start with all supported formats: ' + Filter);
+  AllPattern := Copy(Filter, Length(Prefix) + 1, MaxInt);
+  AllPattern := ';' + Copy(AllPattern, 1, Pos('|', AllPattern) - 1) + ';';
+{$IF DEFINED(UNIX) AND NOT DEFINED(DARWIN)}
+  Check((Pos(';*.[tT][pP][xX];', AllPattern) > 0) and
+    (Pos(';*.[tT][iI][kK][zZ];', AllPattern) > 0) and
+    (Pos(';*.[tT][eE][xX];', AllPattern) > 0) and
+    (Pos(';*.[sS][vV][gG];', AllPattern) > 0),
+    'All supported formats misses a case-insensitive pattern: ' + AllPattern);
+{$ELSE}
+  Check((Pos(';*.tpx;', AllPattern) > 0) and (Pos(';*.tikz;', AllPattern) > 0)
+    and (Pos(';*.tex;', AllPattern) > 0) and (Pos(';*.svg;', AllPattern) > 0),
+    'All supported formats misses a registered format: ' + AllPattern);
+{$IFEND}
+end;
+
 procedure TestOpenExamples;
 const
   ExampleCaptions: array[0..2] of string =
@@ -1988,6 +2014,7 @@ begin
     else if ParamStr(1) = 'svg-linked-image-copy' then TestSvgLinkedImageCopy
     else if ParamStr(1) = 'svg-codec' then TestSvgCodec
     else if ParamStr(1) = 'open-examples' then TestOpenExamples
+    else if ParamStr(1) = 'open-dialog-all-formats' then TestOpenDialogAllFormats
     else if ParamStr(1) = 'labeled-preview' then TestLabeledPreview
 {$IFDEF DARWIN}
     else if ParamStr(1) = 'mac-settings' then TestMacSettings
