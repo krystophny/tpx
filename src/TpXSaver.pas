@@ -195,9 +195,10 @@ begin
   fXML.AddAttribute('LineWidth', FF(fDrawing2D.LineWidthBase));
   if fDrawing2D.MiterLimit <> 10 then
     fXML.AddAttribute('MiterLimit', FF(fDrawing2D.MiterLimit));
-  if fDrawing2D.TeXCenterFigure <> TeXCenterFigure_Default
-    then fXML.AddAttribute('TeXCenterFigure',
-      IntToStr(Integer(fDrawing2D.TeXCenterFigure)));
+  { Save the value explicitly; the legacy missing-attribute default is True,
+    independent of the user's default for new drawings. }
+  fXML.AddAttribute('TeXCenterFigure',
+    IntToStr(Integer(fDrawing2D.TeXCenterFigure)));
   if fDrawing2D.TeXFigure <> fig_figure then
     fXML.AddAttribute('TeXFigure',
       ChoiceToString(TeXFigure_Choice, Ord(fDrawing2D.TeXFigure)));
