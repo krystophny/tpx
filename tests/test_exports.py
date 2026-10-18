@@ -2,9 +2,11 @@
 """Exercise the actual TpX executable against independently defined drawings."""
 import os
 from pathlib import Path
+import struct
 import subprocess
 import tempfile
 import unittest
+import zlib
 import xml.etree.ElementTree as ET
 
 BINARY = Path(os.environ["TPX_BINARY"]).resolve()
@@ -77,6 +79,33 @@ class ExportTests(unittest.TestCase):
         self.run_tpx("-f", source, "-o", "numeric.TpX")
         saved = self.read_tpx(self.root / "numeric.TpX")
         self.assertEqual(saved.find("text").get("t"), "\tβ🙂")
+
+    def test_tikz_includes_png_without_eps_converter(self):
+        def chunk(kind, data):
+            return (struct.pack(">I", len(data)) + kind + data +
+                    struct.pack(">I", zlib.crc32(kind + data)))
+        (self.root / "photo.png").write_bytes(
+            b"\x89PNG\r\n\x1a\n" +
+            chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 1, 8, 2, 0, 0, 0)) +
+            chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00\x00\x00\xff")) +
+            chunk(b"IEND", b""))
+        drawing = ET.Element("TpX", v="5", TeXFormat="tikz",
+                             PdfTeXFormat="tikz", TeXFigure="none")
+        ET.SubElement(drawing, "bitmap", x="10", y="20", w="40", h="20",
+                      link="photo.png")
+        source = self.root / "photo-figure.TpX"
+        source.write_text("%" + ET.tostring(drawing, encoding="unicode") + "\n")
+        empty = self.root / "empty-path"
+        empty.mkdir()
+        self.env["PATH"] = str(empty)
+        self.run_tpx("-f", source, "-o", "saved.TpX")
+        tail = [line for line in (self.root / "saved.TpX").read_text().splitlines()
+                if not line.startswith("%")]
+        nodes = [line for line in tail if "\\includegraphics" in line]
+        self.assertEqual(len(nodes), 1, "\n".join(tail))
+        self.assertIn("{photo}", nodes[0])
+        self.assertIn("(10.00,20.00)", nodes[0])
+        self.assertFalse((self.root / "photo.eps").exists())
 
     def test_saved_drawings_preserve_geometry_and_text(self):
         for text in ["", "z", "ordinary trailing text", "123.45",

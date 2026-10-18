@@ -392,7 +392,8 @@ begin
   BE := BitmapEntry as TBitmapEntry;
   OutDir := ExtractFilePath(BE.GetFullLink);
   if not BE.RequirePNGJPEG(OutDir) then Exit;
-  if not BE.RequireEPS(OutDir) then Exit;
+  // pdfLaTeX includes the PNG or JPEG; the EPS copy only serves latex+dvips.
+  if Bitmap2EpsAvailable then BE.RequireEPS(OutDir);
   WriteStream('\pgftext[bottom,left,at=');
   WriteStreamPoint(P);
   WriteStream(']');

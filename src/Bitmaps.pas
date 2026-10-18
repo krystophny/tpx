@@ -45,6 +45,7 @@ type
 
 function BitmapToEps(const BitmapFileName: string;
   const OutFileName: string): Boolean;
+function Bitmap2EpsAvailable: Boolean;
 var
 {$IFDEF MSWINDOWS}Bitmap2EpsPath: string = 'sam2p.exe';
 {$ELSE}Bitmap2EpsPath: string = 'sam2p'; {$ENDIF}
@@ -230,6 +231,25 @@ begin
   if Result and (Pos('sam2p', LowerCase(Bitmap2EpsPath)) > 0) and
     (LowerCase(ExtractFileExt(OutFileName)) = '.eps') then
     Result := FixSam2pEps(BitmapPathFromString(OutFileName));
+end;
+
+function Bitmap2EpsAvailable: Boolean;
+var ToolPath: string; I: Integer;
+begin
+  // Probe like CheckFilePath, but without its error dialogs.
+  ToolPath := Trim(Bitmap2EpsPath);
+  if (ToolPath <> '') and not (ToolPath[1] in ['"', '''']) then
+  begin
+    I := Pos(' ', ToolPath);
+    if I > 0 then ToolPath := Copy(ToolPath, 1, I - 1);
+  end;
+  if (ToolPath <> '') and (ToolPath[1] in ['"', '''']) then
+    ToolPath := AnsiDequotedStr(ToolPath, ToolPath[1]);
+  if (ToolPath <> '') and (ExtractFilePath(ToolPath) = '') then
+    ToolPath := FileSearch(ToolPath, '.' + PathSeparator +
+      ExtractFilePath(ParamStr(0)) + PathSeparator +
+      GetEnvironmentVariable('PATH'));
+  Result := (ToolPath <> '') and FileExists(ToolPath);
 end;
 
 function BitmapToEps(const BitmapFileName: string;
@@ -433,7 +453,7 @@ begin
   end;
   NewLink := ExtractFilePath(NewFileName) + fImageLink;
   NewDir := ExtractFilePath(NewLink);
-  if not DirectoryExists(NewDir)
+  if (NewDir <> '') and not DirectoryExists(NewDir)
     then ForceDirectories(NewDir);
   if not ImageFileExists(NewLink) then
     CopyImage(GetFullLink, NewLink);
