@@ -1624,9 +1624,17 @@ begin
     'Open filter must start with all supported formats: ' + Filter);
   AllPattern := Copy(Filter, Length(Prefix) + 1, MaxInt);
   AllPattern := ';' + Copy(AllPattern, 1, Pos('|', AllPattern) - 1) + ';';
+{$IF DEFINED(UNIX) AND NOT DEFINED(DARWIN)}
+  Check((Pos(';*.[tT][pP][xX];', AllPattern) > 0) and
+    (Pos(';*.[tT][iI][kK][zZ];', AllPattern) > 0) and
+    (Pos(';*.[tT][eE][xX];', AllPattern) > 0) and
+    (Pos(';*.[sS][vV][gG];', AllPattern) > 0),
+    'All supported formats misses a case-insensitive pattern: ' + AllPattern);
+{$ELSE}
   Check((Pos(';*.tpx;', AllPattern) > 0) and (Pos(';*.tikz;', AllPattern) > 0)
     and (Pos(';*.tex;', AllPattern) > 0) and (Pos(';*.svg;', AllPattern) > 0),
     'All supported formats misses a registered format: ' + AllPattern);
+{$IFEND}
 end;
 
 procedure TestOpenExamples;
