@@ -1566,8 +1566,9 @@ begin
   OldGhostscriptPath := GhostscriptPath;
   try
     Original.Text := 'preserve me'; Original.SaveToFile(Name);
-    { EMF is unsupported; PNG and BMP need Ghostscript, here missing. }
-    GhostscriptPath := ExtractFilePath(Name) + 'missing-tpx-ghostscript';
+    { EMF is unsupported; PNG/BMP preserve their target when a converter fails. }
+    GhostscriptPath := GetEnvironmentVariable('TPX_FAILED_TOOL');
+    Check(FileExists(GhostscriptPath), 'Failing converter fixture is missing');
     for Format in [export_EMF, export_PNG, export_BMP] do begin
       Failed := False;
       try ExportToFile(MainForm.TheDrawing, Name, Format)
