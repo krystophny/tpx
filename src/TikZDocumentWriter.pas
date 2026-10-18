@@ -1772,16 +1772,23 @@ var
   NewDocument: RawByteString;
 begin
   Result := False;
-  if CodecContext = nil then
+  Context := nil;
+  if CodecContext <> nil then
+  begin
+    if not (CodecContext is TTikZImportContext) then
+      raise EWriteError.Create('TikZ save-back context has an unsupported type');
+    Context := CodecContext as TTikZImportContext;
+    // Bare fragments need a picture envelope when saved as .tex.
+    if Context.Document.Region.IsFragment and
+      SameText(ExtractFileExt(string(FileName)), '.tex') then Context := nil;
+  end;
+  if Context = nil then
   begin
     NewDocument := SerializeNewDocument(Drawing, FileName);
     if Length(NewDocument) > 0 then
       Destination.WriteBuffer(NewDocument[1], Length(NewDocument));
     Exit(True);
   end;
-  if not (CodecContext is TTikZImportContext) then
-    raise EWriteError.Create('TikZ save-back context has an unsupported type');
-  Context := CodecContext as TTikZImportContext;
   Source := Context.CopySource;
   if not BuildSourceEdits(Drawing, Context, Source, Updated) then Exit;
   if Length(Updated) > 0 then Destination.WriteBuffer(Updated[0], Length(Updated));

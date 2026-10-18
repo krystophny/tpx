@@ -2815,15 +2815,16 @@ begin
   end;
 end;
 
-function LoadCommandLineDrawing(const FileName: string): TDrawing2D;
+function LoadCommandLineDrawing(const FileName: string;
+  out FormatId: string; out CodecContext: TObject): TDrawing2D;
 var
   Path: TDocumentPath;
   Snapshot: TDocumentSnapshot;
   Format: TDocumentFormat;
   CanSaveBack: Boolean;
-  CodecContext: TObject;
 begin
   { Use the codec registry, exactly like File > Open in the GUI. }
+  CodecContext := nil;
   Path := NormalizeDocumentPath(TDocumentPath(FileName));
   Snapshot := ReadDocumentSnapshot(Path);
   if not DetectDocumentFormat(Path, Snapshot.SourceBytes, Format) then
@@ -2832,17 +2833,13 @@ begin
   if not IsDocumentCodecRegistered(Format.Id) then
     raise EReadError.CreateFmt('No loader is registered for %s',
       [Format.DisplayName]);
-  CodecContext := nil;
-  try
-    Result := LoadDocumentCandidate(Format.Id, Path, Snapshot.SourceBytes,
-      CanSaveBack, CodecContext, nil);
-  finally
-    CodecContext.Free;
-  end;
+  FormatId := Format.Id;
+  Result := LoadDocumentCandidate(Format.Id, Path, Snapshot.SourceBytes,
+    CanSaveBack, CodecContext, nil);
 end;
 
 procedure SaveCommandLineDrawing(const Drawing: TDrawing2D;
-  const FileName, FormatId: string);
+  const FileName, FormatId: string; CodecContext: TObject);
 var
   Path, BackupFileName: TDocumentPath;
   NewRevision: TDiskRevision;
@@ -2851,7 +2848,7 @@ begin
   { Use the GUI save transaction: staged, verified and atomically replaced. }
   Path := NormalizeDocumentPath(TDocumentPath(FileName));
   Transaction := TDocumentSaveTransaction.Create(FormatId, Drawing, Path,
-    ReadDocumentRevision(Path), nil, True);
+    ReadDocumentRevision(Path), CodecContext, True);
   try
     Transaction.Publish(NewRevision, BackupFileName);
   finally
@@ -2862,8 +2859,9 @@ end;
 function CheckCommandLine: Boolean;
 var
   FileName, IncludePath: string;
-  OutputFile, OutputFormats, ExportFormats, FormatId: string;
+  OutputFile, OutputFormats, ExportFormats, FormatId, SourceFormatId: string;
   ADrawing: TDrawing2D;
+  CodecContext, SaveCodecContext: TObject;
   Ext: string;
   I, J: Integer;
   function GetExportDefaultExt(const J: Integer): string;
@@ -2888,6 +2886,7 @@ begin
   ConsoleErrorReported := False;
   ExitCode := 1;
   ADrawing := nil;
+  CodecContext := nil;
   try
     try
       if ExtractFileExt(FileName) = '' then
@@ -2895,7 +2894,7 @@ begin
       if not FileExists(FileName) then
         raise EReadError.CreateFmt('Input file not found: %s', [FileName]);
       LoadSettings;
-      ADrawing := LoadCommandLineDrawing(FileName);
+      ADrawing := LoadCommandLineDrawing(FileName, SourceFormatId, CodecContext);
       ADrawing.IncludePath := IncludePath;
       if ExportFormats <> '' then
       begin
@@ -2927,7 +2926,12 @@ begin
           raise EWriteError.CreateFmt(
             'Cannot save %s: use .tpx, .tikz, .tex or .svg with -o, ' +
             'or -x for export formats', [OutputFile]);
-        SaveCommandLineDrawing(ADrawing, OutputFile, FormatId);
+        // Same-format Save As retains source coordinates and source bindings,
+        // just as the GUI does; conversion to another format starts afresh.
+        SaveCodecContext := nil;
+        if SameText(SourceFormatId, FormatId) then
+          SaveCodecContext := CodecContext;
+        SaveCommandLineDrawing(ADrawing, OutputFile, FormatId, SaveCodecContext);
       end;
       if not ConsoleErrorReported then ExitCode := 0;
     except
@@ -2935,6 +2939,7 @@ begin
         WriteConsoleMessage('TpX: ' + E.Message);
     end;
   finally
+    CodecContext.Free;
     ADrawing.Free;
   end;
 end;

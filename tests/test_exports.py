@@ -266,6 +266,63 @@ class ExportTests(unittest.TestCase):
         rectangle = self.read_tpx(self.root / "from-svg.TpX").find("rect")
         self.assertEqual(float(rectangle.get("w")), 20)
 
+    def test_cli_svg_save_preserves_source_viewport_and_coordinates(self):
+        source = self.root / "source.svg"
+        source.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="40mm" '
+            'viewBox="10 -50 80 40"><polygon points="20,-45 32,-45 32,-37 20,-37" '
+            'stroke="#000000" fill="none"/></svg>')
+        for name in ("first.svg", "second.svg"):
+            self.run_tpx("-f", source, "-o", name)
+            source = self.root / name
+            saved = ET.parse(source).getroot()
+            self.assertEqual(list(map(float, saved.get("viewBox").split())),
+                             [10, -50, 80, 40])
+            self.assertEqual((saved.get("width"), saved.get("height")),
+                             ("80mm", "40mm"))
+            polygon = saved.find(SVG + "polygon")
+            self.assertIsNotNone(polygon)
+            points = [tuple(map(float, point.split(",")))
+                      for point in polygon.get("points").split()]
+            self.assertEqual(points, [(20, -45), (32, -45), (32, -37), (20, -37)])
+
+    def test_cli_tikz_save_preserves_unedited_source(self):
+        picture = (
+            "% preserve source coordinates, inherited text color and comments\n"
+            "\\begin{tikzpicture}\n"
+            "\\draw (62mm,26mm) circle (0.899999619mm);\n"
+            "\\node[anchor=base west] at (64mm,27mm) {$x$};\n"
+            "\\end{tikzpicture}\n").encode()
+        wrappers = (
+            (".tikz", b"", b""),
+            (".tex", b"\\documentclass{article}\n\\usepackage{tikz}\n"
+             b"% preserve the surrounding document too\n\\begin{document}\n",
+             b"\\end{document}\n"))
+        for extension, prefix, suffix in wrappers:
+            with self.subTest(extension=extension):
+                source = self.root / ("source" + extension)
+                original = prefix + picture + suffix
+                source.write_bytes(original)
+                for stem in ("first", "second"):
+                    target = self.root / (stem + extension)
+                    self.run_tpx("-f", source, "-o", target)
+                    source = target
+                    self.assertEqual(source.read_bytes(), original)
+
+    def test_cli_saves_bare_tikz_fragment_as_reopenable_tex(self):
+        source = self.root / "bare.tikz"
+        fragment = b"\\draw (0mm,0mm) -- (10mm,5mm);\n"
+        source.write_bytes(fragment)
+        self.run_tpx("-f", source, "-o", "bare-copy.tikz")
+        self.assertEqual((self.root / "bare-copy.tikz").read_bytes(), fragment)
+        self.run_tpx("-f", source, "-o", "drawing.tex")
+        self.run_tpx("-f", "drawing.tex", "-o", "from-tex.TpX")
+        drawing = self.read_tpx(self.root / "from-tex.TpX")
+        line = drawing.find("polyline")
+        self.assertIsNotNone(line)
+        points = [tuple(map(float, point.split(","))) for point in line.text.split()]
+        self.assertEqual(points, [(0, 0), (10, 5)])
+
     def test_cli_rejects_unsupported_output_clearly(self):
         source = self.drawing()
         result = self.run_tpx("-f", source, "-o", "drawing.pdf", expect_success=False)
