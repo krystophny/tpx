@@ -59,7 +59,7 @@ type
 
 var
   Observer: TObserver;
-  PromptCount, ReplyButton, SaveErrorPromptCount: Integer;
+  PromptCount, ReplyButton, SaveErrorPromptCount, ExportErrorPromptCount: Integer;
   ShortcutModifierSimulation: Boolean = False;
   ShortcutModifiers: TShiftState = [];
   SourceWorkflowFaultPhase: TDocumentIOPhase;
@@ -184,6 +184,13 @@ begin
   if (ParamStr(1) = 'property-dimensions') and
     ((Pos('Line width must', Message) > 0) or (Pos('Text height must', Message) > 0)) then
     Exit(idButtonOK);
+  if (ParamStr(1) = 'tool-hint-save') and
+    (Pos('Can not export', Message) > 0) then begin
+    Inc(ExportErrorPromptCount);
+    Check(Pos('Ghostscript did not create the image', Message) > 0,
+      'Converter failure lost its useful error message: ' + Message);
+    Exit(idButtonOK);
+  end;
   if (ParamStr(1) = 'exit-save-failure') and
     (Pos('Can not save', Message) > 0) then begin
     Inc(SaveErrorPromptCount);
@@ -864,6 +871,7 @@ procedure TestToolHintDialog;
 var
   HintObserver: TToolHintObserver;
   Timer: TTimer;
+  Cancelled: Boolean;
 begin
   HintObserver := TToolHintObserver.Create;
   Timer := TTimer.Create(nil);
@@ -871,14 +879,26 @@ begin
     Timer.Interval := 100;
     Timer.OnTimer := HintObserver.Tick;
     Timer.Enabled := True;
-    ReportMissingTool(rtGhostscript, 'PNG/BMP export');
+    Cancelled := False;
+    try
+      ReportMissingTool(rtGhostscript, 'PNG/BMP export');
+    except
+      on E: EToolRequestCancelled do Cancelled := True;
+    end;
+    Check(Cancelled, 'Handled GUI hint did not cancel its caller');
     Check(HintObserver.ErrorText = '', HintObserver.ErrorText);
     Check(HintObserver.Stage = 42, 'Missing-tool dialog did not complete copy/cancel');
     OptionsForm := TOptionsForm.Create(nil);
     try
       HintObserver.Stage := 43;
       Timer.Enabled := True;
-      ReportMissingTool(rtGhostscript, 'PNG/BMP export');
+      Cancelled := False;
+      try
+        ReportMissingTool(rtGhostscript, 'PNG/BMP export');
+      except
+        on E: EToolRequestCancelled do Cancelled := True;
+      end;
+      Check(Cancelled, 'Open settings did not cancel the pending tool request');
       Check(HintObserver.ErrorText = '', HintObserver.ErrorText);
       Check(HintObserver.Stage = 45, 'Open settings did not open the settings dialog');
     finally
@@ -887,6 +907,166 @@ begin
   finally
     Timer.Free;
     HintObserver.Free;
+  end;
+end;
+
+type
+  TExportSaveDialog = class(TSaveDialog)
+  public
+    Target: string;
+    function Execute: Boolean; override;
+  end;
+  TExportSaveMode = class(TTpXMode)
+    function SaveAs: Word;
+  end;
+
+function TExportSaveDialog.Execute: Boolean;
+var
+  I: Integer;
+  Format: TExportFormat;
+begin
+  FileName := Target;
+  for I := 1 to DocumentSaveFormatCount + ExportFormatCount do
+    if ExportFormatForFilterIndex(I, Format) and
+      (Format.Kind = Ord(export_PNG)) then
+    begin
+      FilterIndex := I;
+      Exit(True);
+    end;
+  raise Exception.Create('PNG save filter was not found');
+end;
+
+function TExportSaveMode.SaveAs: Word;
+begin
+  Result := DlgSaveDrawing(Drawing_NewFileName);
+end;
+
+procedure TestToolHintSave;
+var
+  OriginalDialog: TSaveDialog;
+  SaveDialog: TExportSaveDialog;
+  HintObserver: TToolHintObserver;
+  Timer: TTimer;
+  Name, OriginalPath, ResolvedPath, SourcePath, ErrorText: string;
+  Contents: TStringList;
+  I: Integer;
+  Cancelled: Boolean;
+begin
+  Name := GetTempFileName(SysUtils.GetTempDir(False), 'tpx-hint-save-') + '.png';
+  OriginalPath := GhostscriptPath;
+  SourcePath := MainForm.TheDrawing.FileName;
+  OriginalDialog := MainForm.DrawingSaveDlg;
+  SaveDialog := TExportSaveDialog.Create(nil);
+  HintObserver := TToolHintObserver.Create;
+  Timer := TTimer.Create(nil);
+  Contents := TStringList.Create;
+  try
+    SaveDialog.Target := Name;
+    MainForm.DrawingSaveDlg := SaveDialog;
+    MainForm.TheDrawing.AddObject(-1,
+      TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(20, 10)));
+    Timer.Interval := 100;
+    Timer.OnTimer := HintObserver.Tick;
+    ExportErrorPromptCount := 0;
+    ResolvedPath := '';
+{$IFDEF WINDOWS}
+    if not ResolveToolPath(ResolvedPath, ['gswin64c.exe', 'gswin32c.exe', 'mgs.exe']) then
+{$ELSE}
+    if not ResolveToolPath(ResolvedPath, ['gs']) then
+{$ENDIF}
+    begin
+      OptionsForm := TOptionsForm.Create(nil);
+      try
+        for I := 0 to 1 do
+        begin
+          GhostscriptPath := '/stale/ghostscript/gs';
+          if I = 0 then HintObserver.Stage := 0
+          else
+          begin
+            HintObserver.Stage := 43;
+            Contents.Text := 'preserve existing export';
+            Contents.SaveToFile(Name);
+          end;
+          Timer.Enabled := True;
+          Check(TExportSaveMode(MainForm.EventManager.Mode).SaveAs = mrCancel,
+            'Missing-tool Save As did not return cancellation');
+          Check(HintObserver.ErrorText = '', HintObserver.ErrorText);
+          if I = 0 then
+          begin
+            Check(HintObserver.Stage = 42, 'Copy/cancel did not finish');
+            Check(not FileExists(Name), 'Cancelled export created output');
+          end
+          else
+          begin
+            Check(HintObserver.Stage = 45, 'Open settings did not finish');
+            Contents.LoadFromFile(Name);
+            Check(Trim(Contents.Text) = 'preserve existing export',
+              'Open settings replaced the existing export');
+          end;
+          Check(ExportErrorPromptCount = 0,
+            'Handled tool hint produced a second export error');
+        end;
+        MainForm.TheDrawing.TeXFormat := tex_none;
+        MainForm.TheDrawing.PdfTeXFormat := pdftex_none;
+        Check(BaseMode.SaveDocumentToPath(Name + '.tpx', 'tpx', True, False,
+          ErrorText), 'Could not prepare native close fixture: ' + ErrorText);
+        Contents.LoadFromFile(Name + '.tpx');
+        SourcePath := MainForm.TheDrawing.FileName;
+        MainForm.TheDrawing.PdfTeXFormat := pdftex_epstopdf;
+        MainForm.TheDrawing.History.SetPropertiesChanged;
+        MainForm.OnClose := Observer.Closing;
+        Observer.CloseRequests := 0;
+        ReplyButton := idButtonYes;
+        PromptCount := 0;
+        HintObserver.Stage := 0;
+        Timer.Enabled := True;
+        Cancelled := False;
+        try
+          MainForm.Close;
+        except
+          on E: EToolRequestCancelled do
+          begin
+            Cancelled := True;
+            Application.HandleException(MainForm);
+          end;
+        end;
+        Check(Cancelled and (HintObserver.Stage = 42),
+          'Native document save did not propagate the handled tool cancellation');
+        Check((PromptCount = 1) and (Observer.CloseRequests = 0) and
+          not Application.Terminated and MainForm.TheDrawing.History.IsChanged and
+          (MainForm.TheDrawing.ObjectsCount = 1) and
+          (MainForm.TheDrawing.FileName = SourcePath),
+          'Cancelling the tool request closed or discarded the dirty document');
+        ErrorText := Contents.Text;
+        Contents.LoadFromFile(Name + '.tpx');
+        Check(Contents.Text = ErrorText,
+          'Cancelled native save replaced its source document');
+      finally FreeAndNil(OptionsForm) end;
+    end
+    else Writeln('SKIP actual Save As cancellation: Ghostscript is installed');
+    Contents.Text := 'preserve existing export';
+    Contents.SaveToFile(Name);
+    GhostscriptPath := GetEnvironmentVariable('TPX_FAILED_TOOL');
+    Check(FileExists(GhostscriptPath), 'Failing converter fixture is missing');
+    Check(TExportSaveMode(MainForm.EventManager.Mode).SaveAs = mrCancel,
+      'Failed converter did not return cancellation');
+    Check(ExportErrorPromptCount = 1,
+      'Real converter failure did not report its export error');
+    Contents.LoadFromFile(Name);
+    Check(Trim(Contents.Text) = 'preserve existing export',
+      'Cancelled or failed export replaced the destination');
+    Check(MainForm.TheDrawing.FileName = SourcePath,
+      'Cancelled or failed export changed the drawing source');
+  finally
+    MainForm.DrawingSaveDlg := OriginalDialog;
+    GhostscriptPath := OriginalPath;
+    Contents.Free;
+    Timer.Free;
+    HintObserver.Free;
+    SaveDialog.Free;
+    DeleteFile(Name);
+    DeleteFile(Name + '.tpx');
+    DeleteFile(ChangeFileExt(Name, ''));
   end;
 end;
 
@@ -2113,6 +2293,7 @@ begin
     else if ParamStr(1) = 'check-file-path' then TestCheckFilePath
     else if ParamStr(1) = 'required-tools' then TestRequiredTools
     else if ParamStr(1) = 'tool-hint-dialog' then TestToolHintDialog
+    else if ParamStr(1) = 'tool-hint-save' then TestToolHintSave
     else if ParamStr(1) = 'clipboard-format-width' then TestClipboardFormatWidth
     else if ParamStr(1) = 'clipboard-roundtrip' then TestClipboardRoundTrip
     else if ParamStr(1) = 'copy-as-tikz' then TestCopyAsTikZ

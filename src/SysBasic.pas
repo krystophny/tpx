@@ -77,6 +77,8 @@ type
    it from this class.
 }
   ETpX_SysException = class(Exception);
+  { A GUI tool hint already explained why the requested action cannot continue. }
+  EToolRequestCancelled = class(EAbort);
 
 var
   StartTime: Cardinal;
@@ -445,6 +447,7 @@ begin
     Dialog.Free;
   end;
   if (Choice = mrYes) and Assigned(MainForm) then MainForm.TpXSettings.Execute;
+  raise EToolRequestCancelled.Create('');
 {$ENDIF}
 end;
 

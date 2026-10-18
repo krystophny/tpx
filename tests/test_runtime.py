@@ -18,7 +18,7 @@ BINARY = Path(os.environ["RUNTIME_BINARY"]).resolve()
 SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-empty-cancel", "exit-yes",
              "exit-destroy-no", "exit-destroy-yes", "exit-close",
              "exit-fallback", "exit-save-failure", "text-selection",
-             "default-view", "toolbar", "draw-click", "draw-drag", "draw-rectangle", "draw-jitter", "draw-cancel", "shape-snap", "external-tools", "preview-state", "tool-hint-dialog",
+             "default-view", "toolbar", "draw-click", "draw-drag", "draw-rectangle", "draw-jitter", "draw-cancel", "shape-snap", "external-tools", "preview-state", "tool-hint-dialog", "tool-hint-save",
              "viewport-events", "viewport-crosshair", "viewport-preview", "viewport-damage",
              "text-metrics", "path-first-click", "async-tools",
              "document-io",
@@ -267,7 +267,7 @@ class RuntimeTests(unittest.TestCase):
                         "XDG_STATE_HOME": str(state), "XDG_CACHE_HOME": str(cache),
                         "APPDATA": str(config), "LOCALAPPDATA": str(state)})
             env.update(extra_env or {})
-            if scenario == "unsupported-exports":
+            if scenario in ("unsupported-exports", "tool-hint-save"):
                 fixture = runtime_dir / ("failed-tool-fixture.exe" if os.name == "nt"
                                          else "failed-tool-fixture")
                 shutil.copy2(BINARY, fixture)
