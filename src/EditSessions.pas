@@ -185,7 +185,9 @@ begin
   Result := [];
   for Field := Low(TObjectPropertyField) to High(TObjectPropertyField) do
     if (Bits and (LongWord(1) shl Ord(Field))) <> 0 then Include(Result, Field);
-  if (Bits shr (Ord(High(TObjectPropertyField)) + 1)) <> 0 then
+  { A shift by the full 32 bits is undefined, so test only when bits remain. }
+  if (Ord(High(TObjectPropertyField)) < 31) and
+    ((Bits shr (Ord(High(TObjectPropertyField)) + 1)) <> 0) then
     raise EReadError.Create('Recovery edit state contains unknown fields');
 end;
 
