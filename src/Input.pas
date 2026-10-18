@@ -932,6 +932,7 @@ begin
     Elem.ChildNodes.Count - 1 do
   begin
     Child := Elem.ChildNodes[I];
+    Tmp := nil;
     if Child is TXMLDElement then
       Tmp := ReadEntity(Child as TXMLDElement);
     if Assigned(Tmp) then
