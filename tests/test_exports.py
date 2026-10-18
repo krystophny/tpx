@@ -91,6 +91,21 @@ class ExportTests(unittest.TestCase):
         saved = self.read_tpx(self.root / "numeric.TpX")
         self.assertEqual(saved.find("text").get("t"), "\tβ🙂")
 
+    def test_native_save_preserves_tex_centering(self):
+        for centered in ("0", "1"):
+            with self.subTest(centered=centered):
+                source = self.drawing()
+                drawing = self.read_tpx(source)
+                drawing.set("TeXCenterFigure", centered)
+                xml = ET.tostring(drawing, encoding="unicode")
+                source.write_text("\n".join("%" + line for line in xml.splitlines()) + "\n")
+                first = self.root / ("first-" + centered + ".TpX")
+                second = self.root / ("second-" + centered + ".TpX")
+                self.run_tpx("-f", source, "-o", first)
+                self.assertEqual(self.read_tpx(first).get("TeXCenterFigure"), centered)
+                self.run_tpx("-f", first, "-o", second)
+                self.assertEqual(second.read_bytes(), first.read_bytes())
+
     def test_tikz_includes_png_without_eps_converter(self):
         def chunk(kind, data):
             return (struct.pack(">I", len(data)) + kind + data +
