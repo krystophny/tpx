@@ -367,11 +367,32 @@ begin
     (Copy(Link, 1, 1) <> PathDelim) and (Copy(Link, 1, 1) <> '/');
 end;
 
+{$IF DEFINED(UNIX) AND NOT DEFINED(WASI)}
+function c_realpath(Path, Resolved: PChar): PChar; cdecl;
+  external 'c' name 'realpath';
+{$ENDIF}
+
+function CanonicalFileName(const FileName: string): string;
+{$IF DEFINED(UNIX) AND NOT DEFINED(WASI)}
+var
+  Buffer: array[0..4095] of Char;
+{$ENDIF}
+begin
+  Result := ExpandFileName(FileName);
+{$IF DEFINED(UNIX) AND NOT DEFINED(WASI)}
+  // Resolve symlinked folders (macOS /var -> /private/var) so both sides
+  // of a relative link share their real ancestors.
+  if c_realpath(PChar(ExtractFileDir(Result)), @Buffer[0]) <> nil then
+    Result := IncludeTrailingPathDelimiter(StrPas(@Buffer[0])) +
+      ExtractFileName(Result);
+{$ENDIF}
+end;
+
 function RelativeImageLink(const FullLink, ParentFileName: string): string;
 begin
   if ParentFileName = '' then Exit(FullLink);
-  Result := ExtractRelativePath(ExpandFileName(ParentFileName),
-    ExpandFileName(FullLink));
+  Result := ExtractRelativePath(CanonicalFileName(ParentFileName),
+    CanonicalFileName(FullLink));
 {$IFDEF MSWINDOWS}
   // Stored links use '/' so drawings and TeX output stay portable.
   if IsRelativeImageLink(Result) then
@@ -493,9 +514,8 @@ procedure TBitmapEntry.RebaseParentFileName(const NewFileName: string);
 begin
   // Keep pointing at the same file, relative to the new drawing location.
   if NewFileName = '' then fImageLink := ExpandFileName(GetFullLink)
-  else if not IsRelativeImageLink(fImageLink) or not SameFileName(
-    ExpandFileName(ExtractFilePath(NewFileName) + fImageLink),
-    ExpandFileName(GetFullLink)) then
+  else if not IsRelativeImageLink(fImageLink) or not SameExistingFile(
+    ExtractFilePath(NewFileName) + fImageLink, GetFullLink) then
     fImageLink := RelativeImageLink(GetFullLink, NewFileName);
   // Otherwise the stored link still resolves and keeps its spelling.
   fParentFileName := NewFileName;
