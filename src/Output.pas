@@ -1084,7 +1084,7 @@ begin
     if not OutputFileExists(TempImage) then
       raise EWriteError.Create('Ghostscript did not create the image ' +
         '(check the GhostscriptPath setting)');
-    if not CopyFile(TempImage, FileName) then
+    if not SysBasic.CopyFile(TempImage, FileName) then
       raise EWriteError.CreateFmt('Could not write %s', [FileName]);
   finally
     OutputTryDeleteFile(TempEPS);
