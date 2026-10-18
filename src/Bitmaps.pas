@@ -59,7 +59,7 @@ implementation
 uses
   SysBasic,
   DocumentFormats,
-{$IFDEF WASI}
+{$IFDEF FPC}
   IntfGraphics, FPImage,
 {$ENDIF}
 {$IFNDEF FPC}
@@ -566,7 +566,7 @@ begin
   Result := CopyImage(GetFullLink, OutFileName);
 end;
 
-{$IFDEF WASI}
+{$IFDEF FPC}
 function StoreBitmapToEPS(BMP: Graphics.TBitmap;
   const FileName: string): Boolean;
 const
@@ -640,11 +640,15 @@ begin
   OutFileName := OutDir + GetOnlyName + '.eps';
   if (Pos(GetTempDir, OutDir) <> 1)
     and ImageFileExists(OutFileName) then Exit;
-{$IFDEF WASI}
-  // The browser already decoded the pixels; no external converter is needed.
-  Result := StoreBitmapToEPS(fBitmap, OutFileName);
-  if Result then fImageFiles.Add(OutFileName);
-  Exit;
+{$IFDEF FPC}
+  // The pixels are already decoded. Without a configured converter, write
+  // them as a plain EPS image instead of failing; the browser has none.
+  if {$IFNDEF WASI}not Bitmap2EpsAvailable{$ELSE}True{$ENDIF} then
+  begin
+    Result := StoreBitmapToEPS(fBitmap, OutFileName);
+    if Result then fImageFiles.Add(OutFileName);
+    Exit;
+  end;
 {$ENDIF}
   if (fKind = bek_JPEG) or
     ((fKind = bek_BMP)

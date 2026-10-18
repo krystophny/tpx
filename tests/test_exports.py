@@ -2,6 +2,7 @@
 """Exercise the actual TpX executable against independently defined drawings."""
 import os
 from pathlib import Path
+import re
 import struct
 import subprocess
 import tempfile
@@ -134,6 +135,58 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(links, ["quarter_torus.png",
                                  "../shared.png"])
         self.assertEqual([path for path in self.root.rglob("bitmaps")], [])
+
+    def bitmap_only_drawing(self):
+        """Write a 30x20 RGB PNG and a drawing showing only that image."""
+        def chunk(kind, data):
+            return (struct.pack(">I", len(data)) + kind + data +
+                    struct.pack(">I", zlib.crc32(kind + data)))
+        width, height = 30, 20
+        pixels = bytes(value for y in range(height) for x in range(width)
+                       for value in (8 * x, 12 * y, 255 if (x + y) % 2 else 40))
+        rows = b"".join(b"\x00" + pixels[3 * width * y:3 * width * (y + 1)]
+                        for y in range(height))
+        (self.root / "photo.png").write_bytes(
+            b"\x89PNG\r\n\x1a\n" +
+            chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)) +
+            chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+        drawing = ET.Element("TpX", v="5", TeXFormat="none",
+                             PdfTeXFormat="none", TeXFigure="none")
+        ET.SubElement(drawing, "bitmap", x="10", y="20", w="60", h="40",
+                      link="photo.png")
+        source = self.root / "bitmap.TpX"
+        source.write_text("%" + ET.tostring(drawing, encoding="unicode") + "\n")
+        # No external converter may be found.
+        empty = self.root / "empty-path"
+        empty.mkdir()
+        self.env["PATH"] = str(empty)
+        return source, pixels
+
+    def test_pdf_embeds_bitmap_pixels(self):
+        source, pixels = self.bitmap_only_drawing()
+        self.run_tpx("-f", source, "-x", "pdf", "-o", "bitmap")
+        pdf = (self.root / "bitmap.pdf").read_bytes()
+        match = re.search(rb"<<((?:(?!>>).)*?/Subtype\s*/Image(?:(?!>>).)*)>>"
+                          rb"\s*stream\r?\n", pdf, re.S)
+        self.assertIsNotNone(match, "PDF has no image XObject")
+        attributes = match.group(1)
+        self.assertRegex(attributes, rb"/Width\s+30\b")
+        self.assertRegex(attributes, rb"/Height\s+20\b")
+        self.assertRegex(attributes, rb"/ColorSpace\s*/DeviceRGB")
+        length = int(re.search(rb"/Length\s+(\d+)", attributes).group(1))
+        data = pdf[match.end():match.end() + length]
+        if b"FlateDecode" in attributes:
+            data = zlib.decompress(data)
+        self.assertEqual(data, pixels)
+
+    def test_eps_embeds_bitmap_without_converter(self):
+        source, pixels = self.bitmap_only_drawing()
+        self.run_tpx("-f", source, "-x", "eps", "-o", "bitmap")
+        lines = (self.root / "bitmap.eps").read_text().splitlines()
+        start = next(index for index, line in enumerate(lines)
+                     if "colorimage" in line) + 1
+        data = bytes.fromhex("".join(lines[start:start + 20]))
+        self.assertEqual(data, pixels)
 
     def test_saved_drawings_preserve_geometry_and_text(self):
         for text in ["", "z", "ordinary trailing text", "123.45",

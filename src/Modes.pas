@@ -174,6 +174,7 @@ type
     procedure OnDblClick(Sender: TObject;
       X, Y: Integer); override;
     procedure PointSelected(P: TPoint2D);
+    procedure PlaceBitmapAtNaturalSize;
     procedure OnMouseDown(Sender: TObject;
       Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
       override;
@@ -2552,6 +2553,26 @@ begin
   ViewPort.DrawObject2DWithRubber(Obj, IdentityTransf2D);
 end;
 
+procedure TInsertSizedGrObjMode.PlaceBitmapAtNaturalSize;
+var
+  Prim: TBitmap2D;
+  PixelsPerMM: TRealType;
+begin
+  Prim := Obj as TBitmap2D;
+  // Natural size uses the drawing's raster resolution, so exporting the
+  // drawing as PNG reproduces the image pixel for pixel.
+  PixelsPerMM := Drawing.BitmapRes / 1000;
+  if PixelsPerMM <= 0 then PixelsPerMM := BitmapRes_Default / 1000;
+  ViewPort.DrawObject2DWithRubber(Obj, IdentityTransf2D);
+  if Assigned(Prim.Bitmap) and (Prim.Bitmap.Width > 0)
+    and (Prim.Bitmap.Height > 0) then
+    // The click marks the top-left corner.
+    Prim.MoveControlPoint0(2, ShiftPoint(Prim.Points[0],
+      V2D(Prim.Bitmap.Width / PixelsPerMM,
+      -Prim.Bitmap.Height / PixelsPerMM)), [], True);
+  FinishDraw;
+end;
+
 procedure TInsertSizedGrObjMode.OnMouseDown(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
@@ -2598,8 +2619,13 @@ begin
     CurrPoint := ViewPort.GetSnappedPoint(
       ViewPort.ScreenToViewport(Point2D(X, Y)));
     if PointDistance2D(CurrPoint, Prim.Points[Prim.FirstDrawPoint - 1])
-      <= 3 * ViewPort.PixelSize
-      then Exit;
+      <= 3 * ViewPort.PixelSize then
+    begin
+      // A plain click places a bitmap at its natural size, like the other
+      // click-to-place tools, so the shown image is never left uncommitted.
+      if Prim is TBitmap2D then PlaceBitmapAtNaturalSize;
+      Exit;
+    end;
     PointSelected(CurrPoint);
   end;
 end;
