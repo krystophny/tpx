@@ -299,6 +299,20 @@ class ExportTests(unittest.TestCase):
             source = self.root / name
             self.assertEqual(source.read_bytes(), original)
 
+    def test_cli_saves_bare_tikz_fragment_as_reopenable_tex(self):
+        source = self.root / "bare.tikz"
+        fragment = b"\\draw (0mm,0mm) -- (10mm,5mm);\n"
+        source.write_bytes(fragment)
+        self.run_tpx("-f", source, "-o", "bare-copy.tikz")
+        self.assertEqual((self.root / "bare-copy.tikz").read_bytes(), fragment)
+        self.run_tpx("-f", source, "-o", "drawing.tex")
+        self.run_tpx("-f", "drawing.tex", "-o", "from-tex.TpX")
+        drawing = self.read_tpx(self.root / "from-tex.TpX")
+        line = drawing.find("polyline")
+        self.assertIsNotNone(line)
+        points = [tuple(map(float, point.split(","))) for point in line.text.split()]
+        self.assertEqual(points, [(0, 0), (10, 5)])
+
     def test_cli_rejects_unsupported_output_clearly(self):
         source = self.drawing()
         result = self.run_tpx("-f", source, "-o", "drawing.pdf", expect_success=False)
