@@ -1083,6 +1083,7 @@ procedure StoreToFile_GhostscriptRaster(const Drawing: TDrawing2D;
 var
   TempEPS, TempImage: TOutputPath;
 begin
+  if not CheckRequiredTool(GhostscriptPath, rtGhostscript, 'PNG/BMP export') then Exit;
   TempEPS := OutputPathFromString(GetTempDir) + '(raster)TpX.eps';
   TempImage := OutputPathFromString(GetTempDir) + '(raster)TpX' +
     ExtractFileExt(FileName);
@@ -2020,6 +2021,7 @@ function Run_EpsToPdf(
   const EpsFileName, PdfFileName: TOutputPath): Boolean;
 begin
   Result := False;
+  if not CheckRequiredTool(GhostscriptPath, rtGhostscript, 'EPS to PDF conversion') then Exit;
   try
     if not OutputTryDeleteFile(PdfFileName) then
       MessageBoxError('Can not delete PDF file')
@@ -2542,7 +2544,7 @@ var
   TempDvi, EKey: string;
 begin
   Result := False;
-  if not CheckFilePath(DviPsPath, 'DviPs') then Exit;
+  if not CheckRequiredTool(DviPsPath, rtDvips, 'LaTeX EPS/PDF export') then Exit;
   if not Run_LaTeX_Temp(Drawing, ltxview_Dvi, TempDvi, True,
     True) then Exit;
   TempEPS := ChangeFileExt(TempDvi, '.eps');
@@ -2883,6 +2885,7 @@ begin
   if FileName = '' then Exit;
   Result := False;
   ConsoleMessages := True;
+  ConsoleErrorReported := False;
   ExitCode := 1;
   ADrawing := nil;
   try
@@ -2926,7 +2929,7 @@ begin
             'or -x for export formats', [OutputFile]);
         SaveCommandLineDrawing(ADrawing, OutputFile, FormatId);
       end;
-      ExitCode := 0;
+      if not ConsoleErrorReported then ExitCode := 0;
     except
       on E: Exception do
         WriteConsoleMessage('TpX: ' + E.Message);
