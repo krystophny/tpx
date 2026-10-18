@@ -1212,6 +1212,7 @@ begin
         { Publication and source acceptance already succeeded. }
       end;
     except
+      on E: EToolRequestCancelled do raise;
       on E: Exception do
       begin
         ErrorText := E.Message;
@@ -1334,6 +1335,7 @@ begin
 {$ENDIF}
       end;
     except
+      on E: EToolRequestCancelled do Exit(mrCancel);
       on E: Exception do
       begin
 {$IFDEF CPUWASM32}
