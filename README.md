@@ -15,6 +15,12 @@ run the editor; no compiler is needed. See [INSTALL.md](INSTALL.md) for the
 short installation steps, dependencies and Mac first-launch instructions.
 The Mac app is ad hoc signed and not notarized.
 
+TpX 1.6.0 predates opening and saving TikZ and SVG sources, the Inspector and
+**File → Open Example**; the browser build and the guide below follow the
+current `master`. With the default `tikz` TeX format, a 1.6.0 `.TpX` file
+carries its TikZ picture after the editor data, so include the saved drawing
+directly with `\input{figure.TpX}`.
+
 To try TpX without installing it, open the
 [browser build](https://krystophny.github.io/tpx/). It is deployed from the
 latest `master` and runs on the Lazarus CustomDrawn WASI backend proposed in
