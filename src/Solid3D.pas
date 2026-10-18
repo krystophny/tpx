@@ -54,6 +54,8 @@ type
     fFrozen: TObjectList;
     fFrozenHatch: TPointsSet2D;
     fFrozenKey: string;
+    // Eye distance for perspective, set once per rendering (0 = unknown).
+    fEyeDistance: Double;
     function GeometryKey: string;
     function GetBody(I: Integer): TSolidBody;
     function GetBodyCount: Integer;
@@ -1303,8 +1305,12 @@ begin
   Y := VDot(P, U);
   if fPerspective then
   begin
-    SceneBounds(Lo, Hi);
-    F := 3 * Max(VLen(VSub(Hi, Lo)), 1E-9);
+    F := fEyeDistance;
+    if F <= 0 then
+    begin
+      SceneBounds(Lo, Hi);
+      F := 3 * Max(VLen(VSub(Hi, Lo)), 1E-9);
+    end;
     F := F / Max(F - VDot(P, C), 1E-9 * F);
     X := X * F;
     Y := Y * F;
@@ -1407,7 +1413,7 @@ var
   I, J, K: Integer;
   F: TFace;
   Item: TProjected;
-  R, U, C, Sum: TVec3;
+  R, U, C, Sum, Lo, Hi: TVec3;
   Piece: TPolyLinPiece;
   L: TCapLoop;
   Count: Integer;
@@ -1511,6 +1517,11 @@ begin
   Order := TObjectList.Create(True);
   try
     for I := 0 to BodyCount - 1 do TessellateBody(Bodies[I], Faces);
+    if fPerspective then
+    begin
+      SceneBounds(Lo, Hi);
+      fEyeDistance := 3 * Max(VLen(VSub(Hi, Lo)), 1E-9);
+    end;
     ProjectBasis(R, U, C);
     for I := 0 to Faces.Count - 1 do
     begin
@@ -1556,6 +1567,7 @@ begin
         AddPoly(F.P, True, pliDefault, pfiDefault, phaNone);
     end;
   finally
+    fEyeDistance := 0;
     Order.Free;
     Faces.Free;
   end;

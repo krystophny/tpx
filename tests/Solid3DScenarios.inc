@@ -444,6 +444,12 @@ begin
   Merged := Drawing.ObjectList.FirstObj as TSolid3D;
   Count := Merged.Pieces.Count;
   Check(Count > 0, 'a merged 3D scene renders nothing');
+  // Perspective must render the scene once, not once per projected point.
+  Drawing.SelectAll;
+  MainForm.EventManager.SendMessage(Msg_View3DPerspective, nil);
+  Merged := Drawing.ObjectList.FirstObj as TSolid3D;
+  Check(Merged.Perspective and (Merged.Pieces.Count > 0),
+    '3D view Perspective did not render the scene in perspective');
   Drawing.SelectAll;
   MainForm.EventManager.SendMessage(Msg_Ungroup, nil);
   Check(Solid3DCount(Drawing) = 2, 'Ungroup did not split the 3D scene');
