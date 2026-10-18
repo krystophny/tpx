@@ -1292,7 +1292,7 @@ begin
   Ruler2.LinkedViewport := LocalView;
   Ruler2.Align := alClient;
   Ruler2.Color := clBtnFace;
-  OpenDialog_FilterIndex := 2;
+  OpenDialog_FilterIndex := 1;
   //TpXExtAssoc := TTpXExtAssoc.Create;
 {$IFDEF VER140}
   mHHelp := THookHelpSystem.Create('TpX.chm', '', htHHAPI);

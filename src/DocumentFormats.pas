@@ -1427,8 +1427,32 @@ begin
   end;
 end;
 
+function OpenFilterPatterns(const Extensions: string): string;
+var I: Integer; Ext: string; Rest: string;
+begin
+  Result := '';
+  Rest := Extensions + ';';
+  while Rest <> '' do
+  begin
+    Ext := Copy(Rest, 1, Pos(';', Rest) - 1);
+    System.Delete(Rest, 1, Length(Ext) + 1);
+    if Ext = '' then Continue;
+    if Result <> '' then Result := Result + ';';
+    Result := Result + '*';
+{$IF DEFINED(UNIX) AND NOT DEFINED(DARWIN) AND NOT DEFINED(WASI)}
+    // GTK matches filter patterns case-sensitively; accept .TpX as well as .tpx.
+    for I := 1 to Length(Ext) do
+      if LowerCase(Ext[I]) <> UpperCase(Ext[I]) then
+        Result := Result + '[' + LowerCase(Ext[I]) + UpperCase(Ext[I]) + ']'
+      else Result := Result + Ext[I];
+{$ELSE}
+    Result := Result + Ext;
+{$IFEND}
+  end;
+end;
+
 function BuildOpenFileFilter(const IncludeExternalFormats: Boolean): string;
-var I, Count: Integer; F: TDocumentFormat; AllPattern, Pattern: string;
+var I, Count: Integer; F: TDocumentFormat; AllPattern: string;
   function Visible: Boolean;
   begin
     Result := F.CanOpen and (F.Extensions <> '') and
@@ -1441,11 +1465,8 @@ begin
   begin
     F := DocumentFormatAt(I);
     if not Visible then Continue;
-    Pattern := F.Extensions;
-    if Pattern = '' then Continue;
-    Pattern := StringReplace(Pattern, ';', ';*', [rfReplaceAll]);
     if (Count > 0) then AllPattern := AllPattern + ';';
-    AllPattern := AllPattern + '*' + Pattern;
+    AllPattern := AllPattern + OpenFilterPatterns(F.Extensions);
     Inc(Count);
   end;
   if Count = 0 then Result := ''
@@ -1454,9 +1475,8 @@ begin
   begin
     F := DocumentFormatAt(I);
     if not Visible then Continue;
-    Result := Result + '|' + F.DisplayName + ' (' + F.Extensions + ')|';
-    Pattern := StringReplace(F.Extensions, ';', ';*', [rfReplaceAll]);
-    Result := Result + '*' + Pattern;
+    Result := Result + '|' + F.DisplayName + ' (' + F.Extensions + ')|' +
+      OpenFilterPatterns(F.Extensions);
   end;
 end;
 
