@@ -181,6 +181,8 @@ sudo pacman -S --needed texlive-latex texlive-latexrecommended texlive-latexextr
 
 Bitmap-to-EPS conversion uses `sam2p` by default. Install it from your
 distribution when available, or follow the [sam2p build instructions](https://github.com/pts/sam2p).
+Without it, TpX writes bitmaps into EPS and PostScript output as uncompressed
+image data, which works but produces larger files.
 Its PNG, JPEG, and TIFF readers use Netpbm and libjpeg tools. Those are provided
 by `netpbm` and `libjpeg-turbo-progs` on Debian/Ubuntu, or `netpbm` and
 `libjpeg-turbo` on Arch/CachyOS. In TpX's settings, check the tool paths and

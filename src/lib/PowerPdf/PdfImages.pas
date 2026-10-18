@@ -38,6 +38,7 @@ uses
   {$ELSE}
   Graphics,// QGraphics, Qt,
   {$ENDIF}
+  {$IFDEF FPC}IntfGraphics, FPImage,{$ENDIF}
   Classes, PdfTypes, PdfDoc;
 
 type
@@ -151,8 +152,20 @@ function TPdfBitmapImage.CreateImage(AImage: TGraphic): TPdfImage;
 var
   ABitmap: TBitmap;
   x, y: integer;
+{$IFNDEF FPC}
   pb: PByteArray;
   b: Byte;
+{$ELSE}
+  PixelSource: TLazIntfImage;
+  Pixel: TFPColor;
+  PixelRow: array of Byte;
+
+  function FlattenChannel(Value, Alpha: Word): Byte;
+  begin
+    Result := (65535 - LongWord(Alpha) +
+      LongWord(Value) * Alpha div 65535) shr 8;
+  end;
+{$ENDIF}
 const
   {$IFDEF USE_CLX}
   PIXEL_COLOR_SIZE = 4;
@@ -174,6 +187,29 @@ begin
     try
       Assign(AImage);
 
+{$IFDEF FPC}
+      // LCL clears the pixels when PixelFormat changes, and its ScanLine
+      // layout depends on the widgetset. Read colors through an interface
+      // image instead and flatten transparency onto white.
+      PixelSource := CreateIntfImage;
+      try
+        SetLength(PixelRow, PixelSource.Width * 3);
+        for y := 0 to PixelSource.Height - 1 do
+        begin
+          for x := 0 to PixelSource.Width - 1 do
+          begin
+            Pixel := PixelSource.Colors[x, y];
+            PixelRow[x * 3] := FlattenChannel(Pixel.Red, Pixel.Alpha);
+            PixelRow[x * 3 + 1] := FlattenChannel(Pixel.Green, Pixel.Alpha);
+            PixelRow[x * 3 + 2] := FlattenChannel(Pixel.Blue, Pixel.Alpha);
+          end;
+          if Length(PixelRow) > 0 then Stream.Write(PixelRow[0], Length(PixelRow));
+        end;
+        Attributes.AddItem('ColorSpace', TPdfName.CreateName('DeviceRGB'));
+      finally
+        PixelSource.Free;
+      end;
+{$ELSE}
       // if bitmap image has less then 8 bit color, set PixelFormat to 8 bit.
       if (PixelFormat = pf1bit) or
          {$IFNDEF USE_CLX}
@@ -216,6 +252,7 @@ begin
         end;
       end;
 
+{$ENDIF}
       with Attributes do
       begin
         AddItem('Width', TPdfNumber.CreateNumber(Width));
