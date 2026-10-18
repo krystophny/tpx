@@ -122,9 +122,9 @@ function IsClosedProfile(const Obj: TGraphicObject): Boolean;
 procedure ProfileLoops(const Profiles: TGraphicObjList;
   const Loops: TObjectList);
 // Builds a solid from closed 2D shapes; the shapes are copied.
-// For a revolution the axis is the vertical line X = AxisX.
+// For a revolution the selected line supplies the radial/axial frame.
 function CreateSolidFromProfiles(const Shapes: TGraphicObjList;
-  const Kind: TSolidKind; const AxisX: TRealType): TSolid3D;
+  const Kind: TSolidKind; const AxisStart, AxisEnd: TPoint2D): TSolid3D;
 
 const
   SvgSolidNamespace = 'https://github.com/krystophny/tpx/ns/solid';
@@ -1574,16 +1574,26 @@ begin
 end;
 
 function CreateSolidFromProfiles(const Shapes: TGraphicObjList;
-  const Kind: TSolidKind; const AxisX: TRealType): TSolid3D;
+  const Kind: TSolidKind; const AxisStart, AxisEnd: TPoint2D): TSolid3D;
 var
   Obj: TGraphicObject;
   Copy: TPrimitive2D;
   Body: TSolidBody;
   R: TRect2D;
   First: Boolean;
-  CY, CX: TRealType;
+  CY, CX, DX, DY, Length, Along, FrameAngle: TRealType;
   T: TTransf2D;
   Lo, Hi: TVec3;
+  J: Integer;
+  P: TPoint2D;
+  function NativePoint(const Point: TPoint2D): TPoint2D;
+  begin
+    // TpX stores coordinates with six significant digits. Render from
+    // those same values so reopening does not reorder nearly coplanar faces.
+    Result := Point;
+    Result.X := StrToFloat(Format('%.6g', [Point.X]));
+    Result.Y := StrToFloat(Format('%.6g', [Point.Y]));
+  end;
 begin
   Result := TSolid3D.Create(-1);
   Body := Result.AddBody(Kind);
@@ -1612,19 +1622,47 @@ begin
     end;
     Obj := Shapes.NextObj;
   end;
+  CX := (R.Left + R.Right) / 2;
   CY := (R.Bottom + R.Top) / 2;
-  if Kind = skRevolve then CX := AxisX else CX := (R.Left + R.Right) / 2;
-  // Profiles move to model coordinates: origin at the axis (or the centre).
-  T := Translate2D(-CX, -CY);
+  FrameAngle := 0;
+  if Kind = skRevolve then
+  begin
+    DX := AxisEnd.X - AxisStart.X;
+    DY := AxisEnd.Y - AxisStart.Y;
+    Length := Hypot(DX, DY);
+    DX := DX / Length;
+    DY := DY / Length;
+    // Orient the radial direction toward the profile, independent of the
+    // order of the selected axis endpoints.
+    if (CX - AxisStart.X) * DY - (CY - AxisStart.Y) * DX < 0 then
+    begin
+      DX := -DX;
+      DY := -DY;
+    end;
+    Along := (CX - AxisStart.X) * DX + (CY - AxisStart.Y) * DY;
+    CX := AxisStart.X + Along * DX;
+    CY := AxisStart.Y + Along * DY;
+    FrameAngle := ArcTan2(DX, DY);
+  end;
+  // Profiles move to the axis frame (radial X, axial Y). Placement carries
+  // the inverse rotation so Ungroup returns the original editable shapes.
+  T := MultiplyTransform2D(Translate2D(-CX, -CY), Rotate2D(FrameAngle));
   Obj := Body.Profiles.FirstObj;
   while Obj <> nil do
   begin
     TPrimitive2D(Obj).Transform(T);
+    for J := 0 to TPrimitive2D(Obj).Points.Count - 1 do
+    begin
+      P := NativePoint(TPrimitive2D(Obj).Points[J]);
+      TPrimitive2D(Obj).Points[J] := P;
+    end;
     Obj := Body.Profiles.NextObj;
   end;
   if Kind = skExtrude then
     Body.Size1 := Max(R.Right - R.Left, R.Top - R.Bottom) / 2;
-  Result.SetPlacement(Point2D(CX, CY), 1, 0);
+  Result.SetPlacement(Point2D(CX, CY), 1, -FrameAngle);
+  Result.SetPlacementPoints(NativePoint(Result.Points[0]),
+    NativePoint(Result.Points[1]));
   // Keep the visible picture where the profiles were.
   Result.SceneBounds(Lo, Hi);
 end;

@@ -367,8 +367,90 @@ var
   Solid, Merged: TSolid3D;
   Obj: TGraphicObject;
   Count, I: Integer;
+  procedure CheckRevolveAxis(const DX, DY: Double; const Reverse: Boolean);
+  var
+    P: array[0..3] of TPoint2D;
+    Axis0, Axis1, Swap: TPoint2D;
+    J, FormatIndex: Integer;
+    R: TRect2D;
+    Restored: TPolygon2D;
+    Bytes: RawByteString;
+    Reloaded: TDrawing2D;
+    Context: TObject;
+  const
+    Formats: array[0..2] of string = ('tpx', 'svg', 'tikz');
+    Names: array[0..2] of string = ('axis.TpX', 'axis.svg', 'axis.tikz');
+  begin
+    Drawing.DeleteAllObjects;
+    // Independently specified rectangle: radius 5..10, axial height -5..5,
+    // around the line through (20,30) in direction (DX,DY).
+    P[0] := Point2D(20 + 5 * DY - 5 * DX, 30 - 5 * DX - 5 * DY);
+    P[1] := Point2D(20 + 10 * DY - 5 * DX, 30 - 10 * DX - 5 * DY);
+    P[2] := Point2D(20 + 10 * DY + 5 * DX, 30 - 10 * DX + 5 * DY);
+    P[3] := Point2D(20 + 5 * DY + 5 * DX, 30 - 5 * DX + 5 * DY);
+    Profile := TPolygon2D.CreateSpec(-1, P);
+    Axis0 := Point2D(20 - 20 * DX, 30 - 20 * DY);
+    Axis1 := Point2D(20 + 20 * DX, 30 + 20 * DY);
+    if Reverse then
+    begin
+      Swap := Axis0; Axis0 := Axis1; Axis1 := Swap;
+    end;
+    Axis := TLine2D.CreateSpec(-1, Axis0, Axis1);
+    Drawing.AddObject(-1, Profile);
+    Drawing.AddObject(-1, Axis);
+    Drawing.SelectAll;
+    Check(SolidFromSelected(Drawing, skRevolve), 'Revolve rejected a valid axis');
+    Solid := Drawing.ObjectList.FirstObj as TSolid3D;
+    R := (Solid.Bodies[0].Profiles.FirstObj as TObject2D).BoundingBox;
+    Check((Abs(R.Left - 5) < 1E-5) and (Abs(R.Right - 10) < 1E-5) and
+      (Abs(R.Bottom + 5) < 1E-5) and (Abs(R.Top - 5) < 1E-5),
+      Format('Revolve axis %g,%g: radius %g..%g height %g..%g',
+        [DX, DY, R.Left, R.Right, R.Bottom, R.Top]));
+    Check(Solid.Pieces.Count > 0, 'Revolve about a selected axis rendered nothing');
+    for FormatIndex := 0 to High(Formats) do
+    begin
+      Bytes := SerializeDocumentToBytes(Formats[FormatIndex], Drawing,
+        TDocumentPath(Names[FormatIndex]));
+      Reloaded := Solid3DLoad(Formats[FormatIndex], Names[FormatIndex], Bytes, Context);
+      try
+        CheckSameSolids(Drawing, Reloaded, 'angled-axis ' + Formats[FormatIndex],
+          FormatIndex = 1);
+        Check(SerializeDocumentToBytes(Formats[FormatIndex], Reloaded,
+          TDocumentPath(Names[FormatIndex]), Context) = Bytes,
+          'angled-axis ' + Formats[FormatIndex] + ' unchanged save changed bytes');
+      finally
+        Reloaded.Free;
+        Context.Free;
+      end;
+    end;
+    Drawing.SelectAll;
+    UngroupSelected(Drawing);
+    Restored := Drawing.ObjectList.FirstObj as TPolygon2D;
+    for J := 0 to 3 do
+      Check((Abs(Restored.Points[J].X - P[J].X) < 1E-5) and
+        (Abs(Restored.Points[J].Y - P[J].Y) < 1E-5),
+        'Ungroup did not restore the original profile after an angled revolution');
+  end;
 begin
   Drawing := MainForm.TheDrawing;
+  Drawing.TeXCenterFigure := True;
+  CheckRevolveAxis(0, 1, False);
+  CheckRevolveAxis(1, 0, False);
+  CheckRevolveAxis(0.6, 0.8, False);
+  CheckRevolveAxis(0.6, 0.8, True);
+  Drawing.DeleteAllObjects;
+  Profile := TPolygon2D.CreateSpec(-1, [Point2D(0,0), Point2D(10,0),
+    Point2D(10,10), Point2D(0,10)]);
+  Axis := TLine2D.CreateSpec(-1, Point2D(20,0), Point2D(20,10));
+  Drawing.AddObject(-1, Profile);
+  Drawing.AddObject(-1, Axis);
+  Drawing.SelectAll;
+  Check(SolidFromSelected(Drawing, skExtrude), 'Extrude rejected a closed profile');
+  Check((Drawing.ObjectsCount = 2) and (Drawing.GetObject(Axis.ID) = Axis),
+    'Extrude deleted an unrelated selected open shape');
+  Drawing.History.Undo;
+  Check(Drawing.ObjectsCount = 2, 'Undo did not restore the extrusion selection');
+
   Drawing.DeleteAllObjects;
   // Insert each primitive the way the tool palette does.
   for I := 0 to 4 do

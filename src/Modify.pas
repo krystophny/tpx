@@ -286,7 +286,8 @@ function SolidFromSelected(const ADrawing: TDrawing2D;
 var
   Shapes: TGraphicObjList;
   Obj: TGraphicObject;
-  AxisX: TRealType;
+  AxisStart, AxisEnd: TPoint2D;
+  Axis: TGraphicObject;
   HasAxis: Boolean;
   R: TRect2D;
   First: Boolean;
@@ -298,7 +299,7 @@ begin
   Shapes.FreeOnDelete := False;
   try
     HasAxis := False;
-    AxisX := 0;
+    Axis := nil;
     First := True;
     Obj := ADrawing.SelectedObjects.FirstObj;
     while Obj <> nil do
@@ -314,13 +315,21 @@ begin
       begin
         // A selected straight line is the axis of the revolution.
         HasAxis := True;
-        AxisX := (TLine2D(Obj).Points[0].X + TLine2D(Obj).Points[1].X) / 2;
+        AxisStart := TLine2D(Obj).Points[0];
+        AxisEnd := TLine2D(Obj).Points[1];
+        if IsSamePoint2D(AxisStart, AxisEnd) then Exit;
+        Axis := Obj;
       end;
       Obj := ADrawing.SelectedObjects.NextObj;
     end;
     if Shapes.Count = 0 then Exit;
-    if not HasAxis then AxisX := R.Left;
-    Solid := CreateSolidFromProfiles(Shapes, Kind, AxisX);
+    if not HasAxis then
+    begin
+      AxisStart := Point2D(R.Left, R.Bottom);
+      AxisEnd := Point2D(R.Left, R.Top);
+      if IsSamePoint2D(AxisStart, AxisEnd) then AxisEnd.Y := AxisStart.Y + 1;
+    end;
+    Solid := CreateSolidFromProfiles(Shapes, Kind, AxisStart, AxisEnd);
     ApplySolidDefaults(Solid);
     if Kind = skRevolve then
     begin
@@ -330,6 +339,11 @@ begin
       Body.Size2 := Solid.Azimuth + 45;
     end;
     Solid.UpdateExtension(Solid);
+    // Replace only the profiles and the chosen axis; leave other selected
+    // drawing objects intact.
+    ADrawing.SelectionClear;
+    ADrawing.SelectionAddList(Shapes);
+    if Axis <> nil then ADrawing.SelectionAdd(Axis);
     ReplaceSelectedBy(ADrawing, Solid);
     Result := True;
   finally
