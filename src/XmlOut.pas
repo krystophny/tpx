@@ -36,6 +36,9 @@ type
     procedure AddAttrValue(const Data: string);
     procedure CloseAttr;
     procedure AddText(const Data: string);
+    // Writes Data unescaped inside a CDATA section; Data must not
+    // contain ']]>'.
+    procedure AddCData(const Data: string);
     procedure AddTextInTag(const Tag: string;
       const Data: string; const Has_EOL: Boolean = False);
     procedure CloseTag;
@@ -168,6 +171,14 @@ procedure TXmlOutput.AddText(const Data: string);
 begin
   DataAdded;
   Write(XmlReplaceChars(Data));
+end;
+
+procedure TXmlOutput.AddCData(const Data: string);
+begin
+  DataAdded;
+  Write('<![CDATA[');
+  Write(Data);
+  Write(']]>');
 end;
 
 procedure TXmlOutput.AddTextInTag(const Tag: string;

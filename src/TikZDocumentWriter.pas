@@ -13,7 +13,7 @@ implementation
 
 uses Classes, SysUtils, Math, Graphics, Geometry, GObjects,
   Devices, GObjBase, TikZLexer, TikZSyntax, TikZImport, TikZImportDrawing,
-  TikZWriter, DocumentIO;
+  TikZWriter, DocumentIO, Pieces, Solid3D, TpXSaver;
 
 type
   TEditArray = array of TTikZBoundEdit;
@@ -1271,10 +1271,115 @@ begin
   Result := Result + ';';
 end;
 
+function SolidColorName(const Color, Default: TColor; const Id: string;
+  Defs: TStrings): string;
+var
+  RGB: LongWord;
+begin
+  if Color = clDefault then RGB := ColorToRGB24(Default)
+  else RGB := ColorToRGB24(Color);
+  if RGBColorName(RGB, Result) then Exit;
+  Result := Id;
+  Defs.Add('\definecolor{' + Id + '}{rgb}{' +
+    FormatTikZReal(((RGB shr 16) and $FF) / 255, SizeOf(Double)) + ',' +
+    FormatTikZReal(((RGB shr 8) and $FF) / 255, SizeOf(Double)) + ',' +
+    FormatTikZReal((RGB and $FF) / 255, SizeOf(Double)) + '}');
+end;
+
+// A 3D object as a block of plain TikZ paths (painter order) framed by
+// comments that carry the editable object and a digest of the paths.
+function SerializeNewSolid(Solid: TSolid3D; Drawing: TDrawing2D): RawByteString;
+var
+  Lines, Defs: TStringList;
+  I, J: Integer;
+  Piece: TPiece;
+  LineName, FillName, HatchName, Options, Path: string;
+  Segments, Loop: TPointsSet2D;
+  Width: Extended;
+  procedure AddPath(const Opt: string; const PP: TPointsSet2D;
+    const Closed: Boolean; const Command: string);
+  var
+    K: Integer;
+  begin
+    Path := Command + '[' + Opt + '] ' + PointText(PP[0]);
+    for K := 1 to PP.Count - 1 do Path := Path + ' -- ' + PointText(PP[K]);
+    if Closed then Path := Path + ' -- cycle';
+    Lines.Add(Path + ';');
+  end;
+begin
+  Lines := TStringList.Create;
+  Defs := TStringList.Create;
+  Segments := TPointsSet2D.Create(0);
+  Loop := TPointsSet2D.Create(0);
+  try
+    if Drawing.LineWidthBase <= 0 then
+      raise EWriteError.Create('A TikZ 3D object needs a positive line width base');
+    LineName := SolidColorName(Solid.LineColor, clBlack, 'tpxsolidline', Defs);
+    FillName := SolidColorName(Solid.FillColor, clWhite, 'tpxsolidfill', Defs);
+    HatchName := SolidColorName(Solid.HatchColor, clBlack, 'tpxsolidhatch', Defs);
+    Lines.AddStrings(Defs);
+    Width := Solid.LineWidth * Drawing.LineWidthBase;
+    for I := 0 to Solid.Pieces.Count - 1 do
+    begin
+      Piece := Solid.Pieces[I];
+      if (Piece = nil) or (Piece.Count < 2) then Continue;
+      Loop.Clear;
+      for J := 0 to Piece.Count - 1 do Loop.Add(Piece[J]);
+      Options := '';
+      if Piece.GetLineStyle(Solid) <> liNone then
+      begin
+        Options := 'line width=' + FormatTikZReal(Width, SizeOf(TRealType)) +
+          'mm, draw=' + LineName;
+        case Piece.GetLineStyle(Solid) of
+          liDashed: Options := Options + ', dashed';
+          liDotted: Options := Options + ', dotted';
+        end;
+      end;
+      if (Piece.Fill = pfiDefault) and (Solid.FillColor <> clNone) then
+      begin
+        if Options <> '' then Options := Options + ', ';
+        Options := Options + 'fill=' + FillName;
+        if Piece.GetLineStyle(Solid) = liNone then
+          AddPath(Options, Loop, Piece.Closed, '\fill')
+        else AddPath(Options, Loop, Piece.Closed, '\draw');
+      end
+      else if Options <> '' then
+        AddPath(Options, Loop, Piece.Closed, '\draw');
+      if (Piece.Hatch = phaDefault) and Piece.Closed and
+        (Solid.Hatching <> haNone) then
+      begin
+        Segments.Clear;
+        HatchPolygon(Loop, Solid.Hatching, Drawing.HatchingStep, Segments);
+        J := 0;
+        while J + 1 < Segments.Count do
+        begin
+          Lines.Add('\draw[line width=' + FormatTikZReal(Width,
+            SizeOf(TRealType)) + 'mm, draw=' + HatchName + '] ' +
+            PointText(Segments[J]) + ' -- ' + PointText(Segments[J + 1]) + ';');
+          Inc(J, 2);
+        end;
+      end;
+    end;
+    Result := RawByteString('% tpx-solid ' + SolidToTpXXml(Drawing, Solid, False, True) +
+      LineEnding);
+    for I := 0 to Lines.Count - 1 do
+      Result := Result + RawByteString(Lines[I] + LineEnding);
+    Result := Result + RawByteString('% tpx-solid-end ' +
+      SolidGeometryDigest(Lines));
+  finally
+    Loop.Free;
+    Segments.Free;
+    Defs.Free;
+    Lines.Free;
+  end;
+end;
+
 function SerializeNewObject(Obj: TObject2D; Drawing: TDrawing2D;
   Index: SizeInt; var Definitions: TDefinitionArray): RawByteString;
 begin
   try
+    if Obj is TSolid3D then
+      Exit(SerializeNewSolid(TSolid3D(Obj), Drawing));
     if not (Obj is TPrimitive2D) then
       raise EWriteError.Create(
         'only standalone primitive objects can be inserted into a TikZ picture');
@@ -1377,6 +1482,15 @@ var
   StylePatches: TPatchArray;
   Definitions: TDefinitionArray;
   ObjectIndex, DefinitionsBefore: SizeInt;
+  SolidIndex: SizeInt;
+  SolidRegion: TTikZSolidRegion;
+  function SpanText(const Bytes: TBytes; const Span: TTikZSourceSpan): RawByteString;
+  var
+    K: SizeInt;
+  begin
+    SetLength(Result, Span.EndByte - Span.StartByte);
+    for K := 1 to Length(Result) do Result[K] := Char(Bytes[Span.StartByte + K - 1]);
+  end;
   function EditAffectsBounds(const Edit: TTikZBoundEdit): Boolean;
   var B: TTikZSourceBinding; Kind: TTikZDependencyKind;
   begin
@@ -1413,6 +1527,27 @@ begin
   Obj := Drawing.ObjectList.FirstObj as TObject2D;
   while Obj <> nil do
   begin
+    SolidIndex := Context.FindSolidRegionForObjectID(Obj.ID);
+    if (Obj is TSolid3D) and (SolidIndex >= 0) then
+    begin
+      // A solid read from a '% tpx-solid' block rewrites only its block,
+      // and leaves it byte-identical when nothing changed.
+      SolidRegion := Context.SolidRegionAt(SolidIndex);
+      if SeenNewObject then
+        raise EWriteError.Create('New TikZ objects can only be appended; current order would reorder source statements');
+      if SolidRegion.FirstBinding < PreviousIndex then
+        raise EWriteError.Create('Reordered TikZ objects cannot be saved without changing draw order');
+      PreviousIndex := SolidRegion.LastBinding;
+      Replacement := SerializeNewSolid(TSolid3D(Obj), Drawing);
+      if Replacement <> SpanText(Source, SolidRegion.Span) then
+      begin
+        GeometryChanged := True;
+        AddPatch(Patches, SolidRegion.Span, Replacement);
+      end;
+      Inc(ObjectIndex);
+      Obj := Drawing.ObjectList.NextObj as TObject2D;
+      Continue;
+    end;
     BindingIndex := Context.FindBindingForObjectID(Obj.ID);
     if BindingIndex < 0 then
     begin
@@ -1464,6 +1599,25 @@ begin
     of them cannot be represented by deleting that command. }
   for I := 0 to Context.BindingCount - 1 do
   begin
+    SolidIndex := Context.SolidRegionOfBinding(I);
+    if SolidIndex >= 0 then
+    begin
+      // The statements of a solid block live and die with that solid.
+      SolidRegion := Context.SolidRegionAt(SolidIndex);
+      if (I = SolidRegion.FirstBinding) and
+        (Drawing.GetObject(SolidRegion.NativeObjectID) = nil) then
+      begin
+        GeometryChanged := True;
+        Region := SolidRegion.Span;
+        if (Region.EndByte < Length(Source)) and (Source[Region.EndByte] = 13) then
+          Inc(Region.EndByte);
+        if (Region.EndByte < Length(Source)) and (Source[Region.EndByte] = 10) then
+          Inc(Region.EndByte);
+        AddPatch(Patches, Region, '');
+        Region := Context.Document.Region.Span;
+      end;
+      Continue;
+    end;
     Binding := Context.BindingAt(I);
     if Binding.NativeObjectID < 0 then
       raise EWriteError.Create('TikZ source context contains an unbound native object');
@@ -1566,7 +1720,7 @@ procedure RebindTikZDocumentContext(LiveDrawing, ParsedDrawing: TDrawing2D;
 var
   Context: TTikZImportContext;
   LiveObject, ParsedObject: TObject2D;
-  I: SizeInt;
+  I, SolidIndex: SizeInt;
   Binding: TTikZSourceBinding;
 begin
   if not (CodecContext is TTikZImportContext) then
@@ -1581,6 +1735,19 @@ begin
   ParsedObject := ParsedDrawing.ObjectList.FirstObj as TObject2D;
   for I := 0 to Context.BindingCount - 1 do
   begin
+    SolidIndex := Context.SolidRegionOfBinding(I);
+    if SolidIndex >= 0 then
+    begin
+      // One live 3D object stands for all statements of its block.
+      if I <> Context.SolidRegionAt(SolidIndex).FirstBinding then Continue;
+      if not (LiveObject is TSolid3D) or not (ParsedObject is TSolid3D) or
+        (Context.SolidRegionAt(SolidIndex).NativeObjectID <> ParsedObject.ID) then
+        raise EWriteError.Create('TikZ parsed 3D object order no longer matches its source block');
+      Context.SetSolidRegionObject(SolidIndex, LiveObject.ID);
+      LiveObject := LiveDrawing.ObjectList.NextObj as TObject2D;
+      ParsedObject := ParsedDrawing.ObjectList.NextObj as TObject2D;
+      Continue;
+    end;
     if (LiveObject = nil) or (ParsedObject = nil) then
       raise EWriteError.Create('TikZ save-back changed the bound object count');
     Binding := Context.BindingAt(I);

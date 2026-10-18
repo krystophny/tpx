@@ -26,7 +26,7 @@ procedure RegisterSvgDocumentCodec;
 
 implementation
 
-uses Math, StrUtils, PrimSAX, MprtSVG, Output, gzio, DocumentIO;
+uses Math, StrUtils, PrimSAX, MprtSVG, Output, gzio, DocumentIO, Solid3D;
 
 const
   MaxSvgInputBytes = 4 * 1024 * 1024;
@@ -1412,7 +1412,7 @@ begin
     (Obj is TCircular2D) or (Obj is TSmoothPath2D0) or
     (Obj is TBezierPath2D0) or (Obj is TStar2D) or
     (Obj is TSymbol2D) or (Obj is TPolyline2D0) or
-    (Obj is TText2D) or (Obj is TCompound2D);
+    (Obj is TText2D) or (Obj is TCompound2D) or (Obj is TSolid3D);
   if not Result then
     Unsupported := Obj.ClassName + ' objects are not supported by the SVG saver';
 end;
@@ -1526,6 +1526,15 @@ begin
     Exit;
   end;
   Tag := LocalSvgName(Name);
+  if Name = 'tpx:solid' then
+  begin
+    // TpX's own 3D object record inside the group of its rendered faces.
+    if (fNames.Count = 0) or (LocalSvgName(fNames[fNames.Count - 1]) <> 'g') then
+      AddIssue('TpX 3D record outside its group is not retained');
+    fNames.Add(Name);
+    Inc(fDepth);
+    Exit;
+  end;
   if not IsSvgName(Name) then
     raise ESvgCodec.Create('Unsupported XML namespace prefix: ' + Name);
   if fDepth >= MaxSvgDepth then
@@ -1645,6 +1654,7 @@ end;
 
 procedure TSvgProfileScan.CDATA(const Value: string);
 begin
+  if (fNames.Count > 0) and (fNames[fNames.Count - 1] = 'tpx:solid') then Exit;
   if Trim(Value) <> '' then AddIssue('CDATA content is not retained');
 end;
 

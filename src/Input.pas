@@ -3,7 +3,7 @@ unit Input;
 interface
 
 uses Types, SysUtils, Classes, Graphics, Contnrs,
-  Drawings, GObjBase, GObjects,
+  Drawings, GObjBase, GObjects, Solid3D,
 {$IFDEF VER140}
   Variants,
 {$ENDIF}
@@ -50,6 +50,7 @@ type
     function ReadBitmap(XMLNode: TXMLDElement): TBitmap2D;
     function ReadGroup(XMLNode: TXMLDElement): TGroup2D;
     function ReadCompound(XMLNode: TXMLDElement): TCompound2D;
+    function ReadSolid(XMLNode: TXMLDElement): TSolid3D;
     function ReadEntity(XMLNode: TXMLDElement): TObject2D;
     procedure CollectEntities(Elem: TXMLDElement;
       Objects: TGraphicObjList);
@@ -63,6 +64,8 @@ type
     procedure LoadFromClipboard;
     procedure LoadFromFile(const FileName: string);
     procedure LoadFromBytes(const SourceBytes: RawByteString);
+    // Reads a <solid> element serialized by T_TpX_Saver.WriteSolidElement.
+    function SolidFromXml(const Xml: string): TSolid3D;
     property XMLDoc: TXMLDDocument read fXML;
   end;
 
@@ -707,6 +710,7 @@ function T_TpX_Loader.ReadEntity(XMLNode: TXMLDElement):
   TObject2D;
 var
   ID: string;
+  I: Integer;
 begin
   Result := nil;
   ID := XMLNode.NodeName;
@@ -730,9 +734,125 @@ begin
   else if ID = 'star' then Result := ReadStar(XMLNode)
   else if ID = 'symbol' then Result := ReadSymbol(XMLNode)
   else if ID = 'bitmap' then Result := ReadBitmap(XMLNode)
-  else if ID = 'group' then Result := ReadGroup(XMLNode)
+  else if ID = 'group' then
+  begin
+    // A group led by a solid carries a 3D object; the polygons after it
+    // are the rendered fallback for readers without 3D support.
+    Result := nil;
+    for I := 0 to XMLNode.ChildNodes.Count - 1 do
+      if XMLNode.ChildNodes[I] is TXMLDElement then
+      begin
+        if TXMLDElement(XMLNode.ChildNodes[I]).NodeName = 'solid' then
+          Result := ReadSolid(TXMLDElement(XMLNode.ChildNodes[I]));
+        Break;
+      end;
+    if Result = nil then Result := ReadGroup(XMLNode);
+  end
   else if ID = 'compound' then Result := ReadCompound(XMLNode)
+  else if ID = 'solid' then Result := ReadSolid(XMLNode)
   else Result := nil;
+end;
+
+function XmlFloat(const XMLNode: TXMLDElement; const Name: string;
+  const Default: Double): Double;
+var
+  Code: Integer;
+begin
+  Result := Default;
+  if XMLNode.AttributeNode[Name] = nil then Exit;
+  Val(Trim(XMLNode.AttributeValueSt[Name]), Result, Code);
+  if (Code <> 0) or IsNan(Result) or IsInfinite(Result) then
+    raise EReadError.CreateFmt('Invalid number in 3D attribute %s', [Name]);
+end;
+
+function T_TpX_Loader.ReadSolid(XMLNode: TXMLDElement): TSolid3D;
+var
+  I, K, Code: Integer;
+  Child: TXMLDElement;
+  Body: TSolidBody;
+  Kind: TSolidKind;
+  St, Item: string;
+  Value: Double;
+begin
+  Result := TSolid3D.Create(-1);
+  try
+    ReadPrimitiveAttr(Result, XMLNode);
+    Result.Points.DisableEvents := True;
+    Result.Points[0] := Point2D(XmlFloat(XMLNode, 'x1', 0),
+      XmlFloat(XMLNode, 'y1', 0));
+    Result.Points[1] := Point2D(XmlFloat(XMLNode, 'x2', 1),
+      XmlFloat(XMLNode, 'y2', 0));
+    Result.Points.DisableEvents := False;
+    Result.Azimuth := XmlFloat(XMLNode, 'az', Solid_DefaultAzimuth);
+    Result.Elevation := XmlFloat(XMLNode, 'el', Solid_DefaultElevation);
+    Result.Perspective := XMLNode.AttributeValueSt['persp'] = '1';
+    if XMLNode.AttributeValueSt['hidden'] = SolidHiddenIDs[shWire] then
+      Result.Hidden := shWire;
+    for I := 0 to XMLNode.ChildNodes.Count - 1 do
+    begin
+      if not (XMLNode.ChildNodes[I] is TXMLDElement) then Continue;
+      Child := TXMLDElement(XMLNode.ChildNodes[I]);
+      if Child.NodeName <> 'body' then Continue;
+      if not SolidKindFromID(Child.AttributeValueSt['kind'], Kind) then
+        raise EReadError.CreateFmt('Unknown 3D body kind "%s"',
+          [Child.AttributeValueSt['kind']]);
+      Body := Result.AddBody(Kind);
+      case Kind of
+        skBox:
+          begin
+            Body.Size1 := XmlFloat(Child, 'w', Body.Size1);
+            Body.Size2 := XmlFloat(Child, 'd', Body.Size2);
+            Body.Size3 := XmlFloat(Child, 'h', Body.Size3);
+          end;
+        skCylinder, skCone:
+          begin
+            Body.Size1 := XmlFloat(Child, 'r', Body.Size1);
+            Body.Size2 := XmlFloat(Child, 'h', Body.Size2);
+          end;
+        skSphere: Body.Size1 := XmlFloat(Child, 'r', Body.Size1);
+        skTorus:
+          begin
+            Body.Size1 := XmlFloat(Child, 'r1', Body.Size1);
+            Body.Size2 := XmlFloat(Child, 'r2', Body.Size2);
+          end;
+        skExtrude: Body.Size1 := XmlFloat(Child, 'depth', Body.Size1);
+        skRevolve:
+          begin
+            Body.Size1 := XmlFloat(Child, 'angle', Body.Size1);
+            Body.Size2 := XmlFloat(Child, 'start', Body.Size2);
+          end;
+      end;
+      Body.SegU := Round(XmlFloat(Child, 'segments', Body.SegU));
+      Body.SegV := Round(XmlFloat(Child, 'rings', Body.SegV));
+      if (Body.SegU < 1) or (Body.SegU > 720) or (Body.SegV < 1) or
+        (Body.SegV > 720) then
+        raise EReadError.Create('3D segment count out of range');
+      if Child.AttributeNode['m'] <> nil then
+      begin
+        St := Trim(Child.AttributeValueSt['m']) + ' ';
+        for K := 0 to 11 do
+        begin
+          St := TrimLeft(St);
+          Item := Copy(St, 1, Pos(' ', St) - 1);
+          Delete(St, 1, Length(Item));
+          Val(Item, Value, Code);
+          if (Item = '') or (Code <> 0) then
+            raise EReadError.Create('Invalid 3D body matrix');
+          Body.M[K] := Value;
+        end;
+      end;
+      CollectEntities(Child, Body.Profiles);
+      if (Kind in [skExtrude, skRevolve]) and (Body.Profiles.Count = 0) then
+        raise EReadError.Create('3D extrusion or revolution has no profile');
+    end;
+    if Result.BodyCount = 0 then
+      raise EReadError.Create('3D object has no body');
+    Result.Placed := True;
+    Result.UpdateExtension(Result);
+  except
+    Result.Free;
+    raise;
+  end;
 end;
 
 constructor T_TpX_Loader.Create(Drawing: TDrawing2D);
@@ -994,6 +1114,26 @@ begin
   fXML.LoadXML(XmlSource);
   if fXML.DocumentElement = nil then
     raise EReadError.Create('TpX XML block is malformed');
+end;
+
+function T_TpX_Loader.SolidFromXml(const Xml: string): TSolid3D;
+var
+  I: Integer;
+begin
+  Result := nil;
+  fVersion := TpX_Format_Version;
+  fXML.LoadXML('<TpX v="' + IntToStr(TpX_Format_Version) + '">' + Xml +
+    '</TpX>');
+  if fXML.DocumentElement = nil then
+    raise EReadError.Create('Embedded 3D object is malformed');
+  for I := 0 to fXML.DocumentElement.ChildNodes.Count - 1 do
+    if (fXML.DocumentElement.ChildNodes[I] is TXMLDElement) and
+      (TXMLDElement(fXML.DocumentElement.ChildNodes[I]).NodeName = 'solid') then
+    begin
+      Result := ReadSolid(TXMLDElement(fXML.DocumentElement.ChildNodes[I]));
+      Exit;
+    end;
+  raise EReadError.Create('Embedded 3D object has no solid element');
 end;
 
 procedure T_TpX_Loader.LoadFromBytes(const SourceBytes: RawByteString);

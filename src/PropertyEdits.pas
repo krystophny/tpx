@@ -21,7 +21,11 @@ type
     opfTextHeight, opfFontName, opfFontStyle, opfHAlignment,
     opfTextRotation, opfStarKind, opfStarSizeFactor, opfSymbolKind,
     opfSymbolDiameter, opfSymbolRotation, opfRectangleRX,
-    opfRectangleRY, opfBitmapLink, opfKeepAspectRatio);
+    opfRectangleRY, opfBitmapLink, opfKeepAspectRatio,
+    { 3D objects: sizes in drawing mm or degrees by body kind, then the
+      segment count and the camera. }
+    opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidSegments,
+    opfSolidAzimuth, opfSolidElevation, opfSolidPerspective);
   TObjectPropertyFields = set of TObjectPropertyField;
   TEditTargetIDs = array of Integer;
 
@@ -52,7 +56,15 @@ type
     RectangleRY: TRealType;
     BitmapLink: TEditUtf8Text;
     KeepAspectRatio: Boolean;
+    SolidSize1, SolidSize2, SolidSize3: TRealType;
+    SolidSegments: Integer;
+    SolidAzimuth, SolidElevation: TRealType;
+    SolidPerspective: Boolean;
   end;
+
+{ What a 3D size field means for a selected single-body 3D object. }
+function SolidFieldCaption(Obj: TObject2D; Field: TObjectPropertyField;
+  out Caption: string): Boolean;
 
 function ExpandObjectEditTargetIDs(Drawing: TDrawing2D;
   const TargetIDs: array of Integer; out ErrorText: string): TEditTargetIDs;
@@ -82,7 +94,120 @@ function CaptureObjectPropertyPatch(Drawing: TDrawing2D;
 
 implementation
 
-uses SysUtils, Math, Variants, Bitmaps;
+uses SysUtils, Math, Variants, Bitmaps, Solid3D;
+
+function SolidBody(Obj: TObject2D): TSolidBody;
+begin
+  Result := nil;
+  if (Obj is TSolid3D) and (TSolid3D(Obj).BodyCount = 1) then
+    Result := TSolid3D(Obj).Bodies[0];
+end;
+
+function SolidSizeIsAngle(Body: TSolidBody; Field: TObjectPropertyField): Boolean;
+begin
+  Result := (Body.Kind = skRevolve) and (Field in [opfSolidSize1, opfSolidSize2]);
+end;
+
+function SolidSupports(Obj: TObject2D; Field: TObjectPropertyField): Boolean;
+var Body: TSolidBody;
+begin
+  Result := False;
+  if not (Obj is TSolid3D) then Exit;
+  if Field in [opfSolidAzimuth, opfSolidElevation, opfSolidPerspective] then
+    Exit(True);
+  Body := SolidBody(Obj);
+  if Body = nil then Exit;
+  case Field of
+    opfSolidSize1: Result := True;
+    opfSolidSize2: Result := Body.Kind in [skBox, skCylinder, skCone, skTorus,
+      skRevolve];
+    opfSolidSize3: Result := Body.Kind = skBox;
+    opfSolidSegments: Result := not (Body.Kind in [skBox, skExtrude]);
+  end;
+end;
+
+function SolidFieldCaption(Obj: TObject2D; Field: TObjectPropertyField;
+  out Caption: string): Boolean;
+var Body: TSolidBody;
+begin
+  Caption := '';
+  Body := SolidBody(Obj);
+  Result := (Body <> nil) and SolidSupports(Obj, Field);
+  if not Result then Exit;
+  case Field of
+    opfSolidSize1:
+      case Body.Kind of
+        skBox: Caption := 'Width (mm)';
+        skTorus: Caption := 'Radius R (mm)';
+        skExtrude: Caption := 'Depth (mm)';
+        skRevolve: Caption := 'Angle (°)';
+      else Caption := 'Radius (mm)';
+      end;
+    opfSolidSize2:
+      case Body.Kind of
+        skBox: Caption := 'Depth (mm)';
+        skTorus: Caption := 'Tube radius r (mm)';
+        skRevolve: Caption := 'Start angle (°)';
+      else Caption := 'Height (mm)';
+      end;
+    opfSolidSize3: Caption := 'Height (mm)';
+    opfSolidSegments: Caption := 'Segments';
+  end;
+end;
+
+function SolidScale(Obj: TObject2D): Double;
+var Origin: TPoint2D; Angle: Double;
+begin
+  TSolid3D(Obj).GetPlacement(Origin, Result, Angle);
+end;
+
+function ReadSolidValue(Obj: TObject2D; Field: TObjectPropertyField): Variant;
+var Body: TSolidBody; S: Double;
+begin
+  Body := SolidBody(Obj);
+  case Field of
+    opfSolidAzimuth: Exit(TSolid3D(Obj).Azimuth);
+    opfSolidElevation: Exit(TSolid3D(Obj).Elevation);
+    opfSolidPerspective: Exit(TSolid3D(Obj).Perspective);
+    opfSolidSegments: Exit(Body.SegU);
+  end;
+  case Field of
+    opfSolidSize1: S := Body.Size1;
+    opfSolidSize2: S := Body.Size2;
+  else S := Body.Size3;
+  end;
+  if not SolidSizeIsAngle(Body, Field) then S := S * SolidScale(Obj);
+  Result := S;
+end;
+
+procedure ApplySolidPatch(Obj: TObject2D; const Patch: TObjectPropertyPatch);
+var Solid: TSolid3D; Body: TSolidBody;
+  function Model(Field: TObjectPropertyField; Value: TRealType): Double;
+  begin
+    if SolidSizeIsAngle(Body, Field) then Result := Value
+    else Result := Value / SolidScale(Obj);
+  end;
+begin
+  if not (Obj is TSolid3D) then Exit;
+  Solid := TSolid3D(Obj);
+  Body := SolidBody(Obj);
+  if Body <> nil then
+  begin
+    if opfSolidSize1 in Patch.Fields then
+      Body.Size1 := Model(opfSolidSize1, Patch.SolidSize1);
+    if opfSolidSize2 in Patch.Fields then
+      Body.Size2 := Model(opfSolidSize2, Patch.SolidSize2);
+    if opfSolidSize3 in Patch.Fields then
+      Body.Size3 := Model(opfSolidSize3, Patch.SolidSize3);
+    if opfSolidSegments in Patch.Fields then Body.SegU := Patch.SolidSegments;
+  end;
+  if opfSolidAzimuth in Patch.Fields then
+    Solid.SetView(Patch.SolidAzimuth, Solid.Elevation);
+  if opfSolidElevation in Patch.Fields then
+    Solid.SetView(Solid.Azimuth, Patch.SolidElevation);
+  if opfSolidPerspective in Patch.Fields then
+    Solid.Perspective := Patch.SolidPerspective;
+end;
 
 procedure AddUnique(List: TList; Obj: TObject2D);
 var I: Integer;
@@ -356,6 +481,20 @@ begin
   else if (opfRectangleRY in Patch.Fields) and
     not IsFiniteNonnegative(Patch.RectangleRY) then
     ErrorText := 'Rectangle vertical radius must be finite and nonnegative'
+  else if ((opfSolidSize1 in Patch.Fields) and
+    not IsFinitePositive(Patch.SolidSize1)) or
+    ((opfSolidSize3 in Patch.Fields) and not IsFinitePositive(Patch.SolidSize3)) then
+    ErrorText := '3D sizes must be finite positive numbers'
+  else if (opfSolidSize2 in Patch.Fields) and not IsFiniteValue(Patch.SolidSize2) then
+    ErrorText := '3D size must be finite'
+  else if (opfSolidSegments in Patch.Fields) and
+    ((Patch.SolidSegments < 3) or (Patch.SolidSegments > 720)) then
+    ErrorText := 'Segments must be between 3 and 720'
+  else if ((opfSolidAzimuth in Patch.Fields) and
+    not IsFiniteValue(Patch.SolidAzimuth)) or
+    ((opfSolidElevation in Patch.Fields) and
+    not IsFiniteValue(Patch.SolidElevation)) then
+    ErrorText := 'Camera angles must be finite'
   else
     Result := True;
 end;
@@ -473,6 +612,7 @@ begin
       RawByteString(Patch.BitmapLink));
   if opfKeepAspectRatio in Patch.Fields then
     (Obj as TBitmap2D).KeepAspectRatio := Patch.KeepAspectRatio;
+  ApplySolidPatch(Obj, Patch);
   Obj.UpdateExtension(nil);
 end;
 
@@ -572,6 +712,13 @@ begin
     opfRectangleRY: Patch.RectangleRY := TRealType(Value);
     opfBitmapLink: Patch.BitmapLink := LCLTextToUTF8Bytes(VarToStr(Value));
     opfKeepAspectRatio: Patch.KeepAspectRatio := Boolean(Value);
+    opfSolidSize1: Patch.SolidSize1 := TRealType(Value);
+    opfSolidSize2: Patch.SolidSize2 := TRealType(Value);
+    opfSolidSize3: Patch.SolidSize3 := TRealType(Value);
+    opfSolidSegments: Patch.SolidSegments := Integer(Value);
+    opfSolidAzimuth: Patch.SolidAzimuth := TRealType(Value);
+    opfSolidElevation: Patch.SolidElevation := TRealType(Value);
+    opfSolidPerspective: Patch.SolidPerspective := Boolean(Value);
   end;
   Result := True;
 end;
@@ -686,9 +833,10 @@ function SupportsProperty(Obj: TObject2D;
 begin
   case Field of
     opfLineStyle, opfLineColor, opfLineWidth, opfHatching,
-    opfHatchColor, opfFillColor, opfBeginArrowKind,
-    opfEndArrowKind, opfArrowSizeFactor:
+    opfHatchColor, opfFillColor:
       Result := Obj is TPrimitive2D;
+    opfBeginArrowKind, opfEndArrowKind, opfArrowSizeFactor:
+      Result := (Obj is TPrimitive2D) and not (Obj is TSolid3D);
     opfText, opfTeXText, opfTextHeight, opfFontName,
     opfFontStyle, opfHAlignment, opfTextRotation:
       Result := Obj is TText2D;
@@ -697,6 +845,7 @@ begin
       Result := Obj is TSymbol2D;
     opfRectangleRX, opfRectangleRY: Result := Obj is TRectangle2D;
     opfBitmapLink, opfKeepAspectRatio: Result := Obj is TBitmap2D;
+    opfSolidSize1..opfSolidPerspective: Result := SolidSupports(Obj, Field);
   end;
 end;
 
@@ -738,6 +887,7 @@ begin
       if (Obj as TBitmap2D).BitmapEntry = nil then Value := ''
       else Value := (Obj as TBitmap2D).BitmapEntry.ImageLink;
     opfKeepAspectRatio: Value := (Obj as TBitmap2D).KeepAspectRatio;
+    opfSolidSize1..opfSolidPerspective: Value := ReadSolidValue(Obj, Field);
   end;
 end;
 

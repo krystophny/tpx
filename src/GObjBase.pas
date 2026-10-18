@@ -1149,7 +1149,7 @@ function StringToBlockName(const Str: string): TSourceBlockName;
 
 implementation
 
-uses Drawings, GObjects;
+uses Drawings, GObjects, Solid3D;
 
 type
 
@@ -2605,6 +2605,7 @@ initialization
   TpXRegisterClass(24, TSymbol2D);
   TpXRegisterClass(25, TBitmap2D);
   TpXRegisterClass(26, TCompound2D);
+  TpXRegisterClass(27, TSolid3D);
 
 finalization
 end.
