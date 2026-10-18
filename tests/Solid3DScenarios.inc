@@ -548,6 +548,16 @@ begin
   finally
     DeleteFile(FileName);
   end;
+  // A box beside the torus: sizes mean different things, so they hide.
+  Drawing.AddObject(-1, TSolid3D.Create(-1));
+  TSolid3D(Drawing.ObjectList.LastObj).AddBody(skBox);
+  TSolid3D(Drawing.ObjectList.LastObj).FinishFirstDraw;
+  Drawing.SelectAll;
+  MainForm.RefreshInspectorSelection;
+  Check(not MainForm.Inspector.FieldShown(opfSolidSize1) and
+    MainForm.Inspector.FieldShown(opfSolidAzimuth),
+    'Inspector shows ambiguous 3D sizes for a box beside a torus');
+  Drawing.SelectionClear;
   Drawing.DeleteAllObjects;
   WriteLn('PASS solid3d-inspector');
 end;

@@ -29,6 +29,8 @@ type
 
   TObjectInspector = class(TPanel)
   private
+    { 3D size fields whose meaning differs across the selected bodies. }
+    FSolidAmbiguous: TObjectPropertyFields;
     FImages: TPropertyImages;
     FHeader: TPanel;
     FSelectionLabel: TLabel;
@@ -968,6 +970,7 @@ var
   I: Integer;
   Obj: TGraphicObject;
 begin
+  FSolidAmbiguous := [];
   for Field := opfSolidSize1 to opfSolidSegments do
   begin
     { The kind's own word when every selected body agrees. }
@@ -981,11 +984,11 @@ begin
       if Caption = '' then Caption := Other
       else if Caption <> Other then
       begin
-        Caption := Format('Size %d', [Ord(Field) - Ord(opfSolidSize1) + 1]);
+        Include(FSolidAmbiguous, Field);
         Break;
       end;
     end;
-    if Caption = '' then Continue;
+    if (Caption = '') or (Field in FSolidAmbiguous) then Continue;
     FWidgets[Field].LabelText.Caption := Caption;
     FWidgets[Field].Editor.Hint := Caption;
   end;
@@ -1003,6 +1006,7 @@ begin
   if (FHasSessionField) and (FSessionField = Field) and
     ((FSession <> nil) or Editor.Focused) then Exit;
   Value := ReadObjectProperty(FDrawing, FTargetIDs, Field);
+  if Field in FSolidAmbiguous then Value.State := pvsUnavailable;
   FApplicable[Field] := Value.State <> pvsUnavailable;
   case Value.State of
     pvsUnavailable:
