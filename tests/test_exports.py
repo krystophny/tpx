@@ -163,6 +163,13 @@ class ExportTests(unittest.TestCase):
         self.run_tpx("-f", source, "-o", "saved.TpX")
         saved = self.read_tpx(self.root / "saved.TpX")
         self.assertEqual(len(saved.findall("./group/line")), 2)
+        # Text between elements, as in a TpX block written on one line.
+        source.write_text(
+            '%<TpX v="5" PicScale="1">%  <group><line x1="0" y1="0" x2="10" y2="10"/>'
+            '<line x1="0" y1="10" x2="10" y2="0"/></group>%</TpX>')
+        self.run_tpx("-f", source, "-o", "saved.TpX")
+        saved = self.read_tpx(self.root / "saved.TpX")
+        self.assertEqual(len(saved.findall("./group/line")), 2)
 
 
 if __name__ == "__main__":
