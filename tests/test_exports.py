@@ -286,18 +286,27 @@ class ExportTests(unittest.TestCase):
             self.assertEqual(points, [(20, -45), (32, -45), (32, -37), (20, -37)])
 
     def test_cli_tikz_save_preserves_unedited_source(self):
-        source = self.root / "source.tikz"
-        original = (
+        picture = (
             "% preserve source coordinates, inherited text color and comments\n"
             "\\begin{tikzpicture}\n"
             "\\draw (62mm,26mm) circle (0.899999619mm);\n"
             "\\node[anchor=base west] at (64mm,27mm) {$x$};\n"
             "\\end{tikzpicture}\n").encode()
-        source.write_bytes(original)
-        for name in ("first.tikz", "second.tikz"):
-            self.run_tpx("-f", source, "-o", name)
-            source = self.root / name
-            self.assertEqual(source.read_bytes(), original)
+        wrappers = (
+            (".tikz", b"", b""),
+            (".tex", b"\\documentclass{article}\n\\usepackage{tikz}\n"
+             b"% preserve the surrounding document too\n\\begin{document}\n",
+             b"\\end{document}\n"))
+        for extension, prefix, suffix in wrappers:
+            with self.subTest(extension=extension):
+                source = self.root / ("source" + extension)
+                original = prefix + picture + suffix
+                source.write_bytes(original)
+                for stem in ("first", "second"):
+                    target = self.root / (stem + extension)
+                    self.run_tpx("-f", source, "-o", target)
+                    source = target
+                    self.assertEqual(source.read_bytes(), original)
 
     def test_cli_saves_bare_tikz_fragment_as_reopenable_tex(self):
         source = self.root / "bare.tikz"
