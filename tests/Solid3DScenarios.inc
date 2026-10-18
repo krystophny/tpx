@@ -149,6 +149,7 @@ var
   Ctx, Ctx2, MidCtx: TObject;
   Bytes, Bytes2, Tampered: RawByteString;
   I, P: Integer;
+  Snapshot: TMemoryStream;
 begin
   Scene := Solid3DLoad('tpx', 'scene.TpX', Solid3DSceneTpX, Ctx);
   try
@@ -162,6 +163,20 @@ begin
         Bytes2 := SerializeDocumentToBytes(Formats[I], Reloaded,
           TDocumentPath(Names[I]), Ctx2);
         Check(Bytes2 = Bytes, Formats[I] + ' save -> open -> save is not byte-stable');
+        // An undo snapshot (object stream) keeps the saved numbers too.
+        Snapshot := TMemoryStream.Create;
+        try
+          Reloaded.SaveObjectsToStream(Snapshot);
+          Reloaded.DeleteAllObjects;
+          Snapshot.Position := 0;
+          Reloaded.LoadObjectsFromStream(Snapshot);
+        finally
+          Snapshot.Free;
+        end;
+        if I = 1 then
+          Check(SerializeDocumentToBytes(Formats[I], Reloaded,
+            TDocumentPath(Names[I]), Ctx2) = Bytes,
+            Formats[I] + ' save after an undo snapshot is not byte-stable');
         Again := Solid3DLoad(Formats[I], Names[I], Bytes2, MidCtx);
         try
           CheckSameSolids(Scene, Again, Formats[I] + ' second round trip', I = 1);
@@ -193,6 +208,24 @@ begin
         Mid.Free;
         MidCtx.Free;
       end;
+    end;
+    // Copy as TikZ carries the 3D objects and pastes back as them.
+    Bytes := GenerateTikZPictureFragment(Scene);
+    Check(Pos('% tpx-solid ', string(Bytes)) > 0,
+      'Copy as TikZ dropped the 3D object records');
+    if GetEnvironmentVariable('TPX_TIKZ_FRAGMENT') <> '' then
+      with TFileStream.Create(GetEnvironmentVariable('TPX_TIKZ_FRAGMENT'), fmCreate) do
+      try
+        WriteBuffer(Bytes[1], Length(Bytes));
+      finally
+        Free;
+      end;
+    Reloaded := Solid3DLoad('tikz', 'clipboard.tikz', Bytes, Ctx2);
+    try
+      CheckSameSolids(Scene, Reloaded, 'Copy as TikZ');
+    finally
+      Reloaded.Free;
+      Ctx2.Free;
     end;
     // Faces edited outside TpX stay as the edited plain paths.
     Bytes := SerializeDocumentToBytes('svg', Scene, 'scene.svg');
@@ -422,4 +455,99 @@ begin
     'Ungroup of a revolution did not return its two profiles');
   Drawing.DeleteAllObjects;
   WriteLn('PASS solid3d-editing');
+end;
+
+procedure TestSolid3DInspector;
+var
+  Drawing: TDrawing2D;
+  Torus: TSolid3D;
+  ErrorText, FileName: string;
+  Edit: TEdit;
+  Box: TCheckBox;
+  Origin: TPoint2D;
+  Scale, Angle: Double;
+  Pieces0: Integer;
+  Saved: RawByteString;
+  Ctx: TObject;
+  Reloaded: TDrawing2D;
+  procedure ChangeNumber(Field: TObjectPropertyField; const Value: string);
+  begin
+    MainForm.Inspector.FocusField(Field);
+    Edit := MainForm.Inspector.EditorFor(Field) as TEdit;
+    Edit.Text := Value;
+    Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+      'Inspector 3D edit failed: ' + ErrorText);
+  end;
+begin
+  SetLiveTeXEnabled(False);
+  MainForm.Show;
+  MainForm.ShowInspector;
+  Application.ProcessMessages;
+  Drawing := MainForm.TheDrawing;
+  Drawing.DeleteAllObjects;
+  MainForm.EventManager.SendMessage(Msg_InsertTorus, nil);
+  TInsertSizedGrObjMode(MainForm.EventManager.Mode).PointSelected(Point2D(10, 10));
+  TInsertSizedGrObjMode(MainForm.EventManager.Mode).PointSelected(Point2D(70, 50));
+  Torus := Drawing.ObjectList.FirstObj as TSolid3D;
+  Drawing.SelectionClear;
+  Drawing.SelectionAdd(Torus);
+  MainForm.RefreshInspectorSelection;
+  Check(MainForm.Inspector.FieldShown(opfSolidSize1) and
+    MainForm.Inspector.FieldShown(opfSolidSize2) and
+    not MainForm.Inspector.FieldShown(opfSolidSize3) and
+    MainForm.Inspector.FieldShown(opfSolidSegments),
+    'Inspector does not show the torus radii and segments');
+  Check(not MainForm.Inspector.FieldShown(opfBeginArrowKind),
+    'Inspector offers arrows for a 3D object');
+  Torus.GetPlacement(Origin, Scale, Angle);
+  Pieces0 := Torus.Pieces.Count;
+  ChangeNumber(opfSolidSize1, '30');
+  Torus := Drawing.ObjectList.FirstObj as TSolid3D;
+  Check(Abs(Torus.Bodies[0].Size1 * Scale - 30) < 1E-3,
+    'Inspector did not set the torus radius in drawing mm');
+  ChangeNumber(opfSolidSegments, '12');
+  Torus := Drawing.ObjectList.FirstObj as TSolid3D;
+  Check((Torus.Bodies[0].SegU = 12) and (Torus.Pieces.Count < Pieces0),
+    'Inspector segment edit did not re-render the torus');
+  MainForm.Inspector.ShowMore := True;
+  Check(MainForm.Inspector.FieldShown(opfSolidAzimuth) and
+    MainForm.Inspector.FieldShown(opfSolidPerspective),
+    'More properties does not show the 3D camera');
+  ChangeNumber(opfSolidAzimuth, '-30');
+  MainForm.Inspector.FocusField(opfSolidPerspective);
+  Box := MainForm.Inspector.EditorFor(opfSolidPerspective) as TCheckBox;
+  Box.Checked := True;
+  if Assigned(Box.OnChange) then Box.OnChange(Box);
+  Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText), ErrorText);
+  Torus := Drawing.ObjectList.FirstObj as TSolid3D;
+  Check((Abs(Torus.Azimuth + 30) < 1E-6) and Torus.Perspective,
+    'Inspector camera edits did not reach the 3D object');
+  // Undo steps back through the Inspector edits.
+  Drawing.History.Undo;
+  Torus := Drawing.ObjectList.FirstObj as TSolid3D;
+  Check(not Torus.Perspective, 'Undo did not revert the Inspector 3D edit');
+  Drawing.History.Redo;
+  FileName := GetTempFileName(GetTempDir, 'tpx-solid-inspector-') + '.TpX';
+  try
+    Check(StoreToFile_TpX(Drawing, FileName, False), 'saving the edited torus failed');
+    Saved := Solid3DReadFile(FileName);
+    Check((Pos('kind="torus"', string(Saved)) > 0) and
+      (Pos('segments="12"', string(Saved)) > 0) and
+      (Pos('az="-30"', string(Saved)) > 0) and (Pos('persp="1"', string(Saved)) > 0),
+      'the saved file does not carry the Inspector 3D edits');
+    Reloaded := Solid3DLoad('tpx', FileName, Saved, Ctx);
+    try
+      Torus := Reloaded.ObjectList.FirstObj as TSolid3D;
+      Torus.GetPlacement(Origin, Scale, Angle);
+      Check(Abs(Torus.Bodies[0].Size1 * Scale - 30) < 1E-3,
+        'the reopened torus lost its Inspector radius');
+    finally
+      Reloaded.Free;
+      Ctx.Free;
+    end;
+  finally
+    DeleteFile(FileName);
+  end;
+  Drawing.DeleteAllObjects;
+  WriteLn('PASS solid3d-inspector');
 end;

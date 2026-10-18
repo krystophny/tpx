@@ -117,6 +117,7 @@ type
       const Value: Variant): string;
     procedure ReleaseSession;
     procedure RefreshCurrentSelection;
+    procedure UpdateSolidCaptions;
     function EditorCompositionPending(Editor: TWinControl): Boolean;
   public
     constructor Create(AOwner: TComponent); override;
@@ -160,7 +161,7 @@ function InspectorNumberText(const Value: Double): string;
 implementation
 
 uses
-  Types, ColorEtc, Geometry
+  Types, ColorEtc, Geometry, Solid3D
 {$IFDEF FPC}
   , LCLType
 {$ELSE}
@@ -171,15 +172,17 @@ uses
 const
   { Object-specific properties come first; the style properties that the
     toolbars above the canvas also edit stay behind "More". }
-  PrimaryFields: array[0..10] of TObjectPropertyField = (opfText,
+  PrimaryFields: array[0..14] of TObjectPropertyField = (opfText,
     opfTeXText, opfTextHeight, opfTextRotation, opfSymbolKind,
     opfSymbolDiameter, opfSymbolRotation, opfRectangleRX, opfRectangleRY,
-    opfBitmapLink, opfKeepAspectRatio);
-  MoreFields: array[0..13] of TObjectPropertyField = (opfLineStyle,
+    opfBitmapLink, opfKeepAspectRatio, opfSolidSize1, opfSolidSize2,
+    opfSolidSize3, opfSolidSegments);
+  MoreFields: array[0..16] of TObjectPropertyField = (opfLineStyle,
     opfLineColor, opfLineWidth, opfBeginArrowKind, opfEndArrowKind,
     opfArrowSizeFactor, opfHatching, opfHatchColor, opfFillColor,
     opfFontName, opfFontStyle, opfHAlignment, opfStarKind,
-    opfStarSizeFactor);
+    opfStarSizeFactor, opfSolidAzimuth, opfSolidElevation,
+    opfSolidPerspective);
   LabelWidth = 112;
   RowHeight = 30;
   MemoHeight = 50;
@@ -240,6 +243,13 @@ begin
     opfRectangleRY: Result := 'RectangleRY';
     opfBitmapLink: Result := 'BitmapLink';
     opfKeepAspectRatio: Result := 'KeepAspectRatio';
+    opfSolidSize1: Result := 'SolidSize1';
+    opfSolidSize2: Result := 'SolidSize2';
+    opfSolidSize3: Result := 'SolidSize3';
+    opfSolidSegments: Result := 'SolidSegments';
+    opfSolidAzimuth: Result := 'Azimuth';
+    opfSolidElevation: Result := 'Elevation';
+    opfSolidPerspective: Result := 'Perspective';
   end;
 end;
 
@@ -387,6 +397,11 @@ begin
   AddField(opfRectangleRY, 'Corner ry (mm)', False, False, False);
   AddField(opfBitmapLink, 'Image', False, False, False);
   AddField(opfKeepAspectRatio, 'Keep aspect ratio', False, False, True);
+  { 3D size captions follow the selected body kind (UpdateSolidCaptions). }
+  AddField(opfSolidSize1, 'Size 1', False, False, False);
+  AddField(opfSolidSize2, 'Size 2', False, False, False);
+  AddField(opfSolidSize3, 'Size 3', False, False, False);
+  AddField(opfSolidSegments, 'Segments', False, False, False);
 
   FCoordinateButton := TButton.Create(Self);
   FCoordinateButton.Name := 'InspectorCoordinatesButton';
@@ -417,6 +432,9 @@ begin
   AddField(opfHAlignment, 'Alignment', True, False, False);
   AddField(opfStarKind, 'Star shape', True, False, False);
   AddField(opfStarSizeFactor, 'Star size', False, False, False);
+  AddField(opfSolidAzimuth, 'Azimuth (°)', False, False, False);
+  AddField(opfSolidElevation, 'Elevation (°)', False, False, False);
+  AddField(opfSolidPerspective, 'Perspective', False, False, True);
 
   FEmptyLabel := TLabel.Create(Self);
   FEmptyLabel.Parent := FContent;
@@ -677,6 +695,12 @@ begin
   if Obj is TClosedBezierPath2D then Exit('Closed Bezier path');
   if Obj is TBezierPath2D then Exit('Bezier path');
   if Obj is TContainer2D then Exit('Group');
+  if Obj is TSolid3D then
+  begin
+    if TSolid3D(Obj).BodyCount = 1 then
+      Exit(SolidKindNames[TSolid3D(Obj).Bodies[0].Kind]);
+    Exit('3D scene');
+  end;
   Name := Obj.ClassName;
   if (Name <> '') and (Name[1] = 'T') then Delete(Name, 1, 1);
   if Copy(Name, Length(Name) - 1, 2) = '2D' then
@@ -842,7 +866,9 @@ function TObjectInspector.IsNumericField(
 begin
   Result := Field in [opfLineWidth, opfArrowSizeFactor, opfTextHeight,
     opfTextRotation, opfStarSizeFactor, opfSymbolDiameter,
-    opfSymbolRotation, opfRectangleRX, opfRectangleRY];
+    opfSymbolRotation, opfRectangleRX, opfRectangleRY, opfSolidSize1,
+    opfSolidSize2, opfSolidSize3, opfSolidSegments, opfSolidAzimuth,
+    opfSolidElevation];
 end;
 
 function TObjectInspector.NumericRange(
@@ -850,7 +876,9 @@ function TObjectInspector.NumericRange(
 begin
   case Field of
     opfTextHeight: Result := nerPositive;
-    opfTextRotation, opfSymbolRotation: Result := nerFinite;
+    opfTextRotation, opfSymbolRotation, opfSolidSize2, opfSolidAzimuth,
+    opfSolidElevation: Result := nerFinite;
+    opfSolidSize1, opfSolidSize3, opfSolidSegments: Result := nerPositive;
   else
     Result := nerNonnegative;
   end;
@@ -881,6 +909,9 @@ begin
     opfStarSizeFactor, opfSymbolDiameter, opfRectangleRX,
     opfRectangleRY:
       Result := InspectorNumberText(TRealType(Value));
+    opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidAzimuth,
+    opfSolidElevation:
+      Result := InspectorNumberText(Double(Value));
   else
     Result := VarToStr(Value);
   end;
@@ -928,6 +959,36 @@ begin
   end
   else if Editor is TCheckBox then
     (Editor as TCheckBox).Checked := False;
+end;
+
+procedure TObjectInspector.UpdateSolidCaptions;
+var
+  Field: TObjectPropertyField;
+  Caption, Other: string;
+  I: Integer;
+  Obj: TGraphicObject;
+begin
+  for Field := opfSolidSize1 to opfSolidSegments do
+  begin
+    { The kind's own word when every selected body agrees. }
+    Caption := '';
+    for I := 0 to High(FTargetIDs) do
+    begin
+      Obj := nil;
+      if FDrawing <> nil then Obj := FDrawing.GetObject(FTargetIDs[I]);
+      if not ((Obj is TObject2D) and
+        SolidFieldCaption(TObject2D(Obj), Field, Other)) then Continue;
+      if Caption = '' then Caption := Other
+      else if Caption <> Other then
+      begin
+        Caption := Format('Size %d', [Ord(Field) - Ord(opfSolidSize1) + 1]);
+        Break;
+      end;
+    end;
+    if Caption = '' then Continue;
+    FWidgets[Field].LabelText.Caption := Caption;
+    FWidgets[Field].Editor.Hint := Caption;
+  end;
 end;
 
 procedure TObjectInspector.RefreshField(Field: TObjectPropertyField);
@@ -992,6 +1053,7 @@ begin
       FCoordinateButton.Visible := HasCoordinateTable;
       FTitle := SelectionTitle(SelectedCount);
       FSelectionLabel.Caption := FTitle;
+      UpdateSolidCaptions;
       for Field := Low(TObjectPropertyField) to High(TObjectPropertyField) do
         RefreshField(Field);
       LayoutRows;
@@ -1162,6 +1224,12 @@ begin
       opfSymbolRotation: Patch.SymbolRotation := Number;
       opfRectangleRX: Patch.RectangleRX := Number;
       opfRectangleRY: Patch.RectangleRY := Number;
+      opfSolidSize1: Patch.SolidSize1 := Number;
+      opfSolidSize2: Patch.SolidSize2 := Number;
+      opfSolidSize3: Patch.SolidSize3 := Number;
+      opfSolidSegments: Patch.SolidSegments := Round(Number);
+      opfSolidAzimuth: Patch.SolidAzimuth := Number;
+      opfSolidElevation: Patch.SolidElevation := Number;
     end;
     Exit(True);
   end;
@@ -1207,7 +1275,8 @@ begin
   if Editor is TCheckBox then
   begin
     Check := Editor as TCheckBox;
-    Patch.KeepAspectRatio := Check.Checked;
+    if Field = opfSolidPerspective then Patch.SolidPerspective := Check.Checked
+    else Patch.KeepAspectRatio := Check.Checked;
     Exit(True);
   end;
   if Editor is TCompositionAwareMemo then

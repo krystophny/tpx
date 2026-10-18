@@ -215,12 +215,19 @@ begin
     opfTeXText: begin WriteRaw(Stream, RawByteString(Patch.TeXText)); Exit end;
     opfFontName: begin WriteUtf8(Stream, Patch.FontName); Exit end;
     opfBitmapLink: begin WriteUtf8(Stream, Patch.BitmapLink); Exit end;
-    opfKeepAspectRatio:
+    opfKeepAspectRatio, opfSolidPerspective:
       begin
-        B := Ord(Patch.KeepAspectRatio);
+        if Field = opfKeepAspectRatio then B := Ord(Patch.KeepAspectRatio)
+        else B := Ord(Patch.SolidPerspective);
         Stream.WriteBuffer(B, SizeOf(B));
         Exit;
       end;
+    opfSolidSegments: I := Patch.SolidSegments;
+    opfSolidSize1: R := Patch.SolidSize1;
+    opfSolidSize2: R := Patch.SolidSize2;
+    opfSolidSize3: R := Patch.SolidSize3;
+    opfSolidAzimuth: R := Patch.SolidAzimuth;
+    opfSolidElevation: R := Patch.SolidElevation;
     opfLineWidth: R := Patch.LineWidth;
     opfArrowSizeFactor: R := Patch.ArrowSizeFactor;
     opfTextHeight: R := Patch.TextHeight;
@@ -233,7 +240,7 @@ begin
   end;
   if Field in [opfLineWidth, opfArrowSizeFactor, opfTextHeight,
     opfTextRotation, opfStarSizeFactor, opfSymbolDiameter,
-    opfSymbolRotation, opfRectangleRX, opfRectangleRY] then
+    opfSymbolRotation, opfRectangleRX, opfRectangleRY, opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidAzimuth, opfSolidElevation] then
     Stream.WriteBuffer(R, SizeOf(R))
   else
     Stream.WriteBuffer(I, SizeOf(I));
@@ -248,11 +255,12 @@ begin
     opfTeXText: begin Patch.TeXText := ReadUtf8(Stream, MaxEditRecoveryBytes); Exit end;
     opfFontName: begin Patch.FontName := ReadUtf8(Stream, MaxEditRecoveryBytes); Exit end;
     opfBitmapLink: begin Patch.BitmapLink := ReadUtf8(Stream, MaxEditRecoveryBytes); Exit end;
-    opfKeepAspectRatio:
+    opfKeepAspectRatio, opfSolidPerspective:
       begin
         Stream.ReadBuffer(B, SizeOf(B));
         if B > 1 then raise EReadError.Create('Invalid recovery boolean');
-        Patch.KeepAspectRatio := B <> 0;
+        if Field = opfKeepAspectRatio then Patch.KeepAspectRatio := B <> 0
+        else Patch.SolidPerspective := B <> 0;
         Exit;
       end;
     opfFontStyle:
@@ -264,7 +272,7 @@ begin
   end;
   if Field in [opfLineWidth, opfArrowSizeFactor, opfTextHeight,
     opfTextRotation, opfStarSizeFactor, opfSymbolDiameter,
-    opfSymbolRotation, opfRectangleRX, opfRectangleRY] then
+    opfSymbolRotation, opfRectangleRX, opfRectangleRY, opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidAzimuth, opfSolidElevation] then
   begin
     Stream.ReadBuffer(R, SizeOf(R));
     case Field of
@@ -277,6 +285,11 @@ begin
       opfSymbolRotation: Patch.SymbolRotation := R;
       opfRectangleRX: Patch.RectangleRX := R;
       opfRectangleRY: Patch.RectangleRY := R;
+      opfSolidSize1: Patch.SolidSize1 := R;
+      opfSolidSize2: Patch.SolidSize2 := R;
+      opfSolidSize3: Patch.SolidSize3 := R;
+      opfSolidAzimuth: Patch.SolidAzimuth := R;
+      opfSolidElevation: Patch.SolidElevation := R;
     end;
     Exit;
   end;
@@ -288,6 +301,7 @@ begin
     opfHatchColor: Patch.HatchColor := TColor(I);
     opfFillColor: Patch.FillColor := TColor(I);
     opfBeginArrowKind: Patch.BeginArrowKind := TArrowKind(I);
+    opfSolidSegments: Patch.SolidSegments := I;
     opfEndArrowKind: Patch.EndArrowKind := TArrowKind(I);
     opfHAlignment: Patch.HAlignment := THAlignment(I);
     opfStarKind: Patch.StarKind := TStarKind(I);
@@ -639,6 +653,14 @@ begin
         opfBitmapLink: Destination.BitmapLink := Source.BitmapLink;
         opfKeepAspectRatio:
           Destination.KeepAspectRatio := Source.KeepAspectRatio;
+        opfSolidSize1: Destination.SolidSize1 := Source.SolidSize1;
+        opfSolidSize2: Destination.SolidSize2 := Source.SolidSize2;
+        opfSolidSize3: Destination.SolidSize3 := Source.SolidSize3;
+        opfSolidSegments: Destination.SolidSegments := Source.SolidSegments;
+        opfSolidAzimuth: Destination.SolidAzimuth := Source.SolidAzimuth;
+        opfSolidElevation: Destination.SolidElevation := Source.SolidElevation;
+        opfSolidPerspective:
+          Destination.SolidPerspective := Source.SolidPerspective;
       end;
       Include(Destination.Fields, Field);
     end;

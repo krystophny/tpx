@@ -969,7 +969,37 @@ begin
 end;
 
 const
-  SolidStreamVersion: Byte = 1;
+  SolidStreamVersion: Byte = 2;
+
+// Point sets as count + points; used for the frozen rendering.
+procedure WritePointSet(const Stream: TStream; const PP: TPointsSet2D);
+var
+  N, I: Longint;
+  P: TPoint2D;
+begin
+  N := PP.Count;
+  Stream.Write(N, SizeOf(N));
+  for I := 0 to N - 1 do
+  begin
+    P := PP[I];
+    Stream.Write(P, SizeOf(P));
+  end;
+end;
+
+procedure ReadPointSet(const Stream: TStream; const PP: TPointsSet2D);
+var
+  N, I: Longint;
+  P: TPoint2D;
+begin
+  Stream.ReadBuffer(N, SizeOf(N));
+  if (N < 0) or (Int64(N) * SizeOf(P) > Stream.Size - Stream.Position) then
+    raise EReadError.Create('Invalid 3D rendering data');
+  for I := 0 to N - 1 do
+  begin
+    Stream.ReadBuffer(P, SizeOf(P));
+    PP.Add(P);
+  end;
+end;
 
 procedure TSolid3D.SaveToStream(const Stream: TStream);
 var
@@ -988,6 +1018,21 @@ begin
   N := fBodies.Count;
   Stream.Write(N, SizeOf(N));
   for I := 0 to fBodies.Count - 1 do Bodies[I].SaveToStream(Stream);
+  // The frozen rendering survives undo snapshots and the clipboard.
+  if (fFrozen <> nil) and (fFrozenKey = GeometryKey) then N := fFrozen.Count
+  else N := -1;
+  Stream.Write(N, SizeOf(N));
+  if N >= 0 then
+  begin
+    for I := 0 to N - 1 do
+    begin
+      B := Ord(TPiece(fFrozen[I]).Closed) or (Ord(TPiece(fFrozen[I]).Line) shl 1) or
+        (Ord(TPiece(fFrozen[I]).Fill) shl 4) or (Ord(TPiece(fFrozen[I]).Hatch) shl 7);
+      Stream.Write(B, SizeOf(B));
+      WritePointSet(Stream, TPiece(fFrozen[I]));
+    end;
+    WritePointSet(Stream, fFrozenHatch);
+  end;
 end;
 
 constructor TSolid3D.CreateFromStream(const Stream: TStream);
@@ -995,11 +1040,12 @@ var
   N, I: Longint;
   B, Version: Byte;
   Body: TSolidBody;
+  Piece: TPolyLinPiece;
 begin
   inherited CreateFromStream(Stream);
   fBodies := TObjectList.Create(True);
   Stream.ReadBuffer(Version, SizeOf(Version));
-  if Version <> SolidStreamVersion then
+  if (Version < 1) or (Version > SolidStreamVersion) then
     raise EReadError.Create('Unsupported 3D object stream version');
   Stream.ReadBuffer(fAzimuth, SizeOf(fAzimuth));
   Stream.ReadBuffer(fElevation, SizeOf(fElevation));
@@ -1022,6 +1068,29 @@ begin
     end;
     fBodies.Add(Body);
   end;
+  if Version >= 2 then
+  begin
+    Stream.ReadBuffer(N, SizeOf(N));
+    if N > 1000000 then raise EReadError.Create('Invalid 3D rendering data');
+    if N >= 0 then
+    begin
+      fFrozen := TObjectList.Create(True);
+      for I := 0 to N - 1 do
+      begin
+        Piece := TPolyLinPiece.Create(0);
+        fFrozen.Add(Piece);
+        Stream.ReadBuffer(B, SizeOf(B));
+        Piece.Closed := B and 1 <> 0;
+        Piece.Line := TPieceLine((B shr 1) and 7);
+        Piece.Fill := TPieceFill((B shr 4) and 7);
+        Piece.Hatch := TPieceHatch((B shr 7) and 1);
+        ReadPointSet(Stream, Piece);
+      end;
+      fFrozenHatch := TPointsSet2D.Create(0);
+      ReadPointSet(Stream, fFrozenHatch);
+      fFrozenKey := GeometryKey;
+    end;
+  end;
   UpdateExtension(Self);
 end;
 
@@ -1030,6 +1099,7 @@ var
   Src: TSolid3D;
   I: Integer;
   Body: TSolidBody;
+  Piece: TPolyLinPiece;
 begin
   if Obj = Self then Exit;
   inherited Assign(Obj);
@@ -1049,6 +1119,23 @@ begin
       Body := TSolidBody.Create(Src.Bodies[I].Kind);
       Body.Assign(Src.Bodies[I]);
       fBodies.Add(Body);
+    end;
+    FreeAndNil(fFrozen);
+    FreeAndNil(fFrozenHatch);
+    if (Src.fFrozen <> nil) and (Src.fFrozenKey = Src.GeometryKey) then
+    begin
+      fFrozen := TObjectList.Create(True);
+      for I := 0 to Src.fFrozen.Count - 1 do
+      begin
+        Piece := TPolyLinPiece.Create(0);
+        Piece.Assign(TPiece(Src.fFrozen[I]));
+        Piece.Copy(TPiece(Src.fFrozen[I]), 0, TPiece(Src.fFrozen[I]).Count - 1);
+        fFrozen.Add(Piece);
+      end;
+      fFrozenHatch := TPointsSet2D.Create(0);
+      if Src.fFrozenHatch.Count > 0 then
+        fFrozenHatch.Copy(Src.fFrozenHatch, 0, Src.fFrozenHatch.Count - 1);
+      fFrozenKey := GeometryKey;
     end;
   end;
   UpdateExtension(Self);
