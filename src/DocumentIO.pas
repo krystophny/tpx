@@ -28,7 +28,7 @@ type
     FExpectedRevision: TDiskRevision;
     FDrawing: TDrawing2D;
     FBytes: RawByteString;
-    FCanSaveBack, FPublished, FCommitted: Boolean;
+    FCanSaveBack, FPublished, FCommitted, FRebaseLinks: Boolean;
     FNewRevision: TDiskRevision;
     FBackupFileName: TDocumentPath;
     FCodecContext: TObject;
@@ -175,6 +175,7 @@ constructor TDocumentSaveTransaction.Create(const FormatId: string;
 var Stream: TMemoryStream; Candidate: TDrawing2D;
   CandidateFileName: TDocumentPath; HasStagedAssets,
   UseStagedValidation: Boolean; Format: TDocumentFormat;
+  SavedLinks: TStringList;
 begin
   inherited Create;
   FFormatId := FormatId;
@@ -203,13 +204,26 @@ begin
     FStagingFileName := IncludeTrailingPathDelimiter(FStageDirectory) +
       DocumentPathFileName(FPath);
     Stream := TMemoryStream.Create;
-    if not SerializeDocumentForSave(FormatId, Drawing, FPath, FStagingFileName,
-      Stream, CodecContext, FStagedAssets, FFinalAssets, AllowExternalTools) then
-      raise EWriteError.Create('The document could not be serialized');
     UseStagedValidation := DocumentCodecUsesStagedValidationPath(FormatId);
-    StageRelativeBitmapAssets(Drawing, FPath, FStageDirectory,
-      FStagingFileName, UseStagedValidation, FStagedAssets, FFinalAssets,
-      HasStagedAssets);
+{$IFNDEF CPUWASM32}
+    { TpX links images where they are, relative to the destination; only
+      assets held in private storage are staged beside the document. }
+    FRebaseLinks := SameText(FormatId, 'tpx');
+{$ENDIF}
+    SavedLinks := TStringList.Create;
+    try
+      if FRebaseLinks then Drawing.RebaseBitmapLinks(FPath, SavedLinks);
+      if not SerializeDocumentForSave(FormatId, Drawing, FPath,
+        FStagingFileName, Stream, CodecContext, FStagedAssets, FFinalAssets,
+        AllowExternalTools) then
+        raise EWriteError.Create('The document could not be serialized');
+      StageRelativeBitmapAssets(Drawing, FPath, FStageDirectory,
+        FStagingFileName, UseStagedValidation, FStagedAssets, FFinalAssets,
+        HasStagedAssets);
+    finally
+      if FRebaseLinks then Drawing.RestoreBitmapLinks(SavedLinks);
+      SavedLinks.Free;
+    end;
     if Stream.Size > MaxDocumentBytes then
       raise EWriteError.CreateFmt('Document exceeds the %d byte limit',
         [MaxDocumentBytes]);
@@ -277,7 +291,7 @@ begin
     raise EWriteError.Create('The document save transaction was already published');
   WriteDocumentBundleAtomically(FPath, FBytes, FExpectedRevision, True,
     FStagedAssets, FFinalAssets, NewRevision, BackupFileName);
-  FDrawing.RebindFileNameAfterAssetCommit(FPath);
+  FDrawing.RebindFileNameAfterAssetCommit(FPath, FRebaseLinks);
   FNewRevision := NewRevision;
   FBackupFileName := BackupFileName;
   FPublished := True;

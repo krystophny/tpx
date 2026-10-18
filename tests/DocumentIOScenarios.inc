@@ -457,7 +457,8 @@ end;
 
 procedure TestSaveAsPreservesRelativeBitmapAsset;
 var Directory, SourceDirectory, TargetDirectory, SourceFileName,
-  TargetFileName, SourceImageFileName, TargetImageFileName, ErrorText: string;
+  TargetFileName, SourceImageFileName, TargetImageFileName, ErrorText,
+  ExpectedLink: string;
   Drawing: TDrawing2D;
   Session: TDocumentSession;
   Image: Graphics.TBitmap;
@@ -513,9 +514,14 @@ begin
     Saved := BaseMode.SaveDocumentToPath(TargetFileName, 'tpx', True,
       False, ErrorText);
     Check(Saved, 'Save As failed for a relative bitmap resource: ' + ErrorText);
-    Check(FileExists(TargetFileName) and FileExists(TargetImageFileName),
-      'Save As did not publish both the document and its bitmap resource');
-    Check(ReadDocumentTestBytes(TargetImageFileName) = SourceImageBytes,
+    // Save As links the original image instead of copying it along.
+    ExpectedLink := '..' + PathDelim + 'source' + PathDelim + 'image.bmp';
+    Check(FileExists(TargetFileName) and not FileExists(TargetImageFileName),
+      'Save As copied the bitmap resource instead of linking it');
+    Check(Pos('link="' + ExpectedLink + '"',
+      ReadDocumentTestBytes(TargetFileName)) > 0,
+      'Save As did not write the bitmap link relative to the target');
+    Check(ReadDocumentTestBytes(SourceImageFileName) = SourceImageBytes,
       'Save As changed the bytes of the relative bitmap resource');
     Check((Drawing.FileName = TargetFileName) and
       (Session.SourcePath = TargetFileName) and
@@ -523,10 +529,10 @@ begin
       (Drawing.BitmapRegistry.Count = 1),
       'Save As did not rebind the drawing and source to the target folder');
     BitmapEntry := Drawing.BitmapRegistry.Objects[0] as TBitmapEntry;
-    Check((BitmapEntry.ImageLink = 'image.bmp') and
+    Check((BitmapEntry.ImageLink = ExpectedLink) and
       (ExpandFileName(BitmapEntry.GetFullLink) =
-       ExpandFileName(TargetImageFileName)),
-      'Save As did not preserve the relative bitmap link at the new location');
+       ExpandFileName(SourceImageFileName)),
+      'Save As did not rebase the bitmap link onto the original image');
 
     Check(BaseMode.OpenDocumentFromPath(TargetFileName, ErrorText),
       'The Save As document could not reopen with its relative resource: ' +
@@ -535,8 +541,8 @@ begin
       (Drawing.GetObject(0) is TBitmap2D),
       'Reopening the Save As document lost its bitmap object');
     BitmapObject := Drawing.GetObject(0) as TBitmap2D;
-    Check((BitmapObject.BitmapEntry.ImageLink = 'image.bmp') and
-      BitmapObject.BitmapEntry.ImageFileExists(TargetImageFileName) and
+    Check((BitmapObject.BitmapEntry.ImageLink = ExpectedLink) and
+      FileExists(BitmapObject.BitmapEntry.GetFullLink) and
       (BitmapObject.Bitmap.Width = 3) and (BitmapObject.Bitmap.Height = 2),
       'Reopening the Save As document did not load the published image bytes');
     Check(not Drawing.History.IsChanged,
@@ -549,6 +555,93 @@ begin
     if FileExists(SourceImageFileName) then DeleteFile(SourceImageFileName);
     RemoveDir(TargetDirectory);
     RemoveDir(SourceDirectory);
+    RemoveDir(Directory);
+  end;
+end;
+
+procedure TestBitmapLinksStayInPlace;
+var Directory, FiguresDirectory, SharedImage, LegacyImage, DrawingFile,
+  LegacyFile, MovedFile, ErrorText: string;
+  Drawing: TDrawing2D;
+  Session: TDocumentSession;
+  Image: Graphics.TBitmap;
+  BitmapEntry: TBitmapEntry;
+  LegacyBytes: RawByteString;
+begin
+  PrepareDocumentTestDirectory('issue123-bitmap-links', Directory, DrawingFile);
+  FiguresDirectory := IncludeTrailingPathDelimiter(Directory) + 'figures';
+  Check(ForceDirectories(FiguresDirectory + PathDelim + 'bitmaps'),
+    'Could not create bitmap link test directories');
+  SharedImage := IncludeTrailingPathDelimiter(Directory) + 'shared.bmp';
+  LegacyImage := FiguresDirectory + PathDelim + 'bitmaps' + PathDelim +
+    'old.bmp';
+  DrawingFile := FiguresDirectory + PathDelim + 'fig.tpx';
+  LegacyFile := FiguresDirectory + PathDelim + 'legacy.tpx';
+  MovedFile := IncludeTrailingPathDelimiter(Directory) + 'moved.tpx';
+  Image := Graphics.TBitmap.Create;
+  try
+    Image.SetSize(3, 2);
+    Image.Canvas.Brush.Color := clRed;
+    Image.Canvas.FillRect(Rect(0, 0, 3, 2));
+    Image.SaveToFile(SharedImage);
+    Image.SaveToFile(LegacyImage);
+  finally
+    Image.Free;
+  end;
+  Drawing := MainForm.TheDrawing;
+  Session := MainForm.EventManager.DocumentSession;
+  try
+    Drawing.Clear;
+    Session.Clear;
+    Drawing.FileName := DrawingFile;
+    Drawing.TeXFormat := tex_none;
+    Drawing.PdfTeXFormat := pdftex_none;
+    // Inserting an image from outside the drawing folder links it in place.
+    BitmapEntry := Drawing.RegisterBitmap(SharedImage);
+    Check(BitmapEntry.ImageLink = '..' + PathDelim + 'shared.bmp',
+      'Inserted image is not linked relative to the drawing: ' +
+      BitmapEntry.ImageLink);
+    Check(not FileExists(FiguresDirectory + PathDelim + 'bitmaps' +
+      PathDelim + 'shared.bmp'), 'Inserting an image copied it into bitmaps');
+    Drawing.AddObject(-1, TBitmap2D.CreateSpec(-1,
+      Point2D(0, 0), Point2D(6, 4), BitmapEntry));
+    Check(BaseMode.SaveDocumentToPath(DrawingFile, 'tpx', True, False,
+      ErrorText), 'Saving the linked image drawing failed: ' + ErrorText);
+    Check(Pos('link="..' + PathDelim + 'shared.bmp"',
+      ReadDocumentTestBytes(DrawingFile)) > 0,
+      'The saved drawing lost its relative image link');
+    Check(BaseMode.SaveDocumentToPath(MovedFile, 'tpx', True, False,
+      ErrorText), 'Save As to the parent folder failed: ' + ErrorText);
+    Check(Pos('link="shared.bmp"', ReadDocumentTestBytes(MovedFile)) > 0,
+      'Save As did not recompute the image link for the new folder');
+
+    // A drawing that already uses bitmaps/ keeps its link on save.
+    WriteDocumentTestBytes(LegacyFile, '%<TpX v="5" TeXFormat="none" ' +
+      'PdfTeXFormat="none">' + LineEnding +
+      '%  <bitmap x="0" y="0" w="6" h="4" link="bitmaps/old.bmp"/>' +
+      LineEnding + '%</TpX>' + LineEnding);
+    LegacyBytes := ReadDocumentTestBytes(LegacyImage);
+    Check(BaseMode.OpenDocumentFromPath(LegacyFile, ErrorText),
+      'The legacy bitmap drawing did not open: ' + ErrorText);
+    Check((Drawing.ObjectsCount = 1) and (Drawing.GetObject(0) is TBitmap2D)
+      and ((Drawing.GetObject(0) as TBitmap2D).Bitmap.Width = 3),
+      'The legacy bitmap drawing did not load its image');
+    Check(BaseMode.SaveDocumentToPath(LegacyFile, 'tpx', False, False,
+      ErrorText), 'Saving the legacy bitmap drawing failed: ' + ErrorText);
+    Check(Pos('link="bitmaps/old.bmp"', ReadDocumentTestBytes(LegacyFile)) > 0,
+      'Saving in place changed a legacy bitmaps/ link');
+    Check(ReadDocumentTestBytes(LegacyImage) = LegacyBytes,
+      'Saving in place changed the legacy image');
+  finally
+    Drawing.Clear;
+    Session.Clear;
+    DeleteFile(DrawingFile);
+    DeleteFile(LegacyFile);
+    DeleteFile(MovedFile);
+    DeleteFile(SharedImage);
+    DeleteFile(LegacyImage);
+    RemoveDir(FiguresDirectory + PathDelim + 'bitmaps');
+    RemoveDir(FiguresDirectory);
     RemoveDir(Directory);
   end;
 end;
@@ -972,6 +1065,7 @@ begin
   TestMalformedDocumentCandidatePreservesLiveDrawing;
   TestDocumentCandidateCommitUsesCandidateOptions;
   TestSaveAsPreservesRelativeBitmapAsset;
+  TestBitmapLinksStayInPlace;
   TestDocumentBundleRollbackOnPrimaryConflict;
   TestDocumentModeSaveRoutes;
 end;

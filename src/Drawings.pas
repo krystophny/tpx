@@ -913,7 +913,11 @@ type
     procedure ClearBitmapRegistry;
     function RegisterBitmap(ImageLink: string): TBitmapEntry;
     procedure SetFileNameKeepingBitmapParents(const NewFileName: string);
-    procedure RebindFileNameAfterAssetCommit(const NewFileName: string);
+    procedure RebindFileNameAfterAssetCommit(const NewFileName: string;
+      const RebaseLinks: Boolean = False);
+    function IsDocumentBitmap(BE: TBitmapEntry): Boolean;
+    procedure RebaseBitmapLinks(const NewFileName: string; Saved: TStrings);
+    procedure RestoreBitmapLinks(Saved: TStrings);
     procedure PickUpProperties(Obj: TGraphicObject);
     procedure ApplyProperties(Obj: TGraphicObject);
     {: This property contains the extension of the drawing.
@@ -2704,9 +2708,54 @@ begin
   for I := 0 to BitmapRegistry.Count - 1 do
   begin
     BE := BitmapRegistry.Objects[I] as TBitmapEntry;
-    BE.RefreshParentFileName(NewFileName);
+{$IFNDEF CPUWASM32}
+    if IsDocumentBitmap(BE) then
+    begin
+      if NewFileName = Drawing_NewFileName then BE.RebaseParentFileName('')
+      else BE.RebaseParentFileName(NewFileName);
+    end
+    else
+{$ENDIF}
+      BE.RefreshParentFileName(NewFileName);
   end;
   fFileName := NewFileName;
+end;
+
+function TDrawing2D.IsDocumentBitmap(BE: TBitmapEntry): Boolean;
+var Current: string;
+begin
+  { Entries bound to another file, such as recovery assets in private
+    storage, are copied beside the document instead of linked. }
+  Current := fFileName;
+  if Current = Drawing_NewFileName then Current := '';
+  Result := (BE.ParentFileName = '') or (BE.ParentFileName = Current);
+end;
+
+procedure TDrawing2D.RebaseBitmapLinks(const NewFileName: string;
+  Saved: TStrings);
+var I: Integer; BE: TBitmapEntry;
+begin
+  for I := 0 to BitmapRegistry.Count - 1 do
+  begin
+    BE := BitmapRegistry.Objects[I] as TBitmapEntry;
+    if Saved <> nil then Saved.Add(BE.ImageLink + #0 + BE.ParentFileName);
+{$IFNDEF CPUWASM32}
+    if IsDocumentBitmap(BE) then BE.RebaseParentFileName(NewFileName);
+{$ENDIF}
+  end;
+end;
+
+procedure TDrawing2D.RestoreBitmapLinks(Saved: TStrings);
+var I, Separator: Integer; BE: TBitmapEntry;
+begin
+  if (Saved = nil) or (Saved.Count <> BitmapRegistry.Count) then Exit;
+  for I := 0 to BitmapRegistry.Count - 1 do
+  begin
+    BE := BitmapRegistry.Objects[I] as TBitmapEntry;
+    Separator := Pos(#0, Saved[I]);
+    BE.RestoreLink(Copy(Saved[I], 1, Separator - 1),
+      Copy(Saved[I], Separator + 1, MaxInt));
+  end;
 end;
 
 procedure TDrawing2D.SetFileNameKeepingBitmapParents(
@@ -2723,14 +2772,17 @@ begin
 end;
 
 procedure TDrawing2D.RebindFileNameAfterAssetCommit(
-  const NewFileName: string);
+  const NewFileName: string; const RebaseLinks: Boolean);
 var I: Integer; BE: TBitmapEntry;
 begin
   if fFileName = Drawing_NewFileName then fFileName := '';
   for I := 0 to BitmapRegistry.Count - 1 do
   begin
     BE := BitmapRegistry.Objects[I] as TBitmapEntry;
-    BE.RebindParentFileName(NewFileName);
+    if RebaseLinks and IsDocumentBitmap(BE) then
+      BE.RebaseParentFileName(NewFileName)
+    else
+      BE.RebindParentFileName(NewFileName);
     BitmapRegistry[I] := BE.GetFullLink;
   end;
   fFileName := NewFileName;
