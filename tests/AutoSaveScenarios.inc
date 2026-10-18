@@ -329,7 +329,7 @@ begin
       (MainForm.EventManager.DocumentSession.SourceFormatId = FormatId) and
       (MainForm.EventManager.DocumentSession.OriginalSourceBytes =
         ExternalBytes) and
-      (WidthEditor.Text = RealTypeToStr(Primitive.LineWidth)),
+      (WidthEditor.Text = InspectorNumberText(Primitive.LineWidth)),
       Format(FormatId + ' external source edit did not auto-refresh the live scene: ' +
       'x2=%.6f, width=%.6f, field="%s", source-format="%s", bytes-match=%s',
       [Primitive.Points[1].X, Primitive.LineWidth, WidthEditor.Text,

@@ -212,7 +212,7 @@ var
   Bad: string;
   ErrorText: string;
   HistoryCount: Integer;
-  HeightEditor, WidthEditor, FontEditor: TEdit;
+  HeightEditor, WidthEditor, AngleEditor: TEdit;
   ErrorLabel, SelectionLabel: TLabel;
   LineStyleEditor: TComboBox;
   ScrollControl: TScrollBox;
@@ -240,11 +240,10 @@ begin
     'InspectorSelectionState') as TLabel;
   WidthEditor := MainForm.Inspector.EditorFor(opfLineWidth) as TEdit;
   HistoryCount := MainForm.TheDrawing.History.Count;
-  Check((SelectionLabel.Caption = 'New-object defaults') and
-    (not WidthEditor.Enabled) and
-    (WidthEditor.Text = RealTypeToStr(MainForm.TheDrawing.New_LineWidth)) and
+  Check((SelectionLabel.Caption = 'No selection') and
+    not MainForm.Inspector.FieldShown(opfLineWidth) and
     (MainForm.TheDrawing.History.Count = HistoryCount),
-    'Empty inspector did not show separate, read-only new-object defaults');
+    'Empty inspector still listed property fields');
   TextObj := TText2D.CreateSpec(-1, Point2D(10, 20), 7, 'Original');
   MainForm.TheDrawing.AddObject(-1, TextObj);
   MainForm.TheDrawing.SelectionClear;
@@ -252,7 +251,7 @@ begin
   MainForm.RefreshInspectorSelection;
   HeightEditor := MainForm.Inspector.EditorFor(opfTextHeight) as TEdit;
   WidthEditor := MainForm.Inspector.EditorFor(opfLineWidth) as TEdit;
-  FontEditor := MainForm.Inspector.EditorFor(opfFontName) as TEdit;
+  AngleEditor := MainForm.Inspector.EditorFor(opfTextRotation) as TEdit;
   ScrollControl := nil;
   for I := 0 to MainForm.Inspector.ComponentCount - 1 do
     if MainForm.Inspector.Components[I] is TScrollBox then
@@ -349,12 +348,12 @@ begin
   HeightEditor.OnKeyDown(HeightEditor, Key, Shift);
   Check((Key = 0) and not MainForm.Inspector.HasActiveEdit and
     (MainForm.TheDrawing.History.Count = HistoryCount + 1) and
-    (MainForm.ActiveControl = FontEditor),
+    (MainForm.ActiveControl = AngleEditor),
     'Explicit Tab did not commit and move to the next inspector field');
-  CheckFieldVisibleInInspector(FontEditor, 'Font family editor after Tab');
+  CheckFieldVisibleInInspector(AngleEditor, 'Text angle editor after Tab');
   Key := VK_TAB;
   Shift := [ssShift];
-  FontEditor.OnKeyDown(FontEditor, Key, Shift);
+  AngleEditor.OnKeyDown(AngleEditor, Key, Shift);
   Check((Key = 0) and (MainForm.ActiveControl = HeightEditor),
     'Shift+Tab did not return to the previous inspector field');
   CheckFieldVisibleInInspector(HeightEditor, 'Text height editor after Shift+Tab');
@@ -420,7 +419,6 @@ var
   FirstLine, SecondLine: TLine2D;
   InnerGroup, OuterGroup: TGroup2D;
   WidthEditor: TEdit;
-  StateLabel: TLabel;
   HistoryCount: Integer;
   Key: Word;
   Shift: TShiftState;
@@ -467,12 +465,10 @@ begin
   Drawing.SelectionAdd(OuterGroup);
   MainForm.RefreshInspectorSelection;
   WidthEditor := MainForm.Inspector.EditorFor(opfLineWidth) as TEdit;
-  StateLabel := MainForm.Inspector.FindComponent(
-    'InspectorLineWidthState') as TLabel;
-  Check((WidthEditor.Text = '') and (StateLabel.Caption = 'Mixed'),
+  Check((WidthEditor.Text = '') and (WidthEditor.TextHint = 'mixed'),
     'Inspector did not expose a mixed line width');
   HistoryCount := Drawing.History.Count;
-  WidthEditor.SetFocus;
+  MainForm.Inspector.FocusField(opfLineWidth);
   Application.ProcessMessages;
   Key := VK_TAB;
   Shift := [];
@@ -774,6 +770,100 @@ begin
 end;
 {$ENDIF}
 
+procedure TestInspectorVisibility;
+var
+  Drawing: TDrawing2D;
+  LineObj: TLine2D;
+  TextObj: TText2D;
+  MenuItem: TMenuItem;
+  CloseButton: TSpeedButton;
+  HeightEditor: TEdit;
+  Title: TLabel;
+  ErrorText: string;
+  procedure SelectOnly(Obj: TObject2D);
+  begin
+    Drawing.SelectionClear;
+    Drawing.SelectionAdd(Obj);
+    MainForm.RefreshInspectorSelection;
+  end;
+begin
+  MainForm.Show;
+  MainForm.ShowInspector;
+  Application.ProcessMessages;
+  Drawing := MainForm.TheDrawing;
+  Title := MainForm.Inspector.FindComponent('InspectorSelectionState') as TLabel;
+  MenuItem := MainForm.FindComponent('InspectorMenuItem') as TMenuItem;
+  CloseButton := MainForm.Inspector.FindComponent('InspectorCloseButton')
+    as TSpeedButton;
+  Check((MenuItem <> nil) and (CloseButton <> nil),
+    'Inspector toggle or close control is missing');
+  Check(MenuItem.ShortCut = StandardShortcut(Ord('I'), []),
+    'View > Inspector has no shortcut');
+
+  LineObj := TLine2D.CreateSpec(-1, Point2D(1, 2), Point2D(20, 30));
+  Drawing.AddObject(-1, LineObj);
+  TextObj := TText2D.CreateSpec(-1, Point2D(10, 20), 7, 'Label');
+  Drawing.AddObject(-1, TextObj);
+
+  MainForm.Inspector.ShowMore := False;
+  SelectOnly(LineObj);
+  Check(Title.Caption = 'Line', 'Single line title: ' + Title.Caption);
+  Check(not MainForm.Inspector.FieldShown(opfText) and
+    not MainForm.Inspector.FieldShown(opfTextHeight) and
+    not MainForm.Inspector.FieldShown(opfBitmapLink) and
+    not MainForm.Inspector.FieldShown(opfLineStyle),
+    'A line showed text, bitmap or collapsed style fields');
+  MainForm.Inspector.ShowMore := True;
+  Check(MainForm.Inspector.FieldShown(opfLineStyle) and
+    MainForm.Inspector.FieldShown(opfEndArrowKind) and
+    not MainForm.Inspector.FieldShown(opfFontName) and
+    MainForm.InspectorShowMore,
+    'More did not reveal only the line style fields');
+  MainForm.Inspector.ShowMore := False;
+
+  SelectOnly(TextObj);
+  Check((Title.Caption = 'Text') and
+    MainForm.Inspector.FieldShown(opfText) and
+    MainForm.Inspector.FieldShown(opfTeXText) and
+    MainForm.Inspector.FieldShown(opfTextHeight) and
+    not MainForm.Inspector.FieldShown(opfSymbolKind) and
+    not MainForm.Inspector.FieldShown(opfRectangleRX),
+    'A text did not show exactly its own properties');
+
+  Drawing.SelectionAdd(LineObj);
+  MainForm.RefreshInspectorSelection;
+  Check((Title.Caption = '2 objects') and
+    MainForm.Inspector.FieldShown(opfText) = False,
+    'A text plus line selection offered text-only fields');
+
+  Drawing.SelectionClear;
+  MainForm.RefreshInspectorSelection;
+  Check((Title.Caption = 'No selection') and
+    not MainForm.Inspector.FieldShown(opfLineStyle),
+    'Empty selection still listed fields');
+
+  CloseButton.Click;
+  Check(not MainForm.InspectorPanelVisible and
+    not MainForm.Inspector.Parent.Visible and not MenuItem.Checked,
+    'The close control did not hide the inspector');
+  MenuItem.Click;
+  Check(MainForm.InspectorPanelVisible and
+    MainForm.Inspector.Parent.Visible and MenuItem.Checked,
+    'View > Inspector did not show the inspector again');
+
+  { Hiding settles a pending edit instead of dropping it. }
+  SelectOnly(TextObj);
+  HeightEditor := MainForm.Inspector.EditorFor(opfTextHeight) as TEdit;
+  MainForm.Inspector.FocusField(opfTextHeight);
+  HeightEditor.Text := '9';
+  MenuItem.Click;
+  Check(not MainForm.InspectorPanelVisible and (TextObj.Height = 9) and
+    not MainForm.Inspector.HasActiveEdit,
+    'Hiding the inspector lost or kept open the pending edit');
+  MenuItem.Click;
+  Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText), ErrorText);
+end;
+
 procedure TestInspectorPropertyFamilies;
 var
   Drawing: TDrawing2D;
@@ -820,32 +910,13 @@ var
     end;
   end;
 
-  procedure CheckSectionOrder;
-  var
-    I, PreviousTop: Integer;
-    Component: TComponent;
-    Header: TButton;
+  procedure CheckFieldOrder;
   begin
-    PreviousTop := -1;
-    for I := 0 to 5 do
-    begin
-      Component := MainForm.Inspector.FindComponent(
-        'InspectorSection' + IntToStr(I) + 'Header');
-      Check(Component is TButton,
-        'Inspector section heading is missing: ' + IntToStr(I));
-      Header := Component as TButton;
-      Check(InspectorTop(Header) > PreviousTop,
-        'Inspector section heading ' + IntToStr(I) + ' at ' +
-        IntToStr(InspectorTop(Header)) + ' follows ' + IntToStr(PreviousTop));
-      PreviousTop := InspectorTop(Header);
-    end;
-    Check(InspectorTop(MainForm.Inspector.FindComponent(
-      'InspectorSection0Header') as TButton) <
-      InspectorTop(MainForm.Inspector.EditorFor(opfLineStyle)),
-      'Line section heading appears below its fields');
+    MainForm.Inspector.ShowMore := True;
     Check(InspectorTop(MainForm.Inspector.EditorFor(opfLineStyle)) <
       InspectorTop(MainForm.Inspector.EditorFor(opfLineWidth)),
-      'Line section fields are reversed');
+      'Line fields are reversed');
+    MainForm.Inspector.ShowMore := False;
   end;
 
   {$IFDEF LCLCOCOA}
@@ -1072,12 +1143,12 @@ begin
   MainForm.Show;
   MainForm.ShowInspector;
   Application.ProcessMessages;
-  CheckSectionOrder;
   Drawing := MainForm.TheDrawing;
 
   LineObj := TLine2D.CreateSpec(-1, Point2D(1, 2), Point2D(20, 30));
   Drawing.AddObject(-1, LineObj);
   SelectObject(LineObj);
+  CheckFieldOrder;
   ChangeCombo(opfLineStyle, Ord(liDashed));
   ChangeText(opfLineColor, '#1278B5');
   ChangeCombo(opfBeginArrowKind, Ord(arrH43));
@@ -1281,7 +1352,6 @@ var
   TextObj: TText2D;
   Points: Integer;
   ErrorText: string;
-  FontState: TLabel;
   FontNameEditor: TEdit;
   FontStyleEditor: TComboBox;
   HeightEditor: TEdit;
@@ -1295,8 +1365,6 @@ begin
   MainForm.TheDrawing.SelectionAdd(TextObj);
   MainForm.RefreshInspectorSelection;
   FontNameEditor := MainForm.Inspector.EditorFor(opfFontName) as TEdit;
-  FontState := MainForm.Inspector.FindComponent(
-    'InspectorFontNameState') as TLabel;
   FontStyleEditor := MainForm.Inspector.EditorFor(opfFontStyle) as TComboBox;
   HeightEditor := MainForm.Inspector.EditorFor(opfTextHeight) as TEdit;
   for Points in [6, 36] do begin
@@ -1325,7 +1393,7 @@ begin
   FontNameEditor.Clear;
   Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
     'Resetting the font family did not commit: ' + ErrorText);
-  Check((TextObj.Font.Name = ' ') and (FontState.Caption = 'Inherited'),
+  Check((TextObj.Font.Name = ' ') and (FontNameEditor.TextHint = 'inherited'),
     'Blank font family did not restore inherited-font behavior');
 end;
 

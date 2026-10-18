@@ -568,6 +568,9 @@ type
     procedure CopyAsTikZExecute(Sender: TObject);
     procedure InspectorMenuClick(Sender: TObject);
     procedure InspectorSplitterMoved(Sender: TObject);
+    procedure InspectorCloseRequest(Sender: TObject);
+    procedure InspectorShowMoreChanged(Sender: TObject);
+    procedure SetInspectorVisible(Value: Boolean);
   private
     { Private declarations }
 {$IFDEF FPC}
@@ -772,6 +775,7 @@ type
     Inspector: TObjectInspector;
     InspectorPanelWidth: Integer;
     InspectorPanelVisible: Boolean;
+    InspectorShowMore: Boolean;
     FormPos_Left, FormPos_Top, FormPos_Width, FormPos_Height:
     Integer;
     FormPos_Maximized: Boolean;
@@ -883,7 +887,7 @@ uses Output, Input, Settings0, ColorEtc, Geometry, Options,
 {$IFDEF FPC}  LiveTeX,{$ENDIF}
   SysBasic, Modify, Table
 {$IFDEF FPC}
-  , TikZDocumentWriter
+  , TikZDocumentWriter, LCLProc
 {$ENDIF}
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
@@ -1214,8 +1218,9 @@ begin
   TheDrawing.OnBeforeSelectionChange := BeforeSelectionChange;
   FEditSession := nil;
   FEditSessionGateActive := False;
-  InspectorPanelWidth := 360;
+  InspectorPanelWidth := 280;
   InspectorPanelVisible := True;
+  InspectorShowMore := False;
   BuildObjectInspector;
 {$IFDEF FPC}
 {$IFNDEF CPUWASM32}
@@ -2546,6 +2551,8 @@ begin
   Inspector.OnOpenCoordinates := InspectorOpenCoordinates;
   Inspector.OnShouldSkipFieldRefresh :=
     ShouldSkipInlineInspectorFieldRefresh;
+  Inspector.OnCloseRequest := InspectorCloseRequest;
+  Inspector.OnShowMoreChanged := InspectorShowMoreChanged;
   SetLength(EmptyIDs, 0);
   Inspector.Bind(TheDrawing, EmptyIDs, InspectorCurrentEpoch);
 
@@ -2556,10 +2563,14 @@ begin
   Edit2.Insert(Objectproperties1.MenuIndex, FEditTextMenuItem);
 
   FInspectorMenuItem := TMenuItem.Create(Self);
-  FInspectorMenuItem.Caption := 'Object inspector';
+  FInspectorMenuItem.Name := 'InspectorMenuItem';
+  FInspectorMenuItem.Caption := 'Inspector';
+  FInspectorMenuItem.ShortCut := StandardShortcut(Ord('I'), []);
   FInspectorMenuItem.Checked := InspectorPanelVisible;
   FInspectorMenuItem.OnClick := InspectorMenuClick;
   U1.Add(FInspectorMenuItem);
+  (Inspector.FindComponent('InspectorCloseButton') as TSpeedButton).Hint :=
+    'Hide the inspector (' + ShortCutToText(FInspectorMenuItem.ShortCut) + ')';
   ApplyInspectorSettings;
 end;
 
@@ -2570,6 +2581,7 @@ begin
   if InspectorPanelWidth > 1000 then InspectorPanelWidth := 1000;
   FInspectorHost.Width := InspectorPanelWidth;
   FInspectorHost.Visible := InspectorPanelVisible;
+  if Inspector <> nil then Inspector.ShowMore := InspectorShowMore;
   FInspectorSplitter.Visible := InspectorPanelVisible;
   if FInspectorMenuItem <> nil then
     FInspectorMenuItem.Checked := InspectorPanelVisible;
@@ -2584,11 +2596,32 @@ begin
   if (Inspector <> nil) and Inspector.CanFocus then Inspector.SetFocus;
 end;
 
+procedure TMainForm.SetInspectorVisible(Value: Boolean);
+var ErrorText: string;
+begin
+  if Value = InspectorPanelVisible then Exit;
+  { Hiding must not drop a half-typed value: settle it like a selection change. }
+  if not Value and (Inspector <> nil) and Inspector.HasActiveEdit and
+    not Inspector.PrepareForSelectionChange(ErrorText) then Exit;
+  InspectorPanelVisible := Value;
+  ApplyInspectorSettings;
+  if InspectorPanelVisible then RefreshInspectorSelection
+  else if Showing and LocalView.CanFocus then LocalView.SetFocus;
+end;
+
 procedure TMainForm.InspectorMenuClick(Sender: TObject);
 begin
-  InspectorPanelVisible := not InspectorPanelVisible;
-  ApplyInspectorSettings;
-  if InspectorPanelVisible then RefreshInspectorSelection;
+  SetInspectorVisible(not InspectorPanelVisible);
+end;
+
+procedure TMainForm.InspectorCloseRequest(Sender: TObject);
+begin
+  SetInspectorVisible(False);
+end;
+
+procedure TMainForm.InspectorShowMoreChanged(Sender: TObject);
+begin
+  InspectorShowMore := Inspector.ShowMore;
 end;
 
 procedure TMainForm.InspectorSplitterMoved(Sender: TObject);
