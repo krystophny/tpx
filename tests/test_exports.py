@@ -265,6 +265,40 @@ class ExportTests(unittest.TestCase):
         rectangle = self.read_tpx(self.root / "from-svg.TpX").find("rect")
         self.assertEqual(float(rectangle.get("w")), 20)
 
+    def test_cli_svg_save_preserves_source_viewport_and_coordinates(self):
+        source = self.root / "source.svg"
+        source.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="40mm" '
+            'viewBox="10 -50 80 40"><polygon points="20,-45 32,-45 32,-37 20,-37" '
+            'stroke="#000000" fill="none"/></svg>')
+        for name in ("first.svg", "second.svg"):
+            self.run_tpx("-f", source, "-o", name)
+            source = self.root / name
+            saved = ET.parse(source).getroot()
+            self.assertEqual(list(map(float, saved.get("viewBox").split())),
+                             [10, -50, 80, 40])
+            self.assertEqual((saved.get("width"), saved.get("height")),
+                             ("80mm", "40mm"))
+            polygon = saved.find(SVG + "polygon")
+            self.assertIsNotNone(polygon)
+            points = [tuple(map(float, point.split(",")))
+                      for point in polygon.get("points").split()]
+            self.assertEqual(points, [(20, -45), (32, -45), (32, -37), (20, -37)])
+
+    def test_cli_tikz_save_preserves_unedited_source(self):
+        source = self.root / "source.tikz"
+        original = (
+            "% preserve source coordinates, inherited text color and comments\n"
+            "\\begin{tikzpicture}\n"
+            "\\draw (62mm,26mm) circle (0.899999619mm);\n"
+            "\\node[anchor=base west] at (64mm,27mm) {$x$};\n"
+            "\\end{tikzpicture}\n").encode()
+        source.write_bytes(original)
+        for name in ("first.tikz", "second.tikz"):
+            self.run_tpx("-f", source, "-o", name)
+            source = self.root / name
+            self.assertEqual(source.read_bytes(), original)
+
     def test_cli_rejects_unsupported_output_clearly(self):
         source = self.drawing()
         result = self.run_tpx("-f", source, "-o", "drawing.pdf", expect_success=False)
