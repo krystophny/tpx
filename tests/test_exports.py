@@ -132,7 +132,7 @@ class ExportTests(unittest.TestCase):
         links = [item.get("link")
                  for item in self.read_tpx(figures / "fig.TpX").iter("bitmap")]
         self.assertEqual(links, ["quarter_torus.png",
-                                 os.path.join("..", "shared.png")])
+                                 "../shared.png"])
         self.assertEqual([path for path in self.root.rglob("bitmaps")], [])
 
     def test_saved_drawings_preserve_geometry_and_text(self):

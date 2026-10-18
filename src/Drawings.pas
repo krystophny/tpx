@@ -2802,15 +2802,24 @@ function TDrawing2D.RegisterBitmap(ImageLink: string):
   TBitmapEntry;
 var
   I: Integer;
+  StoredLink: string;
 begin
+  StoredLink := '';
   if (ExtractFileDrive(ImageLink) = '') and
     (Copy(ImageLink, 1, 1) <> PathDelim) then
+  begin
+    StoredLink := ImageLink;
     ImageLink := ExtractFilePath(FileName) + ImageLink;
+  end;
   I := BitmapRegistry.IndexOf(ImageLink);
   if I < 0 then
   begin
     if fFileName <> Drawing_NewFileName then
-      Result := TBitmapEntry.Create(ImageLink, fFileName)
+    begin
+      Result := TBitmapEntry.Create(ImageLink, fFileName);
+      // A loaded relative link keeps its stored spelling.
+      if StoredLink <> '' then Result.RestoreLink(StoredLink, fFileName);
+    end
     else
       Result := TBitmapEntry.Create(ImageLink, '');
     BitmapRegistry.AddObject(ImageLink, Result);

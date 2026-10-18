@@ -515,7 +515,7 @@ begin
       False, ErrorText);
     Check(Saved, 'Save As failed for a relative bitmap resource: ' + ErrorText);
     // Save As links the original image instead of copying it along.
-    ExpectedLink := '..' + PathDelim + 'source' + PathDelim + 'image.bmp';
+    ExpectedLink := '../source/image.bmp';
     Check(FileExists(TargetFileName) and not FileExists(TargetImageFileName),
       'Save As copied the bitmap resource instead of linking it');
     Check(Pos('link="' + ExpectedLink + '"',
@@ -598,7 +598,7 @@ begin
     Drawing.PdfTeXFormat := pdftex_none;
     // Inserting an image from outside the drawing folder links it in place.
     BitmapEntry := Drawing.RegisterBitmap(SharedImage);
-    Check(BitmapEntry.ImageLink = '..' + PathDelim + 'shared.bmp',
+    Check(BitmapEntry.ImageLink = '../shared.bmp',
       'Inserted image is not linked relative to the drawing: ' +
       BitmapEntry.ImageLink);
     Check(not FileExists(FiguresDirectory + PathDelim + 'bitmaps' +
@@ -607,7 +607,7 @@ begin
       Point2D(0, 0), Point2D(6, 4), BitmapEntry));
     Check(BaseMode.SaveDocumentToPath(DrawingFile, 'tpx', True, False,
       ErrorText), 'Saving the linked image drawing failed: ' + ErrorText);
-    Check(Pos('link="..' + PathDelim + 'shared.bmp"',
+    Check(Pos('link="../shared.bmp"',
       ReadDocumentTestBytes(DrawingFile)) > 0,
       'The saved drawing lost its relative image link');
     Check(BaseMode.SaveDocumentToPath(MovedFile, 'tpx', True, False,
@@ -632,6 +632,22 @@ begin
       'Saving in place changed a legacy bitmaps/ link');
     Check(ReadDocumentTestBytes(LegacyImage) = LegacyBytes,
       'Saving in place changed the legacy image');
+    // Links keep '/' and an unchanged target keeps its stored spelling.
+    BitmapEntry := TBitmapEntry.Create(LegacyImage, LegacyFile);
+    try
+      Check(BitmapEntry.ImageLink = 'bitmaps/old.bmp',
+        'Registered legacy image link is not portable: ' + BitmapEntry.ImageLink);
+      BitmapEntry.RebaseParentFileName(FiguresDirectory + PathDelim + 'sub' +
+        PathDelim + '..' + PathDelim + 'legacy.tpx');
+      Check(BitmapEntry.ImageLink = 'bitmaps/old.bmp',
+        'Rebasing onto the same folder respelled the link: ' +
+        BitmapEntry.ImageLink);
+      BitmapEntry.RebaseParentFileName(MovedFile);
+      Check(BitmapEntry.ImageLink = 'figures/bitmaps/old.bmp',
+        'Rebased link does not use forward slashes: ' + BitmapEntry.ImageLink);
+    finally
+      BitmapEntry.Free;
+    end;
   finally
     Drawing.Clear;
     Session.Clear;

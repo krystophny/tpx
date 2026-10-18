@@ -361,11 +361,22 @@ begin
   inherited Destroy;
 end;
 
+function IsRelativeImageLink(const Link: string): Boolean;
+begin
+  Result := (Link <> '') and (ExtractFileDrive(Link) = '') and
+    (Copy(Link, 1, 1) <> PathDelim) and (Copy(Link, 1, 1) <> '/');
+end;
+
 function RelativeImageLink(const FullLink, ParentFileName: string): string;
 begin
-  if ParentFileName = '' then Result := FullLink
-  else Result := ExtractRelativePath(ExpandFileName(ParentFileName),
+  if ParentFileName = '' then Exit(FullLink);
+  Result := ExtractRelativePath(ExpandFileName(ParentFileName),
     ExpandFileName(FullLink));
+{$IFDEF MSWINDOWS}
+  // Stored links use '/' so drawings and TeX output stay portable.
+  if IsRelativeImageLink(Result) then
+    Result := StringReplace(Result, '\', '/', [rfReplaceAll]);
+{$ENDIF}
 end;
 
 function TBitmapEntry.MakeImageLocal(
@@ -481,15 +492,12 @@ end;
 procedure TBitmapEntry.RebaseParentFileName(const NewFileName: string);
 begin
   // Keep pointing at the same file, relative to the new drawing location.
-  if (fParentFileName <> '') and (NewFileName <> '') and
-    (ExtractFilePath(ExpandFileName(fParentFileName)) =
-    ExtractFilePath(ExpandFileName(NewFileName))) then
-  begin
-    fParentFileName := NewFileName;
-    Exit;
-  end;
   if NewFileName = '' then fImageLink := ExpandFileName(GetFullLink)
-  else fImageLink := RelativeImageLink(GetFullLink, NewFileName);
+  else if not IsRelativeImageLink(fImageLink) or not SameFileName(
+    ExpandFileName(ExtractFilePath(NewFileName) + fImageLink),
+    ExpandFileName(GetFullLink)) then
+    fImageLink := RelativeImageLink(GetFullLink, NewFileName);
+  // Otherwise the stored link still resolves and keeps its spelling.
   fParentFileName := NewFileName;
 end;
 
