@@ -423,6 +423,39 @@ type
     Deletesmallobjects1: TMenuItem;
     FreehandBezierBtn: TToolButton;
     FreehandBezier: TAction;
+    InsertBox: TAction;
+    InsertBoxBtn: TToolButton;
+    InsertBox1: TMenuItem;
+    InsertCylinder: TAction;
+    InsertCylinderBtn: TToolButton;
+    InsertCylinder1: TMenuItem;
+    InsertSphere: TAction;
+    InsertSphereBtn: TToolButton;
+    InsertSphere1: TMenuItem;
+    InsertCone: TAction;
+    InsertConeBtn: TToolButton;
+    InsertCone1: TMenuItem;
+    InsertTorus: TAction;
+    InsertTorusBtn: TToolButton;
+    InsertTorus1: TMenuItem;
+    N3D: TMenuItem;
+    Extrude: TAction;
+    Revolve: TAction;
+    Extrude1: TMenuItem;
+    Revolve1: TMenuItem;
+    N3DModify: TMenuItem;
+    View3DIsometric: TAction;
+    View3DTop: TAction;
+    View3DFront: TAction;
+    View3DSide: TAction;
+    View3DPerspective: TAction;
+    View3D1: TMenuItem;
+    View3DIsometric1: TMenuItem;
+    View3DTop1: TMenuItem;
+    View3DFront1: TMenuItem;
+    View3DSide1: TMenuItem;
+    N3DView: TMenuItem;
+    View3DPerspective1: TMenuItem;
     FreehandBeziercurve1: TMenuItem;
     InsertBitmap: TAction;
     InsertBitmapBtn: TToolButton;
@@ -493,6 +526,7 @@ type
     procedure TrustTeXPreviewExecute(Sender: TObject);
     procedure LiveTeXChanged(Sender: TObject);
     procedure InsertRectangleExecute(Sender: TObject);
+    procedure Insert3DExecute(Sender: TObject);
     procedure InsertEllipseExecute(Sender: TObject);
     procedure InsertPolygonExecute(Sender: TObject);
     procedure InsertTextExecute(Sender: TObject);
@@ -1353,6 +1387,13 @@ begin
   DeleteSmallObjects.Tag := Msg_DeleteSmall;
   Group.Tag := Msg_Group;
   Ungroup.Tag := Msg_Ungroup;
+  Extrude.Tag := Msg_Extrude;
+  Revolve.Tag := Msg_Revolve;
+  View3DIsometric.Tag := Msg_View3DIsometric;
+  View3DTop.Tag := Msg_View3DTop;
+  View3DFront.Tag := Msg_View3DFront;
+  View3DSide.Tag := Msg_View3DSide;
+  View3DPerspective.Tag := Msg_View3DPerspective;
   MakeCompound.Tag := Msg_MakeCompound;
   Uncompound.Tag := Msg_Uncompound;
   BreakPath.Tag := Msg_BreakPath;
@@ -5266,6 +5307,20 @@ procedure TMainForm.FreehandBezierExecute(Sender: TObject);
 begin
   SendToolMessage(Msg_FreehandBezier,
     FreehandBezierBtn);
+end;
+
+procedure TMainForm.Insert3DExecute(Sender: TObject);
+begin
+  if Sender = InsertBox then
+    SendToolMessage(Msg_InsertBox, InsertBoxBtn)
+  else if Sender = InsertCylinder then
+    SendToolMessage(Msg_InsertCylinder, InsertCylinderBtn)
+  else if Sender = InsertSphere then
+    SendToolMessage(Msg_InsertSphere, InsertSphereBtn)
+  else if Sender = InsertCone then
+    SendToolMessage(Msg_InsertCone, InsertConeBtn)
+  else if Sender = InsertTorus then
+    SendToolMessage(Msg_InsertTorus, InsertTorusBtn);
 end;
 
 procedure TMainForm.PressModeButton(

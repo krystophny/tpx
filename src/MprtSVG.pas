@@ -13,9 +13,24 @@ uses Types, SysUtils, Classes, Contnrs, Graphics, StrUtils,
 {$ELSE}
   LazBasic,
 {$ENDIF}
-  PrimSAX, Geometry, Devices, Input;
+  PrimSAX, Geometry, Devices, Input, Solid3D;
 
 type
+
+  // Geometry and embedded 3D object seen inside one SVG group.
+  TSvgSolidScan = class
+    Geometry: TStringList;
+    Xml, Digest: string;
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
+  TSvgRestoredSolid = class
+    Solid: TSolid3D;
+    Faces: TGroup2D;
+    LineWidth: TRealType;
+    destructor Destroy; override;
+  end;
 
   T_SVG_Import_State = class
     Scale: TRealType; //(user units measured in mm)
@@ -52,6 +67,14 @@ type
   end;
 
   T_SVG_Import = class(T_Import)
+  private
+    fSolidScans: TObjectStack;
+    fRestoredSolids: TObjectList;
+    fInTpxSolid: Boolean;
+    procedure RecordGeometry(const Value: string);
+    procedure TpxSolidStartProc(var E: TPrimElement);
+    procedure TpxSolidEndProc(var E: TPrimElement);
+    procedure FitRestoredSolids(const T: TTransf2D);
   private
     fSAX: TPrimSAX;
     fPathParser: T_SVG_Path_Parser;
@@ -122,7 +145,25 @@ type
 
 implementation
 
-uses MiscUtils, SysBasic, ColorEtc, gzio, Modify;
+uses MiscUtils, SysBasic, ColorEtc, gzio, Modify, Math, Pieces;
+
+constructor TSvgSolidScan.Create;
+begin
+  inherited Create;
+  Geometry := TStringList.Create;
+end;
+
+destructor TSvgSolidScan.Destroy;
+begin
+  Geometry.Free;
+  inherited Destroy;
+end;
+
+destructor TSvgRestoredSolid.Destroy;
+begin
+  Faces.Free;
+  inherited Destroy;
+end;
 
 function SVG_Color(ClStr: string): TColor;
 var
@@ -278,6 +319,9 @@ begin
   AddProc('ellipse', EllipseProc, EndStateProc);
   AddProc('polygon', PolygonProc, EndStateProc);
   AddProc('polyline', PolylineProc, EndStateProc);
+  AddProc('tpx:solid', TpxSolidStartProc, TpxSolidEndProc);
+  fSolidScans := TObjectStack.Create;
+  fRestoredSolids := TObjectList.Create(True);
   fSAX.OnCDATA := CDATAProc;
   fSAX.OnDOCTYPE := Entities_Proc;
   fPathParser := T_SVG_Path_Parser.Create(
@@ -294,6 +338,9 @@ end;
 
 destructor T_SVG_Import.Destroy;
 begin
+  while fSolidScans.Count > 0 do fSolidScans.Pop.Free;
+  fSolidScans.Free;
+  fRestoredSolids.Free;
   fSAX.Free;
   fPathParser.Free;
   fStack.Free;
@@ -480,8 +527,105 @@ begin
   end;
 end;
 
+procedure T_SVG_Import.RecordGeometry(const Value: string);
+begin
+  if fSolidScans.Count > 0 then
+    TSvgSolidScan(fSolidScans.Peek).Geometry.Add(Value);
+end;
+
+procedure T_SVG_Import.TpxSolidStartProc(var E: TPrimElement);
+begin
+  fInTpxSolid := fSolidScans.Count > 0;
+  if fInTpxSolid then
+    TSvgSolidScan(fSolidScans.Peek).Digest := E.Attributes.Values['digest'];
+end;
+
+procedure T_SVG_Import.TpxSolidEndProc(var E: TPrimElement);
+begin
+  fInTpxSolid := False;
+end;
+
+// Hands the faces as read to the solid, so an unchanged object saves the
+// same numbers again instead of a re-rendered approximation.
+procedure FreezeFaces(const R: TSvgRestoredSolid);
+var
+  Faces: TObjectList;
+  Hatch, PP: TPointsSet2D;
+  Obj: TGraphicObject;
+  I: Integer;
+  Piece: TPiece;
+  Sep: TPoint2D;
+begin
+  Faces := TObjectList.Create(True);
+  Hatch := TPointsSet2D.Create(0);
+  try
+    Obj := R.Faces.Objects.FirstObj;
+    if (Obj is TPolyline2D) and (TPolyline2D(Obj).LineStyle = liNone) then
+      Obj := R.Faces.Objects.NextObj;
+    for I := 0 to R.Solid.Pieces.Count - 1 do
+    begin
+      if not (Obj is TPrimitive2D) then Exit;
+      PP := TPointsSet2D.Create(0);
+      PP.Copy(TPrimitive2D(Obj).Points, 0, TPrimitive2D(Obj).Points.Count - 1);
+      Faces.Add(PP);
+      Obj := R.Faces.Objects.NextObj;
+      Piece := R.Solid.Pieces[I];
+      if (Piece.Hatch = phaDefault) and Piece.Closed and
+        (R.Solid.Hatching <> haNone) then
+      begin
+        while (Obj is TPolyline2D) and (TPolyline2D(Obj).Points.Count = 2) do
+        begin
+          Hatch.Add(TPolyline2D(Obj).Points[0]);
+          Hatch.Add(TPolyline2D(Obj).Points[1]);
+          Obj := R.Faces.Objects.NextObj;
+        end;
+        Sep := Point2D(0, 0);
+        Sep.W := 0;
+        Hatch.Add(Sep);
+      end;
+    end;
+    if Obj = nil then
+      R.Solid.FreezeRendering(Faces, Hatch, 1E-3 * Max(1,
+        R.Solid.BoundingBox.Right - R.Solid.BoundingBox.Left));
+  finally
+    Hatch.Free;
+    Faces.Free;
+  end;
+end;
+
+procedure T_SVG_Import.FitRestoredSolids(const T: TTransf2D);
+var
+  I: Integer;
+  R: TSvgRestoredSolid;
+  Face: TGraphicObject;
+begin
+  for I := 0 to fRestoredSolids.Count - 1 do
+  begin
+    R := TSvgRestoredSolid(fRestoredSolids[I]);
+    R.Faces.Transform(T);
+    R.Faces.UpdateExtension(R.Faces);
+    // The leading invisible polyline is the placement written by TpX.
+    Face := R.Faces.Objects.FirstObj;
+    if (Face is TPolyline2D) and (TPolyline2D(Face).Points.Count = 2) and
+      (TPolyline2D(Face).LineStyle = liNone) then
+      R.Solid.SetPlacementPoints(TPolyline2D(Face).Points[0],
+        TPolyline2D(Face).Points[1])
+    else if not ((Face is TPrimitive2D) and
+      FitSolidToFace(R.Solid, TPrimitive2D(Face).Points)) then
+      FitSolidToBox(R.Solid, R.Faces.BoundingBox);
+    FreezeFaces(R);
+  end;
+  fRestoredSolids.Clear;
+end;
+
 procedure T_SVG_Import.CDATAProc(const CDATA: string);
 begin
+  if fInTpxSolid then
+  begin
+    TSvgSolidScan(fSolidScans.Peek).Xml :=
+      TSvgSolidScan(fSolidScans.Peek).Xml + CDATA;
+    Exit;
+  end;
   if fCurrState.IsInStyle then
   begin
     ParseCSS(CDATA, fCSS);
@@ -818,11 +962,55 @@ procedure T_SVG_Import.StartGroupProc(var E: TPrimElement);
 begin
   StoreAttributes(E.Attributes, 'g');
   StartGroup;
+  fSolidScans.Push(TSvgSolidScan.Create);
 end;
 
 procedure T_SVG_Import.EndGroupProc(var E: TPrimElement);
+var
+  Scan: TSvgSolidScan;
+  Loader: T_TpX_Loader;
+  Restored: TSvgRestoredSolid;
+  Face: TGraphicObject;
 begin
   FinishGroup;
+  if fSolidScans.Count > 0 then
+  begin
+    Scan := TSvgSolidScan(fSolidScans.Pop);
+    try
+      // A group carrying an embedded 3D object becomes that object again,
+      // unless its faces were edited outside TpX (digest mismatch).
+      if (Scan.Xml <> '') and (fCurrObj is TGroup2D) and
+        (fCurrentList.Peek = fCurrObj) and
+        SameText(Scan.Digest, SolidGeometryDigest(Scan.Geometry)) then
+      begin
+        Restored := TSvgRestoredSolid.Create;
+        Loader := T_TpX_Loader.Create(fDrawing2D);
+        try
+          Restored.Solid := Loader.SolidFromXml(Scan.Xml);
+        finally
+          Loader.Free;
+        end;
+        Restored.Faces := fCurrentList.Pop as TGroup2D;
+        // Line width follows the convention of the other imported objects.
+        Face := Restored.Faces.Objects.FirstObj;
+        while Face <> nil do
+        begin
+          if (Face is TPrimitive2D) and
+            (TPrimitive2D(Face).LineStyle <> liNone) then
+          begin
+            Restored.Solid.LineWidth := TPrimitive2D(Face).LineWidth;
+            Break;
+          end;
+          Face := Restored.Faces.Objects.NextObj;
+        end;
+        fCurrentList.Add(Restored.Solid);
+        fCurrObj := Restored.Solid;
+        fRestoredSolids.Add(Restored);
+      end;
+    finally
+      Scan.Free;
+    end;
+  end;
   if (fCurrState.ID <> '') and Assigned(fCurrObj) then
     fNamedObjects.AddObject(fCurrState.ID, fCurrObj);
   EndStateProc(E);
@@ -866,6 +1054,7 @@ begin
   StoreAttributes(E.Attributes, 'path');
   if E.Attributes.IndexOfName('d') < 0 then Exit;
   PathData := E.Attributes.Values['d'];
+  RecordGeometry(PathData);
   fPathAttributes := E.Attributes;
   Compound := AddCompound as TCompound2D;
   Compound.Points.DisableEvents := True;
@@ -1122,6 +1311,7 @@ end;
 procedure T_SVG_Import.PolygonProc(var E: TPrimElement);
 begin
   if E.Attributes.IndexOfName('points') < 0 then Exit;
+  RecordGeometry(E.Attributes.Values['points']);
   StoreAttributes(E.Attributes, 'polygon');
   AddPolygon;
   FillPoints(fCurrObj as TPrimitive2D,
@@ -1134,6 +1324,7 @@ procedure T_SVG_Import.PolylineProc(var E: TPrimElement);
 begin
   StoreAttributes(E.Attributes, 'polyline');
   if E.Attributes.IndexOfName('points') < 0 then Exit;
+  RecordGeometry(E.Attributes.Values['points']);
   AddPolyline;
   FillPoints(fCurrObj as TPrimitive2D,
     E.Attributes.Values['points'],
@@ -1436,6 +1627,7 @@ begin
     Correct_LineWidth;
     while fMainList.Peek is TGroup2D do BreakTopGroup;
     fMainList.Transform(T);
+    FitRestoredSolids(T);
     fDrawing2D.AddList(fMainList);
     if (fCurrState.viewBox_W = 0) and (fCurrState.viewBox_H = 0)
       then

@@ -27,7 +27,7 @@ function ArrowKindTikZTip(Kind: TArrowKind; out Tip: string): Boolean;
 implementation
 
 uses Contnrs, Types, Math, Graphics, Devices, Geometry, GObjBase, Bitmaps,
-  TikZSyntax, TikZLexer, DocumentIO;
+  TikZSyntax, TikZLexer, DocumentIO, Solid3D, Input, StrUtils;
 
 type
   TTikZPointArray = array of TPoint2D;
@@ -439,6 +439,115 @@ begin
   end;
 end;
 
+const
+  SolidBeginMarker = '% tpx-solid ';
+  SolidEndMarker = '% tpx-solid-end ';
+
+// Turns verified '% tpx-solid' blocks back into editable 3D objects. A block
+// whose paths no longer match its digest stays as the plain paths it holds.
+procedure RestoreTikZSolids(Drawing: TDrawing2D; Context: TTikZImportContext;
+  const Source: RawByteString);
+var
+  Pos0, LineEnd, EndLine, EndLineEnd, BodyStart, BodyEnd, I, First, Last: SizeInt;
+  Xml, Digest, Body: string;
+  Lines: TStringList;
+  Binding: TTikZSourceBinding;
+  Loader: T_TpX_Loader;
+  Solid: TSolid3D;
+  Region: TTikZSolidRegion;
+  Native: TGraphicObject;
+  WidthTaken: Boolean;
+  function FindFrom(const Needle: string; From: SizeInt): SizeInt;
+  begin
+    Result := PosEx(Needle, string(Source), From);
+  end;
+  function LineEndAt(From: SizeInt): SizeInt;
+  begin
+    Result := From;
+    while (Result <= Length(Source)) and not (Source[Result] in [#10, #13]) do
+      Inc(Result);
+  end;
+  function SkipBreak(From: SizeInt): SizeInt;
+  begin
+    Result := From;
+    if (Result <= Length(Source)) and (Source[Result] = #13) then Inc(Result);
+    if (Result <= Length(Source)) and (Source[Result] = #10) then Inc(Result);
+  end;
+begin
+  Pos0 := FindFrom(SolidBeginMarker, 1);
+  while Pos0 > 0 do
+  begin
+    LineEnd := LineEndAt(Pos0);
+    Xml := Copy(string(Source), Pos0 + Length(SolidBeginMarker),
+      LineEnd - Pos0 - Length(SolidBeginMarker));
+    BodyStart := SkipBreak(LineEnd);
+    EndLine := FindFrom(SolidEndMarker, BodyStart);
+    if EndLine <= 0 then Break;
+    EndLineEnd := LineEndAt(EndLine);
+    Digest := Trim(Copy(string(Source), EndLine + Length(SolidEndMarker),
+      EndLineEnd - EndLine - Length(SolidEndMarker)));
+    BodyEnd := EndLine;
+    Body := Copy(string(Source), BodyStart, BodyEnd - BodyStart);
+    Lines := TStringList.Create;
+    try
+      Lines.Text := Body;
+      for I := Lines.Count - 1 downto 0 do
+        if Trim(Lines[I]) = '' then Lines.Delete(I);
+      if SameText(Digest, SolidGeometryDigest(Lines)) then
+      begin
+        // Statements of the block, as 0-based source offsets.
+        First := -1;
+        Last := -1;
+        for I := 0 to Context.BindingCount - 1 do
+        begin
+          Binding := Context.BindingAt(I);
+          if (Binding.StatementSpan.StartByte >= BodyStart - 1) and
+            (Binding.StatementSpan.EndByte <= BodyEnd - 1) then
+          begin
+            if First < 0 then First := I;
+            Last := I;
+          end;
+        end;
+        if First >= 0 then
+        begin
+          Loader := T_TpX_Loader.Create(Drawing);
+          try
+            Solid := Loader.SolidFromXml(Xml);
+          finally
+            Loader.Free;
+          end;
+          Native := Drawing.GetObject(Context.BindingAt(First).NativeObjectID);
+          Drawing.AddObject(-1, Solid);
+          if Native <> nil then Drawing.MoveObject(Solid.ID, Native.ID);
+          WidthTaken := False;
+          for I := First to Last do
+          begin
+            Native := Drawing.GetObject(Context.BindingAt(I).NativeObjectID);
+            // Line width follows the base this import chose for all paths.
+            if not WidthTaken and (Native is TPrimitive2D) and
+              (TPrimitive2D(Native).LineStyle <> liNone) then
+            begin
+              Solid.LineWidth := TPrimitive2D(Native).LineWidth;
+              Solid.UpdateExtension(Solid);
+              WidthTaken := True;
+            end;
+            if Native <> nil then Drawing.DeleteObject(Native.ID);
+          end;
+          Region.Span.StartByte := Pos0 - 1;
+          Region.Span.EndByte := EndLineEnd - 1;
+          Region.NativeObjectID := Solid.ID;
+          Region.FirstBinding := First;
+          Region.LastBinding := Last;
+          Context.AddSolidRegion(Region);
+        end;
+      end;
+    finally
+      Lines.Free;
+    end;
+    Pos0 := FindFrom(SolidBeginMarker, EndLineEnd);
+  end;
+end;
+
 function TikZDocumentLoader(Candidate: TDrawing2D; const FileName: TDocumentPath;
   const SourceBytes: RawByteString; Diagnostics: TStrings;
   out CodecContext: TObject): Boolean;
@@ -483,6 +592,7 @@ begin
       @ResolveTikZLocalAsset, FileName, Diagnostics) then
       raise EReadError.Create(ImportFailureText(Diagnostics,
         'TikZ scene could not be materialized as native drawing objects'));
+    RestoreTikZSolids(Candidate, Context, SourceBytes);
     CodecContext := Context;
     Context := nil;
     Result := True;

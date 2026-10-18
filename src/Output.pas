@@ -3,7 +3,7 @@ unit Output;
 interface
 
 uses SysUtils, Classes, Contnrs, Graphics, Drawings,
-  GObjBase, GObjects,
+  GObjBase, GObjects, Solid3D,
 {$IFDEF VER140}
   Gr32, Gr32_Polygons, WinBasic,
 {$ENDIF}
@@ -68,6 +68,7 @@ type
     procedure StartGroup2D(Obj: TGroup2D); virtual;
     procedure FinishGroup2D(Obj: TGroup2D); virtual;
     procedure WriteCompound2D(Obj: TCompound2D); virtual;
+    procedure WriteSolid3D(Obj: TSolid3D); virtual;
     procedure WriteEntity(Obj: TObject2D);
     function GetFontDescent: TRealType; virtual;
     procedure WriteEntities0(const ObjList: TGraphicObjList);
@@ -117,6 +118,7 @@ type
     fUseSourceViewport: Boolean;
     fSourceViewBoxY, fSourceViewBoxHeight: TRealType;
     function GetTransform: TTransf2D; override;
+    procedure WriteSolid3D(Obj: TSolid3D); override;
   public
     constructor Create(Drawing: TDrawing2D); override;
     destructor Destroy; override;
@@ -764,6 +766,10 @@ begin
   begin
     WriteCompound2D(Obj as TCompound2D);
   end
+  else if Obj is TSolid3D then
+  begin
+    WriteSolid3D(Obj as TSolid3D);
+  end
     ;
  {except
  showmessage(Obj.ClassName);
@@ -771,6 +777,11 @@ begin
 end;
 
 procedure TDrawingSaver.WriteLine2D(Obj: TLine2D);
+begin
+  WritePieces(Obj);
+end;
+
+procedure TDrawingSaver.WriteSolid3D(Obj: TSolid3D);
 begin
   WritePieces(Obj);
 end;
@@ -1820,6 +1831,71 @@ destructor T_SVG_Export.Destroy;
 begin
   fDevice.Free;
   inherited Destroy;
+end;
+
+procedure T_SVG_Export.WriteSolid3D(Obj: TSolid3D);
+var
+  I, J: Integer;
+  Piece: TPiece;
+  Segments, Segment, Frozen: TPointsSet2D;
+  FrozenAt: Integer;
+begin
+  (fDevice as TSvgDevice).BeginSolid;
+  Segments := TPointsSet2D.Create(0);
+  Segment := TPointsSet2D.Create(2);
+  try
+    // The placement travels as an invisible polyline, so readers map it
+    // through exactly the same coordinate transform as the faces.
+    Segment.Add(Obj.Points[0]);
+    Segment.Add(Obj.Points[1]);
+    fDevice.PolyCh(Segment, clDefault, clDefault, clDefault, liNone, 1,
+      haNone, IdentityTransf2D, False);
+    Frozen := Obj.FrozenHatch;
+    FrozenAt := 0;
+    for I := 0 to Obj.Pieces.Count - 1 do
+    begin
+      Piece := Obj.Pieces[I];
+      if Piece = nil then Continue;
+      if not ((Piece.Hatch = phaDefault) and Piece.Closed and
+        (Obj.Hatching <> haNone)) then
+      begin
+        WritePiece(Piece, Obj);
+        Continue;
+      end;
+      // Cut faces carry their hatching as plain lines: editable SVG has
+      // no pattern fills.
+      fDevice.PieceCh(Piece, Piece.GetLineColor(Obj), Piece.GetHatchColor(Obj),
+        Piece.GetFillColor(Obj), Piece.GetLineStyle(Obj),
+        Piece.GetLineWidth(Obj), haNone, IdentityTransf2D);
+      Segments.Clear;
+      if Frozen <> nil then
+      begin
+        // Frozen segments come per face, each run ended by a W = 0 point.
+        while (FrozenAt < Frozen.Count) and (Frozen[FrozenAt].W <> 0) do
+        begin
+          Segments.Add(Frozen[FrozenAt]);
+          Inc(FrozenAt);
+        end;
+        Inc(FrozenAt);
+      end
+      else
+        HatchPolygon(Piece, Obj.Hatching, fDrawing2D.HatchingStep, Segments);
+      J := 0;
+      while J + 1 < Segments.Count do
+      begin
+        Segment.Clear;
+        Segment.Add(Segments[J]);
+        Segment.Add(Segments[J + 1]);
+        fDevice.PolyCh(Segment, Piece.GetHatchColor(Obj), clDefault, clDefault,
+          liSolid, Obj.LineWidth, haNone, IdentityTransf2D, False);
+        Inc(J, 2);
+      end;
+    end;
+  finally
+    Segment.Free;
+    Segments.Free;
+  end;
+  (fDevice as TSvgDevice).EndSolid(SolidToTpXXml(fDrawing2D, Obj, True, True));
 end;
 
 procedure T_SVG_Export.SetSourceViewport(const PageWidthMM, PageHeightMM,

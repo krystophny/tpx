@@ -182,6 +182,68 @@ class TeXTests(unittest.TestCase):
         self.assertIn(r"Price \$5 \& tax", exported)
         self.assertIn(r"$x^2$", exported)
 
+    def ink_grid(self, pdf, name, cells=(48, 24)):
+        """Ink coverage of the inked area of a PDF page on a coarse grid."""
+        image = self.root / (name + ".pgm")
+        self.run_command(["gs", "-q", "-dSAFER", "-dBATCH", "-dNOPAUSE",
+                          "-sDEVICE=pgmraw", "-r200", "-dTextAlphaBits=4",
+                          "-dGraphicsAlphaBits=4", "-sOutputFile=" + str(image), pdf])
+        artifacts = os.environ.get("TPX_TEX_ARTIFACTS")
+        if artifacts and shutil.which("gs"):
+            subprocess.run(["gs", "-q", "-dSAFER", "-dBATCH", "-dNOPAUSE",
+                            "-sDEVICE=png16m", "-r150",
+                            "-sOutputFile=" + str(Path(artifacts) / (name + ".png")),
+                            str(self.root / pdf)], check=True)
+        data = image.read_bytes()
+        header = re.sub(rb"#[^\n]*\n", b"", data[:200]).split()
+        width, height = int(header[1]), int(header[2])
+        pixels = data[-width * height:]
+        rows = [pixels[y * width:(y + 1) * width] for y in range(height)]
+        ink = [(x, y) for y, row in enumerate(rows) for x, v in enumerate(row) if v < 200]
+        self.assertGreater(len(ink), 1000, name + " rendered almost nothing")
+        x0 = min(x for x, _ in ink); x1 = max(x for x, _ in ink) + 1
+        y0 = min(y for _, y in ink); y1 = max(y for _, y in ink) + 1
+        grid = [[0.0] * cells[0] for _ in range(cells[1])]
+        counts = [[0] * cells[0] for _ in range(cells[1])]
+        for y in range(y0, y1):
+            row = rows[y]
+            gy = (y - y0) * cells[1] // (y1 - y0)
+            for x in range(x0, x1):
+                gx = (x - x0) * cells[0] // (x1 - x0)
+                counts[gy][gx] += 1
+                grid[gy][gx] += (255 - row[x]) / 255
+        return (x1 - x0) / (y1 - y0), [[g / max(c, 1) for g, c in zip(gr, cr)]
+                                       for gr, cr in zip(grid, counts)]
+
+    @unittest.skipUnless(shutil.which("gs") and shutil.which("rsvg-convert"),
+                         "Ghostscript or rsvg-convert is not installed")
+    def test_3d_figure_renders_alike_from_tikz_and_svg(self):
+        example = Path(__file__).resolve().parents[1] / "examples" / "basic-3d.TpX"
+        self.run_command([BINARY, "-f", example, "-o", "scene.TpX"])
+        self.run_command([BINARY, "-f", example, "-x", "svg", "-o", "scene"])
+        svg = (self.root / "scene.svg").read_text()
+        self.assertEqual(svg.count("<tpx:solid"), 7)
+        self.run_command(["rsvg-convert", "-f", "pdf", "-o", "scene-svg.pdf",
+                          "scene.svg"])
+        (self.root / "viatikz.tex").write_text(
+            "\\documentclass{standalone}\\usepackage{tikz}\\begin{document}"
+            "\\input{scene.TpX}\\end{document}\n")
+        (self.root / "viasvg.tex").write_text(
+            "\\documentclass{standalone}\\usepackage{graphicx}\\begin{document}"
+            "\\includegraphics{scene-svg.pdf}\\end{document}\n")
+        for stem in ("viatikz", "viasvg"):
+            self.run_command(["pdflatex", "-halt-on-error",
+                              "-interaction=nonstopmode", stem + ".tex"])
+        aspect_tikz, tikz = self.ink_grid("viatikz.pdf", "basic-3d-tikz")
+        aspect_svg, svg_grid = self.ink_grid("viasvg.pdf", "basic-3d-svg")
+        self.assertAlmostEqual(aspect_tikz, aspect_svg, delta=0.03 * aspect_tikz)
+        cells = [(a, b) for ra, rb in zip(tikz, svg_grid) for a, b in zip(ra, rb)]
+        difference = sum(abs(a - b) for a, b in cells) / len(cells)
+        coverage = sum(a for a, _ in cells) / len(cells)
+        # Same faces, edges and hatching: per-cell ink differs only by
+        # antialiasing and line-width rounding.
+        self.assertLess(difference, 0.25 * coverage, (difference, coverage))
+
     def test_scientific_examples_compile_with_tikz(self):
         examples = Path(__file__).resolve().parents[1] / "examples"
         expected_math = {
