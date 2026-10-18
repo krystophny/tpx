@@ -168,6 +168,13 @@ through LaTeX require `latex`, `pdflatex`, `dvips`, and the drawing packages.
 Ghostscript (`gs`) supports PostScript conversion and previews, `mpost` supports
 MetaPost output, and `pstoedit` supports PostScript/PDF import.
 
+If Ghostscript, LaTeX or dvips is missing when a preview or export needs it,
+TpX shows the required tool and an installation command or download link.
+You can copy the command or open TpX settings to select an executable.
+TpX also searches PATH and common installation directories when a saved path
+is no longer valid. Command-line exports report missing tools on stderr and
+return a nonzero exit status.
+
 On Debian or Ubuntu:
 
 ```sh

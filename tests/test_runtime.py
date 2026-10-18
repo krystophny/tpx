@@ -18,7 +18,7 @@ BINARY = Path(os.environ["RUNTIME_BINARY"]).resolve()
 SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-empty-cancel", "exit-yes",
              "exit-destroy-no", "exit-destroy-yes", "exit-close",
              "exit-fallback", "exit-save-failure", "text-selection",
-             "default-view", "toolbar", "draw-click", "draw-drag", "draw-rectangle", "draw-jitter", "draw-cancel", "shape-snap", "external-tools", "preview-state",
+             "default-view", "toolbar", "draw-click", "draw-drag", "draw-rectangle", "draw-jitter", "draw-cancel", "shape-snap", "external-tools", "preview-state", "tool-hint-dialog",
              "viewport-events", "viewport-crosshair", "viewport-preview", "viewport-damage",
              "text-metrics", "path-first-click", "async-tools",
              "document-io",
@@ -122,6 +122,16 @@ class RuntimeTests(unittest.TestCase):
 
         self.assertEqual(cleanup.call_count, 1)
         real_cleanup(cleanup.call_args.args[0])
+
+    def test_required_tool_resolution_and_console_hints(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-required-tools-") as directory:
+            root = Path(directory).resolve()
+            tool = root / ("tpx-test-tool.exe" if os.name == "nt" else "tpx-test-tool")
+            shutil.copy2(BINARY, tool)
+            self.run_scenario("required-tools", {
+                "TPX_RESOLVED_TOOL": str(tool),
+                "PATH": str(root),
+            })
 
     def test_transactional_pstoedit_emf_import(self):
         with tempfile.TemporaryDirectory(prefix="tpx-pstoedit-") as directory:
@@ -257,6 +267,11 @@ class RuntimeTests(unittest.TestCase):
                         "XDG_STATE_HOME": str(state), "XDG_CACHE_HOME": str(cache),
                         "APPDATA": str(config), "LOCALAPPDATA": str(state)})
             env.update(extra_env or {})
+            if scenario == "unsupported-exports":
+                fixture = runtime_dir / ("failed-tool-fixture.exe" if os.name == "nt"
+                                         else "failed-tool-fixture")
+                shutil.copy2(BINARY, fixture)
+                env["TPX_FAILED_TOOL"] = str(fixture)
             expected_entries = {path.name for path in runtime_dir.iterdir()}
             readonly_modes = {}
             if readonly_runtime and os.name != "nt":

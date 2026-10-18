@@ -245,16 +245,21 @@ const
   TempTpX0 = '(tpx)TpX.tpx';
 begin
   Result := False;
+  if PreviewKind = ltxview_Pdf then
+  begin
+    if not CheckRequiredTool(PdfLatexPath, rtPdfLaTeX, 'LaTeX PDF preview') then Exit;
+    LatexCompPath := PdfLatexPath;
+  end
+  else
+  begin
+    if not CheckRequiredTool(LatexPath, rtLaTeX, 'LaTeX preview and export') then Exit;
+    LatexCompPath := LatexPath;
+  end;
   TempDir := GetTempDir;
   TempTpX := TempDir + TempTpX0;
   TempTeX := TempDir + '(doc)TpX.tex';
   if not WritePreviewSource(
     Drawing, PreviewKind, DvipsFixBB, TempTeX, TempTpX) then Exit;
-  case PreviewKind of
-    ltxview_Dvi, ltxview_PS: LatexCompPath := LatexPath;
-    ltxview_Pdf: LatexCompPath := PdfLatexPath;
-  end;
-  if not CheckFilePath(LatexCompPath, 'LaTeX/PdfLaTeX') then Exit;
   case PreviewKind of
     ltxview_Dvi, ltxview_PS: TempDvi := TempDir + '(doc)TpX.dvi';
     ltxview_Pdf: TempDvi := TempDir + '(doc)TpX.pdf';
@@ -298,7 +303,7 @@ begin
     then Exit;
   if PreviewKind = ltxview_PS then
   begin
-    if not CheckFilePath(DviPsPath, 'DviPs') then Exit;
+    if not CheckRequiredTool(DviPsPath, rtDvips, 'PostScript preview') then Exit;
     TryDeleteFile(ChangeFileExt(TempDvi, '.ps'));
     FileExec(Format('%s "%s"', 
       [PrepareFilePath(DviPsPath), ExtractFileName(TempDvi)]), '',
@@ -395,7 +400,7 @@ end;
 procedure GhostScriptConvert(const FileName: string;
   const Keys: string; const OutFileName: string);
 begin
-  if not CheckFilePath(GhostscriptPath, 'Ghostscript') then Exit;
+  if not CheckRequiredTool(GhostscriptPath, rtGhostscript, 'PostScript preview and conversion') then Exit;
   if not FileExists(FileName) then Exit;
   FileExec(Format(
     '%s -dSAFER -dBATCH -dNOPAUSE -dEPSCrop -q %s -sOutputFile="%s" "%s"',

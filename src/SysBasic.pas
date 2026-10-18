@@ -16,6 +16,15 @@ uses Types,
 {$ENDIF}
   SysUtils, Forms, Graphics;
 
+type
+  TRequiredTool = (rtGhostscript, rtLaTeX, rtPdfLaTeX, rtDvips);
+
+function ResolveToolPath(var FilePath: string;
+  const ExecutableNames: array of string): Boolean;
+procedure ReportMissingTool(const Tool: TRequiredTool; const Purpose: string);
+function CheckRequiredTool(var FilePath: string; const Tool: TRequiredTool;
+  const Purpose: string): Boolean;
+
 function CheckFilePath(var FilePath: string;
   const FileDescription: string): Boolean;
 function PrepareFilePath(const FilePath: string): string;
@@ -73,6 +82,7 @@ var
   StartTime: Cardinal;
   { Command-line conversion runs without a GUI: messages go to stderr. }
   ConsoleMessages: Boolean = False;
+  ConsoleErrorReported: Boolean = False;
 
 procedure WriteConsoleMessage(const MsgStr: string);
 
@@ -80,7 +90,7 @@ implementation
 
 uses
 //WinBasic,
-  MainUnit, Math{$IFDEF FPC}, Classes,
+  MainUnit, Dialogs, Controls, Buttons, Clipbrd, Classes, Math{$IFDEF FPC},
 {$IFNDEF WASI}
   Process{$IFDEF MSWINDOWS}, ProcessUnicode{$ENDIF},
 {$ENDIF}
@@ -232,6 +242,233 @@ begin
   if not Result then Exit;
   Result := not IsNan(Value) and not IsInfinite(Value) and
     ((Value > 0) or (AllowZero and (Value = 0)));
+end;
+
+function ResolveToolPath(var FilePath: string;
+  const ExecutableNames: array of string): Boolean;
+var
+  SearchPath, Candidate, Configured: string;
+  I: Integer;
+{$IFDEF MSWINDOWS}
+  Directories: TStringList;
+  Entry: TSearchRec;
+  Base: string;
+  procedure AddSubdirectories(const Parent, Suffix: string);
+  begin
+    if FindFirst(IncludeTrailingPathDelimiter(Parent) + '*', faDirectory,
+      Entry) <> 0 then Exit;
+    try
+      repeat
+        if ((Entry.Attr and faDirectory) <> 0) and
+          (Entry.Name <> '.') and (Entry.Name <> '..') then
+          Directories.Add(IncludeTrailingPathDelimiter(Parent) +
+            Entry.Name + Suffix);
+      until FindNext(Entry) <> 0;
+    finally
+      SysUtils.FindClose(Entry);
+    end;
+  end;
+{$ENDIF}
+  function Usable(const Path: string): Boolean;
+  begin
+    Result := (Path <> '') and FileExists(Path);
+{$IFDEF UNIX}{$IFNDEF CPUWASM32}
+    if Result then Result := fpAccess(PChar(Path), X_OK) = 0;
+{$ENDIF}{$ENDIF}
+  end;
+  function FindExecutable(const Name: string): Boolean;
+  var
+    Remaining, Directory: string;
+    Separator: Integer;
+  begin
+    Result := False;
+    if Name = '' then Exit;
+    Remaining := SearchPath;
+    while Remaining <> '' do
+    begin
+      Separator := Pos(PathSeparator, Remaining);
+      if Separator = 0 then Separator := Length(Remaining) + 1;
+      Directory := Copy(Remaining, 1, Separator - 1);
+      Delete(Remaining, 1, Separator);
+      Candidate := IncludeTrailingPathDelimiter(Directory) + Name;
+      if Usable(Candidate) then
+      begin
+        FilePath := ExpandFileName(Candidate);
+        Exit(True);
+      end;
+    end;
+  end;
+begin
+  Result := False;
+  Configured := Trim(FilePath);
+  if (Length(Configured) > 1) and (Configured[1] in ['"', '''']) then
+    Configured := AnsiDequotedStr(Configured, Configured[1]);
+  if Usable(Configured) then
+  begin
+    FilePath := ExpandFileName(Configured);
+    Exit(True);
+  end;
+  SearchPath := SysUtils.GetEnvironmentVariable('PATH');
+  if (ExtractFilePath(Configured) = '') and FindExecutable(Configured) then
+    Exit(True);
+  for I := 0 to High(ExecutableNames) do
+    if FindExecutable(ExecutableNames[I]) then Exit(True);
+{$IFDEF DARWIN}
+  SearchPath := '/Library/TeX/texbin:/opt/homebrew/bin:/usr/local/bin:/opt/local/bin';
+{$ELSE}
+{$IFDEF MSWINDOWS}
+  Directories := TStringList.Create;
+  try
+    Base := SysUtils.GetEnvironmentVariable('ProgramFiles');
+    AddSubdirectories(Base + '\gs', '\bin');
+    Directories.Add(Base + '\MiKTeX\miktex\bin\x64');
+    Base := SysUtils.GetEnvironmentVariable('ProgramFiles(x86)');
+    AddSubdirectories(Base + '\gs', '\bin');
+    Directories.Add(Base + '\MiKTeX\miktex\bin');
+    Directories.Add(SysUtils.GetEnvironmentVariable('LOCALAPPDATA') +
+      '\Programs\MiKTeX\miktex\bin\x64');
+    AddSubdirectories('C:\texlive', '\bin\windows');
+    SearchPath := '';
+    for I := 0 to Directories.Count - 1 do
+      SearchPath := SearchPath + Directories[I] + PathSeparator;
+  finally
+    Directories.Free;
+  end;
+{$ELSE}
+  SearchPath := '/usr/local/bin:/usr/bin:/bin:/snap/bin';
+{$ENDIF}{$ENDIF}
+  for I := 0 to High(ExecutableNames) do
+    if FindExecutable(ExecutableNames[I]) then Exit(True);
+end;
+
+procedure ReportMissingTool(const Tool: TRequiredTool; const Purpose: string);
+{$IFNDEF CPUWASM32}
+const
+  Names: array[TRequiredTool] of string =
+    ('Ghostscript', 'LaTeX', 'pdfLaTeX', 'dvips');
+var
+  InstallHint, CopyText, MessageText, PackageName, Distribution: string;
+  Dialog: TForm;
+  Button: TBitBtn;
+  I, Choice, ButtonLeft, ButtonResult: Integer;
+{$IFDEF LINUX}
+  OSRelease: TStringList;
+{$ENDIF}
+{$ENDIF}
+begin
+{$IFNDEF CPUWASM32}
+  CopyText := '';
+  if Tool = rtGhostscript then PackageName := 'ghostscript'
+  else PackageName := 'texlive-latex-extra texlive-pictures';
+{$IFDEF DARWIN}
+  if Tool = rtGhostscript then InstallHint := 'brew install ghostscript'
+  else InstallHint := 'brew install --cask mactex-no-gui';
+  CopyText := InstallHint;
+  if Tool <> rtGhostscript then
+    InstallHint := InstallHint + LineEnding +
+      'Or download MacTeX: https://tug.org/mactex/';
+{$ELSE}
+{$IFDEF MSWINDOWS}
+  if Tool = rtGhostscript then
+    InstallHint := 'https://ghostscript.com/releases/gsdnld.html'
+  else InstallHint := 'https://miktex.org/download';
+  CopyText := InstallHint;
+  InstallHint := 'Download and install: ' + InstallHint;
+{$ELSE}
+  Distribution := '';
+{$IFDEF LINUX}
+  OSRelease := TStringList.Create;
+  try
+    if FileExists('/etc/os-release') then
+    begin
+      OSRelease.LoadFromFile('/etc/os-release');
+      Distribution := ' ' + OSRelease.Values['ID'] + ' ' +
+        StringReplace(OSRelease.Values['ID_LIKE'], '"', '', [rfReplaceAll]) + ' ';
+      Distribution := StringReplace(Distribution, '"', '', [rfReplaceAll]);
+    end;
+  finally
+    OSRelease.Free;
+  end;
+{$ENDIF}
+  if Pos(' arch ', Distribution) > 0 then
+  begin
+    if Tool <> rtGhostscript then PackageName := 'texlive-latexextra texlive-pictures';
+    InstallHint := 'sudo pacman -S ' + PackageName;
+  end
+  else if (Pos(' fedora ', Distribution) > 0) or
+    (Pos(' rhel ', Distribution) > 0) then
+  begin
+    if Tool <> rtGhostscript then PackageName := 'texlive-latex texlive-dvips texlive-pgf texlive-preview';
+    InstallHint := 'sudo dnf install ' + PackageName;
+  end
+  else if (Pos(' debian ', Distribution) > 0) or
+    (Pos(' ubuntu ', Distribution) > 0) then
+    InstallHint := 'sudo apt install ' + PackageName
+  else if Tool = rtGhostscript then
+    InstallHint := 'Install Ghostscript using your package manager: https://ghostscript.com/releases/gsdnld.html'
+  else InstallHint := 'Install TeX Live using your package manager: https://tug.org/texlive/';
+{$ENDIF}{$ENDIF}
+  if CopyText = '' then CopyText := InstallHint;
+  MessageText := Names[Tool] + ' is needed for ' + Purpose +
+    ', but TpX could not find it.' + LineEnding + LineEnding +
+    InstallHint + LineEnding + LineEnding +
+    'After installing, retry this action. You can also select the executable in TpX settings.';
+  if ConsoleMessages then raise ETpX_SysException.Create(MessageText);
+  Dialog := CreateMessageDialog(MessageText, mtInformation,
+    [mbYes, mbNo, mbCancel]);
+  try
+    Dialog.Caption := 'Install ' + Names[Tool];
+    ButtonLeft := 16;
+    for I := 0 to Dialog.ComponentCount - 1 do
+      if Dialog.Components[I] is TBitBtn then
+      begin
+        Button := TBitBtn(Dialog.Components[I]);
+        ButtonResult := Button.ModalResult;
+        Button.Kind := bkCustom;
+        Button.Glyph.Clear;
+        Button.ModalResult := ButtonResult;
+        case ButtonResult of
+          mrYes: Button.Caption := 'Open settings';
+          mrNo: Button.Caption := 'Copy command';
+          mrCancel: Button.Caption := 'Cancel';
+        end;
+        Button.Width := Max(Button.Width, Dialog.Canvas.TextWidth(Button.Caption) + 36);
+        Button.Left := ButtonLeft;
+        Inc(ButtonLeft, Button.Width + 10);
+      end;
+    Dialog.ClientWidth := Max(Dialog.ClientWidth, ButtonLeft + 6);
+    repeat
+      Choice := Dialog.ShowModal;
+      if Choice = mrNo then Clipboard.AsText := CopyText;
+    until Choice <> mrNo;
+  finally
+    Dialog.Free;
+  end;
+  if (Choice = mrYes) and Assigned(MainForm) then MainForm.TpXSettings.Execute;
+{$ENDIF}
+end;
+
+function CheckRequiredTool(var FilePath: string; const Tool: TRequiredTool;
+  const Purpose: string): Boolean;
+begin
+{$IFDEF CPUWASM32}
+  Result := CheckFilePath(FilePath, Purpose);
+{$ELSE}
+  case Tool of
+{$IFDEF MSWINDOWS}
+    rtGhostscript: Result := ResolveToolPath(FilePath, ['gswin64c.exe', 'gswin32c.exe', 'mgs.exe']);
+    rtLaTeX: Result := ResolveToolPath(FilePath, ['latex.exe']);
+    rtPdfLaTeX: Result := ResolveToolPath(FilePath, ['pdflatex.exe']);
+    rtDvips: Result := ResolveToolPath(FilePath, ['dvips.exe']);
+{$ELSE}
+    rtGhostscript: Result := ResolveToolPath(FilePath, ['gs']);
+    rtLaTeX: Result := ResolveToolPath(FilePath, ['latex']);
+    rtPdfLaTeX: Result := ResolveToolPath(FilePath, ['pdflatex']);
+    rtDvips: Result := ResolveToolPath(FilePath, ['dvips']);
+{$ENDIF}
+  end;
+  if not Result then ReportMissingTool(Tool, Purpose);
+{$ENDIF}
 end;
 
 function CheckFilePath(var FilePath: string;
@@ -448,6 +685,8 @@ begin
   end;
   {$ENDIF}
 {$ENDIF}
+  if ConsoleMessages and not Result then
+    MessageBoxError('External command failed: ' + aCmdLine);
 end;
 
 procedure OpenOrExec(const ViewerPath, FileName: string);
@@ -673,6 +912,7 @@ procedure MessageBoxError(MsgStr: string);
 begin
   if ConsoleMessages then
   begin
+    ConsoleErrorReported := True;
     WriteConsoleMessage('TpX: ' + MsgStr);
     Exit;
   end;
@@ -687,6 +927,7 @@ function MessageBoxErrorAsk(MsgStr: string): Boolean;
 begin
   if ConsoleMessages then
   begin
+    ConsoleErrorReported := True;
     WriteConsoleMessage('TpX: ' + MsgStr);
     Exit(False);
   end;
