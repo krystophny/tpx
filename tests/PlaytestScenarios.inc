@@ -1477,6 +1477,105 @@ begin
   finally Before.Free; After.Free; DeleteFile(FileName); DeleteFile(ImageName) end;
 end;
 
+procedure TestSelectionDrag;
+var
+  Lines: array[0..1] of TLine2D;
+  Before: array[0..1, 0..1] of TPoint2D;
+  I: Integer;
+  procedure Snapshot;
+  var J: Integer;
+  begin
+    for J := 0 to 1 do begin
+      Before[J, 0] := Lines[J].Points[0];
+      Before[J, 1] := Lines[J].Points[1];
+    end;
+  end;
+  procedure Fixture;
+  begin
+    MainForm.TheDrawing.SelectionClear;
+    MainForm.EventManager.SendMessage(Msg_Escape, nil);
+    MainForm.TheDrawing.SelectionAdd(Lines[0]);
+    Snapshot;
+    Check(MainForm.EventManager.Mode = BaseMode,
+      'The selection fixture is not in the normal mode');
+  end;
+  procedure CheckUnmoved(const Context: string; First, Last: Integer);
+  var J: Integer;
+  begin
+    for J := First to Last do
+      Check(IsSamePoint2D(Lines[J].Points[0], Before[J, 0]) and
+        IsSamePoint2D(Lines[J].Points[1], Before[J, 1]),
+        Context + ' moved line ' + IntToStr(J));
+  end;
+begin
+  UseSnap := False;
+  MainForm.Show;
+  PumpEvents;
+  MainForm.LocalView.VisualRect := Rect2D(0, 0,
+    MainForm.LocalView.ClientWidth, MainForm.LocalView.ClientHeight);
+  Lines[0] := TLine2D.CreateSpec(-1,
+    MainForm.LocalView.ScreenToViewport(Point2D(40, 50)),
+    MainForm.LocalView.ScreenToViewport(Point2D(160, 50)));
+  Lines[1] := TLine2D.CreateSpec(-1,
+    MainForm.LocalView.ScreenToViewport(Point2D(40, 120)),
+    MainForm.LocalView.ScreenToViewport(Point2D(160, 120)));
+  for I := 0 to 1 do begin
+    MainForm.TheDrawing.AddObject(-1, Lines[I]);
+  end;
+    { A press on empty canvas with a drag deselects and moves nothing. }
+    Fixture;
+    MainForm.EventManager.MouseDown(nil, mbLeft, [], 100, 200);
+    MainForm.EventManager.MouseMove(nil, [ssLeft], 120, 213);
+    MainForm.EventManager.MouseUp(nil, mbLeft, [], 120, 213);
+    CheckUnmoved('Empty canvas drag', 0, 1);
+    Check(MainForm.TheDrawing.SelectedObjects.Count = 0,
+      'Empty canvas drag kept the old selection');
+    Check(MainForm.EventManager.Mode = BaseMode,
+      'Empty canvas drag left a transform mode');
+    { A plain click on empty canvas only deselects. }
+    Fixture;
+    MainForm.EventManager.MouseDown(nil, mbLeft, [], 100, 200);
+    MainForm.EventManager.MouseUp(nil, mbLeft, [], 100, 200);
+    CheckUnmoved('Empty canvas click', 0, 1);
+    Check(MainForm.TheDrawing.SelectedObjects.Count = 0,
+      'Empty canvas click kept the selection');
+    { Pointer jitter during a click is not a drag, on or off the object. }
+    Fixture;
+    MainForm.EventManager.MouseDown(nil, mbLeft, [], 100, 50);
+    MainForm.EventManager.MouseMove(nil, [ssLeft], 103, 52);
+    MainForm.EventManager.MouseUp(nil, mbLeft, [], 103, 52);
+    CheckUnmoved('Click jitter on the selection', 0, 1);
+    MainForm.EventManager.MouseDown(nil, mbLeft, [], 100, 120);
+    MainForm.EventManager.MouseMove(nil, [ssLeft], 103, 122);
+    MainForm.EventManager.MouseUp(nil, mbLeft, [], 103, 122);
+    CheckUnmoved('Click jitter on another object', 0, 1);
+    Check(MainForm.TheDrawing.SelectedObjects.Find(Lines[1].ID) <> nil,
+      'Click on another object did not select it');
+    { Pointer motion without a press seen by the canvas never drags the
+      object that was clicked before. }
+    Fixture;
+    MainForm.EventManager.MouseDown(nil, mbLeft, [], 100, 50);
+    MainForm.EventManager.MouseUp(nil, mbLeft, [], 100, 50);
+    MainForm.EventManager.MouseMove(nil, [ssLeft], 100, 90);
+    MainForm.EventManager.MouseUp(nil, mbLeft, [], 100, 90);
+    CheckUnmoved('Motion without a press', 0, 1);
+    { A press on another object with a drag moves that object only. }
+    Fixture;
+    MainForm.EventManager.MouseDown(nil, mbLeft, [], 100, 120);
+    MainForm.EventManager.MouseMove(nil, [ssLeft], 100, 140);
+    MainForm.EventManager.MouseUp(nil, mbLeft, [], 100, 140);
+    CheckUnmoved('Dragging another object', 0, 0);
+    Check(Abs(Lines[1].Points[0].Y - Before[1, 0].Y) > 1e-6,
+      'Dragging an unselected object did not move it');
+    { Dragging the selected object itself still moves it. }
+    Fixture;
+    MainForm.EventManager.MouseDown(nil, mbLeft, [], 100, 50);
+    MainForm.EventManager.MouseMove(nil, [ssLeft], 100, 70);
+    MainForm.EventManager.MouseUp(nil, mbLeft, [], 100, 70);
+    Check(Abs(Lines[0].Points[0].Y - Before[0, 0].Y) > 1e-6,
+      'Dragging the selected object no longer moves it');
+end;
+
 procedure TestArcFlip;
 const
   Tolerance = 1e-6;

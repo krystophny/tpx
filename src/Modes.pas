@@ -105,6 +105,7 @@ type
   protected
     fLastClickedPoint: TPoint2D;
     fLastMousePoint: TPoint2D;
+    fLeftPressed: Boolean;
     procedure OnInsertGrObj(Msg: TEventMessage; Sender: TObject);
   public
     constructor Create;
@@ -502,6 +503,8 @@ const
   Msg_View3DPerspective = Msg_View3DSide + 1;
 
 const Drag_Aperture = 4;
+  { Pointer travel in pixels before a press becomes a drag. }
+  Drag_Threshold = 6;
 
 implementation
 
@@ -2155,6 +2158,7 @@ procedure TBaseMode.OnMouseDown(Sender: TObject; Button:
   Shift: TShiftState; X, Y: Integer);
 begin
   fLastClickedPoint := ViewPort.ScreenToViewport(Point2D(X, Y));
+  fLeftPressed := Button = mbLeft;
 end;
 
 procedure TBaseMode.OnMouseMove(Sender: TObject;
@@ -2167,8 +2171,13 @@ begin
   fLastMousePoint := ViewPort.ScreenToViewport(Point2D(X, Y));
   if SSLeft in Shift then
   begin //Start drag
+    { Only a press seen by this mode can start a drag. Otherwise
+      fLastClickedPoint is an old click, possibly on the object that
+      was selected before, and that object would be dragged. }
+    if not fLeftPressed then Exit;
     if PointDistance2D(fLastMousePoint, fLastClickedPoint)
-      < ViewPort.PixelSize * Drag_Aperture then Exit;
+      < ViewPort.PixelSize * Drag_Threshold then Exit;
+    fLeftPressed := False; // The press becomes a drag exactly once.
     TmpObj := Drawing.PickObject_PreferSelected(//PickObject(
       fLastClickedPoint,
       ViewPort.PixelSize * PixelApertureCoefficient,
@@ -2246,6 +2255,7 @@ var
   TmpObj: TObject2D;
   OnObjectIndex: Integer;
 begin
+  fLeftPressed := False;
   if Button = mbRight then
   begin
     OnLocalPopup(Sender, Shift, X, Y);

@@ -2356,6 +2356,7 @@ begin
     else if ParamStr(1) = 'conversion-save' then TestConversionSave
     else if ParamStr(1) = 'unsupported-exports' then TestUnsupportedExports
     else if ParamStr(1) = 'arc-flip' then TestArcFlip
+    else if ParamStr(1) = 'selection-drag' then TestSelectionDrag
     else if ParamStr(1) = 'tpx-staged-sidecars' then TestTpXStagedSidecars
     else if ParamStr(1) = 'tikz-import-native' then TestTikZImportNativeScene
     else if ParamStr(1) = 'tikz-source-save' then TestTikZSourceSave
