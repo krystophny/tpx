@@ -1052,7 +1052,7 @@ def s_object_inspector(app):
         dialog.get_by_role('button', name='OK', exact=True).click()
 
     # Opening a selected rectangle must keep both targets for all edits below.
-    app.page.mouse.dblclick(*app.at(cx - 90, cy - 5), delay=80)
+    app.page.mouse.dblclick(*app.at(cx - 90, cy - 55), delay=80)
     app.page.wait_for_timeout(150)
     width.fill('2.5')
     width.press('Tab')
