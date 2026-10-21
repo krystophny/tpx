@@ -113,16 +113,18 @@ def stage_runtime(package, binary, platform, version):
 
 
 def build_and_package():
-    version = os.environ["CANDIDATE_VERSION"]
+    source_version_match = re.search(
+        r"^\s*About_Version\s*=\s*'Version ([^']+)'",
+        (ROOT / "src/tpx.inc").read_text(), re.MULTILINE)
+    source_version = source_version_match.group(1) if source_version_match else None
+    version = os.environ.get("CANDIDATE_VERSION") or source_version
+    if version is None:
+        raise ValueError("src/tpx.inc has no About_Version")
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-(?:beta|rc)\.[1-9][0-9]*)?", version):
         raise ValueError("version must be X.Y.Z with an optional beta.N or rc.N suffix")
     kind = os.environ.get("PACKAGE_KIND", "candidate")
     if kind not in {"candidate", "release"}:
         raise ValueError("PACKAGE_KIND must be candidate or release")
-    source_version_match = re.search(
-        r"^\s*About_Version\s*=\s*'Version ([^']+)'",
-        (ROOT / "src/tpx.inc").read_text(), re.MULTILINE)
-    source_version = source_version_match.group(1) if source_version_match else None
     if source_version != version:
         raise ValueError(f"About version {source_version!r} != package version {version!r}")
     platform = os.environ["CANDIDATE_PLATFORM"]

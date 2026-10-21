@@ -13,7 +13,18 @@ being packaged, including any beta or RC suffix.
 ## Candidate builds
 
 Candidate builds have read-only repository permissions and only upload tested
-artifacts; they never create tags or releases:
+artifacts; they never create tags or releases.
+
+The desktop build workflow runs automatically for every push to `master` and
+for pull requests. With no version input it uses `About_Version` from the
+checked-out source; an explicit version must match that source. The README
+links to the `master` push runs for downloading the latest fixes. Sign in to
+GitHub, open a successful run and select the platform under **Artifacts**;
+extract the artifact ZIP and then the package inside. Artifacts expire after
+30 days. Each archive name and `BUILD.json` identifies its source commit.
+These CI downloads require no release or tag.
+
+To build a candidate from a release branch manually:
 
 ```sh
 gh workflow run candidate.yml --ref release/1.6 -f version=1.6.1

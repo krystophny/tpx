@@ -1,9 +1,9 @@
-name: Candidate binaries (manual playtest)
+name: Desktop builds
 
 on:
   pull_request:
   push:
-    branches: [fix/playtest-regressions, prep/release-candidate]
+    branches: [master, fix/playtest-regressions, prep/release-candidate]
   workflow_call:
     inputs:
       version:
@@ -15,9 +15,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Proposed version; this builds a candidate and never releases it
-        required: true
-        default: '1.6.0'
+        description: Proposed version (empty uses the source version); builds a candidate only
+        required: false
         type: string
 
 permissions:
@@ -43,7 +42,7 @@ jobs:
             widgetset: cocoa
     env:
       PYTHONUTF8: '1'
-      CANDIDATE_VERSION: ${{ inputs.version || '1.6.0' }}
+      CANDIDATE_VERSION: ${{ inputs.version }}
       PACKAGE_KIND: ${{ inputs.package_kind || 'candidate' }}
       CANDIDATE_PLATFORM: ${{ matrix.platform }}
       WIDGETSET: ${{ matrix.widgetset }}
