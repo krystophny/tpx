@@ -21,6 +21,17 @@ current `master`. With the default `tikz` TeX format, a 1.6.0 `.TpX` file
 carries its TikZ picture after the editor data, so include the saved drawing
 directly with `\input{figure.TpX}`.
 
+For the latest desktop fixes, download a
+[development build from CI](https://github.com/krystophny/tpx/actions/workflows/candidate.yml?query=branch%3Amaster+event%3Apush).
+Windows x86-64, Linux x86-64 and Apple Silicon macOS packages are built and
+tested automatically on every push to `master`. Sign in to GitHub, open the
+latest successful run, and choose your platform under **Artifacts**. Extract
+the downloaded artifact ZIP, then extract the package inside and follow its
+`INSTALL.md`; no compiler or Lazarus installation is needed. These are test
+builds, retained for 30 days. The archive name and bundled `BUILD.json`
+identify the source commit. Each package contains its source, and the artifact
+also includes a checksum file.
+
 To try TpX without installing it, open the
 [browser build](https://krystophny.github.io/tpx/). It is deployed from the
 latest `master` and runs on the Lazarus CustomDrawn WASI backend proposed in
