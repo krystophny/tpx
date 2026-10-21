@@ -500,6 +500,111 @@ begin
     'Undo did not restore the distinct pre-edit mixed values');
 end;
 
+procedure TestInspectorDoubleClickSelection;
+var
+  Drawing, Reloaded: TDrawing2D;
+  Vertical, Horizontal, Outside: TRectangle2D;
+  P, Q: TPoint2D;
+  WidthEditor: TEdit;
+  FillEditor: TComboBox;
+  Key: Word;
+  Shift: TShiftState;
+  HistoryCount: Integer;
+  FileName: string;
+  Loader: T_TpX_Loader;
+
+  function AddRectangle(ID: Integer; X, Y, W, H, Width: TRealType): TRectangle2D;
+  begin
+    Result := TRectangle2D.Create(ID);
+    Result.Points[0] := Point2D(X, Y);
+    Result.Points[1] := Point2D(X + W, Y + H);
+    Result.Points[2] := Point2D(X, Y + H);
+    Result.FillColor := clWhite;
+    Result.LineColor := clBlack;
+    Result.LineWidth := Width;
+    Drawing.AddObject(ID, Result);
+  end;
+
+  procedure DoubleClickAt(const Point: TPoint2D);
+  var Screen: TPoint2D;
+  begin
+    Screen := MainForm.LocalView.ViewportToScreen(Point);
+    MainForm.EventManager.MouseDown(nil, mbLeft, [], Round(Screen.X), Round(Screen.Y));
+    MainForm.EventManager.MouseUp(nil, mbLeft, [], Round(Screen.X), Round(Screen.Y));
+    MainForm.EventManager.MouseDown(nil, mbLeft, [], Round(Screen.X), Round(Screen.Y));
+    MainForm.EventManager.Mode.OnDblClick(nil, Round(Screen.X), Round(Screen.Y));
+    MainForm.EventManager.MouseUp(nil, mbLeft, [], Round(Screen.X), Round(Screen.Y));
+  end;
+begin
+  MainForm.Show;
+  MainForm.ShowInspector;
+  PumpEvents;
+  Drawing := MainForm.TheDrawing;
+  MainForm.LocalView.VisualRect := Rect2D(-10, -10, 100, 70);
+  UseSnap := False;
+  Vertical := AddRectangle(101, 20, 0, 10, 50, 0.5);
+  Horizontal := AddRectangle(102, 0, 20, 50, 10, 0.75);
+  Outside := AddRectangle(103, 70, 20, 10, 10, 1);
+  P := MainForm.LocalView.ViewportToScreen(Point2D(-5, 55));
+  Q := MainForm.LocalView.ViewportToScreen(Point2D(55, -5));
+  MainForm.EventManager.MouseDown(nil, mbLeft, [], Round(P.X), Round(P.Y));
+  MainForm.EventManager.MouseMove(nil, [ssLeft], Round(P.X) + 7, Round(P.Y) + 7);
+  MainForm.EventManager.MouseMove(nil, [ssLeft], Round(Q.X), Round(Q.Y));
+  MainForm.EventManager.MouseUp(nil, mbLeft, [], Round(Q.X), Round(Q.Y));
+  Check(Drawing.SelectedObjects.Count = 2, 'Box selection did not select both rectangles');
+  HistoryCount := Drawing.History.Count;
+  DoubleClickAt(Point2D(25, 40));
+  Check((Drawing.SelectedObjects.Count = 2) and
+    (Drawing.SelectedObjects.Find(Vertical.ID) <> nil) and
+    (Drawing.SelectedObjects.Find(Horizontal.ID) <> nil),
+    'Double-click discarded the other selected rectangle');
+  Check(Drawing.History.Count = HistoryCount, 'Opening properties edited the drawing');
+  MainForm.Inspector.ShowMore := True;
+  WidthEditor := MainForm.Inspector.EditorFor(opfLineWidth) as TEdit;
+  Check((WidthEditor.Text = '') and (WidthEditor.TextHint = 'mixed'),
+    'Double-click did not retain the mixed width of the full selection');
+  MainForm.Inspector.FocusField(opfFillColor);
+  FillEditor := MainForm.Inspector.EditorFor(opfFillColor) as TComboBox;
+  FillEditor.Text := 'red';
+  FillEditor.OnChange(FillEditor);
+  Key := VK_TAB;
+  Shift := [];
+  FillEditor.OnKeyDown(FillEditor, Key, Shift);
+  Check((Vertical.FillColor = clRed) and (Horizontal.FillColor = clRed) and
+    (Outside.FillColor = clWhite), 'Fill edit did not respect the multi-selection');
+  Check((Vertical.LineWidth = 0.5) and (Horizontal.LineWidth = 0.75),
+    'Fill edit changed the distinct line widths');
+  MainForm.Inspector.FocusField(opfLineWidth);
+  WidthEditor.Text := '1.25';
+  Key := VK_TAB;
+  WidthEditor.OnKeyDown(WidthEditor, Key, Shift);
+  Check((Vertical.LineWidth = 1.25) and (Horizontal.LineWidth = 1.25) and
+    (Outside.LineWidth = 1), 'Width edit did not respect the multi-selection');
+  FileName := GetTempFileName(SysUtils.GetTempDir(False), 'tpx-multiselect-');
+  Reloaded := TDrawing2D.Create(nil);
+  try
+    Check(StoreToFile_TpX(Drawing, FileName, False), 'Could not save the edited cross');
+    Loader := T_TpX_Loader.Create(Reloaded);
+    try Loader.LoadFromFile(FileName); finally Loader.Free end;
+    Vertical := Reloaded.ObjectList.FirstObj as TRectangle2D;
+    Horizontal := Reloaded.ObjectList.NextObj as TRectangle2D;
+    Check((Vertical.FillColor = clRed) and (Horizontal.FillColor = clRed) and
+      (Vertical.LineWidth = 1.25) and (Horizontal.LineWidth = 1.25),
+      'Bulk properties did not survive save and reopen');
+    Check(IsSamePoint2D(Vertical.Points[0], Point2D(20, 0)) and
+      IsSamePoint2D(Horizontal.Points[1], Point2D(50, 30)),
+      'Opening properties or bulk editing changed the geometry');
+  finally
+    Reloaded.Free;
+    DeleteFile(FileName);
+  end;
+  DoubleClickAt(Point2D(75, 25));
+  Check((Drawing.SelectedObjects.Count = 1) and
+    (Drawing.SelectedObjects.Find(Outside.ID) <> nil),
+    'Double-clicking an unselected object retained the previous selection');
+  Check(WidthEditor.Text = '1', 'Inspector did not rebind to the unselected object');
+end;
+
 {$IFDEF LCLCOCOA}
 function CocoaInspectorTextView(Memo: TCompositionAwareMemo): TCocoaTextView;
 begin

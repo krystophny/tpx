@@ -2347,6 +2347,7 @@ begin
     else if ParamStr(1) = 'default-opener' then TestDefaultOpener
     else if ParamStr(1) = 'property-dimensions' then TestPropertyDimensions
     else if ParamStr(1) = 'inspector-mixed-selection' then TestInspectorMixedSelection
+    else if ParamStr(1) = 'inspector-doubleclick-selection' then TestInspectorDoubleClickSelection
     {$IFDEF LCLCOCOA}
     else if ParamStr(1) = 'cocoa-local-composition' then TestCocoaLocalComposition
     {$ENDIF}
