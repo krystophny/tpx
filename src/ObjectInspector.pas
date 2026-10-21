@@ -1856,6 +1856,8 @@ end;
 procedure TObjectInspector.FocusObject(Obj: TObject2D);
 var
   IDs: TEditTargetIDs;
+  Selected: TGraphicObject;
+  Count: Integer;
   ErrorText: string;
   Field: TObjectPropertyField;
 begin
@@ -1865,11 +1867,21 @@ begin
     FSelectionLabel.Caption := ErrorText;
     Exit;
   end;
-  FDrawing.SelectionClear;
-  FDrawing.SelectionAdd(Obj);
-  SetLength(IDs, 1);
-  IDs[0] := Obj.ID;
-  RefreshSelection(IDs, 1, Obj is TPrimitive2D);
+  if FDrawing.SelectedObjects.Find(Obj.ID) = nil then
+  begin
+    FDrawing.SelectionClear;
+    FDrawing.SelectionAdd(Obj);
+  end;
+  SetLength(IDs, FDrawing.SelectedObjects.Count);
+  Count := 0;
+  Selected := FDrawing.SelectedObjects.FirstObj;
+  while Selected <> nil do
+  begin
+    IDs[Count] := Selected.ID;
+    Inc(Count);
+    Selected := FDrawing.SelectedObjects.NextObj;
+  end;
+  RefreshSelection(IDs, Count, (Count = 1) and (Obj is TPrimitive2D));
   if Obj is TText2D then Field := opfText
   else if Obj is TStar2D then Field := opfStarKind
   else if Obj is TSymbol2D then Field := opfSymbolKind
