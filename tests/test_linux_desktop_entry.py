@@ -12,6 +12,10 @@ import time
 import unittest
 import xml.etree.ElementTree as ET
 
+import headless_display
+
+headless_display.ensure_private_display()
+
 ROOT = Path(__file__).resolve().parents[1]
 
 

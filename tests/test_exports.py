@@ -13,6 +13,10 @@ import unittest
 import zlib
 import xml.etree.ElementTree as ET
 
+import headless_display
+
+headless_display.ensure_private_display()
+
 BINARY = Path(os.environ["TPX_BINARY"]).resolve()
 SVG = "{http://www.w3.org/2000/svg}"
 

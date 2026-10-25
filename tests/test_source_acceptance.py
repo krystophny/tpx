@@ -12,6 +12,10 @@ import traceback
 import unittest
 import xml.etree.ElementTree as ET
 
+import headless_display
+
+headless_display.ensure_private_display()
+
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = Path(os.environ["TPX_BINARY"]).resolve()
 RUNTIME_BINARY = Path(os.environ["RUNTIME_BINARY"]).resolve()

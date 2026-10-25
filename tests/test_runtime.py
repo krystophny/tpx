@@ -14,6 +14,10 @@ import unittest
 from contextlib import contextmanager
 from unittest import mock
 
+import headless_display
+
+headless_display.ensure_private_display()
+
 BINARY = Path(os.environ["RUNTIME_BINARY"]).resolve()
 SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-empty-cancel", "exit-yes",
              "exit-destroy-no", "exit-destroy-yes", "exit-close",
