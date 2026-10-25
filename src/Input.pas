@@ -818,6 +818,10 @@ begin
           begin
             Body.Size1 := XmlFloat(Child, 'r1', Body.Size1);
             Body.Size2 := XmlFloat(Child, 'r2', Body.Size2);
+            Body.Size3 := XmlFloat(Child, 'angle', Body.Size3);
+            Body.Size4 := XmlFloat(Child, 'start', Body.Size4);
+            if not ((Body.Size3 > 0) and (Body.Size3 <= 360)) then
+              raise EReadError.Create('Torus angle out of range');
           end;
         skExtrude: Body.Size1 := XmlFloat(Child, 'depth', Body.Size1);
         skRevolve:

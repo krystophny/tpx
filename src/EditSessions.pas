@@ -113,7 +113,10 @@ const
   MaxRecoveryTargets = 4096;
   MaxRecoveryPathDepth = 128;
   MaxRecoveryProvisionalObjects = 64;
-  EditRecoveryMagic = 'TPXES002';
+  // Version 3 stores field sets in 64 bits; version 2 has 32-bit field sets
+  // and version 1 has no presentation byte either.
+  EditRecoveryMagic = 'TPXES003';
+  NarrowEditRecoveryMagic = 'TPXES002';
   LegacyEditRecoveryMagic = 'TPXES001';
 
 type
@@ -171,24 +174,43 @@ begin
   Result := TEditUtf8Text(Bytes);
 end;
 
-function PropertyFieldsToBits(Fields: TObjectPropertyFields): LongWord;
+function PropertyFieldsToBits(Fields: TObjectPropertyFields): QWord;
 var Field: TObjectPropertyField;
 begin
   Result := 0;
   for Field := Low(TObjectPropertyField) to High(TObjectPropertyField) do
-    if Field in Fields then Result := Result or (LongWord(1) shl Ord(Field));
+    if Field in Fields then Result := Result or (QWord(1) shl Ord(Field));
 end;
 
-function BitsToPropertyFields(Bits: LongWord): TObjectPropertyFields;
+function BitsToPropertyFields(Bits: QWord): TObjectPropertyFields;
 var Field: TObjectPropertyField;
 begin
   Result := [];
   for Field := Low(TObjectPropertyField) to High(TObjectPropertyField) do
-    if (Bits and (LongWord(1) shl Ord(Field))) <> 0 then Include(Result, Field);
-  { A shift by the full 32 bits is undefined, so test only when bits remain. }
-  if (Ord(High(TObjectPropertyField)) < 31) and
+    if (Bits and (QWord(1) shl Ord(Field))) <> 0 then Include(Result, Field);
+  { A shift by the full 64 bits is undefined, so test only when bits remain. }
+  if (Ord(High(TObjectPropertyField)) < 63) and
     ((Bits shr (Ord(High(TObjectPropertyField)) + 1)) <> 0) then
     raise EReadError.Create('Recovery edit state contains unknown fields');
+end;
+
+procedure WriteFieldBits(Stream: TStream; Fields: TObjectPropertyFields);
+var Bits: QWord;
+begin
+  Bits := PropertyFieldsToBits(Fields);
+  Stream.WriteBuffer(Bits, SizeOf(Bits));
+end;
+
+function ReadFieldBits(Stream: TStream; Wide: Boolean): TObjectPropertyFields;
+var Bits: QWord; Narrow: LongWord;
+begin
+  if Wide then Stream.ReadBuffer(Bits, SizeOf(Bits))
+  else
+  begin
+    Stream.ReadBuffer(Narrow, SizeOf(Narrow));
+    Bits := Narrow;
+  end;
+  Result := BitsToPropertyFields(Bits);
 end;
 
 procedure WriteFieldValue(Stream: TStream; const Patch: TObjectPropertyPatch;
@@ -228,6 +250,7 @@ begin
     opfSolidSize1: R := Patch.SolidSize1;
     opfSolidSize2: R := Patch.SolidSize2;
     opfSolidSize3: R := Patch.SolidSize3;
+    opfSolidSize4: R := Patch.SolidSize4;
     opfSolidAzimuth: R := Patch.SolidAzimuth;
     opfSolidElevation: R := Patch.SolidElevation;
     opfLineWidth: R := Patch.LineWidth;
@@ -242,7 +265,7 @@ begin
   end;
   if Field in [opfLineWidth, opfArrowSizeFactor, opfTextHeight,
     opfTextRotation, opfStarSizeFactor, opfSymbolDiameter,
-    opfSymbolRotation, opfRectangleRX, opfRectangleRY, opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidAzimuth, opfSolidElevation] then
+    opfSymbolRotation, opfRectangleRX, opfRectangleRY, opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidSize4, opfSolidAzimuth, opfSolidElevation] then
     Stream.WriteBuffer(R, SizeOf(R))
   else
     Stream.WriteBuffer(I, SizeOf(I));
@@ -274,7 +297,7 @@ begin
   end;
   if Field in [opfLineWidth, opfArrowSizeFactor, opfTextHeight,
     opfTextRotation, opfStarSizeFactor, opfSymbolDiameter,
-    opfSymbolRotation, opfRectangleRX, opfRectangleRY, opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidAzimuth, opfSolidElevation] then
+    opfSymbolRotation, opfRectangleRX, opfRectangleRY, opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidSize4, opfSolidAzimuth, opfSolidElevation] then
   begin
     Stream.ReadBuffer(R, SizeOf(R));
     case Field of
@@ -290,6 +313,7 @@ begin
       opfSolidSize1: Patch.SolidSize1 := R;
       opfSolidSize2: Patch.SolidSize2 := R;
       opfSolidSize3: Patch.SolidSize3 := R;
+      opfSolidSize4: Patch.SolidSize4 := R;
       opfSolidAzimuth: Patch.SolidAzimuth := R;
       opfSolidElevation: Patch.SolidElevation := R;
     end;
@@ -373,7 +397,7 @@ function EncodeSessionRecoveryState(Session: TObjectEditSession;
 var Stream, ObjectStream: TMemoryStream; Targets: TRecoveryTargets;
   Field: TObjectPropertyField; I, Count: Integer; Path: TRecoveryPath;
   Obj: TObject2D; Graphic: TGraphicObject; ClassIndex: Word;
-  PendingBits: LongWord; DraftBytes: Int64; Bytes: RawByteString;
+  PendingFields: TObjectPropertyFields; DraftBytes: Int64; Bytes: RawByteString;
   FieldByte, PendingByte, PresentationByte: Byte;
 begin
   Result := False;
@@ -440,12 +464,12 @@ begin
           ObjectStream.Free;
         end;
       end;
-      WriteUInt32(Stream, PropertyFieldsToBits(Session.FPreviewPatch.Fields));
+      WriteFieldBits(Stream, Session.FPreviewPatch.Fields);
       for Field := Low(TObjectPropertyField) to High(TObjectPropertyField) do
         if Field in Session.FPreviewPatch.Fields then
           WriteFieldValue(Stream, Session.FPreviewPatch, Field);
       WriteUInt32(Stream, Length(Session.FRawDrafts));
-      PendingBits := PropertyFieldsToBits(Session.FRawDraftPendingFields);
+      PendingFields := Session.FRawDraftPendingFields;
       DraftBytes := 0;
       for I := 0 to High(Session.FRawDrafts) do
       begin
@@ -457,7 +481,7 @@ begin
         Stream.WriteBuffer(FieldByte, SizeOf(FieldByte));
         WriteUtf8(Stream, Session.FRawDrafts[I].Text);
       end;
-      WriteUInt32(Stream, PendingBits);
+      WriteFieldBits(Stream, PendingFields);
       if Session.FGlobalRawDraftPending then PendingByte := 1
       else PendingByte := 0;
       Stream.WriteBuffer(PendingByte, SizeOf(PendingByte));
@@ -658,6 +682,7 @@ begin
         opfSolidSize1: Destination.SolidSize1 := Source.SolidSize1;
         opfSolidSize2: Destination.SolidSize2 := Source.SolidSize2;
         opfSolidSize3: Destination.SolidSize3 := Source.SolidSize3;
+        opfSolidSize4: Destination.SolidSize4 := Source.SolidSize4;
         opfSolidSegments: Destination.SolidSegments := Source.SolidSegments;
         opfSolidAzimuth: Destination.SolidAzimuth := Source.SolidAzimuth;
         opfSolidElevation: Destination.SolidElevation := Source.SolidElevation;
@@ -1119,9 +1144,9 @@ var
   Field: TObjectPropertyField;
   FieldByte, GlobalPending: Byte;
   PresentationByte: Byte;
-  HasPresentation: Boolean;
+  HasPresentation, WideFields: Boolean;
   Presentation: TEditSessionPresentation;
-  FieldBits, PendingBits, Count, PathLength: LongWord;
+  Count, PathLength: LongWord;
   I, J: Integer;
   RawBytes: Int64;
   ClassIndex: Word;
@@ -1148,7 +1173,9 @@ begin
       if Stream.Size < Length(EditRecoveryMagic) then
         raise EReadError.Create('Edit recovery state is incomplete');
       Stream.ReadBuffer(Magic, SizeOf(Magic));
-      HasPresentation := CompareMem(@Magic[0], @EditRecoveryMagic[1], SizeOf(Magic));
+      WideFields := CompareMem(@Magic[0], @EditRecoveryMagic[1], SizeOf(Magic));
+      HasPresentation := WideFields or CompareMem(@Magic[0],
+        @NarrowEditRecoveryMagic[1], SizeOf(Magic));
       if not HasPresentation and not CompareMem(@Magic[0],
         @LegacyEditRecoveryMagic[1], SizeOf(Magic)) then
         raise EReadError.Create('Edit recovery signature is invalid');
@@ -1219,8 +1246,7 @@ begin
         end;
       end;
       InitializePatch(Patch);
-      FieldBits := ReadUInt32(Stream);
-      Patch.Fields := BitsToPropertyFields(FieldBits);
+      Patch.Fields := ReadFieldBits(Stream, WideFields);
       for Field := Low(TObjectPropertyField) to High(TObjectPropertyField) do
         if Field in Patch.Fields then ReadFieldValue(Stream, Patch, Field);
       Count := ReadUInt32(Stream);
@@ -1242,8 +1268,7 @@ begin
         if RawBytes > MaxRawDraftBytes then
           raise EReadError.Create('Edit recovery raw drafts exceed 64 KiB');
       end;
-      PendingBits := ReadUInt32(Stream);
-      PendingFields := BitsToPropertyFields(PendingBits);
+      PendingFields := ReadFieldBits(Stream, WideFields);
       Stream.ReadBuffer(GlobalPending, SizeOf(GlobalPending));
       if GlobalPending > 1 then
         raise EReadError.Create('Edit recovery pending state is invalid');
