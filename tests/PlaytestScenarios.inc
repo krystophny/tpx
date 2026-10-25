@@ -1880,3 +1880,35 @@ begin
     DeleteFile(FileName);
   end;
 end;
+
+procedure TestBezierArrowDirection;
+  function CentroidX(Piece: TPiece): TRealType;
+  var
+    I: Integer;
+  begin
+    Result := 0;
+    for I := 0 to Piece.Count - 1 do Result := Result + Piece[I].X;
+    Result := Result / Piece.Count;
+  end;
+var
+  Curve: TBezierPath2D;
+begin
+  { Both end segments are much shorter than the h44 head, which must still
+    point outward from the curve ends along the curve. }
+  Curve := TBezierPath2D.CreateSpec(-1, [
+    Point2D(0, 0), Point2D(0.8, -2), Point2D(1.7, 2), Point2D(2.5, 0),
+    Point2D(6, 6), Point2D(11.5, 6), Point2D(15, 0),
+    Point2D(15.8, 2), Point2D(16.7, -2), Point2D(17.5, 0)]);
+  try
+    Curve.BeginArrowKind := arrH44;
+    Curve.EndArrowKind := arrH44;
+    Curve.UpdateExtension(Curve);
+    Check(Curve.Pieces.Count = 3, 'Bezier curve did not produce two arrowheads');
+    Check(CentroidX(Curve.Pieces[1]) > 0.5,
+      'Begin arrowhead of a curve with a short first segment points backwards');
+    Check(CentroidX(Curve.Pieces[2]) < 17.5 - 0.5,
+      'End arrowhead of a curve with a short last segment points backwards');
+  finally
+    Curve.Free;
+  end;
+end;
