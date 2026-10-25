@@ -1148,10 +1148,14 @@ var
   Line: TLine2D;
   CanvasPoint: TPoint;
 begin
-  Line := TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(20, 10));
-  MainForm.TheDrawing.AddObject(-1, Line);
+  { Let the startup recovery offer run before editing, as for a user. An edit
+    made before the first message pass can write this session's own draft once
+    the AutoSave coalescing delay has passed, which on a loaded machine happens
+    before the queued offer runs and leaves its modal dialog waiting. }
   MainForm.Show;
   Application.ProcessMessages;
+  Line := TLine2D.CreateSpec(-1, Point2D(0, 0), Point2D(20, 10));
+  MainForm.TheDrawing.AddObject(-1, Line);
 
   MainForm.ComboBox6.Text := '0.2';
   MainForm.ComboBox6.SelStart := 0;
