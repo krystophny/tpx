@@ -11,6 +11,17 @@ edges and hidden faces removed. A 3D object is one drawing object.
   plane of the 3D view and follows the pointer; Shift snaps both angles to
   15°. The open ends are flat circular caps. The Inspector edits the angle
   and start angle of any torus (360° is a full torus).
+- A selected **torus segment** shows two round handles on the centre circle
+  of its tube, at the start and end angle, beside the square points that
+  move and scale it. Dragging a handle turns that end while the other stays,
+  like the angle points of an arc; Shift snaps to 15°, Escape cancels and
+  each drag is one undo step. Dropping one end on the other closes the
+  torus. A full torus has no angle handles; give it an angle below 360° in
+  the Inspector first. The pointer is mapped to the angle exactly, with or
+  without perspective, both here and while inserting: its ray through the
+  camera meets the plane of the torus. With perspective on, the camera
+  distance of a torus segment is that of the whole torus, so the view does
+  not change while its angles are dragged.
 - **Modify → Extrude / Revolve** turn the selected closed shapes into one 3D
   object. For Revolve, a selected straight line is the axis (otherwise the
   left edge of the shapes). Revolve leaves a 90° cut-away toward the viewer;

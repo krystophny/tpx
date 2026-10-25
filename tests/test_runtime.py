@@ -44,7 +44,8 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "clipboard-roundtrip", "color-box-custom-state", "open-examples", "open-dialog-all-formats",
              "platform-shortcuts", "svg-linked-image-copy", "svg-codec",
              "solid3d-formats", "solid3d-open-save", "solid3d-editing",
-             "solid3d-insert-fit", "solid3d-inspector", "solid3d-torus-segment")
+             "solid3d-insert-fit", "solid3d-inspector", "solid3d-torus-segment",
+             "solid3d-torus-handles")
 
 
 def storage_environment(home, config, state, cache):
