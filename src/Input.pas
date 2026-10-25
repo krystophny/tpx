@@ -217,6 +217,12 @@ begin
   if XMLNode.AttributeNode['fill'] <> nil then
     Obj.FillColor := HtmlToColor(XMLNode.AttributeValue['fill'])
   else Obj.FillColor := Graphics.clDefault;
+  if XMLNode.AttributeNode['lo'] <> nil then
+    Obj.LineOpacity := ClampOpacity(XMLNode.AttributeValue['lo'])
+  else Obj.LineOpacity := 1;
+  if XMLNode.AttributeNode['fo'] <> nil then
+    Obj.FillOpacity := ClampOpacity(XMLNode.AttributeValue['fo'])
+  else Obj.FillOpacity := 1;
 end;
 
 procedure T_TpX_Loader.ReadArrows(XMLNode: TXMLDElement;

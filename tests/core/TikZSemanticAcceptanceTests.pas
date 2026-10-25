@@ -210,7 +210,7 @@ begin
   Text := RawFromBytes(Source);
   EndAt := Pos('\end{tikzpicture}', Text);
   CheckCore(EndAt > 0, 'Fixture lost its selected picture terminator');
-  Insert('\path[opacity=0.5] (0,0) -- (1,1);' + #10,
+  Insert('\path[draw, double] (0,0) -- (1,1);' + #10,
     Text, EndAt);
   Source := BytesFromRaw(Text);
   Evaluated := ParseAndEvaluate(Source, Syntax);
@@ -218,7 +218,7 @@ begin
     CheckCore(Syntax.Outcome = tpoAccepted,
       'Unrepresentable style should remain syntactically parseable');
     CheckCore(Evaluated.Outcome = tsoUnsupported,
-      'Unrepresentable opacity was silently accepted for save-back');
+      'Unrepresentable double stroke was silently accepted for save-back');
   finally
     Evaluated.Free;
     Syntax.Free;

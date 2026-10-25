@@ -46,7 +46,8 @@ The inventory below is derived from `src/DevTikZ.pas`:
   pairs, `--`, cubic `.. controls ... and ... ..`, `cycle`, `circle`, `ellipse`,
   legacy `arc (start:end:radius)` syntax, `rectangle + (width,height)`, and
   per-path `rotate around={angle:(point)}`. Styles use line width, draw/fill
-  colors, and the generated dash/dot macros.
+  colors, `draw opacity`/`fill opacity` for translucent paint, and the
+  generated dash/dot macros.
 - Generated text nodes with `anchor`, optional rotation, nested text groups,
   `\pgfmathsetlengthmacro` font-size/baseline expressions, `\fontsize`,
   `\selectfont`, and text from `Get_TeXText`.
@@ -116,8 +117,9 @@ geometry is imported in source order as those paths.
 
 Inline styles support literal RGB/HTML/gray color definitions, the named
 standard colors recognized by the evaluator, path `draw`/`fill` enablement,
-node `text=<color>`, literal line widths, and `solid`, `dashed`, and `dotted`
-strokes. On stroked paths the core arrow specifications `-`, `->`, `<-`, and
+node `text=<color>`, literal line widths, `solid`, `dashed`, and `dotted`
+strokes, and literal `draw opacity`, `fill opacity`, and `opacity` values from
+0 to 1 on paths. On stroked paths the core arrow specifications `-`, `->`, `<-`, and
 `<->` map to the native h40 arrowhead, and `latex` and `stealth` tips at
 either end map to h44 and h42.
 Colored node frames and fills are rejected because native text has no matching
@@ -125,14 +127,17 @@ frame or fill primitive. Generated TpX width, text,
 dash, and dot defaults are evaluated and retained as source dependencies.
 Dash patterns are accepted only when they map exactly to the native solid,
 dashed, or dotted line styles. Unsupported option keys, unresolved macros,
-library styles, opacity, clipping, gradients, and pattern fills produce a
+library styles, opacity on nodes, clipping, gradients, and pattern fills produce a
 source-located import error. Other arrow-head options such as `->>`,
 `arrows=...`, `>=Stealth`, or `arrows.meta` tips are unsupported; TpX-generated
 arrow artwork is accepted only when it is emitted as ordinary supported
 geometry.
 
-TikZ save writes the same style subset. Line-pattern and arrowhead edits replace
-the object's own style option or insert one at the start of its option list.
+TikZ save writes the same style subset. Line-pattern, arrowhead, and opacity
+edits replace the object's own style option or insert one at the start of its
+option list. An edited opacity whose source came from a shared `opacity`
+option rewrites that option, as `draw opacity`/`fill opacity` when the two
+values now differ.
 New objects use named standard colors where possible and otherwise a local
 literal RGB `\definecolor`; new arcs, sectors, and segments use the legacy
 `arc (start:end:radius)` syntax. A native property outside this subset, such

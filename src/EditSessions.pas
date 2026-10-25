@@ -213,6 +213,13 @@ begin
   Result := BitsToPropertyFields(Bits);
 end;
 
+const
+  RealRecoveryFields: TObjectPropertyFields = [opfLineWidth,
+    opfArrowSizeFactor, opfTextHeight, opfTextRotation, opfStarSizeFactor,
+    opfSymbolDiameter, opfSymbolRotation, opfRectangleRX, opfRectangleRY,
+    opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidSize4,
+    opfSolidAzimuth, opfSolidElevation, opfLineOpacity, opfFillOpacity];
+
 procedure WriteFieldValue(Stream: TStream; const Patch: TObjectPropertyPatch;
   Field: TObjectPropertyField);
 var I: LongInt; B: Byte; R: TRealType;
@@ -262,10 +269,10 @@ begin
     opfSymbolRotation: R := Patch.SymbolRotation;
     opfRectangleRX: R := Patch.RectangleRX;
     opfRectangleRY: R := Patch.RectangleRY;
+    opfLineOpacity: R := Patch.LineOpacity;
+    opfFillOpacity: R := Patch.FillOpacity;
   end;
-  if Field in [opfLineWidth, opfArrowSizeFactor, opfTextHeight,
-    opfTextRotation, opfStarSizeFactor, opfSymbolDiameter,
-    opfSymbolRotation, opfRectangleRX, opfRectangleRY, opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidSize4, opfSolidAzimuth, opfSolidElevation] then
+  if Field in RealRecoveryFields then
     Stream.WriteBuffer(R, SizeOf(R))
   else
     Stream.WriteBuffer(I, SizeOf(I));
@@ -295,9 +302,7 @@ begin
         Exit;
       end;
   end;
-  if Field in [opfLineWidth, opfArrowSizeFactor, opfTextHeight,
-    opfTextRotation, opfStarSizeFactor, opfSymbolDiameter,
-    opfSymbolRotation, opfRectangleRX, opfRectangleRY, opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidSize4, opfSolidAzimuth, opfSolidElevation] then
+  if Field in RealRecoveryFields then
   begin
     Stream.ReadBuffer(R, SizeOf(R));
     case Field of
@@ -316,6 +321,8 @@ begin
       opfSolidSize4: Patch.SolidSize4 := R;
       opfSolidAzimuth: Patch.SolidAzimuth := R;
       opfSolidElevation: Patch.SolidElevation := R;
+      opfLineOpacity: Patch.LineOpacity := R;
+      opfFillOpacity: Patch.FillOpacity := R;
     end;
     Exit;
   end;
@@ -688,6 +695,8 @@ begin
         opfSolidElevation: Destination.SolidElevation := Source.SolidElevation;
         opfSolidPerspective:
           Destination.SolidPerspective := Source.SolidPerspective;
+        opfLineOpacity: Destination.LineOpacity := Source.LineOpacity;
+        opfFillOpacity: Destination.FillOpacity := Source.FillOpacity;
       end;
       Include(Destination.Fields, Field);
     end;

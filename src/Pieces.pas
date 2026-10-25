@@ -28,6 +28,10 @@ type
     function GetHatchColor(Obj: TObject): TColor;
     function GetHatching(Obj: TObject): THatching;
     function GetFillColor(Obj: TObject): TColor;
+    { Opacities follow the colour each painting operation takes, so an
+      arrowhead filled with the line colour also takes the line opacity. }
+    function GetLineOpacity(Obj: TObject): TRealType;
+    function GetFillOpacity(Obj: TObject): TRealType;
     procedure Linearize(const PP: TPointsSet2D;
       const Precision: TRealType); virtual;
     procedure BezierPoints(const PP: TPointsSet2D); virtual;
@@ -320,6 +324,38 @@ begin
         Result := (Obj as TPrimitive2D).LineColor
       else
         Result := clBlack;
+  end;
+end;
+
+function TPiece.GetLineOpacity(Obj: TObject): TRealType;
+begin
+  case Line of
+    pliDefault, pliSolidDefault:
+      Result := (Obj as TPrimitive2D).LineOpacity;
+    pliFillAsDefault:
+      if ((Obj as TPrimitive2D).LineColor = clDefault) and
+        ((Obj as TPrimitive2D).FillColor <> clDefault) then
+        Result := (Obj as TPrimitive2D).FillOpacity
+      else
+        Result := (Obj as TPrimitive2D).LineOpacity;
+    pliFill: Result := (Obj as TPrimitive2D).FillOpacity;
+  else
+    Result := 1;
+  end;
+end;
+
+function TPiece.GetFillOpacity(Obj: TObject): TRealType;
+begin
+  case Fill of
+    pfiDefault: Result := (Obj as TPrimitive2D).FillOpacity;
+    pfiLine: Result := (Obj as TPrimitive2D).LineOpacity;
+    pfiLineAsDefault:
+      if (Obj as TPrimitive2D).FillColor <> clDefault then
+        Result := (Obj as TPrimitive2D).FillOpacity
+      else
+        Result := (Obj as TPrimitive2D).LineOpacity;
+  else
+    Result := 1;
   end;
 end;
 

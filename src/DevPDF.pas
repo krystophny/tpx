@@ -18,7 +18,9 @@ type
   protected
     fDrawing2D: TDrawing2D;
     fPDF: TPdfDoc;
+    fAlphaSet: Boolean;
     FontName: string;
+    procedure ResetAlpha;
     procedure WriteAttr(const LineStyle: TLineStyle;
       const LineWidth: TRealType; const LineColor, FillColor:
       TColor);
@@ -126,6 +128,13 @@ end;
 procedure TPdfDevice.WriteAttr(const LineStyle: TLineStyle;
   const LineWidth: TRealType; const LineColor, FillColor: TColor);
 begin
+  if not IsOpaque(fPaint.LineOpacity) or
+    not IsOpaque(fPaint.FillOpacity) then
+  begin
+    fPDF.Canvas.SetAlpha(ClampOpacity(fPaint.LineOpacity),
+      ClampOpacity(fPaint.FillOpacity));
+    fAlphaSet := True;
+  end;
   if FillColor <> clDefault then
     fPDF.Canvas.SetRGBFillColor(FillColor);
   if LineStyle = liNone then Exit;
@@ -157,6 +166,14 @@ begin
     fPDF.Canvas.Fill; // nonzero winding fill rule
       //Eofill; // even-odd aka alternate fill rule
   if LineStyle <> liNone then fPDF.Canvas.Stroke;
+  ResetAlpha;
+end;
+
+procedure TPdfDevice.ResetAlpha;
+begin
+  if not fAlphaSet then Exit;
+  fPDF.Canvas.SetAlpha(1, 1);
+  fAlphaSet := False;
 end;
 
 procedure TPdfDevice.HatchingLine(P0, P1: TPoint2D;
@@ -177,11 +194,18 @@ begin
   else fPDF.Canvas.SetRGBStrokeColor(clBlack);
   fPDF.Canvas.SetDash([0], 0);
   fPDF.Canvas.SetLineWidth(fLineWidthBase * LineWidth * fFactorMM);
+  { Hatching belongs to the fill and takes its opacity. }
+  if not IsOpaque(fPaint.FillOpacity) then
+  begin
+    fPDF.Canvas.SetAlpha(ClampOpacity(fPaint.FillOpacity), 1);
+    fAlphaSet := True;
+  end;
   Lines.TransformPoints(T);
   for I := 0 to Lines.Count div 2 - 1 do
     HatchingLine(Lines[I * 2], Lines[I * 2 + 1],
       HatchColor, liSolid, LineWidth);
   fPDF.Canvas.Stroke;
+  ResetAlpha;
 end;
 
 procedure TPdfDevice.WriteHeader(ExtRect: TRect2D);

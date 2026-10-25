@@ -45,7 +45,10 @@ type
     Hatching: THatching;
     HatchColor: TColor;
     FillColor: TColor;
-    FillOpacity: TRealType;
+    { fill-opacity and stroke-opacity are inherited; Opacity is the
+      product of the element and ancestor opacity attributes, applied to
+      both paints of each primitive. }
+    FillOpacity, LineOpacity, Opacity: TRealType;
     T: TTransf2D;
     FontHeight: TRealType;
     FontFamily: string;
@@ -234,6 +237,8 @@ begin
     HatchColor := State.HatchColor;
   if State.FillColor <> clNone then FillColor := State.FillColor;
   FillOpacity := State.FillOpacity;
+  LineOpacity := State.LineOpacity;
+  Opacity := State.Opacity;
   T := State.T;
   if State.FontHeight > 0 then FontHeight := State.FontHeight;
   FontFamily := State.FontFamily;
@@ -447,6 +452,8 @@ begin
   fCurrState.HatchColor := Graphics.clDefault; // Graphics.clNone;
   fCurrState.FillColor := Graphics.clBlack;
   fCurrState.FillOpacity := 1;
+  fCurrState.LineOpacity := 1;
+  fCurrState.Opacity := 1;
     //clBlack; //clSilver;Graphics.clDefault;
   fCurrState.T := IdentityTransf2D;
   fCurrState.FontHeight := 16;
@@ -1460,10 +1467,14 @@ begin
     end;
   end;
   if Attributes.IndexOfName('fill-opacity') >= 0 then
-    fCurrState.FillOpacity :=
-      GetRealTypeAttr(Attributes.Values['fill-opacity'], 1, 1);
-  if fCurrState.FillOpacity < 0.1
-    then fCurrState.UpdateFill(clDefault);
+    fCurrState.FillOpacity := ClampOpacity(
+      GetRealTypeAttr(Attributes.Values['fill-opacity'], 1, 1));
+  if Attributes.IndexOfName('stroke-opacity') >= 0 then
+    fCurrState.LineOpacity := ClampOpacity(
+      GetRealTypeAttr(Attributes.Values['stroke-opacity'], 1, 1));
+  if Attributes.IndexOfName('opacity') >= 0 then
+    fCurrState.Opacity := fCurrState.Opacity * ClampOpacity(
+      GetRealTypeAttr(Attributes.Values['opacity'], 1, 1));
   if Attributes.IndexOfName('stroke') >= 0 then
   begin
     if Attributes.Values['stroke'] = 'currentColor' then
@@ -1534,6 +1545,13 @@ begin
   else LI(liNone);
   Ha(fCurrState.Hatching);
   Fill(fCurrState.FillColor);
+  if fCurrObj is TPrimitive2D then
+  begin
+    (fCurrObj as TPrimitive2D).LineOpacity :=
+      fCurrState.LineOpacity * fCurrState.Opacity;
+    (fCurrObj as TPrimitive2D).FillOpacity :=
+      fCurrState.FillOpacity * fCurrState.Opacity;
+  end;
   if not IsSameTransform2D(fCurrState.T, IdentityTransf2D) then
     fCurrObj.Transform(fCurrState.T);
 end;

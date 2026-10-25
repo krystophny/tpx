@@ -11,6 +11,7 @@ type
   T_TikZ_Device = class(TFileDevice)
   protected
     fCurrLineColor, fCurrFillColor, fCurrTextColor: TColor;
+    fHatchPass: Boolean;
     procedure DefineColor(Color: TColor; ID: Char);
     procedure WriteAttr(
       const LineColor, HatchColor, FillColor: TColor;
@@ -199,6 +200,15 @@ begin
     AddAttr('draw=L');
   end;
   if FillColor <> clDefault then AddAttr('fill=F');
+  { Hatching lines belong to the fill and take its opacity. }
+  if (LineStyle <> liNone) and fHatchPass and
+    not IsOpaque(fPaint.FillOpacity) then
+    AddAttr('draw opacity=' + OpacityText(fPaint.FillOpacity))
+  else if (LineStyle <> liNone) and not fHatchPass and
+    not IsOpaque(fPaint.LineOpacity) then
+    AddAttr('draw opacity=' + OpacityText(fPaint.LineOpacity));
+  if (FillColor <> clDefault) and not IsOpaque(fPaint.FillOpacity) then
+    AddAttr('fill opacity=' + OpacityText(fPaint.FillOpacity));
   case LineStyle of
     liDotted:
       begin
@@ -228,8 +238,13 @@ var
   I: Integer;
 begin
   Lines.TransformPoints(T);
-  WriteAttr(HatchColor, HatchColor, clDefault,
-    liSolid, LineWidth, haNone);
+  fHatchPass := True;
+  try
+    WriteAttr(HatchColor, HatchColor, clDefault,
+      liSolid, LineWidth, haNone);
+  finally
+    fHatchPass := False;
+  end;
   for I := 0 to Lines.Count div 2 - 1 do
   begin
     HatchingLine(Lines[I * 2], Lines[I * 2 + 1],

@@ -232,6 +232,7 @@ type
 
   TPdfHeader = class(TObject)
   protected
+    FTransparency: Boolean;
     procedure WriteToStream(const AStream: TStream);
   end;
 
@@ -393,6 +394,8 @@ type
 
     {* Special Graphics State *}
     procedure GSave;                                             {  q   }
+    { Constant stroke and fill alpha through a named ExtGState. }
+    procedure SetAlpha(StrokeAlpha, FillAlpha: Single);          {  gs  }
     procedure GRestore;                                          {  Q   }
     procedure Concat(a, b, c, d, e, f: Single);                  {  cm  }
 
@@ -643,7 +646,11 @@ end;
 // WriteToStream
 procedure TPdfHeader.WriteToStream(const AStream: TStream);
 begin
-  _WriteString('%PDF-1.2 '#13#10, AStream);
+  // Constant alpha (ExtGState CA/ca) needs PDF 1.4.
+  if FTransparency then
+    _WriteString('%PDF-1.4 '#13#10, AStream)
+  else
+    _WriteString('%PDF-1.2 '#13#10, AStream);
 end;
 
 { TPdfTrailer }
@@ -2027,6 +2034,33 @@ begin
 end;
 
 {* Device-dependent color space operators *}
+
+// SetAlpha
+procedure TPdfCanvas.SetAlpha(StrokeAlpha, FillAlpha: Single);
+var
+  Resources, States, State: TPdfDictionary;
+  Name: string;
+begin
+  Name := 'TpXA' + IntToStr(Round(StrokeAlpha * 1000)) + 'F' +
+    IntToStr(Round(FillAlpha * 1000));
+  Resources := FPage.PdfDictionaryByName('Resources');
+  States := Resources.PdfDictionaryByName('ExtGState');
+  if States = nil then
+  begin
+    States := TPdfDictionary.CreateDictionary(FPdfDoc.FXref);
+    Resources.AddItem('ExtGState', States);
+  end;
+  if States.ValueByName(Name) = nil then
+  begin
+    State := TPdfDictionary.CreateDictionary(FPdfDoc.FXref);
+    State.AddItem('Type', TPdfName.CreateName('ExtGState'));
+    State.AddItem('CA', TPdfReal.CreateReal(StrokeAlpha));
+    State.AddItem('ca', TPdfReal.CreateReal(FillAlpha));
+    States.AddItem(Name, State);
+  end;
+  FPdfDoc.FHeader.FTransparency := True;
+  WriteString('/' + Name + ' gs'#10);
+end;
 
 // SetRGBFillColor
 procedure TPdfCanvas.SetRGBFillColor(Value: TPdfColor);

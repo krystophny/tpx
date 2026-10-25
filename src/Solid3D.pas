@@ -73,6 +73,7 @@ type
     procedure ProjectBasis(out R, U, C: TVec3);
   public
     class function GetName: string; override;
+    class function SupportsOpacity: Boolean; override;
     constructor Create(ID: Integer); override;
     constructor CreateFromStream(const Stream: TStream); override;
     destructor Destroy; override;
@@ -951,6 +952,11 @@ end;
 class function TSolid3D.GetName: string;
 begin
   Result := '3D object';
+end;
+
+class function TSolid3D.SupportsOpacity: Boolean;
+begin
+  Result := False;
 end;
 
 constructor TSolid3D.Create(ID: Integer);

@@ -1069,6 +1069,7 @@ begin
   fOnScreenCanvas := Canvas;
   fOffScreenDevice := TCanvasDevice.Create;
   fOffScreenDevice.Cnv := fOffScreenCanvas;
+  fOffScreenDevice.CanBlend := True;
   fOnScreenDevice := TCanvasDevice.Create;
   fOnScreenDevice.Cnv := fOnScreenCanvas;
   fRubberDevice := TRubberCanvasDevice.Create;

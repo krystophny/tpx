@@ -22,7 +22,7 @@ type
     Mixed: Boolean;
   end;
 
-  TNumericEditRange = (nerFinite, nerNonnegative, nerPositive);
+  TNumericEditRange = (nerFinite, nerNonnegative, nerPositive, nerUnit);
 
 procedure AddPropertyRead(var Accumulator: TPropertyReadAccumulator;
   Supported: Boolean; const Value: Variant);
@@ -97,6 +97,12 @@ begin
       if Value <= 0 then
       begin
         ErrorText := 'Enter a positive number';
+        Result := False;
+      end;
+    nerUnit:
+      if (Value < 0) or (Value > 1) then
+      begin
+        ErrorText := 'Enter a number from 0 to 1';
         Result := False;
       end;
   end;

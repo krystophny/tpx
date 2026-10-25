@@ -30,6 +30,7 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "auto-reload-integration",
              "autosave-source-formats",
              "edit-session-preview-cancel", "edit-session-recovery-payload",
+             "edit-session-wide-field-recovery",
              "edit-session-nested-recovery-rebind",
              "edit-session-text-whitespace", "edit-session-malformed-reference",
              "edit-session-autosave-cancel", "edit-session-recovery-disabled",
@@ -444,6 +445,12 @@ class RuntimeTests(unittest.TestCase):
                 "TPX_TIKZ_REJECTED_FILE": str(rejected),
                 "TPX_TIKZ_FRESH_TEX_FILE": str(fresh_dir / "standalone.tex"),
                 "TPX_TIKZ_EMPTY_FILE": str(fresh_dir / "empty.tikz"),
+            })
+
+    def test_paint_opacity(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-paint-style-") as directory:
+            self.run_scenario("paint-opacity", {
+                "TPX_PAINT_STYLE_DIR": str(Path(directory).resolve()),
             })
 
     def test_tikz_line_styles_and_example_round_trip(self):

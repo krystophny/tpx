@@ -128,6 +128,10 @@ begin
   if FillColor <> clDefault then
     AddAttr('fillstyle=solid,fillcolor=' +
       WriteNewColor(FillColor));
+  if (FillColor <> clDefault) and not IsOpaque(fPaint.FillOpacity) then
+    AddAttr('opacity=' + OpacityText(fPaint.FillOpacity));
+  if (LineStyle <> liNone) and not IsOpaque(fPaint.LineOpacity) then
+    AddAttr('strokeopacity=' + OpacityText(fPaint.LineOpacity));
   if (LineStyle <> liNone) and (LineStyle <> liSolid)
     and (fCurrDash <> LineStyle) then
   begin
@@ -193,6 +197,8 @@ begin
     C := ''
   else
     C := ',linecolor=' + WriteNewColor(HatchColor);
+  if not IsOpaque(fPaint.FillOpacity) then
+    C := C + ',strokeopacity=' + OpacityText(fPaint.FillOpacity);
   WriteLnStream(Format('{\psset{linewidth=%.2fmm%s}',
     [fLineWidthBase * LineWidth, C]));
   for I := 0 to Lines.Count div 2 - 1 do

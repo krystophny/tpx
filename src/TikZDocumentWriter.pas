@@ -755,6 +755,62 @@ begin
   end;
 end;
 
+function OpacityOption(const Key: string; Value: Double): string;
+begin
+  { Opacities are stored in single precision; four digits keep the
+    source short without changing the stored value. }
+  Result := Key + '=' + OpacityText(Value);
+end;
+
+{ Edited opacities replace their own source option, or an 'opacity'
+  option that set both, or are inserted as new options. }
+procedure AddOpacityChanges(Context: TTikZImportContext;
+  BindingIndex: SizeInt; Native: TPrimitive2D;
+  SceneObject: TTikZSceneObject; const Source: TBytes;
+  var Insertion: string; var Patches: TPatchArray);
+var
+  Binding: TTikZSourceBinding;
+  StrokeChanged, FillChanged, StrokeViaShared, FillViaShared: Boolean;
+  Stroke, Fill: Double;
+  Keyword: string;
+begin
+  Binding := Context.BindingAt(BindingIndex);
+  StrokeChanged := SceneObject.StrokeEnabled and
+    not NearValue(Native.LineOpacity, SceneObject.StrokeOpacity);
+  FillChanged := SceneObject.FillEnabled and
+    not NearValue(Native.FillOpacity, SceneObject.FillOpacity);
+  if not (StrokeChanged or FillChanged) then Exit;
+  if (Native.LineOpacity < 0) or (Native.LineOpacity > 1) or
+    (Native.FillOpacity < 0) or (Native.FillOpacity > 1) then
+    raise EWriteError.Create('Opacity must be between 0 and 1');
+  StrokeViaShared := StrokeChanged and
+    (FindDependency(Binding, tdStrokeOpacity) < 0) and
+    (FindDependency(Binding, tdOpacity) >= 0);
+  FillViaShared := FillChanged and
+    (FindDependency(Binding, tdFillOpacity) < 0) and
+    (FindDependency(Binding, tdOpacity) >= 0);
+  if StrokeChanged and not StrokeViaShared then
+    AddStyleKeyword(Context, BindingIndex, tdStrokeOpacity,
+      OpacityOption('draw opacity', Native.LineOpacity), 'draw opacity',
+      Source, Insertion, Patches);
+  if FillChanged and not FillViaShared then
+    AddStyleKeyword(Context, BindingIndex, tdFillOpacity,
+      OpacityOption('fill opacity', Native.FillOpacity), 'fill opacity',
+      Source, Insertion, Patches);
+  if not (StrokeViaShared or FillViaShared) then Exit;
+  if StrokeViaShared then Stroke := Native.LineOpacity
+  else Stroke := SceneObject.StrokeOpacity;
+  if FillViaShared then Fill := Native.FillOpacity
+  else Fill := SceneObject.FillOpacity;
+  if NearValue(Stroke, Fill) then
+    Keyword := OpacityOption('opacity', Fill)
+  else
+    Keyword := OpacityOption('draw opacity', Stroke) + ', ' +
+      OpacityOption('fill opacity', Fill);
+  AddStyleKeyword(Context, BindingIndex, tdOpacity, Keyword, 'opacity',
+    Source, Insertion, Patches);
+end;
+
 procedure AddNativeChanges(Context: TTikZImportContext; BindingIndex: SizeInt;
   Native: TPrimitive2D; Drawing: TDrawing2D; Source: TBytes;
   var Edits: TEditArray; var StylePatches: TPatchArray);
@@ -950,6 +1006,8 @@ begin
     raise EWriteError.Create('Adding a fill to an unfilled TikZ object is not supported');
 
   Insertion := '';
+  AddOpacityChanges(Context, BindingIndex, Native, SceneObject, Source,
+    Insertion, StylePatches);
   if SceneObject.StrokeEnabled and
     (((SceneObject.LineKind = tlSolid) and (Native.LineStyle <> liSolid)) or
     ((SceneObject.LineKind = tlDashed) and (Native.LineStyle <> liDashed)) or
@@ -1118,6 +1176,12 @@ begin
     Options := Options + 'fill=' +
       TikZColor(ColorToRGB24(Primitive.FillColor), Definitions);
   end;
+  if (Primitive.LineStyle <> liNone) and (Primitive.LineOpacity <> 1) then
+    Options := Options + ', ' +
+      OpacityOption('draw opacity', ClampOpacity(Primitive.LineOpacity));
+  if (Primitive.FillColor <> clDefault) and (Primitive.FillOpacity <> 1) then
+    Options := Options + ', ' +
+      OpacityOption('fill opacity', ClampOpacity(Primitive.FillOpacity));
 end;
 
 procedure AppendTikZOption(var Options: string; const Value: string);

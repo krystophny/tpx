@@ -504,7 +504,58 @@ begin
   end;
 end;
 
+procedure TestOpacityOptions;
+const
+  Source = '\begin{tikzpicture}' +
+    '\path[draw, fill=red, fill opacity=0.25] (0,0) rectangle +(1,1);' +
+    '\path[draw, draw opacity=0.5] (0,2) -- (1,2);' +
+    '\path[draw, fill=blue, opacity=0.75] (0,3) circle (1);' +
+    '\end{tikzpicture}';
+  OutOfRange = '\begin{tikzpicture}' +
+    '\path[draw, opacity=1.5] (0,0) -- (1,1);' +
+    '\end{tikzpicture}';
+var
+  Syntax: TTikZSyntaxResult;
+  Evaluated: TTikZSemanticResult;
+  Obj: TTikZSceneObject;
+  Dependency: TTikZPropertyDependency;
+begin
+  Evaluated := ParseAndEvaluate(Source, Syntax);
+  try
+    CheckCore((Syntax.Outcome = tpoAccepted) and
+      (Evaluated.Outcome = tsoAccepted) and
+      (Evaluated.Scene.ObjectCount = 3),
+      'fill opacity, draw opacity and opacity should import as native styles');
+    Obj := Evaluated.Scene.ObjectAt(0);
+    CheckCore((Obj.FillOpacity = 0.25) and (Obj.StrokeOpacity = 1),
+      'fill opacity must set only the fill opacity');
+    CheckCore(FindDependency(Obj, tdFillOpacity, Dependency) and
+      (RawStringOf(Copy(BytesOf(Source), Dependency.ValueSpan.StartByte,
+      Dependency.ValueSpan.EndByte - Dependency.ValueSpan.StartByte)) = '0.25'),
+      'fill opacity must bind its source value for save-back');
+    Obj := Evaluated.Scene.ObjectAt(1);
+    CheckCore((Obj.StrokeOpacity = 0.5) and (Obj.FillOpacity = 1),
+      'draw opacity must set only the stroke opacity');
+    Obj := Evaluated.Scene.ObjectAt(2);
+    CheckCore((Obj.StrokeOpacity = 0.75) and (Obj.FillOpacity = 0.75) and
+      FindDependency(Obj, tdOpacity, Dependency),
+      'opacity must set both opacities through one dependency');
+  finally
+    Evaluated.Free;
+    Syntax.Free;
+  end;
+  Evaluated := ParseAndEvaluate(OutOfRange, Syntax);
+  try
+    CheckCore(Evaluated.Outcome = tsoUnsupported,
+      'an opacity above 1 must not be clamped silently');
+  finally
+    Evaluated.Free;
+    Syntax.Free;
+  end;
+end;
+
 initialization
+  RegisterCoreTest('tikz-opacity-options', TestOpacityOptions);
   RegisterCoreTest('tikz-pgf-scope-transform-order',
     TestPGFScopeTransformOrder);
   RegisterCoreTest('tikz-attached-devtikz-label-font',

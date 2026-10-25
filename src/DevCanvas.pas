@@ -26,6 +26,25 @@ type
   protected
     fCnv: TCanvas;
     fFaceName: string;
+    fCanBlend: Boolean;
+    { Draws a path with the current paint style. Translucent parts are
+      composited over the pixels already on the canvas when CanBlend is
+      set; otherwise they are drawn opaque. }
+    procedure DrawPaintedPath(const PathProc: TDrawPathProc;
+      const Closed: Boolean; const Pnts: array of TPoint;
+      const LineColor, HatchColor, FillColor: TColor;
+      const LineStyle: TLineStyle; const LineWidth: TRealType;
+      const Hatching: THatching);
+    procedure BlendPath(const PathProc: TDrawPathProc;
+      const Closed: Boolean; const Pnts: array of TPoint;
+      const LineStyle: TLineStyle; const LineWidth: TRealType;
+      const IsFill: Boolean; const Color: TColor;
+      const Alpha: TRealType);
+    procedure BlendMask(const Mask: TBitmap; const Origin: TPoint;
+      const Color: TColor; const Alpha: TRealType);
+    function CanvasBounds(var R: TRect): Boolean;
+    procedure WriteHatchingLines(const Lines: TPointsSet2D;
+      const HatchColor: TColor; const LineWidth: TRealType); override;
     procedure Poly(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
       const LineStyle: TLineStyle; const LineWidth: TRealType;
@@ -61,6 +80,10 @@ type
       const S: TTransf2D);
     property Cnv: TCanvas read fCnv write fCnv;
     property FaceName: string write fFaceName;
+    { Set only for canvases whose pixels can be read back, such as the
+      viewport's off-screen bitmap. Printer, metafile and window canvases
+      leave it False and draw translucent paint opaque. }
+    property CanBlend: Boolean read fCanBlend write fCanBlend;
   end;
 
   TRubberCanvasDevice = class(TCanvasDevice)
@@ -267,7 +290,7 @@ procedure DrawAsPolyline(PP: TPointsSet2D; const Cnv: TCanvas; const
 implementation
 
 uses Math, Drawings, SysBasic, Bitmaps
-{$IFDEF FPC}, LiveTeX, Output{$ENDIF};
+{$IFDEF FPC}, LiveTeX, Output, IntfGraphics, FPImage{$ENDIF};
 
 procedure CnvDrawLine(const Cnv: TCanvas;
   const P0, P1: TPoint2D);
@@ -1165,12 +1188,8 @@ begin
   for I := 0 to PP.Count - 1 do
     Pnts[I] := Point2DToPoint(TransformPoint2D(PP[I],
       MultTransf(Transf)));
-  DrawNative0(fCnv,
-    CnvDrawPolylinePath, Rect2D(0, 0, 0, 0),
-    Closed, Pnts, nil, IdentityTransf2D, LineStyle, LineWidth,
-    Hatching,
-    LineColor, FillColor, HatchColor,
-    fLineWidthBase, fFactorMM, fMiterLimit);
+  DrawPaintedPath(CnvDrawPolylinePath, Closed, Pnts,
+    LineColor, HatchColor, FillColor, LineStyle, LineWidth, Hatching);
 end;
 
 procedure TCanvasDevice.Bezier(PP: TPointsSet2D;
@@ -1188,13 +1207,231 @@ begin
   for I := 0 to PP.Count - 1 do
     Pnts[I] := Point2DToPoint(TransformPoint2D(PP[I],
       MultTransf(Transf)));
-  DrawNative0(fCnv,
-    CnvDrawBezierPath, Rect2D(0, 0, 0, 0),
-    Closed, Pnts, nil, IdentityTransf2D, LineStyle, LineWidth,
-    Hatching,
-    LineColor, FillColor, HatchColor,
-    fLineWidthBase, fFactorMM, fMiterLimit);
+  DrawPaintedPath(CnvDrawBezierPath, Closed, Pnts,
+    LineColor, HatchColor, FillColor, LineStyle, LineWidth, Hatching);
 end;
+
+procedure TCanvasDevice.DrawPaintedPath(const PathProc: TDrawPathProc;
+  const Closed: Boolean; const Pnts: array of TPoint;
+  const LineColor, HatchColor, FillColor: TColor;
+  const LineStyle: TLineStyle; const LineWidth: TRealType;
+  const Hatching: THatching);
+var
+  FillAlpha, LineAlpha: TRealType;
+  StrokeColor: TColor;
+begin
+  FillAlpha := ClampOpacity(fPaint.FillOpacity);
+  LineAlpha := ClampOpacity(fPaint.LineOpacity);
+  if ((FillColor = clDefault) or (FillAlpha >= 1)) and
+    ((LineStyle = liNone) or (LineAlpha >= 1)) then
+  begin
+    DrawNative0(fCnv, PathProc, Rect2D(0, 0, 0, 0),
+      Closed, Pnts, nil, IdentityTransf2D, LineStyle, LineWidth,
+      Hatching, LineColor, FillColor, HatchColor,
+      fLineWidthBase, fFactorMM, fMiterLimit);
+    Exit;
+  end;
+  { Fill first, then the stroke on top, as the single opaque call would. }
+  if (FillColor <> clDefault) and (FillAlpha > 0) then
+    if (FillAlpha >= 1) or not fCanBlend then
+      DrawNative0(fCnv, PathProc, Rect2D(0, 0, 0, 0),
+        Closed, Pnts, nil, IdentityTransf2D, liNone, LineWidth,
+        Hatching, LineColor, FillColor, HatchColor,
+        fLineWidthBase, fFactorMM, fMiterLimit)
+    else
+      BlendPath(PathProc, Closed, Pnts, liNone, LineWidth, True,
+        FillColor, FillAlpha);
+  if (LineStyle <> liNone) and (LineAlpha > 0) then
+    if (LineAlpha >= 1) or not fCanBlend then
+      DrawNative0(fCnv, PathProc, Rect2D(0, 0, 0, 0),
+        Closed, Pnts, nil, IdentityTransf2D, LineStyle, LineWidth,
+        Hatching, LineColor, clDefault, HatchColor,
+        fLineWidthBase, fFactorMM, fMiterLimit)
+    else
+    begin
+      if LineColor = clDefault then StrokeColor := clBlack
+      else StrokeColor := LineColor;
+      BlendPath(PathProc, Closed, Pnts, LineStyle, LineWidth, False,
+        StrokeColor, LineAlpha);
+    end;
+end;
+
+function TCanvasDevice.CanvasBounds(var R: TRect): Boolean;
+begin
+  if (fCnv.Width > 0) and (fCnv.Height > 0) then
+  begin
+    R.Left := Max(R.Left, 0);
+    R.Top := Max(R.Top, 0);
+    R.Right := Min(R.Right, fCnv.Width);
+    R.Bottom := Min(R.Bottom, fCnv.Height);
+  end;
+  Result := (R.Right > R.Left) and (R.Bottom > R.Top);
+end;
+
+procedure TCanvasDevice.BlendPath(const PathProc: TDrawPathProc;
+  const Closed: Boolean; const Pnts: array of TPoint;
+  const LineStyle: TLineStyle; const LineWidth: TRealType;
+  const IsFill: Boolean; const Color: TColor;
+  const Alpha: TRealType);
+{$IFDEF FPC}
+var
+  R: TRect;
+  Margin, I: Integer;
+  Shifted: array of TPoint;
+  Mask: TBitmap;
+  MaskFill: TColor;
+begin
+  if Length(Pnts) = 0 then Exit;
+  { The mask is the shape drawn white on black with the same canvas
+    calls as opaque paint, so translucent and opaque coverage agree. }
+  Margin := Max(Round(fLineWidthBase * LineWidth * fFactorMM), 1) + 2;
+  R := Types.Rect(Pnts[0].X, Pnts[0].Y, Pnts[0].X, Pnts[0].Y);
+  for I := 1 to High(Pnts) do
+  begin
+    R.Left := Min(R.Left, Pnts[I].X);
+    R.Top := Min(R.Top, Pnts[I].Y);
+    R.Right := Max(R.Right, Pnts[I].X);
+    R.Bottom := Max(R.Bottom, Pnts[I].Y);
+  end;
+  R := Types.Rect(R.Left - Margin, R.Top - Margin,
+    R.Right + Margin + 1, R.Bottom + Margin + 1);
+  if not CanvasBounds(R) then Exit;
+  SetLength(Shifted, Length(Pnts));
+  for I := 0 to High(Pnts) do
+    Shifted[I] := Types.Point(Pnts[I].X - R.Left, Pnts[I].Y - R.Top);
+  if IsFill then MaskFill := clWhite
+  else MaskFill := clDefault;
+  Mask := TBitmap.Create;
+  try
+    Mask.PixelFormat := pf24bit;
+    Mask.SetSize(R.Right - R.Left, R.Bottom - R.Top);
+    Mask.Canvas.Brush.Style := bsSolid;
+    Mask.Canvas.Brush.Color := clBlack;
+    Mask.Canvas.FillRect(0, 0, Mask.Width, Mask.Height);
+    DrawNative0(Mask.Canvas, PathProc, Rect2D(0, 0, 0, 0),
+      Closed, Shifted, nil, IdentityTransf2D, LineStyle, LineWidth,
+      haNone, clWhite, MaskFill, clWhite,
+      fLineWidthBase, fFactorMM, fMiterLimit);
+    BlendMask(Mask, R.TopLeft, Color, Alpha);
+  finally
+    Mask.Free;
+  end;
+end;
+{$ELSE}
+begin
+end;
+{$ENDIF}
+
+procedure TCanvasDevice.BlendMask(const Mask: TBitmap;
+  const Origin: TPoint; const Color: TColor; const Alpha: TRealType);
+{$IFDEF FPC}
+var
+  Back: TBitmap;
+  BackImage, MaskImage: TLazIntfImage;
+  X, Y: Integer;
+  Src, Dst: TFPColor;
+  A: Double;
+begin
+  Src := TColorToFPColor(ColorToRGB(Color));
+  A := ClampOpacity(Alpha);
+  Back := TBitmap.Create;
+  BackImage := nil;
+  MaskImage := nil;
+  try
+    Back.PixelFormat := pf24bit;
+    Back.SetSize(Mask.Width, Mask.Height);
+    Back.Canvas.CopyRect(Types.Rect(0, 0, Mask.Width, Mask.Height), fCnv,
+      Types.Rect(Origin.X, Origin.Y, Origin.X + Mask.Width,
+      Origin.Y + Mask.Height));
+    BackImage := Back.CreateIntfImage;
+    MaskImage := Mask.CreateIntfImage;
+    for Y := 0 to Mask.Height - 1 do
+      for X := 0 to Mask.Width - 1 do
+        if MaskImage.Colors[X, Y].green >= $8000 then
+        begin
+          Dst := BackImage.Colors[X, Y];
+          Dst.red := Round(Dst.red + (Src.red - Dst.red) * A);
+          Dst.green := Round(Dst.green + (Src.green - Dst.green) * A);
+          Dst.blue := Round(Dst.blue + (Src.blue - Dst.blue) * A);
+          BackImage.Colors[X, Y] := Dst;
+        end;
+    Back.LoadFromIntfImage(BackImage);
+    fCnv.Draw(Origin.X, Origin.Y, Back);
+  finally
+    MaskImage.Free;
+    BackImage.Free;
+    Back.Free;
+  end;
+end;
+{$ELSE}
+begin
+end;
+{$ENDIF}
+
+procedure TCanvasDevice.WriteHatchingLines(const Lines: TPointsSet2D;
+  const HatchColor: TColor; const LineWidth: TRealType);
+{$IFDEF FPC}
+var
+  R: TRect;
+  Margin, I: Integer;
+  P0, P1: TPoint;
+  Mask: TBitmap;
+  Alpha: TRealType;
+  Color: TColor;
+begin
+  { Hatching belongs to the fill and takes the fill opacity. }
+  Alpha := ClampOpacity(fPaint.FillOpacity);
+  if Alpha <= 0 then Exit;
+  if (Alpha >= 1) or not fCanBlend or (Lines.Count < 2) then
+  begin
+    inherited WriteHatchingLines(Lines, HatchColor, LineWidth);
+    Exit;
+  end;
+  Margin := Max(Round(fLineWidthBase * LineWidth * fFactorMM), 1) + 2;
+  P0 := Point2DToPoint(TransformPoint2D(Lines[0], fT));
+  R := Types.Rect(P0.X, P0.Y, P0.X, P0.Y);
+  for I := 1 to Lines.Count - 1 do
+  begin
+    P0 := Point2DToPoint(TransformPoint2D(Lines[I], fT));
+    R.Left := Min(R.Left, P0.X);
+    R.Top := Min(R.Top, P0.Y);
+    R.Right := Max(R.Right, P0.X);
+    R.Bottom := Max(R.Bottom, P0.Y);
+  end;
+  R := Types.Rect(R.Left - Margin, R.Top - Margin,
+    R.Right + Margin + 1, R.Bottom + Margin + 1);
+  if not CanvasBounds(R) then Exit;
+  if HatchColor = clDefault then Color := clBlack
+  else Color := HatchColor;
+  Mask := TBitmap.Create;
+  try
+    Mask.PixelFormat := pf24bit;
+    Mask.SetSize(R.Right - R.Left, R.Bottom - R.Top);
+    Mask.Canvas.Brush.Style := bsSolid;
+    Mask.Canvas.Brush.Color := clBlack;
+    Mask.Canvas.FillRect(0, 0, Mask.Width, Mask.Height);
+    Mask.Canvas.Pen.Mode := pmCopy;
+    Mask.Canvas.Pen.Style := psSolid;
+    Mask.Canvas.Pen.Color := clWhite;
+    Mask.Canvas.Pen.Width :=
+      Max(Round(fLineWidthBase * LineWidth * fFactorMM), 1);
+    for I := 0 to Lines.Count div 2 - 1 do
+    begin
+      P0 := Point2DToPoint(TransformPoint2D(Lines[I * 2], fT));
+      P1 := Point2DToPoint(TransformPoint2D(Lines[I * 2 + 1], fT));
+      Mask.Canvas.MoveTo(P0.X - R.Left, P0.Y - R.Top);
+      Mask.Canvas.LineTo(P1.X - R.Left, P1.Y - R.Top);
+    end;
+    BlendMask(Mask, R.TopLeft, Color, Alpha);
+  finally
+    Mask.Free;
+  end;
+end;
+{$ELSE}
+begin
+  inherited WriteHatchingLines(Lines, HatchColor, LineWidth);
+end;
+{$ENDIF}
 
 procedure TCanvasDevice.RotText(
   P: TPoint2D; H, ARot: TRealType;

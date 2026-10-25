@@ -17,7 +17,7 @@ type
     tdDotSize, tdStrokeColor, tdFillColor, tdTextColor, tdTextBody,
     tdCoordinateX, tdCoordinateY, tdWidth, tdHeight, tdRadius,
     tdRotation, tdStartAngle, tdEndAngle, tdTextAnchor, tdTextRotation,
-    tdArrows);
+    tdArrows, tdStrokeOpacity, tdFillOpacity, tdOpacity);
   TTikZDependencySource = (tdepLocalLiteral, tdepSharedDefaultMacro,
     tdepLocalStyle, tdepNamedColor, tdepNamedCoordinate, tdepUnsupported);
 
@@ -69,6 +69,8 @@ type
     StartAngle, EndAngle, Rotation: Double;
     StrokeEnabled, FillEnabled: Boolean;
     StrokeRGB, FillRGB: LongWord;
+    { 'draw opacity', 'fill opacity' and 'opacity'; 1 when absent. }
+    StrokeOpacity, FillOpacity: Double;
     LineWidthMM, DashOnMM, DashOffMM: Double;
     LineKind: TTikZLineKind;
     TextBody, TextContent, ImageReference: RawByteString;
@@ -1914,6 +1916,8 @@ var
     AObj.LineKind := tlSolid;
     AObj.StrokeRGB := $000000;
     AObj.FillRGB := $000000;
+    AObj.StrokeOpacity := 1;
+    AObj.FillOpacity := 1;
     AObj.StrokeEnabled := (RootCommand = 'draw') or (RootCommand = 'filldraw');
     AObj.FillEnabled := (RootCommand = 'fill') or (RootCommand = 'filldraw');
     OptSpan := SpanAtZero;
@@ -2114,6 +2118,24 @@ var
           AddDependency(AObj, tdTextRotation, tdepLocalLiteral, '',
             Item.ValueSpan, Item.KeySpan, OptSpan, SpanAtZero, True,
             -1, -1, Pi / 180, 'deg', False);
+        end;
+      end
+      else if (not IsNodeStyle) and ((Item.Key = 'opacity') or
+        (Item.Key = 'fill opacity') or (Item.Key = 'draw opacity')) then
+      begin
+        if not ParseInvariantFloat(TrimASCII(CName), Value) or
+          (Value < 0) or (Value > 1) then
+          Unsupported(Item.OptionSpan, 'Unsupported TikZ opacity: ' + CName)
+        else
+        begin
+          if Item.Key <> 'fill opacity' then AObj.StrokeOpacity := Value;
+          if Item.Key <> 'draw opacity' then AObj.FillOpacity := Value;
+          if Item.Key = 'opacity' then ColorKind := tdOpacity
+          else if Item.Key = 'fill opacity' then ColorKind := tdFillOpacity
+          else ColorKind := tdStrokeOpacity;
+          AddDependency(AObj, ColorKind, tdepLocalLiteral, '',
+            Item.ValueSpan, Item.KeySpan, OptSpan, SpanAtZero, True,
+            -1, -1, 1, '', False);
         end;
       end
       else if (Item.Key = 'inner sep') or (Item.Key = 'outer sep') or

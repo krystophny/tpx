@@ -179,9 +179,10 @@ const
     opfSymbolDiameter, opfSymbolRotation, opfRectangleRX, opfRectangleRY,
     opfBitmapLink, opfKeepAspectRatio, opfSolidSize1, opfSolidSize2,
     opfSolidSize3, opfSolidSize4, opfSolidSegments);
-  MoreFields: array[0..16] of TObjectPropertyField = (opfLineStyle,
-    opfLineColor, opfLineWidth, opfBeginArrowKind, opfEndArrowKind,
-    opfArrowSizeFactor, opfHatching, opfHatchColor, opfFillColor,
+  MoreFields: array[0..18] of TObjectPropertyField = (opfLineStyle,
+    opfLineColor, opfLineWidth, opfLineOpacity, opfBeginArrowKind,
+    opfEndArrowKind, opfArrowSizeFactor, opfHatching, opfHatchColor,
+    opfFillColor, opfFillOpacity,
     opfFontName, opfFontStyle, opfHAlignment, opfStarKind,
     opfStarSizeFactor, opfSolidAzimuth, opfSolidElevation,
     opfSolidPerspective);
@@ -226,6 +227,8 @@ begin
     opfHatching: Result := 'Hatching';
     opfHatchColor: Result := 'HatchColor';
     opfFillColor: Result := 'FillColor';
+    opfLineOpacity: Result := 'LineOpacity';
+    opfFillOpacity: Result := 'FillOpacity';
     opfBeginArrowKind: Result := 'BeginArrow';
     opfEndArrowKind: Result := 'EndArrow';
     opfArrowSizeFactor: Result := 'ArrowSize';
@@ -425,12 +428,14 @@ begin
   AddField(opfLineStyle, 'Line style', True, False, False);
   AddField(opfLineColor, 'Line color', True, True, False);
   AddField(opfLineWidth, 'Line width', False, False, False);
+  AddField(opfLineOpacity, 'Line opacity', False, False, False);
   AddField(opfBeginArrowKind, 'Start arrow', True, False, False);
   AddField(opfEndArrowKind, 'End arrow', True, False, False);
   AddField(opfArrowSizeFactor, 'Arrow size', False, False, False);
   AddField(opfHatching, 'Hatching', True, False, False);
   AddField(opfHatchColor, 'Hatch color', True, True, False);
   AddField(opfFillColor, 'Fill color', True, True, False);
+  AddField(opfFillOpacity, 'Fill opacity', False, False, False);
   AddField(opfFontName, 'Font', False, False, False);
   AddField(opfFontStyle, 'Font style', True, False, False);
   AddField(opfHAlignment, 'Alignment', True, False, False);
@@ -872,7 +877,7 @@ begin
     opfTextRotation, opfStarSizeFactor, opfSymbolDiameter,
     opfSymbolRotation, opfRectangleRX, opfRectangleRY, opfSolidSize1,
     opfSolidSize2, opfSolidSize3, opfSolidSize4, opfSolidSegments,
-    opfSolidAzimuth, opfSolidElevation];
+    opfSolidAzimuth, opfSolidElevation, opfLineOpacity, opfFillOpacity];
 end;
 
 function TObjectInspector.NumericRange(
@@ -883,6 +888,7 @@ begin
     opfTextRotation, opfSymbolRotation, opfSolidSize2, opfSolidSize4,
     opfSolidAzimuth, opfSolidElevation: Result := nerFinite;
     opfSolidSize1, opfSolidSize3, opfSolidSegments: Result := nerPositive;
+    opfLineOpacity, opfFillOpacity: Result := nerUnit;
   else
     Result := nerNonnegative;
   end;
@@ -911,7 +917,7 @@ begin
       end;
     opfLineWidth, opfArrowSizeFactor, opfTextHeight,
     opfStarSizeFactor, opfSymbolDiameter, opfRectangleRX,
-    opfRectangleRY:
+    opfRectangleRY, opfLineOpacity, opfFillOpacity:
       Result := InspectorNumberText(TRealType(Value));
     opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidSize4,
     opfSolidAzimuth, opfSolidElevation:
@@ -1238,6 +1244,8 @@ begin
       opfSolidSegments: Patch.SolidSegments := Round(Number);
       opfSolidAzimuth: Patch.SolidAzimuth := Number;
       opfSolidElevation: Patch.SolidElevation := Number;
+      opfLineOpacity: Patch.LineOpacity := Number;
+      opfFillOpacity: Patch.FillOpacity := Number;
     end;
     Exit(True);
   end;
