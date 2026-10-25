@@ -2842,28 +2842,60 @@ var
   procedure FillBezierArrows;
   var
     P0, P1: TPoint2D;
+    { Return the point of the curve at chord distance ArrowSize *
+      MeasureArrow(Kind) from the end point, walking back over as many
+      segments as needed. When the curve is shorter than the arrow, the
+      first control point different from the end point gives the direction. }
     function GetSecondPoint(const Kind: TArrowKind;
-      const P0, P1, P2, P3: TPoint2D): TPoint2D;
+      const Piece: TPiece; const AtEnd: Boolean): TPoint2D;
+    const
+      Steps = 32;
     var
-      R, U, DP: TRealType;
-      V: TVector2D;
+      R, T, TLo, THi: TRealType;
+      Q: array[0..3] of TPoint2D;
+      I, J, K, Last: Integer;
+      Prev, E: TPoint2D;
+      function Dist(const U: TRealType): TRealType;
+      begin
+        Result := VectorLength2D(Vector2D(E,
+          BezierPoint(Q[0], Q[1], Q[2], Q[3], U)));
+      end;
     begin
-//      Result := P1; // primitive approximation
-      // First approximation:
-      if ArrowSize = 0 then Exit;
+      Last := Piece.Count - 1;
+      if AtEnd then E := Piece[Last] else E := Piece[0];
+      Result := E;
+      for I := 1 to Last do
+      begin
+        if AtEnd then Prev := Piece[Last - I] else Prev := Piece[I];
+        if not IsSamePoint2D(Prev, E) then
+        begin
+          Result := Prev;
+          Break;
+        end;
+      end;
+      if (ArrowSize = 0) or (Kind = arrNone) then Exit;
       R := ArrowSize * MeasureArrow(Kind);
-      V := Vector2D(P0, P1);
-      U := VectorLength2D(V);
-      if U > 0 then U := R / (3 * U)
-      else U := 0.1;
-      Result := BezierPoint(P0, P1, P2, P3, U);
-      // Second approximation (Newton algorithm step):
-      V := Vector2D(P0, Result);
-      DP := DotProduct2D(
-        BezierDerivative(P0, P1, P2, P3, U), V);
-      if Abs(DP) < Sqr(R) * 1E-10 then Exit;
-      U := U + (Sqr(R) - VectorLength2D(V)) / (2 * DP);
-      Result := BezierPoint(P0, P1, P2, P3, U);
+      for K := 0 to Last div 3 - 1 do
+      begin
+        for J := 0 to 3 do
+          if AtEnd then Q[J] := Piece[Last - 3 * K - J]
+          else Q[J] := Piece[3 * K + J];
+        TLo := 0;
+        for I := 1 to Steps do
+        begin
+          THi := I / Steps;
+          if Dist(THi) >= R then
+          begin
+            for J := 1 to 30 do
+            begin
+              T := (TLo + THi) / 2;
+              if Dist(T) >= R then THi := T else TLo := T;
+            end;
+            Exit(BezierPoint(Q[0], Q[1], Q[2], Q[3], THi));
+          end;
+          TLo := THi;
+        end;
+      end;
     end;
   begin
     if fPoints.Count < 2 then Exit;
@@ -2880,16 +2912,11 @@ var
     end;
     // First arrow-head
     P0 := Pieces.Item[0][0];
-    P1 := GetSecondPoint(fBeginArrowKind,
-      P0, Pieces.Item[0][1],
-      Pieces.Item[0][2], Pieces.Item[0][3]);
+    P1 := GetSecondPoint(fBeginArrowKind, Pieces.Item[0], False);
     FillArrow(fBeginArrowKind, P0, P1, ArrowSize, Pieces);
     // Second arrow-head
     P0 := Pieces.Item[0][Pieces.Item[0].Count - 1];
-    P1 := GetSecondPoint(fEndArrowKind,
-      P0, Pieces.Item[0][Pieces.Item[0].Count - 2],
-      Pieces.Item[0][Pieces.Item[0].Count - 3],
-      Pieces.Item[0][Pieces.Item[0].Count - 4]);
+    P1 := GetSecondPoint(fEndArrowKind, Pieces.Item[0], True);
     FillArrow(fEndArrowKind, P0, P1, ArrowSize, Pieces);
   end;
 begin

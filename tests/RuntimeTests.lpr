@@ -2348,6 +2348,7 @@ begin
     else if ParamStr(1) = 'property-dimensions' then TestPropertyDimensions
     else if ParamStr(1) = 'inspector-mixed-selection' then TestInspectorMixedSelection
     else if ParamStr(1) = 'unknown-arrow-codes' then TestUnknownArrowCodes
+    else if ParamStr(1) = 'bezier-arrow-direction' then TestBezierArrowDirection
     else if ParamStr(1) = 'inspector-doubleclick-selection' then TestInspectorDoubleClickSelection
     {$IFDEF LCLCOCOA}
     else if ParamStr(1) = 'cocoa-local-composition' then TestCocoaLocalComposition
