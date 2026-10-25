@@ -13,6 +13,10 @@ type
     fCurrLineColor, fCurrFillColor, fCurrTextColor, fCurrGradColor: TColor;
     fHatchPass: Boolean;
     fFadings: TStringList;
+    { Colour definitions before an opacity group; the scope forgets the
+      ones made inside it. }
+    fGroupLineColor, fGroupFillColor, fGroupTextColor,
+      fGroupGradColor: TColor;
     function GradientFading: Boolean;
     function DeclareFading: string;
     function ShadingOptions: string;
@@ -66,6 +70,10 @@ type
     constructor Create;
     destructor Destroy; override;
     function NeedsDisjointFill: Boolean; override;
+    function SupportsOpacityGroup: Boolean; override;
+    procedure BeginOpacityGroup(const Opacity: TRealType;
+      const Box: TRect2D; const LineWidth: TRealType); override;
+    procedure EndOpacityGroup; override;
     procedure Poly(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
       const LineStyle: TLineStyle; const LineWidth: TRealType;
@@ -126,6 +134,31 @@ end;
 function T_TikZ_Device.NeedsDisjointFill: Boolean;
 begin
   Result := inherited NeedsDisjointFill or GradientFading;
+end;
+
+function T_TikZ_Device.SupportsOpacityGroup: Boolean;
+begin
+  Result := True;
+end;
+
+procedure T_TikZ_Device.BeginOpacityGroup(const Opacity: TRealType;
+  const Box: TRect2D; const LineWidth: TRealType);
+begin
+  fGroupLineColor := fCurrLineColor;
+  fGroupFillColor := fCurrFillColor;
+  fGroupTextColor := fCurrTextColor;
+  fGroupGradColor := fCurrGradColor;
+  WriteLnStream('\begin{scope}[transparency group, opacity=' +
+    OpacityText(Opacity) + ']');
+end;
+
+procedure T_TikZ_Device.EndOpacityGroup;
+begin
+  WriteLnStream('\end{scope}');
+  fCurrLineColor := fGroupLineColor;
+  fCurrFillColor := fGroupFillColor;
+  fCurrTextColor := fGroupTextColor;
+  fCurrGradColor := fGroupGradColor;
 end;
 
 { Declares the fading of the current gradient once per picture and returns

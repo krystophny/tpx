@@ -74,6 +74,13 @@ type
     DevEOL: string;
     // Geometry strings written while a 3D object is being exported.
     Capture: TStrings;
+    { Editable SVG documents leave it False: their profile has no group
+      opacity, so each piece keeps its own stroke and fill opacity. }
+    OpacityGroups: Boolean;
+    function SupportsOpacityGroup: Boolean; override;
+    procedure BeginOpacityGroup(const Opacity: TRealType;
+      const Box: TRect2D; const LineWidth: TRealType); override;
+    procedure EndOpacityGroup; override;
     procedure BeginSolid;
     procedure EndSolid(const SolidXml: string);
     constructor Create(Drawing: TDrawing2D);
@@ -142,6 +149,7 @@ begin
   fXML.EOL_Str := DevEOL;
   fDrawing2D := Drawing;
   fPattIDs := TStringList.Create;
+  OpacityGroups := True;
   OnBezier := Bezier;
   OnCircle := Circle;
   OnRotEllipse := RotEllipse;
@@ -874,6 +882,23 @@ end;
 procedure TSvgDevice.StartGroup;
 begin
   fXML.OpenTag('g');
+end;
+
+function TSvgDevice.SupportsOpacityGroup: Boolean;
+begin
+  Result := OpacityGroups;
+end;
+
+procedure TSvgDevice.BeginOpacityGroup(const Opacity: TRealType;
+  const Box: TRect2D; const LineWidth: TRealType);
+begin
+  fXML.OpenTag('g');
+  fXML.AddAttribute('opacity', OpacityText(Opacity));
+end;
+
+procedure TSvgDevice.EndOpacityGroup;
+begin
+  fXML.CloseTag;
 end;
 
 procedure TSvgDevice.FinishGroup;

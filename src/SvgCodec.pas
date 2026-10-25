@@ -1487,6 +1487,7 @@ begin
   PicScale0 := Drawing.PicScale;
   Saver := T_SVG_Export.Create(Drawing);
   try
+    Saver.UseEditableProfile;
     if CodecContext is TSvgCodecContext then
       Saver.SetSourceViewport(
         TSvgCodecContext(CodecContext).Viewport.WidthMM,

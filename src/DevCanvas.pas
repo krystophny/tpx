@@ -29,6 +29,10 @@ type
     fCanBlend: Boolean;
     { Maps the coordinates of the paint box to canvas pixels. }
     fBlendTransf: TTransf2D;
+    { Pixels under an open opacity group as they were before it. }
+    fGroupBack: TBitmap;
+    fGroupOrigin: TPoint;
+    fGroupOpacity: TRealType;
     { Draws a path with the current paint style. Translucent parts are
       composited over the pixels already on the canvas when CanBlend is
       set; otherwise they are drawn opaque. }
@@ -87,6 +91,10 @@ type
       viewport's off-screen bitmap. Printer, metafile and window canvases
       leave it False and draw translucent paint opaque. }
     property CanBlend: Boolean read fCanBlend write fCanBlend;
+    function SupportsOpacityGroup: Boolean; override;
+    procedure BeginOpacityGroup(const Opacity: TRealType;
+      const Box: TRect2D; const LineWidth: TRealType); override;
+    procedure EndOpacityGroup; override;
   end;
 
   TRubberCanvasDevice = class(TCanvasDevice)
@@ -1173,8 +1181,104 @@ end;
 
 destructor TCanvasDevice.Destroy;
 begin
+  fGroupBack.Free;
   inherited Destroy;
 end;
+
+function TCanvasDevice.SupportsOpacityGroup: Boolean;
+begin
+{$IFDEF FPC}
+  Result := fCanBlend;
+{$ELSE}
+  Result := False;
+{$ENDIF}
+end;
+
+{ The group's paint is drawn opaque straight onto the canvas. Ending the
+  group blends each changed pixel back from its colour before the group
+  with the group opacity; unchanged pixels stay as they are either way,
+  so no coverage mask is needed and the result matches BlendMask. }
+procedure TCanvasDevice.BeginOpacityGroup(const Opacity: TRealType;
+  const Box: TRect2D; const LineWidth: TRealType);
+{$IFDEF FPC}
+var
+  PixBox: TRect2D;
+  Margin: Integer;
+  R: TRect;
+begin
+  fGroupBack.Free;
+  fGroupBack := nil;
+  fGroupOpacity := ClampOpacity(Opacity);
+  PixBox := TransformBoundingBox2D(Box, fT);
+  { A miter join reaches up to MiterLimit half widths past the outline. }
+  Margin := Ceil(fLineWidthBase * LineWidth * fFactorMM *
+    Max(fMiterLimit, 1) / 2) + 2;
+  R := Types.Rect(
+    Floor(Min(PixBox.Left, PixBox.Right)) - Margin,
+    Floor(Min(PixBox.Bottom, PixBox.Top)) - Margin,
+    Ceil(Max(PixBox.Left, PixBox.Right)) + Margin + 1,
+    Ceil(Max(PixBox.Bottom, PixBox.Top)) + Margin + 1);
+  if not CanvasBounds(R) then Exit;
+  fGroupOrigin := R.TopLeft;
+  fGroupBack := TBitmap.Create;
+  fGroupBack.PixelFormat := pf24bit;
+  fGroupBack.SetSize(R.Right - R.Left, R.Bottom - R.Top);
+  fGroupBack.Canvas.CopyRect(Types.Rect(0, 0, fGroupBack.Width,
+    fGroupBack.Height), fCnv, R);
+end;
+{$ELSE}
+begin
+end;
+{$ENDIF}
+
+procedure TCanvasDevice.EndOpacityGroup;
+{$IFDEF FPC}
+var
+  Layer: TBitmap;
+  BackImage, LayerImage: TLazIntfImage;
+  X, Y: Integer;
+  Back, Paint: TFPColor;
+  A: Double;
+begin
+  if fGroupBack = nil then Exit;
+  A := fGroupOpacity;
+  Layer := TBitmap.Create;
+  BackImage := nil;
+  LayerImage := nil;
+  try
+    Layer.PixelFormat := pf24bit;
+    Layer.SetSize(fGroupBack.Width, fGroupBack.Height);
+    Layer.Canvas.CopyRect(Types.Rect(0, 0, Layer.Width, Layer.Height), fCnv,
+      Types.Rect(fGroupOrigin.X, fGroupOrigin.Y,
+      fGroupOrigin.X + Layer.Width, fGroupOrigin.Y + Layer.Height));
+    BackImage := fGroupBack.CreateIntfImage;
+    LayerImage := Layer.CreateIntfImage;
+    for Y := 0 to Layer.Height - 1 do
+      for X := 0 to Layer.Width - 1 do
+      begin
+        Paint := LayerImage.Colors[X, Y];
+        Back := BackImage.Colors[X, Y];
+        if (Paint.red = Back.red) and (Paint.green = Back.green) and
+          (Paint.blue = Back.blue) then Continue;
+        Back.red := Round(Back.red + (Paint.red - Back.red) * A);
+        Back.green := Round(Back.green + (Paint.green - Back.green) * A);
+        Back.blue := Round(Back.blue + (Paint.blue - Back.blue) * A);
+        BackImage.Colors[X, Y] := Back;
+      end;
+    fGroupBack.LoadFromIntfImage(BackImage);
+    fCnv.Draw(fGroupOrigin.X, fGroupOrigin.Y, fGroupBack);
+  finally
+    LayerImage.Free;
+    BackImage.Free;
+    Layer.Free;
+    fGroupBack.Free;
+    fGroupBack := nil;
+  end;
+end;
+{$ELSE}
+begin
+end;
+{$ENDIF}
 
 procedure TCanvasDevice.Poly(PP: TPointsSet2D;
   const LineColor, HatchColor, FillColor: TColor;

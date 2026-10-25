@@ -234,7 +234,12 @@ the fill opacity. The canvas, TikZ, PGF, PSTricks (`opacity`/`strokeopacity`),
 SVG and PDF output keep the opacity. EPS/PostScript, MetaPost, the LaTeX
 picture environment and EMF have no transparency and draw such paint opaque;
 PSTricks transparency needs a PostScript-to-PDF route that allows it, such as
-`ps2pdf -dALLOWPSTRANSPARENCY`. Text, images and 3D objects are always opaque.
+`ps2pdf -dALLOWPSTRANSPARENCY`. A translucent line and its arrowheads composite
+as one layer (a transparency group in TikZ, PGF, PDF and, through the same
+Ghostscript route, PSTricks, and an SVG group with `opacity`), so a head does not darken the line where it covers
+it. Editable SVG documents keep the opacity on each shape instead, because
+their profile has no group opacity. Text, images and 3D objects are always
+opaque.
 Opaque drawings are saved exactly as before; the `.TpX` attributes are `lo`
 and `fo` and appear only when an opacity is below 1.
 

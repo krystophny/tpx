@@ -201,6 +201,13 @@ type
     HasValue: Boolean;
   end;
   TTikZOptionValues = array of TTikZOptionValue;
+  { The opacity of the enclosing scopes, 1 without any, and the innermost
+    scope option that set it. }
+  TTikZScopeOpacity = record
+    Opacity: Double;
+    Option: TTikZOptionValue;
+  end;
+  TTikZScopeOpacityStack = array of TTikZScopeOpacity;
 
   TTikZEvaluator = class
   private
@@ -212,6 +219,7 @@ type
     FColors: TStringList;
     FColorSpans: TStringList;
     FCurrentTransform: TTikZAffineTransform;
+    FScopeOpacity: TTikZScopeOpacity;
     FEvaluationSteps, FPathCommandCount: SizeInt;
     function TokenText(Index: SizeInt): string;
     function SourceText(const Span: TTikZSourceSpan): RawByteString;
@@ -755,6 +763,16 @@ begin
   Obj.Dependencies[N].UpdatesRelativeBase := False;
 end;
 
+function HasOpacityDependency(Obj: TTikZSceneObject): Boolean;
+var
+  I: SizeInt;
+begin
+  for I := 0 to High(Obj.Dependencies) do
+    if Obj.Dependencies[I].Kind in [tdStrokeOpacity, tdFillOpacity,
+      tdOpacity] then Exit(True);
+  Result := False;
+end;
+
 procedure TTikZEvaluator.AddSemanticObject(Obj: TTikZSceneObject;
   const StatementSpan: TTikZSourceSpan);
 var
@@ -771,6 +789,27 @@ begin
     Obj.Free;
     Invalid(StatementSpan, 'TikZ import exceeds the object limit');
     Exit;
+  end;
+  if FScopeOpacity.Opacity < 1 then
+  begin
+    { TpX exports a translucent primitive with arrowheads as an opacity
+      group that holds paths without opacities of their own. Its paths
+      reopen with the group opacity, bound to the scope option, so that
+      an opacity edit is refused instead of being written into the
+      statement and multiplied with the group. }
+    if (Obj.Kind in [tsoText, tsoImage]) or HasOpacityDependency(Obj) then
+    begin
+      Obj.Free;
+      Unsupported(StatementSpan,
+        'An opacity inside a translucent TikZ scope is not native');
+      Exit;
+    end;
+    if Obj.StrokeEnabled then Obj.StrokeOpacity := FScopeOpacity.Opacity;
+    if Obj.FillEnabled then Obj.FillOpacity := FScopeOpacity.Opacity;
+    AddDependency(Obj, tdOpacity, tdepUnsupported, '',
+      FScopeOpacity.Option.ValueSpan, FScopeOpacity.Option.KeySpan,
+      FScopeOpacity.Option.OptionSpan, SpanAtZero, False, -1, -1, 1, '',
+      False);
   end;
   Obj.ScopeTransform := FCurrentTransform;
   for I := 0 to High(Obj.Dependencies) do
@@ -1603,6 +1642,7 @@ var
   Tok: TTikZToken;
   Command: string;
   ScopeStack: TTikZTransformStack;
+  OpacityStack: TTikZScopeOpacityStack;
   ScopeTransform, Operation, PreviousTransform: TTikZAffineTransform;
   ScopeName: string;
   ScopeGroup, CloseToken, K: SizeInt;
@@ -1717,6 +1757,22 @@ var
         if ScopeOption.Key <> 'yscale' then Operation.XX := Number;
         if ScopeOption.Key <> 'xscale' then Operation.YY := Number;
       end
+      else if (ScopeOption.Key = 'transparency group') and
+        not ScopeOption.HasValue then
+        Continue
+      else if ScopeOption.Key = 'opacity' then
+      begin
+        if not ParseInvariantFloat(TrimASCII(ScopeOption.Value), Number) or
+          (Number < 0) or (Number > 1) then
+          Unsupported(ScopeOption.OptionSpan,
+            'Scope opacity requires a literal number from 0 to 1')
+        else
+        begin
+          FScopeOpacity.Opacity := FScopeOpacity.Opacity * Number;
+          FScopeOpacity.Option := ScopeOption;
+        end;
+        Continue;
+      end
       else
       begin
         Unsupported(ScopeOption.OptionSpan,
@@ -1732,7 +1788,9 @@ var
 
 begin
   FCurrentTransform := IdentityTikZTransform;
+  FScopeOpacity.Opacity := 1;
   ScopeStack := nil;
+  OpacityStack := nil;
   I := FDocument.Region.FirstContentToken;
   EndToken := FDocument.Region.PastLastContentToken;
   while I < EndToken do
@@ -1770,6 +1828,8 @@ begin
           begin
             FCurrentTransform := ScopeStack[High(ScopeStack)];
             SetLength(ScopeStack, Length(ScopeStack) - 1);
+            FScopeOpacity := OpacityStack[High(OpacityStack)];
+            SetLength(OpacityStack, Length(OpacityStack) - 1);
           end;
           I := J;
           Continue;
@@ -1778,6 +1838,8 @@ begin
         K := Length(ScopeStack);
         SetLength(ScopeStack, K + 1);
         ScopeStack[K] := PreviousTransform;
+        SetLength(OpacityStack, K + 1);
+        OpacityStack[K] := FScopeOpacity;
         J := NextSignificant(J, EndToken);
         ScopeTransform := IdentityTikZTransform;
         if (J < EndToken) and (FOpenGroups[J] >= 0) and
@@ -1837,6 +1899,7 @@ begin
   if Length(ScopeStack) <> 0 then
     Invalid(SpanAtZero, 'TikZ scope is not closed');
   FCurrentTransform := IdentityTikZTransform;
+  FScopeOpacity.Opacity := 1;
 end;
 
 procedure TTikZEvaluator.Run;

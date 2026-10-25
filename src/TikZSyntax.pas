@@ -307,6 +307,24 @@ begin
     Key := TokenText(ResultDoc.FSource, ResultDoc.TokenAt(KeyToken));
     EqualsToken := NextSignificant(ResultDoc, KeyToken + 1);
     BadToken := EqualsToken;
+    { The opacity group of a translucent primitive with arrowheads. }
+    if (Key = 'transparency') and (EqualsToken < CloseBracket) and
+      (ResultDoc.TokenAt(EqualsToken).Kind = ttkWord) and
+      (TokenText(ResultDoc.FSource, ResultDoc.TokenAt(EqualsToken)) =
+      'group') then
+    begin
+      Cursor := NextSignificant(ResultDoc, EqualsToken + 1);
+      if Cursor = CloseBracket then Exit(True);
+      BadToken := Cursor;
+      if ResultDoc.TokenAt(Cursor).Kind <> ttkComma then Exit;
+      Cursor := NextSignificant(ResultDoc, Cursor + 1);
+      if Cursor >= CloseBracket then
+      begin
+        BadToken := Cursor - 1;
+        Exit;
+      end;
+      Continue;
+    end;
     if (EqualsToken >= CloseBracket) or
       (ResultDoc.TokenAt(EqualsToken).Kind <> ttkEquals) then Exit;
     ValueToken := NextSignificant(ResultDoc, EqualsToken + 1);
@@ -320,7 +338,7 @@ begin
       Cursor := ValueClose + 1;
     end
     else if (Key = 'rotate') or (Key = 'scale') or (Key = 'xscale') or
-      (Key = 'yscale') then
+      (Key = 'yscale') or (Key = 'opacity') then
     begin
       Cursor := ValueToken;
       if not ConsumeLiteralScalar(ResultDoc, Cursor, False) then Exit;

@@ -49,6 +49,10 @@ type
     FontSizeInTeX: Boolean;
     constructor Create;
     destructor Destroy; override;
+    function SupportsOpacityGroup: Boolean; override;
+    procedure BeginOpacityGroup(const Opacity: TRealType;
+      const Box: TRect2D; const LineWidth: TRealType); override;
+    procedure EndOpacityGroup; override;
     procedure Poly(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
       const LineStyle: TLineStyle; const LineWidth: TRealType;
@@ -90,6 +94,38 @@ destructor T_PSTricks_Device.Destroy;
 begin
   fColors.Free;
   inherited Destroy;
+end;
+
+{ PSTricks has no transparency groups, so the group uses the Ghostscript
+  operators that ps2pdf -dALLOWPSTRANSPARENCY provides, as PSTricks does
+  for its own opacity; elsewhere the group's paint stays opaque, as all
+  PSTricks transparency does there. }
+const
+  PSTricksGroupTest = 'systemdict /.begintransparencygroup known ' +
+    'systemdict /.setfillconstantalpha known and';
+
+function T_PSTricks_Device.SupportsOpacityGroup: Boolean;
+begin
+  Result := True;
+end;
+
+procedure T_PSTricks_Device.BeginOpacityGroup(const Opacity: TRealType;
+  const Box: TRect2D; const LineWidth: TRealType);
+var
+  A: string;
+begin
+  A := OpacityText(Opacity);
+  WriteLnStream('\pstVerb{gsave ' + PSTricksGroupTest + ' {' + A +
+    ' .setfillconstantalpha ' + A + ' .setstrokeconstantalpha ' +
+    '<< /Isolated true /Knockout false >> clippath pathbbox newpath ' +
+    '.begintransparencygroup 1 .setfillconstantalpha ' +
+    '1 .setstrokeconstantalpha} if}%');
+end;
+
+procedure T_PSTricks_Device.EndOpacityGroup;
+begin
+  WriteLnStream('\pstVerb{' + PSTricksGroupTest +
+    ' {.endtransparencygroup} if grestore}%');
 end;
 
 function T_PSTricks_Device.WriteNewColor(Color: TColor): string;

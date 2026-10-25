@@ -457,6 +457,9 @@ class RuntimeTests(unittest.TestCase):
     def test_paint_gradient(self):
         self.run_scenario("paint-gradient")
 
+    def test_paint_arrow_opacity(self):
+        self.run_scenario("paint-arrow-opacity")
+
     def test_tikz_line_styles_and_example_round_trip(self):
         with tempfile.TemporaryDirectory(prefix="tpx-tikz-style-") as directory:
             root = Path(directory).resolve()
