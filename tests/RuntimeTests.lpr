@@ -233,6 +233,7 @@ end;
 {$I SourceFormatWorkflowScenarios.inc}
 {$I EditSessionScenarios.inc}
 {$I NonModalRecoveryScenarios.inc}
+{$I PaintStyleScenarios.inc}
 
 procedure RunBitmapFixtureConverter;
 var
@@ -2326,6 +2327,7 @@ begin
     else if ParamStr(1) = 'autosave-recovery-watch-binding' then TestAutoSaveRecoveryWatchBinding
     else if ParamStr(1) = 'edit-session-preview-cancel' then TestEditSessionPreviewCancel
     else if ParamStr(1) = 'edit-session-recovery-payload' then TestEditSessionRecoveryPayload
+    else if ParamStr(1) = 'edit-session-wide-field-recovery' then TestEditSessionWideFieldRecovery
     else if ParamStr(1) = 'edit-session-nested-recovery-rebind' then TestEditSessionNestedRecoveryRebind
     else if ParamStr(1) = 'edit-session-text-whitespace' then TestEditSessionTextWhitespaceSaveRoundTrip
     else if ParamStr(1) = 'edit-session-malformed-reference' then TestEditSessionMalformedLiteralReference
@@ -2364,6 +2366,7 @@ begin
     else if ParamStr(1) = 'tikz-import-native' then TestTikZImportNativeScene
     else if ParamStr(1) = 'tikz-source-save' then TestTikZSourceSave
     else if ParamStr(1) = 'tikz-style-roundtrip' then TestTikZStyleRoundTrip
+    else if ParamStr(1) = 'paint-opacity' then TestPaintOpacity
     else if ParamStr(1) = 'bitmap-eps' then TestBitmapEps
     else if ParamStr(1) = 'svg-linked-image-copy' then TestSvgLinkedImageCopy
     else if ParamStr(1) = 'svg-codec' then TestSvgCodec

@@ -97,6 +97,7 @@ type
     fLineStyle: TLineStyle;
     fLineWidth: TRealType;
     fLineColor, fHatchColor, fFillColor: TColor;
+    fLineOpacity, fFillOpacity: TRealType;
     fCanDeletePoints: Boolean;
     fDrawPathBezier: Boolean;
     fOwnsInterior: Boolean;
@@ -151,6 +152,10 @@ type
         primitive can store without growing the vector.>
     }
     class function GetName: string; virtual; abstract;
+    { False for objects whose look does not come from line and fill
+      paint (text, bitmaps and 3D objects); they keep the opacity values
+      but draw opaque and do not offer them for editing. }
+    class function SupportsOpacity: Boolean; virtual;
     constructor Create(ID: Integer); override;
     constructor CreateSpec(ID: Integer; NPts: Integer;
       CurvePrec: Word);
@@ -205,6 +210,11 @@ type
       write fHatchColor;
     property FillColor: TColor read fFillColor
       write fFillColor;
+    { 0 (transparent) to 1 (opaque, the default). }
+    property LineOpacity: TRealType read fLineOpacity
+      write fLineOpacity;
+    property FillOpacity: TRealType read fFillOpacity
+      write fFillOpacity;
     property BeginArrowKind: TArrowKind read fBeginArrowKind write
       fBeginArrowKind;
     property EndArrowKind: TArrowKind read fEndArrowKind write
@@ -613,6 +623,7 @@ type
   public
     Font: TFont; // Win font
     class function GetName: string; override;
+    class function SupportsOpacity: Boolean; override;
     {: Create a new text entity in the rectangle <I=Rect1>, with
        the given <I=Height> and <I=Text>.
 
@@ -735,6 +746,7 @@ type
     function GetBitmap: TBitmap;
   public
     class function GetName: string; override;
+    class function SupportsOpacity: Boolean; override;
     constructor Create(ID: Integer); override;
     constructor CreateSpec(ID: Integer; const P0, P1: TPoint2D;
       const BitmapEntry: TBitmapEntry);
@@ -872,6 +884,8 @@ begin
   fLineColor := clDefault;
   fHatchColor := clDefault;
   fFillColor := clDefault;
+  fLineOpacity := 1;
+  fFillOpacity := 1;
   fCanDeletePoints := False;
   fDrawPathBezier := True;
   Pieces := TArrayOfPiece.Create(1);
@@ -901,6 +915,8 @@ begin
   fLineColor := (Obj as TPrimitive2D).fLineColor;
   fHatchColor := (Obj as TPrimitive2D).fHatchColor;
   fFillColor := (Obj as TPrimitive2D).fFillColor;
+  fLineOpacity := (Obj as TPrimitive2D).fLineOpacity;
+  fFillOpacity := (Obj as TPrimitive2D).fFillOpacity;
 end;
 
 procedure TPrimitive2D.Assign(const Obj: TGraphicObject);
@@ -965,6 +981,8 @@ begin
   Stream.ReadBuffer(fLineColor, SizeOf(fLineColor));
   Stream.ReadBuffer(fHatchColor, SizeOf(fHatchColor));
   Stream.ReadBuffer(fFillColor, SizeOf(fFillColor));
+  Stream.ReadBuffer(fLineOpacity, SizeOf(fLineOpacity));
+  Stream.ReadBuffer(fFillOpacity, SizeOf(fFillOpacity));
   Stream.ReadBuffer(fCanDeletePoints, SizeOf(fCanDeletePoints));
   Stream.ReadBuffer(fDrawPathBezier, SizeOf(fDrawPathBezier));
   Stream.ReadBuffer(fOwnsInterior, SizeOf(fOwnsInterior));
@@ -999,6 +1017,8 @@ begin
   Stream.Write(fLineColor, SizeOf(fLineColor));
   Stream.Write(fHatchColor, SizeOf(fHatchColor));
   Stream.Write(fFillColor, SizeOf(fFillColor));
+  Stream.Write(fLineOpacity, SizeOf(fLineOpacity));
+  Stream.Write(fFillOpacity, SizeOf(fFillOpacity));
   Stream.Write(fCanDeletePoints, SizeOf(fCanDeletePoints));
   Stream.Write(fDrawPathBezier, SizeOf(fDrawPathBezier));
   Stream.Write(fOwnsInterior, SizeOf(fOwnsInterior));
@@ -1046,15 +1066,33 @@ begin
   end;
 end;
 
+class function TPrimitive2D.SupportsOpacity: Boolean;
+begin
+  Result := True;
+end;
+
 procedure TPrimitive2D.DeviceDrawPiece(Piece: TPiece;
   const Transf: TTransf2D; const Dvc: TDevice;
   const ClipRect2D: TRect2D);
+var
+  Paint: TPaintStyle;
 begin
-  Dvc.PieceCh(Piece, Piece.GetLineColor(Self),
-    Piece.GetHatchColor(Self),
-    Piece.GetFillColor(Self), Piece.GetLineStyle(Self),
-    Piece.GetLineWidth(Self), Piece.GetHatching(Self),
-    Transf);
+  Paint := DefaultPaintStyle;
+  if SupportsOpacity then
+  begin
+    Paint.LineOpacity := ClampOpacity(Piece.GetLineOpacity(Self));
+    Paint.FillOpacity := ClampOpacity(Piece.GetFillOpacity(Self));
+  end;
+  Dvc.Paint := Paint;
+  try
+    Dvc.PieceCh(Piece, Piece.GetLineColor(Self),
+      Piece.GetHatchColor(Self),
+      Piece.GetFillColor(Self), Piece.GetLineStyle(Self),
+      Piece.GetLineWidth(Self), Piece.GetHatching(Self),
+      Transf);
+  finally
+    Dvc.ResetPaint;
+  end;
 end;
 
 procedure TPrimitive2D.DeviceDrawPieces(const VT: TTransf2D;
@@ -3863,6 +3901,11 @@ begin
   Result := 'Text';
 end;
 
+class function TText2D.SupportsOpacity: Boolean;
+begin
+  Result := False;
+end;
+
 procedure TText2D.ResetAlignment;
 begin
   UpdateExtension(Self);
@@ -4439,6 +4482,11 @@ end;
 class function TBitmap2D.GetName: string;
 begin
   Result := 'Bitmap';
+end;
+
+class function TBitmap2D.SupportsOpacity: Boolean;
+begin
+  Result := False;
 end;
 
 function TBitmap2D.GetBitmapParams(var W, H: TRealType;

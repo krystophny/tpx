@@ -23,6 +23,15 @@ type
   { Text vertical alignment }
   TVAlignment = (jvBaseline, jvBottom, jvCenter, jvTop);
 
+  { Paint properties that the positional style arguments of the device
+    procedures do not carry. A primitive sets them on the device around
+    each piece it draws (see TPrimitive2D.DeviceDrawPiece); every other
+    caller leaves the opaque defaults in place. Opacities run from 0
+    (transparent) to 1 (opaque). }
+  TPaintStyle = record
+    LineOpacity, FillOpacity: TRealType;
+  end;
+
   TPathProc = procedure(PP: TPointsSet2D;
     const LineColor, HatchColor, FillColor: TColor;
     const LineStyle: TLineStyle; const LineWidth: TRealType;
@@ -113,6 +122,7 @@ type
     fHatchingStep, fHatchingLineWidth: TRealType;
     fLineWidthBase, fDottedSize, fDashSize, fMiterLimit,
       fApproximationPrecision: TRealType;
+    fPaint: TPaintStyle;
     procedure SetTransform(const Transf: TTransf2D);
     function MultTransf(const Transf: TTransf2D): TTransf2D;
     procedure HatchPath(
@@ -226,6 +236,9 @@ type
     property DottedSize: TRealType write fDottedSize;
     property DashSize: TRealType write fDashSize;
     property MiterLimit: TRealType write fMiterLimit;
+    { Current paint style; reset it with ResetPaint after drawing. }
+    property Paint: TPaintStyle read fPaint write fPaint;
+    procedure ResetPaint;
   end;
 
   TStreamDevice = class(TDevice)
@@ -255,10 +268,16 @@ type
   end;
 
 function FF_N(const X: TRealType; const Prec: Integer): string;
+function DefaultPaintStyle: TPaintStyle;
+{ Opacity clamped to [0, 1]; NaN counts as opaque. }
+function ClampOpacity(const Value: TRealType): TRealType;
+function IsOpaque(const Opacity: TRealType): Boolean;
+{ Opacity as a short decimal with a '.' separator, for output formats. }
+function OpacityText(const Opacity: TRealType): string;
 
 implementation
 
-uses Drawings, GObjects, SysBasic, Preview, Pieces;
+uses Math, Drawings, GObjects, SysBasic, Preview, Pieces;
 
 function FF_N(const X: TRealType; const Prec: Integer): string;
 begin
@@ -269,11 +288,39 @@ end;
 // TDevice
 // =====================================================================
 
+function DefaultPaintStyle: TPaintStyle;
+begin
+  Result.LineOpacity := 1;
+  Result.FillOpacity := 1;
+end;
+
+function ClampOpacity(const Value: TRealType): TRealType;
+begin
+  if IsNan(Value) or (Value > 1) then Result := 1
+  else if Value < 0 then Result := 0
+  else Result := Value;
+end;
+
+function IsOpaque(const Opacity: TRealType): Boolean;
+begin
+  Result := ClampOpacity(Opacity) >= 1;
+end;
+
+function OpacityText(const Opacity: TRealType): string;
+var
+  Settings: TFormatSettings;
+begin
+  Settings := DefaultFormatSettings;
+  Settings.DecimalSeparator := '.';
+  Result := FloatToStrF(ClampOpacity(Opacity), ffGeneral, 4, 0, Settings);
+end;
+
 constructor TDevice.Create;
 begin
   inherited Create;
   fT := IdentityTransf2D;
   fDisjointFill := False;
+  fPaint := DefaultPaintStyle;
 //  OnBitmap := nil;
 end;
 
@@ -282,6 +329,11 @@ begin
   fT := Transf;
   fTScale := IsotropicScale(Transf);
   if fTScale = 0 then fTScale := 1;
+end;
+
+procedure TDevice.ResetPaint;
+begin
+  fPaint := DefaultPaintStyle;
 end;
 
 function TDevice.MultTransf(const Transf: TTransf2D): TTransf2D;

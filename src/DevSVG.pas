@@ -423,6 +423,8 @@ begin
           [fDashSize * 2 * fFactorMM,
           fDashSize * fFactorMM]));
     end;
+    if not IsOpaque(fPaint.LineOpacity) then
+      fXML.AddAttribute('stroke-opacity', OpacityText(fPaint.LineOpacity));
   end;
   if Hatching <> haNone then
     fXML.AddAttribute('fill',
@@ -431,6 +433,9 @@ begin
     fXML.AddAttribute('fill', ColorToHtml(FillColor))
   else
     fXML.AddAttribute('fill', 'none');
+  if ((Hatching <> haNone) or (FillColor <> clDefault)) and
+    not IsOpaque(fPaint.FillOpacity) then
+    fXML.AddAttribute('fill-opacity', OpacityText(fPaint.FillOpacity));
 end;
 
 procedure TSvgDevice.Poly(PP: TPointsSet2D;

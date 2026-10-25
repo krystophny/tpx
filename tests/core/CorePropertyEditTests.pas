@@ -70,6 +70,13 @@ begin
     'An incomplete exponent must remain an invalid raw draft');
   CheckCore(not TryParseNumericEdit('NaN', nerFinite, Value, ErrorText),
     'NaN must not pass finite-number validation');
+  CheckCore(TryParseNumericEdit('0', nerUnit, Value, ErrorText) and
+    TryParseNumericEdit('1', nerUnit, Value, ErrorText) and
+    TryParseNumericEdit('0.35', nerUnit, Value, ErrorText) and
+    (Abs(Value - 0.35) < 1E-12), 'Opacities from 0 to 1 must be valid');
+  CheckCore(not TryParseNumericEdit('1.01', nerUnit, Value, ErrorText) and
+    not TryParseNumericEdit('-0.1', nerUnit, Value, ErrorText),
+    'Opacities outside 0 to 1 must be rejected');
 end;
 
 initialization

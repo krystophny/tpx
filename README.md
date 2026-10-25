@@ -227,6 +227,17 @@ Ctrl+Enter (or Command+Enter on macOS), Tab, or **Done** finishes the edit.
 Escape cancels the uncommitted edit after any active input-method composition
 ends.
 
+Lines, shapes, curves and arcs have a line opacity and a fill opacity from 0
+(transparent) to 1 (opaque, the default) under **More properties** in the
+Inspector, for example for a translucent highlight over a curve. Hatching takes
+the fill opacity. The canvas, TikZ, PGF, PSTricks (`opacity`/`strokeopacity`),
+SVG and PDF output keep the opacity. EPS/PostScript, MetaPost, the LaTeX
+picture environment and EMF have no transparency and draw such paint opaque;
+PSTricks transparency needs a PostScript-to-PDF route that allows it, such as
+`ps2pdf -dALLOWPSTRANSPARENCY`. Text, images and 3D objects are always opaque.
+Opaque drawings are saved exactly as before; the `.TpX` attributes are `lo`
+and `fo` and appear only when an opacity is below 1.
+
 Use **Edit → Object properties** to open the Object Inspector on the right;
 **View → Object inspector** toggles it, and its splitter can be dragged to
 resize the panel. Collapse a section to make room for the drawing. When a

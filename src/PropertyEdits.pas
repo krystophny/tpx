@@ -26,7 +26,9 @@ type
       segment count and the camera. The fourth size comes last so that the
       ordinals of older recovery records stay valid. }
     opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidSegments,
-    opfSolidAzimuth, opfSolidElevation, opfSolidPerspective, opfSolidSize4);
+    opfSolidAzimuth, opfSolidElevation, opfSolidPerspective, opfSolidSize4,
+    { Opacities from 0 (transparent) to 1 (opaque). }
+    opfLineOpacity, opfFillOpacity);
   TObjectPropertyFields = set of TObjectPropertyField;
   TEditTargetIDs = array of Integer;
 
@@ -61,6 +63,7 @@ type
     SolidSegments: Integer;
     SolidAzimuth, SolidElevation: TRealType;
     SolidPerspective: Boolean;
+    LineOpacity, FillOpacity: TRealType;
   end;
 
 { What a 3D size field means for a selected single-body 3D object. }
@@ -270,6 +273,11 @@ begin
   Result := not IsNan(Value) and not IsInfinite(Value);
 end;
 
+function IsUnitValue(Value: TRealType): Boolean;
+begin
+  Result := IsFiniteValue(Value) and (Value >= 0) and (Value <= 1);
+end;
+
 function FontStylesMask(const Styles: TFontStyles): Byte;
 begin
   Result := 0;
@@ -456,6 +464,11 @@ begin
     ((Ord(Patch.EndArrowKind) < Ord(Low(TArrowKind))) or
     (Ord(Patch.EndArrowKind) > Ord(High(TArrowKind)))) then
     ErrorText := 'Invalid end arrow'
+  else if ((opfLineOpacity in Patch.Fields) and
+    not IsUnitValue(Patch.LineOpacity)) or
+    ((opfFillOpacity in Patch.Fields) and
+    not IsUnitValue(Patch.FillOpacity)) then
+    ErrorText := 'Opacity must be between 0 and 1'
   else if (opfArrowSizeFactor in Patch.Fields) and
     not IsFiniteNonnegative(Patch.ArrowSizeFactor) then
     ErrorText := 'Arrow size must be a finite nonnegative number'
@@ -591,6 +604,8 @@ begin
   if opfHatching in Patch.Fields then Prim.Hatching := Patch.Hatching;
   if opfHatchColor in Patch.Fields then Prim.HatchColor := Patch.HatchColor;
   if opfFillColor in Patch.Fields then Prim.FillColor := Patch.FillColor;
+  if opfLineOpacity in Patch.Fields then Prim.LineOpacity := Patch.LineOpacity;
+  if opfFillOpacity in Patch.Fields then Prim.FillOpacity := Patch.FillOpacity;
   if opfBeginArrowKind in Patch.Fields then
     Prim.BeginArrowKind := Patch.BeginArrowKind;
   if opfEndArrowKind in Patch.Fields then
@@ -733,6 +748,8 @@ begin
     opfSolidAzimuth: Patch.SolidAzimuth := TRealType(Value);
     opfSolidElevation: Patch.SolidElevation := TRealType(Value);
     opfSolidPerspective: Patch.SolidPerspective := Boolean(Value);
+    opfLineOpacity: Patch.LineOpacity := TRealType(Value);
+    opfFillOpacity: Patch.FillOpacity := TRealType(Value);
   end;
   Result := True;
 end;
@@ -860,6 +877,9 @@ begin
     opfRectangleRX, opfRectangleRY: Result := Obj is TRectangle2D;
     opfBitmapLink, opfKeepAspectRatio: Result := Obj is TBitmap2D;
     opfSolidSize1..opfSolidSize4: Result := SolidSupports(Obj, Field);
+    opfLineOpacity, opfFillOpacity:
+      Result := (Obj is TPrimitive2D) and
+        TPrimitive2D(Obj).SupportsOpacity;
   end;
 end;
 
@@ -902,6 +922,8 @@ begin
       else Value := (Obj as TBitmap2D).BitmapEntry.ImageLink;
     opfKeepAspectRatio: Value := (Obj as TBitmap2D).KeepAspectRatio;
     opfSolidSize1..opfSolidSize4: Value := ReadSolidValue(Obj, Field);
+    opfLineOpacity: Value := Prim.LineOpacity;
+    opfFillOpacity: Value := Prim.FillOpacity;
   end;
 end;
 

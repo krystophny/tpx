@@ -130,6 +130,8 @@ begin
   Primitive.EndArrowKind := TikZTipArrowKind(Obj.EndArrow);
   if Obj.FillEnabled then Primitive.FillColor := SceneColor(Obj.FillRGB)
   else Primitive.FillColor := clDefault;
+  Primitive.LineOpacity := Obj.StrokeOpacity;
+  Primitive.FillOpacity := Obj.FillOpacity;
 end;
 
 function RotatePoint(const Point, Center: TPoint2D; Angle: Double): TPoint2D;

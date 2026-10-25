@@ -628,6 +628,84 @@ begin
   end;
 end;
 
+procedure TestEditSessionWideFieldRecovery;
+var
+  Drawing, Candidate: TDrawing2D;
+  Band, RestoredBand: TPolygon2D;
+  Session, RestoredSession: TObjectEditSession;
+  Patch: TObjectPropertyPatch;
+  ModelBytes, AuxiliaryState: RawByteString;
+  DraftText: TEditUtf8Text;
+  ErrorText: string;
+  CanSaveBack: Boolean;
+  CodecContext: TObject;
+  TargetIDs: TEditTargetIDs;
+  Epoch: QWord;
+begin
+  { Opacity fields have ordinals above 31, so the preview patch and the
+    pending raw drafts need the 64-bit field sets of TPXES003. }
+  Check(Ord(opfFillOpacity) > 31,
+    'the wide-field fixture needs a property field beyond 32 bits');
+  Drawing := MainForm.TheDrawing;
+  Drawing.Clear;
+  Band := TPolygon2D.CreateSpec(-1, [Point2D(5, 15), Point2D(55, 15),
+    Point2D(55, 25), Point2D(5, 25)]);
+  Drawing.AddObject(-1, Band);
+  Drawing.History.Save;
+  Drawing.History.SaveCheckSum;
+  Session := TObjectEditSession.Create(Drawing,
+    MainForm.CurrentDocumentEpoch, [Band.ID]);
+  Candidate := nil;
+  CodecContext := nil;
+  RestoredSession := nil;
+  Epoch := Session.DocumentEpoch + 1;
+  try
+    Patch := Default(TObjectPropertyPatch);
+    Patch.Fields := [opfFillOpacity];
+    Patch.FillOpacity := 0.25;
+    Check(Session.Preview(Patch, Session.DocumentEpoch, ErrorText),
+      'fill opacity preview setup failed: ' + ErrorText);
+    Check(Session.TrySetRawDraft(opfLineOpacity, '1e', ErrorText),
+      'raw line opacity draft setup failed: ' + ErrorText);
+    Check(Session.BuildRecoveryData('', ModelBytes, AuxiliaryState,
+      ErrorText), 'could not build wide-field recovery data: ' + ErrorText);
+    Check(Copy(AuxiliaryState, 1, 8) = 'TPXES003',
+      'edit recovery must be written in the TPXES003 format');
+    Check(Band.FillOpacity = 0.25,
+      'recovery serialization must restore the live opacity preview');
+    Candidate := LoadDocumentCandidate('tpx', 'recovered.tpx', ModelBytes,
+      CanSaveBack, CodecContext, nil);
+    Check(Candidate <> nil, 'the committed recovery model did not parse');
+    RestoredBand := Candidate.ObjectList.FirstObj as TPolygon2D;
+    Check(RestoredBand.FillOpacity = 1,
+      'the saved scene must contain the committed opacity, not the preview');
+    Check(TObjectEditSession.RestoreRecoveryState(Candidate, Epoch,
+      AuxiliaryState, RestoredSession, ErrorText),
+      'the wide-field sidecar did not restore: ' + ErrorText);
+    TargetIDs := RestoredSession.CopyTargetIDs;
+    Check((Length(TargetIDs) = 1) and (TargetIDs[0] = RestoredBand.ID),
+      'the wide-field sidecar selected the wrong object');
+    Check(RestoredBand.FillOpacity = 0.25,
+      'recovery must restore a previewed field beyond 32 bits');
+    Check(RestoredSession.HasRawDraft(opfLineOpacity, DraftText) and
+      (DraftText = '1e') and RestoredSession.HasRawDraftPending,
+      'recovery must restore a pending raw draft beyond 32 bits');
+    Check(RestoredSession.Cancel(Epoch),
+      'the recovered wide-field edit could not be canceled');
+    Check(RestoredBand.FillOpacity = 1,
+      'canceling the recovered edit must restore the committed opacity');
+  finally
+    if (RestoredSession <> nil) and RestoredSession.IsActive then
+      RestoredSession.Cancel(Epoch);
+    RestoredSession.Free;
+    Session.Cancel(Session.DocumentEpoch);
+    Session.Free;
+    Candidate.Free;
+    CodecContext.Free;
+    Drawing.Clear;
+  end;
+end;
+
 procedure TestEditSessionNestedRecoveryRebind;
 var
   Drawing, Candidate: TDrawing2D;

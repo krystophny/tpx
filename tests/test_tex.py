@@ -248,6 +248,34 @@ class TeXTests(unittest.TestCase):
         # antialiasing and line-width rounding.
         self.assertLess(difference, 0.25 * coverage, (difference, coverage))
 
+    @unittest.skipUnless(shutil.which("gs"), "Ghostscript is not installed")
+    def test_tikz_fill_opacity_renders_translucent(self):
+        source = self.root / "opacity.TpX"
+        source.write_text(
+            '%<TpX v="5" PicScale="1" TeXFormat="tikz" PdfTeXFormat="tikz" TeXFigure="none" Border="0">\n'
+            '%<rect x="0" y="0" w="20" h="10" li="none" fill="#000000" fo="0.5"/>\n'
+            '%<rect x="20" y="0" w="20" h="10" li="none" fill="#000000"/>\n'
+            '%</TpX>\n')
+        self.run_command([BINARY, "-f", source, "-o", "saved.TpX"])
+        (self.root / "opacity.tex").write_text(
+            "\\documentclass{standalone}\\usepackage{tikz}\\begin{document}"
+            "\\input{saved.TpX}\\end{document}\n")
+        self.run_command(["pdflatex", "-halt-on-error", "-interaction=nonstopmode",
+                          "opacity.tex"])
+        image = self.root / "opacity.pgm"
+        self.run_command(["gs", "-q", "-dSAFER", "-dBATCH", "-dNOPAUSE",
+                          "-sDEVICE=pgmraw", "-r72", "-sOutputFile=" + str(image),
+                          "opacity.pdf"])
+        data = image.read_bytes()
+        header = re.sub(rb"#[^\n]*\n", b"", data[:200]).split()
+        width, height = int(header[1]), int(header[2])
+        pixels = data[-width * height:]
+        middle = pixels[(height // 2) * width:(height // 2 + 1) * width]
+        # Half-opaque black over the white page is mid gray; the opaque
+        # reference rectangle stays black.
+        self.assertLess(abs(middle[width // 4] - 128), 24, middle[width // 4])
+        self.assertLess(middle[3 * width // 4], 24)
+
     def test_scientific_examples_compile_with_tikz(self):
         examples = Path(__file__).resolve().parents[1] / "examples"
         expected_math = {

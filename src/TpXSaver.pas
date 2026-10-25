@@ -274,6 +274,12 @@ begin
     fXML.AddAttribute('hc', ColorToHtml(Obj.HatchColor));
   if Obj.FillColor <> clDefault then
     fXML.AddAttribute('fill', ColorToHtml(Obj.FillColor));
+  // Opacities: written only when not opaque, so opaque drawings keep
+  // their bytes.
+  if Obj.LineOpacity <> 1 then
+    fXML.AddAttribute('lo', FF(Obj.LineOpacity));
+  if Obj.FillOpacity <> 1 then
+    fXML.AddAttribute('fo', FF(Obj.FillOpacity));
 end;
 
 procedure T_TpX_Saver.WriteArrows(Obj: TPrimitive2D);

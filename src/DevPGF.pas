@@ -13,8 +13,10 @@ type
   T_PGF_Device = class(TFileDevice)
   protected
     fCurrColor: TColor;
+    fCurrStrokeOpacity, fCurrFillOpacity: TRealType;
     fCurrLineWidth: TRealType;
     fCurrLineStyle: TLineStyle;
+    procedure WriteOpacity(const StrokeOpacity, FillOpacity: TRealType);
     procedure WriteStreamPoint0(const X, Y: TRealType); override;
     function GetColor(Color: TColor): string;
     procedure WriteColor(Color: TColor);
@@ -101,6 +103,8 @@ begin
   fHasSegment := True;
   fHasNativeHatching := False;
   fCurrColor := clNone;
+  fCurrStrokeOpacity := 1;
+  fCurrFillOpacity := 1;
   fDisjointFill := True;
 end;
 
@@ -153,10 +157,26 @@ begin
   WriteStream(Format('\pgfsetlinewidth{%.2fmm}', [W]));
 end;
 
+procedure T_PGF_Device.WriteOpacity(const StrokeOpacity,
+  FillOpacity: TRealType);
+var
+  S, F: TRealType;
+begin
+  S := ClampOpacity(StrokeOpacity);
+  F := ClampOpacity(FillOpacity);
+  if S <> fCurrStrokeOpacity then
+    WriteStream('\pgfsetstrokeopacity{' + OpacityText(S) + '}');
+  if F <> fCurrFillOpacity then
+    WriteStream('\pgfsetfillopacity{' + OpacityText(F) + '}');
+  fCurrStrokeOpacity := S;
+  fCurrFillOpacity := F;
+end;
+
 procedure T_PGF_Device.WritePathAttr(
   const LineColor, FillColor: TColor;
   const LineStyle: TLineStyle; const LineWidth: TRealType);
 begin
+  WriteOpacity(fPaint.LineOpacity, fPaint.FillOpacity);
   if (FillColor <> clDefault) then
   begin
     WriteColor(FillColor);
@@ -222,6 +242,7 @@ begin
     WriteColor(clBlack)
   else
     WriteColor(HatchColor);
+  WriteOpacity(fPaint.FillOpacity, fPaint.FillOpacity);
   WriteDash(liSolid, 0);
   WriteLineWidth(fLineWidthBase * fHatchingLineWidth);
   Lines.TransformPoints(T);

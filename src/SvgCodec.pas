@@ -69,6 +69,7 @@ type
     procedure CheckAttributes(const Tag: string; const Attributes: TAttributes);
     procedure CheckStyle(const Tag, Value: string);
     procedure CheckDashArray(const Tag, Value: string);
+    procedure CheckOpacity(const Name, Value: string);
     procedure CheckRoot(const Attributes: TAttributes);
     procedure CheckPhysicalLength(const Name, Value: string);
     procedure CheckGeometryLength(const Name, Value: string;
@@ -229,6 +230,28 @@ begin
     fIssues.Add(Issue);
 end;
 
+{ fill-opacity and stroke-opacity map to the primitive opacities. The
+  opacity property composites the element as a group, which the model
+  approximates per paint, so it keeps the source import-only. }
+procedure TSvgProfileScan.CheckOpacity(const Name, Value: string);
+var
+  Number: TRealType;
+begin
+  if Name = 'opacity' then
+  begin
+    AddIssue('group opacity is approximated per fill and stroke');
+    Exit;
+  end;
+  if (Value = '') or (Pos('%', Value) > 0) then
+  begin
+    AddIssue('unsupported ' + Name + ' value ' + Value);
+    Exit;
+  end;
+  Number := ParseSvgNumber(Trim(Value), Name);
+  if (Number < 0) or (Number > 1) then
+    AddIssue(Name + ' outside 0 to 1 is clamped');
+end;
+
 procedure TSvgProfileScan.CheckStyle(const Tag, Value: string);
 var
   Declarations: TStringList;
@@ -254,8 +277,11 @@ begin
       V := LowerCase(Trim(Copy(Declarations[I], Sep + 1, MaxInt)));
       if not ValueIn(Name, ['fill', 'stroke', 'stroke-width',
         'stroke-dasharray', 'font-family', 'font-size', 'font-weight',
-        'font-style', 'text-anchor', 'transform']) then
+        'font-style', 'text-anchor', 'transform', 'fill-opacity',
+        'stroke-opacity', 'opacity']) then
         AddIssue('unsupported style property ' + Name);
+      if ValueIn(Name, ['fill-opacity', 'stroke-opacity', 'opacity']) then
+        CheckOpacity(Name, V);
       if (Name = 'fill') or (Name = 'stroke') then
       begin
         if Pos('url(', V) > 0 then AddIssue('resource paint in style')
@@ -609,7 +635,7 @@ begin
         AddIssue('unsupported color in ' + Name);
     end
     else if (Name = 'fill-opacity') or (Name = 'stroke-opacity') or
-      (Name = 'opacity') then AddIssue('unsupported opacity attribute ' + Name)
+      (Name = 'opacity') then CheckOpacity(Name, Value)
     else if (Name = 'class') then AddIssue('CSS class inheritance')
     else if (Name = 'href') or (Name = 'xlink:href') then
       AddIssue('SVG reference ' + Name)

@@ -327,6 +327,72 @@ class ExportTests(unittest.TestCase):
         points = [tuple(map(float, point.split(","))) for point in line.text.split()]
         self.assertEqual(points, [(0, 0), (10, 5)])
 
+    def opacity_drawing(self):
+        source = self.root / "opacity.TpX"
+        source.write_text(
+            '%<TpX v="5" PicScale="1" TeXFormat="tikz" PdfTeXFormat="tikz">\n'
+            '%<line x1="0" y1="5" x2="30" y2="5" lw="2" lc="#000000" lo="0.25"/>\n'
+            '%<rect x="0" y="0" w="30" h="10" li="none" fill="#FFD700" fo="0.5"/>\n'
+            '%</TpX>\n')
+        return source
+
+    def test_opacity_round_trip_and_vector_exports(self):
+        source = self.opacity_drawing()
+        self.run_tpx("-f", source, "-o", "saved.TpX")
+        saved = self.read_tpx(self.root / "saved.TpX")
+        self.assertEqual(saved.find("line").get("lo"), "0.25")
+        self.assertIsNone(saved.find("line").get("fo"))
+        self.assertEqual(saved.find("rect").get("fo"), "0.5")
+        self.assertIsNone(saved.find("rect").get("lo"))
+        tikz = (self.root / "saved.TpX").read_text()
+        self.assertIn("draw=L, draw opacity=0.25]", tikz)
+        self.assertIn("[fill=F, fill opacity=0.5]", tikz)
+        self.run_tpx("-f", source, "-x", "svg", "-o", "drawing")
+        svg = ET.parse(self.root / "drawing.svg").getroot()
+        rect = svg.find(SVG + "rect")
+        self.assertEqual(rect.get("fill-opacity"), "0.5")
+        self.assertIsNone(rect.get("stroke-opacity"))
+        line = svg.find(SVG + "polyline")
+        self.assertEqual(line.get("stroke-opacity"), "0.25")
+        self.run_tpx("-f", "drawing.svg", "-o", "from-svg.TpX")
+        reopened = self.read_tpx(self.root / "from-svg.TpX")
+        self.assertEqual(reopened.find("rect").get("fo"), "0.5")
+        self.run_tpx("-f", source, "-x", "pdf", "-o", "drawing")
+        pdf = (self.root / "drawing.pdf").read_bytes()
+        self.assertTrue(pdf.startswith(b"%PDF-1.4"))
+        self.assertIn(b"/ca 0.5", pdf)
+
+    def test_opaque_drawing_writes_no_opacity(self):
+        source = self.drawing()
+        self.run_tpx("-f", source, "-o", "saved.TpX")
+        self.run_tpx("-f", source, "-x", "svg", "-o", "drawing")
+        self.run_tpx("-f", source, "-x", "pdf", "-o", "drawing")
+        self.assertNotIn("opacity", (self.root / "saved.TpX").read_text())
+        self.assertNotIn(' lo="', (self.root / "saved.TpX").read_text())
+        self.assertNotIn(' fo="', (self.root / "saved.TpX").read_text())
+        self.assertNotIn("opacity", (self.root / "drawing.svg").read_text())
+        pdf = (self.root / "drawing.pdf").read_bytes()
+        self.assertTrue(pdf.startswith(b"%PDF-1.2"))
+        self.assertNotIn(b"ExtGState", pdf)
+
+    def test_svg_opacity_import(self):
+        source = self.root / "opacity.svg"
+        source.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="40mm" '
+            'viewBox="0 0 80 40"><g opacity="0.5">'
+            '<rect x="10" y="10" width="20" height="10" stroke="#000000" '
+            'stroke-opacity="0.5" style="fill:#ff0000;fill-opacity:0.8"/></g>'
+            '<circle cx="50" cy="20" r="5" fill="#0000ff" fill-opacity="0.25"/>'
+            '</svg>')
+        self.run_tpx("-f", source, "-o", "imported.TpX")
+        imported = self.read_tpx(self.root / "imported.TpX")
+        rect = imported.find(".//rect")
+        self.assertAlmostEqual(float(rect.get("lo")), 0.25, places=5)
+        self.assertAlmostEqual(float(rect.get("fo")), 0.4, places=5)
+        circle = imported.find(".//circle")
+        self.assertAlmostEqual(float(circle.get("fo")), 0.25, places=5)
+        self.assertIsNone(circle.get("lo"))
+
     def test_cli_rejects_unsupported_output_clearly(self):
         source = self.drawing()
         result = self.run_tpx("-f", source, "-o", "drawing.pdf", expect_success=False)
