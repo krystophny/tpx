@@ -652,9 +652,115 @@ begin
   end;
 end;
 
+function EvaluateFragment(const Value: RawByteString;
+  out Syntax: TTikZSyntaxResult): TTikZSemanticResult;
+begin
+  Syntax := ParseTikZ(BytesOf(Value),
+    DefaultTikZParseOptions(tikFragmentInput));
+  Result := EvaluateTikZ(Syntax, DefaultTikZImportOptions);
+end;
+
+{ The fixture is TpX's own export of four gradients whose ends differ in
+  opacity: a stroked rectangle (blue to yellow, 1 to 0.2, 30 degrees), an
+  unstroked radial disc (red, 1 to 0), a stroked rectangle (0.5 to 1,
+  0 degrees) and an unstroked rectangle at 180 degrees (red to blue, 0.3 to
+  0.9). }
+procedure TestTpXFadingImport;
+var
+  Source: RawByteString;
+  Syntax: TTikZSyntaxResult;
+  Evaluated: TTikZSemanticResult;
+  Obj: TTikZSceneObject;
+  procedure Reject(const Variant, Reason: RawByteString);
+  var
+    S: TTikZSyntaxResult;
+    E: TTikZSemanticResult;
+  begin
+    E := EvaluateFragment(Variant, S);
+    try
+      CheckCore(E.Outcome = tsoUnsupported, Reason);
+      CheckCore((Length(E.Diagnostics) > 0) and
+        (E.Diagnostics[High(E.Diagnostics)].Span.StartLine > 0),
+        Reason + ' (with a source location)');
+    finally
+      E.Free;
+      S.Free;
+    end;
+  end;
+begin
+  Source := RawStringOf(LoadTikZFixture('devtikz-faded-gradients.tikz'));
+  Evaluated := EvaluateFragment(Source, Syntax);
+  try
+    if Length(Evaluated.Diagnostics) > 0 then
+      CheckCore(Evaluated.Outcome = tsoAccepted,
+        'TpX fading declarations and faded shadings should import: ' +
+        Evaluated.Diagnostics[0].Message);
+    CheckCore(Evaluated.Outcome = tsoAccepted,
+      'TpX fading declarations and faded shadings should import');
+    CheckCore((Evaluated.Scene.ObjectCount = 6) and
+      (Length(Evaluated.Scene.Fadings) = 4),
+      'four faded fills, two stroke paths and four declarations');
+    Obj := Evaluated.Scene.ObjectAt(0);
+    CheckCore((Obj.Gradient = tgLinear) and (Obj.FillRGB = $0000FF) and
+      (Obj.GradientRGB = $FFFF00) and (Abs(Obj.GradientAngle - 30) < 1E-9),
+      'the faded linear shading keeps its colours and angle');
+    CheckNearCore(Obj.FillOpacity, 1, 1E-9, 'start opacity from the fading');
+    CheckNearCore(Obj.GradientOpacity, 0.2, 1E-9, 'end opacity from the fading');
+    CheckCore((Obj.StrokeCompanion = 1) and
+      (Evaluated.Scene.ObjectAt(1).StrokeOf = 0) and
+      Evaluated.Scene.ObjectAt(1).StrokeEnabled,
+      'the stroke path completes the faded fill');
+    CheckNearCore(Obj.FadingShift.X, 15, 1E-9, 'fading shift x (mm)');
+    CheckNearCore(Obj.FadingXScale, 1.28577, 1E-9, 'fading ramp scale');
+    Obj := Evaluated.Scene.ObjectAt(2);
+    CheckCore((Obj.Gradient = tgRadial) and (Obj.FillRGB = $D00000) and
+      (Obj.StrokeCompanion = -1) and (Obj.GradientOpacity = 0) and
+      (Obj.FillOpacity = 1),
+      'an unstroked radial fade has no stroke companion');
+    Obj := Evaluated.Scene.ObjectAt(3);
+    CheckCore((Obj.StrokeCompanion = 4) and (Abs(Obj.GradientAngle) < 1E-9) and
+      (Abs(Obj.FillOpacity - 0.5) < 1E-9) and (Obj.GradientOpacity = 1),
+      'a fade from 0.5 to 1 at 0 degrees');
+    Obj := Evaluated.Scene.ObjectAt(5);
+    CheckCore((Obj.Gradient = tgLinear) and
+      (Abs(Obj.GradientAngle - 180) < 1E-9) and
+      (Obj.FillRGB = $FF0000) and (Obj.GradientRGB = $0000FF),
+      'bottom/top colours with shading angle 90 run at 180 degrees');
+    CheckNearCore(Obj.FillOpacity, 0.3, 1E-9, 'start opacity at 180 degrees');
+    CheckNearCore(Obj.GradientOpacity, 0.9, 1E-9, 'end opacity at 180 degrees');
+  finally
+    Evaluated.Free;
+    Syntax.Free;
+  end;
+  Reject(StringReplace(Source, 'path fading=tpxfadeR1x0',
+    'path fading=south', []), 'a foreign fading is unsupported');
+  Reject(StringReplace(Source, 'gray(50bp)=(0)', 'gray(50bp)=(0.5)', []),
+    'a fading declaration TpX does not write is unsupported');
+  Reject(StringReplace(Source, 'tpxfadeR1x0s}{', 'tpxfadeR1x0p5s}{', []),
+    'a fading whose name disagrees with its opacities is unsupported');
+  Reject(StringReplace(Source, 'rotate=30,', 'rotate=40,', []),
+    'a linear fading off the gradient direction is unsupported');
+  Reject(StringReplace(Source, 'fit fading=true]', 'fit fading=false]', []),
+    'a radial fading must be fitted');
+  Reject(StringReplace(Source, 'inner color=F, outer color=G, path',
+    'draw, inner color=F, outer color=G, path', []),
+    'a faded shading must not be stroked');
+  Reject(StringReplace(Source, 'inner color=F, outer color=G, path',
+    'fill opacity=0.5, inner color=F, outer color=G, path', []),
+    'a faded shading takes no fill opacity of its own');
+  Reject(StringReplace(Source, 'inner color=F, outer color=G, path',
+    'left color=F, right color=G, path', []),
+    'a radial fading on an axis shading is unsupported');
+  Reject(StringReplace(StringReplace(Source, '\path[inner color=F',
+    '\begin{scope}[transparency group, opacity=0.5]\path[inner color=F',
+    []), 'circle (5.00mm);', 'circle (5.00mm);\end{scope}', []),
+    'a fading inside a translucent scope is unsupported');
+end;
+
 initialization
   RegisterCoreTest('tikz-opacity-options', TestOpacityOptions);
   RegisterCoreTest('tikz-shading-options', TestShadingOptions);
+  RegisterCoreTest('tikz-tpx-fading-import', TestTpXFadingImport);
   RegisterCoreTest('tikz-pgf-scope-transform-order',
     TestPGFScopeTransformOrder);
   RegisterCoreTest('tikz-attached-devtikz-label-font',

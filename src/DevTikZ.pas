@@ -85,7 +85,7 @@ type
 
 implementation
 
-uses Math, ColorEtc, Output, Bitmaps;
+uses Math, ColorEtc, Output, Bitmaps, TikZFading;
 
 // =====================================================================
 // T_TikZ_Device
@@ -163,31 +163,17 @@ end;
 
 { Declares the fading of the current gradient once per picture and returns
   its name. A fading is a luminosity mask (white opaque, black clear) laid
-  out like the matching TikZ shading. pgf declarations inside a picture
-  need \pgfinterruptpicture. }
+  out like the matching TikZ shading (see TikZFading). }
 function T_TikZ_Device.DeclareFading: string;
 var
-  A0, A1: string;
+  Declaration: string;
 begin
-  A0 := OpacityText(fPaint.FillOpacity);
-  A1 := OpacityText(fPaint.GradientOpacity);
-  if fPaint.Gradient = fgRadial then Result := 'tpxfadeR'
-  else Result := 'tpxfadeL';
-  Result := Result + IntToStr(Round(ClampOpacity(fPaint.FillOpacity) * 1000)) +
-    'x' + IntToStr(Round(ClampOpacity(fPaint.GradientOpacity) * 1000));
+  Declaration := TikZFadingDeclaration(fPaint.Gradient = fgRadial,
+    TikZFadingStopText(fPaint.FillOpacity),
+    TikZFadingStopText(fPaint.GradientOpacity), Result);
   if fFadings.IndexOf(Result) >= 0 then Exit;
   fFadings.Add(Result);
-  WriteStream('\pgfinterruptpicture');
-  if fPaint.Gradient = fgRadial then
-    WriteStream(Format('\pgfdeclareradialshading{%ss}{\pgfpointorigin}' +
-      '{gray(0bp)=(%s);gray(25bp)=(%s);gray(50bp)=(%s)}', [Result, A0, A1, A1]))
-  else
-    WriteStream(Format('\pgfdeclarehorizontalshading{%ss}{100bp}' +
-      '{gray(0bp)=(%s);gray(25bp)=(%s);gray(75bp)=(%s);gray(100bp)=(%s)}',
-      [Result, A0, A0, A1, A1]));
-  WriteStream(Format('\pgfdeclarefading{%s}{\pgfuseshading{%ss}}',
-    [Result, Result]));
-  WriteLnStream('\endpgfinterruptpicture%');
+  WriteLnStream(Declaration);
 end;
 
 function FormatTikZNumber(const X: TRealType): string;

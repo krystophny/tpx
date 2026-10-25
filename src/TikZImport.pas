@@ -4,7 +4,7 @@ unit TikZImport;
 
 interface
 
-uses SysUtils, Classes, Math, TikZLexer, TikZSyntax;
+uses SysUtils, Classes, Math, TikZLexer, TikZSyntax, TikZFading;
 
 type
   TTikZSemanticOutcome = (tsoAccepted, tsoUnsupported, tsoInvalid,
@@ -18,7 +18,7 @@ type
     tdDotSize, tdStrokeColor, tdFillColor, tdTextColor, tdTextBody,
     tdCoordinateX, tdCoordinateY, tdWidth, tdHeight, tdRadius,
     tdRotation, tdStartAngle, tdEndAngle, tdTextAnchor, tdTextRotation,
-    tdArrows, tdStrokeOpacity, tdFillOpacity, tdOpacity);
+    tdArrows, tdStrokeOpacity, tdFillOpacity, tdOpacity, tdFillPaint);
   TTikZDependencySource = (tdepLocalLiteral, tdepSharedDefaultMacro,
     tdepLocalStyle, tdepNamedColor, tdepNamedCoordinate, tdepUnsupported);
 
@@ -77,6 +77,28 @@ type
     Gradient: TTikZGradientKind;
     GradientRGB: LongWord;
     GradientAngle: Double;
+    { End opacity of the gradient: FillOpacity unless a TpX fading gives
+      the two ends different opacities. }
+    GradientOpacity: Double;
+    { Source names of the start (fill) and end colours, '' when the fill
+      colour comes from the command alone. }
+    FillColorName, GradientColorName: string;
+    { 'path fading' naming a TpX fading declaration (see
+      TTikZFadingDeclaration); FillOpacity and GradientOpacity then come
+      from that declaration. A linear fading carries its literal
+      'fading transform' (shift in mm, rotation in degrees, scales of the
+      50bp ramp), which materialization checks against the gradient box. }
+    FadingName: string;
+    FadingDeclaration: SizeInt;
+    FadingShift: TTikZPoint;
+    FadingRotation, FadingXScale, FadingYScale: Double;
+    { Scene index of the stroke-only statement that TpX writes right after
+      a faded fill, because the fading would also fade the stroke; the two
+      statements form one native object. StrokeOf is the reverse link. }
+    StrokeCompanion, StrokeOf: SizeInt;
+    { Colour names defined between a faded fill and its stroke companion
+      (set on the companion). }
+    ColorsSinceFill: string;
     LineWidthMM, DashOnMM, DashOffMM: Double;
     LineKind: TTikZLineKind;
     TextBody, TextContent, ImageReference: RawByteString;
@@ -87,6 +109,7 @@ type
     { Normalized arrow tips ('', 'to', 'latex' or 'stealth'). }
     BeginArrow, EndArrow: string;
     Dependencies: TTikZPropertyDependencies;
+    constructor Create;
   end;
 
   TTikZMacroDefinition = record
@@ -96,6 +119,17 @@ type
     ExpressionSpan: TTikZSourceSpan;
   end;
   TTikZMacroDefinitions = array of TTikZMacroDefinition;
+
+  { A fading declaration in the form TpX writes:
+    \pgfinterruptpicture<shading><fading>\endpgfinterruptpicture. Span
+    covers the declaration with its trailing comment and line break. }
+  TTikZFadingDeclaration = record
+    Name: string;
+    Radial: Boolean;
+    StartOpacity, EndOpacity: Double;
+    Span: TTikZSourceSpan;
+  end;
+  TTikZFadingDeclarations = array of TTikZFadingDeclaration;
 
   TTikZSourceBinding = record
     ObjectIndex: SizeInt;
@@ -120,7 +154,9 @@ type
     OwnedBoundsOrigin: TTikZPoint;
     OwnedBoundsWidthMM, OwnedBoundsHeightMM: Double;
     MacroDefinitions: TTikZMacroDefinitions;
+    Fadings: TTikZFadingDeclarations;
     constructor Create;
+    function FindFading(const Name: string): SizeInt;
     destructor Destroy; override;
     function ObjectCount: SizeInt;
     function ObjectAt(Index: SizeInt): TTikZSceneObject;
@@ -185,6 +221,17 @@ type
     destructor Destroy; override;
     function DetachScene: TTikZScene;
   end;
+
+{ Fading transform of a linear TpX fading for a gradient from P1 to P2 (mm)
+  on a box with diagonal D (mm): its 50bp ramp along P1-P2, scaled to the
+  gradient length and to D across. }
+procedure TikZLinearFadingTransform(const P1, P2: TTikZPoint; D: Double;
+  out Shift: TTikZPoint; out Rotation, XScale, YScale: Double);
+{ True when a fading transform matches another within the precision TpX
+  writes (coordinates to 0.01 picture units, six significant digits). }
+function SameTikZFadingTransform(const ShiftA: TTikZPoint;
+  RotationA, XScaleA, YScaleA: Double; const ShiftB: TTikZPoint;
+  RotationB, XScaleB, YScaleB, UnitMM: Double): Boolean;
 
 function DefaultTikZImportOptions: TTikZImportOptions;
 function EvaluateTikZ(const Syntax: TTikZSyntaxResult;
@@ -259,6 +306,9 @@ type
       YSpan: TTikZSourceSpan; out IsRelative: Boolean;
       out XScaleToMM, YScaleToMM: Double; out XUnit, YUnit: string): Boolean;
     function ParseOptionGroup(GroupIndex: SizeInt): TTikZOptionValues;
+    function ParseFadingDeclaration(Index, Limit: SizeInt): SizeInt;
+    function ParseFadingTransform(const Text: string; Obj: TTikZSceneObject): Boolean;
+    procedure LinkStrokeCompanion(FillIndex: SizeInt; const DefinedColors: string);
     function FindOption(const Values: TTikZOptionValues;
       const Key: string): SizeInt;
     function ParseRGB(const Name: string; out RGB: LongWord): Boolean;
@@ -361,6 +411,56 @@ begin
   for I := 0 to FObjects.Count - 1 do TObject(FObjects[I]).Free;
   FObjects.Free;
   inherited Destroy;
+end;
+
+constructor TTikZSceneObject.Create;
+begin
+  inherited Create;
+  StrokeOpacity := 1;
+  FillOpacity := 1;
+  GradientOpacity := 1;
+  FadingDeclaration := -1;
+  StrokeCompanion := -1;
+  StrokeOf := -1;
+end;
+
+function TTikZScene.FindFading(const Name: string): SizeInt;
+var
+  I: SizeInt;
+begin
+  for I := 0 to High(Fadings) do
+    if Fadings[I].Name = Name then Exit(I);
+  Result := -1;
+end;
+
+procedure TikZLinearFadingTransform(const P1, P2: TTikZPoint; D: Double;
+  out Shift: TTikZPoint; out Rotation, XScale, YScale: Double);
+const
+  BPPerMM = 72 / 25.4;
+begin
+  Shift.X := (P1.X + P2.X) / 2;
+  Shift.Y := (P1.Y + P2.Y) / 2;
+  Rotation := ArcTan2(P2.Y - P1.Y, P2.X - P1.X) * 180 / Pi;
+  XScale := Sqrt(Sqr(P2.X - P1.X) + Sqr(P2.Y - P1.Y)) * BPPerMM / 50;
+  YScale := D * BPPerMM / 50;
+end;
+
+function SameTikZFadingTransform(const ShiftA: TTikZPoint;
+  RotationA, XScaleA, YScaleA: Double; const ShiftB: TTikZPoint;
+  RotationB, XScaleB, YScaleB, UnitMM: Double): Boolean;
+var
+  Tolerance, ScaleTolerance, Turn: Double;
+begin
+  { Coordinates are written to 0.01 picture units, so the box behind the
+    shift and the scales may move by that much. }
+  Tolerance := 0.011 * Abs(UnitMM) + 1E-6;
+  ScaleTolerance := 2 * Tolerance * 72 / 25.4 / 50;
+  Turn := RotationA - RotationB;
+  Turn := Turn - 360 * Round(Turn / 360);
+  Result := (Abs(ShiftA.X - ShiftB.X) <= Tolerance) and
+    (Abs(ShiftA.Y - ShiftB.Y) <= Tolerance) and (Abs(Turn) <= 0.01) and
+    (Abs(XScaleA - XScaleB) <= ScaleTolerance + 1E-5 * Abs(XScaleB)) and
+    (Abs(YScaleA - YScaleB) <= ScaleTolerance + 1E-5 * Abs(YScaleB));
 end;
 
 function TTikZScene.ObjectCount: SizeInt;
@@ -805,7 +905,11 @@ begin
       Exit;
     end;
     if Obj.StrokeEnabled then Obj.StrokeOpacity := FScopeOpacity.Opacity;
-    if Obj.FillEnabled then Obj.FillOpacity := FScopeOpacity.Opacity;
+    if Obj.FillEnabled then
+    begin
+      Obj.FillOpacity := FScopeOpacity.Opacity;
+      Obj.GradientOpacity := FScopeOpacity.Opacity;
+    end;
     AddDependency(Obj, tdOpacity, tdepUnsupported, '',
       FScopeOpacity.Option.ValueSpan, FScopeOpacity.Option.KeySpan,
       FScopeOpacity.Option.OptionSpan, SpanAtZero, False, -1, -1, 1, '',
@@ -1336,6 +1440,234 @@ begin
   end;
 end;
 
+function FindDependencyKind(Obj: TTikZSceneObject;
+  Kind: TTikZDependencyKind): SizeInt;
+var
+  I: SizeInt;
+begin
+  for I := 0 to High(Obj.Dependencies) do
+    if Obj.Dependencies[I].Kind = Kind then Exit(I);
+  Result := -1;
+end;
+
+{ Splits a key list at top-level commas. }
+function SplitTopLevel(const Text: string): TStringArray;
+var
+  I, Depth, Start, N: SizeInt;
+begin
+  Result := nil;
+  Depth := 0;
+  Start := 1;
+  for I := 1 to Length(Text) + 1 do
+  begin
+    if (I <= Length(Text)) and (Text[I] in ['{', '(', '[']) then Inc(Depth)
+    else if (I <= Length(Text)) and (Text[I] in ['}', ')', ']']) then Dec(Depth)
+    else if (I > Length(Text)) or ((Text[I] = ',') and (Depth = 0)) then
+    begin
+      N := Length(Result);
+      SetLength(Result, N + 1);
+      Result[N] := TrimASCII(Copy(Text, Start, I - Start));
+      Start := I + 1;
+    end;
+  end;
+end;
+
+// The literal fading transform TpX writes, with the keys shift (a braced
+// coordinate), rotate, xscale and yscale in that order. Unitless shift
+// coordinates use the picture basis.
+function TTikZEvaluator.ParseFadingTransform(const Text: string;
+  Obj: TTikZSceneObject): Boolean;
+var
+  S, Pair: string;
+  Items, Axes: TStringArray;
+  Values: array[0..3] of Double;
+  Shift: array[0..1] of Double;
+  I, Eq: SizeInt;
+  Dependency: string;
+const
+  Keys: array[0..3] of string = ('shift', 'rotate', 'xscale', 'yscale');
+begin
+  Result := False;
+  S := TrimASCII(Text);
+  if (Length(S) >= 2) and (S[1] = '{') and (S[Length(S)] = '}') then
+    S := Copy(S, 2, Length(S) - 2);
+  Items := SplitTopLevel(S);
+  if Length(Items) <> 4 then Exit;
+  for I := 0 to 3 do
+  begin
+    Eq := Pos('=', Items[I]);
+    if (Eq <= 0) or (TrimASCII(Copy(Items[I], 1, Eq - 1)) <> Keys[I]) then Exit;
+    S := TrimASCII(Copy(Items[I], Eq + 1, MaxInt));
+    if I > 0 then
+    begin
+      if not ParseInvariantFloat(S, Values[I]) then Exit;
+      Continue;
+    end;
+    if (Length(S) < 4) or (S[1] <> '{') or (S[Length(S)] <> '}') then Exit;
+    Pair := TrimASCII(Copy(S, 2, Length(S) - 2));
+    if (Length(Pair) < 2) or (Pair[1] <> '(') or (Pair[Length(Pair)] <> ')') then
+      Exit;
+    Axes := SplitTopLevel(Copy(Pair, 2, Length(Pair) - 2));
+    if Length(Axes) <> 2 then Exit;
+    for Eq := 0 to 1 do
+      if ParseInvariantFloat(Axes[Eq], Shift[Eq]) then
+      begin
+        if Eq = 0 then Shift[Eq] := Shift[Eq] * FResult.Scene.PictureScaleX
+        else Shift[Eq] := Shift[Eq] * FResult.Scene.PictureScaleY;
+      end
+      else if not ParseLengthExpression(Axes[Eq], Shift[Eq], Dependency) or
+        (Dependency <> '') then Exit;
+  end;
+  if (Values[2] <= 0) or (Values[3] <= 0) then Exit;
+  Obj.FadingShift.X := Shift[0];
+  Obj.FadingShift.Y := Shift[1];
+  Obj.FadingRotation := Values[1];
+  Obj.FadingXScale := Values[2];
+  Obj.FadingYScale := Values[3];
+  Result := True;
+end;
+
+{ Reads a fading declaration in the form TpX writes, starting at the
+  \pgfinterruptpicture token Index. Returns the token after it, or -1 when
+  the group is not exactly a TpX fading. }
+function TTikZEvaluator.ParseFadingDeclaration(Index, Limit: SizeInt): SizeInt;
+var
+  J, P, Q, N: SizeInt;
+  Tok: TTikZToken;
+  Body, Name, A0Text, A1Text: string;
+  Radial: Boolean;
+  A0, A1: Double;
+  Span: TTikZSourceSpan;
+  function Between(const Prefix: string; From: SizeInt;
+    out Value: string): SizeInt;
+  var K, L: SizeInt;
+  begin
+    Result := 0;
+    K := Pos(Prefix, Copy(Body, From, MaxInt));
+    if K <= 0 then Exit;
+    K := From + K - 1 + Length(Prefix);
+    L := K;
+    while (L <= Length(Body)) and (Body[L] <> ')') do Inc(L);
+    if L > Length(Body) then Exit;
+    Value := Copy(Body, K, L - K);
+    Result := L;
+  end;
+  function Canonical(const Text: string; out Value: Double): Boolean;
+  begin
+    Result := ParseInvariantFloat(Text, Value) and (Value >= 0) and
+      (Value <= 1) and (TikZFadingStopText(Value) = Text);
+  end;
+begin
+  Result := -1;
+  J := Index + 1;
+  while J < Limit do
+  begin
+    Tok := FDocument.TokenAt(J);
+    if (Tok.Kind = ttkControlWord) and (TokenText(J) = '\endpgfinterruptpicture') then
+      Break;
+    if (Tok.Kind in [ttkOpenBrace, ttkOpenBracket, ttkOpenParen]) and
+      (FOpenGroups[J] >= 0) then
+      J := FDocument.GroupAt(FOpenGroups[J]).CloseToken + 1
+    else Inc(J);
+  end;
+  if J >= Limit then Exit;
+  Body := string(SourceText(SpanBetween(Index + 1, J)));
+  if Copy(Body, 1, 25) = '\pgfdeclareradialshading{' then
+  begin
+    Radial := True;
+    P := 26;
+  end
+  else if Copy(Body, 1, 29) = '\pgfdeclarehorizontalshading{' then
+  begin
+    Radial := False;
+    P := 30;
+  end
+  else Exit;
+  Q := Pos('s}', Copy(Body, P, MaxInt));
+  if Q <= 0 then Exit;
+  Name := Copy(Body, P, Q - 1);
+  if Between('gray(0bp)=(', P, A0Text) = 0 then Exit;
+  if Radial then N := Between('gray(25bp)=(', P, A1Text)
+  else N := Between('gray(75bp)=(', P, A1Text);
+  if (N = 0) or not Canonical(A0Text, A0) or not Canonical(A1Text, A1) then Exit;
+  { The name spells out the stops, and the whole body is the writer's. }
+  if (Name <> TikZFadingName(Radial, A0Text, A1Text)) or
+    (Body <> TikZFadingBody(Name, Radial, A0Text, A1Text)) then Exit;
+  { The declaration owns its line: the trailing comment and line break. }
+  Span := SpanBetween(Index, J + 1);
+  P := Span.EndByte;
+  if (P < Length(FSource)) and (FSource[P] = Ord('%')) then
+    while (P < Length(FSource)) and not (FSource[P] in [10, 13]) do Inc(P);
+  if (P < Length(FSource)) and (FSource[P] = 13) then Inc(P);
+  if (P < Length(FSource)) and (FSource[P] = 10) then Inc(P);
+  Span.EndByte := P;
+  N := Length(FResult.Scene.Fadings);
+  SetLength(FResult.Scene.Fadings, N + 1);
+  FResult.Scene.Fadings[N].Name := Name;
+  FResult.Scene.Fadings[N].Radial := Radial;
+  FResult.Scene.Fadings[N].StartOpacity := A0;
+  FResult.Scene.Fadings[N].EndOpacity := A1;
+  FResult.Scene.Fadings[N].Span := Span;
+  Result := J + 1;
+end;
+
+function SameScenePoint(const A, B: TTikZPoint): Boolean;
+begin
+  Result := (Abs(A.X - B.X) <= 1E-9 * Max(1, Abs(A.X))) and
+    (Abs(A.Y - B.Y) <= 1E-9 * Max(1, Abs(A.Y)));
+end;
+
+function SameSceneValue(A, B: Double): Boolean;
+begin
+  Result := Abs(A - B) <= 1E-9 * Max(1, Abs(A));
+end;
+
+{ True when two scene objects describe the same path geometry. }
+function SameSceneGeometry(A, B: TTikZSceneObject): Boolean;
+var
+  I: SizeInt;
+begin
+  Result := False;
+  if (A.Kind <> B.Kind) or (Length(A.Commands) <> Length(B.Commands)) then Exit;
+  for I := 0 to High(A.Commands) do
+    if (A.Commands[I].Kind <> B.Commands[I].Kind) or
+      not SameScenePoint(A.Commands[I].P1, B.Commands[I].P1) or
+      ((A.Commands[I].Kind = tpcCubic) and
+      (not SameScenePoint(A.Commands[I].P2, B.Commands[I].P2) or
+      not SameScenePoint(A.Commands[I].P3, B.Commands[I].P3))) then Exit;
+  Result := SameScenePoint(A.Center, B.Center) and
+    SameScenePoint(A.Origin, B.Origin) and
+    SameSceneValue(A.RadiusX, B.RadiusX) and
+    SameSceneValue(A.RadiusY, B.RadiusY) and
+    SameSceneValue(A.WidthMM, B.WidthMM) and
+    SameSceneValue(A.HeightMM, B.HeightMM) and
+    SameSceneValue(A.Rotation, B.Rotation) and
+    SameSceneValue(A.StartAngle, B.StartAngle) and
+    SameSceneValue(A.EndAngle, B.EndAngle);
+end;
+
+{ The statement after a faded fill completes it when it strokes the same
+  geometry and paints nothing else, which is how TpX writes the stroke of
+  such a fill. }
+procedure TTikZEvaluator.LinkStrokeCompanion(FillIndex: SizeInt;
+  const DefinedColors: string);
+var
+  Fill, Stroke: TTikZSceneObject;
+  StrokeIndex: SizeInt;
+begin
+  StrokeIndex := FResult.Scene.ObjectCount - 1;
+  if (FillIndex < 0) or (StrokeIndex <> FillIndex + 1) then Exit;
+  Fill := FResult.Scene.ObjectAt(FillIndex);
+  Stroke := FResult.Scene.ObjectAt(StrokeIndex);
+  if (Fill.FadingName = '') or Fill.StrokeEnabled or
+    not Stroke.StrokeEnabled or Stroke.FillEnabled or
+    (Stroke.Gradient <> tgNone) or (Stroke.FadingName <> '') or
+    not SameSceneGeometry(Fill, Stroke) then Exit;
+  Fill.StrokeCompanion := StrokeIndex;
+  Stroke.StrokeOf := FillIndex;
+  Stroke.ColorsSinceFill := DefinedColors;
+end;
+
 function TTikZEvaluator.FindOption(const Values: TTikZOptionValues;
   const Key: string): SizeInt;
 var
@@ -1650,6 +1982,8 @@ var
   ScopeOption: TTikZOptionValue;
   DX, DY, Number: Double;
   Dependency: string;
+  PendingFill, CountBefore: SizeInt;
+  ColorsSincePending: string;
 
   function ReadScopeName(var Cursor: SizeInt; out Name: string): Boolean;
   var
@@ -1791,6 +2125,8 @@ begin
   FScopeOpacity.Opacity := 1;
   ScopeStack := nil;
   OpacityStack := nil;
+  PendingFill := -1;
+  ColorsSincePending := '';
   I := FDocument.Region.FirstContentToken;
   EndToken := FDocument.Region.PastLastContentToken;
   while I < EndToken do
@@ -1806,6 +2142,7 @@ begin
       Command := TokenText(I);
       if (Command = '\begin') or (Command = '\end') then
       begin
+        PendingFill := -1;
         J := I + 1;
         if not ReadScopeName(J, ScopeName) then
         begin
@@ -1860,7 +2197,28 @@ begin
       begin
         J := I;
         ParseColorDefinition(J, EndToken);
+        if (PendingFill >= 0) and (J > I) then
+        begin
+          K := NextSignificant(I + 1, EndToken);
+          if (K < EndToken) and (FOpenGroups[K] >= 0) then
+            ColorsSincePending := ColorsSincePending + ',' +
+              string(SourceText(SpanBetween(K + 1,
+              FDocument.GroupAt(FOpenGroups[K]).CloseToken))) + ',';
+        end;
         if J > I then I := J else Inc(I);
+        Continue;
+      end;
+      if Command = '\pgfinterruptpicture' then
+      begin
+        J := ParseFadingDeclaration(I, EndToken);
+        if J < 0 then
+        begin
+          Unsupported(Tok.Span,
+            'Only the fading declarations TpX writes are supported in ' +
+            '\pgfinterruptpicture');
+          Inc(I);
+        end
+        else I := J;
         Continue;
       end;
       if (Command = '\path') or (Command = '\draw') or
@@ -1885,7 +2243,22 @@ begin
           Invalid(Tok.Span, 'TikZ statement is missing its semicolon');
           Exit;
         end;
+        CountBefore := FResult.Scene.ObjectCount;
         ParseStatement(I, J, Copy(Command, 2, MaxInt));
+        if FResult.Scene.ObjectCount = CountBefore + 1 then
+        begin
+          if PendingFill >= 0 then
+            LinkStrokeCompanion(PendingFill, ColorsSincePending);
+          PendingFill := -1;
+          ColorsSincePending := '';
+          if FResult.Scene.ObjectAt(CountBefore).FadingName <> '' then
+            PendingFill := CountBefore;
+        end
+        else
+        begin
+          PendingFill := -1;
+          ColorsSincePending := '';
+        end;
         I := J + 1;
         Continue;
       end;
@@ -1983,8 +2356,19 @@ var
     ShadeKind: TTikZGradientKind;
     ShadeAngle: Double;
     TopRGB, BottomRGB, InnerRGB, OuterRGB: LongWord;
+    TopName, BottomName, InnerName, OuterName: string;
     HaveTop, HaveBottom, HaveInner, HaveOuter: Boolean;
-    ShadeSpan: TTikZSourceSpan;
+    ShadeSpan, FadingSpan: TTikZSourceSpan;
+    FitFading: Integer;
+    HaveFadingTransform, LeftRight: Boolean;
+    Fading: TTikZFadingDeclaration;
+    Turn: Double;
+    procedure AddFillPaint;
+    begin
+      AddDependency(AObj, tdFillPaint, tdepLocalStyle, Item.Key,
+        Item.ValueSpan, Item.KeySpan, OptSpan, SpanAtZero, True,
+        -1, -1, 1, '', False);
+    end;
   begin
     AObj.LineWidthMM := FResult.Scene.LineWidthBaseMM;
     AObj.LineKind := tlSolid;
@@ -2002,6 +2386,12 @@ var
     HaveInner := False;
     HaveOuter := False;
     ShadeSpan := SpanAtZero;
+    FadingSpan := SpanAtZero;
+    FitFading := -1;
+    HaveFadingTransform := False;
+    LeftRight := False;
+    AObj.FadingName := '';
+    AObj.FadingDeclaration := -1;
     AObj.StrokeEnabled := (RootCommand = 'draw') or (RootCommand = 'filldraw');
     AObj.FillEnabled := (RootCommand = 'fill') or (RootCommand = 'filldraw');
     OptSpan := SpanAtZero;
@@ -2045,7 +2435,11 @@ var
           Unsupported(Item.OptionSpan, 'Unresolved TikZ color: ' + CName);
           Continue;
         end;
-        if Item.Key = 'fill' then AObj.FillRGB := RGB
+        if Item.Key = 'fill' then
+        begin
+          AObj.FillRGB := RGB;
+          AObj.FillColorName := CName;
+        end
         else AObj.StrokeRGB := RGB;
         ColorSource := tdepLocalLiteral;
         DefSpan := SpanAtZero;
@@ -2217,17 +2611,20 @@ var
           Continue;
         end;
         ShadeSpan := Item.OptionSpan;
+        AddFillPaint;
         if (Item.Key = 'inner color') or (Item.Key = 'outer color') then
         begin
           ShadeKind := tgRadial;
           if Item.Key = 'inner color' then
           begin
             InnerRGB := RGB;
+            InnerName := TrimASCII(CName);
             HaveInner := True;
           end
           else
           begin
             OuterRGB := RGB;
+            OuterName := TrimASCII(CName);
             HaveOuter := True;
           end;
         end
@@ -2237,16 +2634,19 @@ var
           if (Item.Key = 'left color') or (Item.Key = 'top color') then
           begin
             TopRGB := RGB;
+            TopName := TrimASCII(CName);
             HaveTop := True;
           end
           else
           begin
             BottomRGB := RGB;
+            BottomName := TrimASCII(CName);
             HaveBottom := True;
           end;
           if (Item.Key = 'left color') or (Item.Key = 'right color') then
             ShadeAngle := 90
           else ShadeAngle := 0;
+          LeftRight := (Item.Key = 'left color') or (Item.Key = 'right color');
         end;
       end
       else if (not IsNodeStyle) and (Item.Key = 'shading angle') then
@@ -2254,9 +2654,39 @@ var
         if not ParseInvariantFloat(TrimASCII(CName), Value) then
           Unsupported(Item.OptionSpan, 'Unsupported TikZ shading angle')
         else ShadeAngle := Value;
+        AddFillPaint;
+      end
+      else if (not IsNodeStyle) and (Item.Key = 'path fading') then
+      begin
+        { Only the fadings TpX declares itself (see EvaluatePicture). }
+        MacroIndex := FResult.Scene.FindFading(TrimASCII(CName));
+        if MacroIndex < 0 then
+          Unsupported(Item.OptionSpan, 'Unsupported TikZ fading: ' + CName)
+        else
+        begin
+          AObj.FadingName := TrimASCII(CName);
+          AObj.FadingDeclaration := MacroIndex;
+          FadingSpan := Item.OptionSpan;
+        end;
+        AddFillPaint;
+      end
+      else if (not IsNodeStyle) and (Item.Key = 'fit fading') then
+      begin
+        if TrimASCII(CName) = 'true' then FitFading := 1
+        else if TrimASCII(CName) = 'false' then FitFading := 0
+        else Unsupported(Item.OptionSpan, 'Unsupported TikZ fit fading: ' + CName);
+        AddFillPaint;
+      end
+      else if (not IsNodeStyle) and (Item.Key = 'fading transform') then
+      begin
+        if ParseFadingTransform(CName, AObj) then HaveFadingTransform := True
+        else Unsupported(Item.OptionSpan,
+          'Unsupported TikZ fading transform: ' + CName);
+        AddFillPaint;
       end
       else if (not IsNodeStyle) and (Item.Key = 'shading') then
       begin
+        AddFillPaint;
         if TrimASCII(CName) = 'axis' then ShadeKind := tgLinear
         else if TrimASCII(CName) = 'radial' then ShadeKind := tgRadial
         else Unsupported(Item.OptionSpan, 'Unsupported TikZ shading: ' + CName);
@@ -2301,6 +2731,8 @@ var
         AObj.FillEnabled := True;
         AObj.FillRGB := InnerRGB;
         AObj.GradientRGB := OuterRGB;
+        AObj.FillColorName := InnerName;
+        AObj.GradientColorName := OuterName;
       end;
     end
     else if ShadeKind = tgLinear then
@@ -2310,24 +2742,80 @@ var
       else
       begin
         { The axis shading runs from bottom to top, rotated by its angle;
-          a run from right to left is kept as left to right. }
+          left and right colours, a run from right to left, are kept as
+          left to right. }
         AObj.Gradient := tgLinear;
         AObj.FillEnabled := True;
         AObj.GradientAngle := 90 + ShadeAngle;
         AObj.GradientAngle := AObj.GradientAngle -
           360 * Floor(AObj.GradientAngle / 360);
-        if Abs(AObj.GradientAngle - 180) < 1E-9 then
+        if LeftRight and (Abs(AObj.GradientAngle - 180) < 1E-9) then
         begin
           AObj.GradientAngle := 0;
           AObj.FillRGB := TopRGB;
           AObj.GradientRGB := BottomRGB;
+          AObj.FillColorName := TopName;
+          AObj.GradientColorName := BottomName;
         end
         else
         begin
           AObj.FillRGB := BottomRGB;
           AObj.GradientRGB := TopRGB;
+          AObj.FillColorName := BottomName;
+          AObj.GradientColorName := TopName;
         end;
       end;
+    end;
+    { A fading is accepted exactly in the form TpX writes for a gradient
+      whose ends differ in opacity: on an unstroked shading of the same
+      kind, without a fill opacity of its own, fitted to the path when
+      radial and placed along the gradient direction when linear. }
+    if AObj.FadingName <> '' then
+    begin
+      Fading := FResult.Scene.Fadings[AObj.FadingDeclaration];
+      { The fading runs from its start opacity along its rotation. }
+      Turn := AObj.FadingRotation - AObj.GradientAngle;
+      Turn := Turn - 360 * Round(Turn / 360);
+      if (AObj.Gradient = tgNone) or
+        (Fading.Radial <> (AObj.Gradient = tgRadial)) then
+        Unsupported(FadingSpan,
+          'This TikZ fading does not belong to the shading of its path')
+      else if AObj.StrokeEnabled then
+        Unsupported(FadingSpan,
+          'A faded TikZ shading is drawn without a stroke; TpX strokes it ' +
+          'as a separate path')
+      else if (FindDependencyKind(AObj, tdFillOpacity) >= 0) or
+        (FindDependencyKind(AObj, tdOpacity) >= 0) then
+        Unsupported(FadingSpan,
+          'A faded TikZ shading takes both opacities from its fading')
+      else if (FCurrentTransform.XX <> 1) or (FCurrentTransform.XY <> 0) or
+        (FCurrentTransform.YX <> 0) or (FCurrentTransform.YY <> 1) or
+        (FCurrentTransform.TX <> 0) or (FCurrentTransform.TY <> 0) or
+        (FResult.Scene.PictureShearX <> 0) or
+        (FResult.Scene.PictureShearY <> 0) then
+        Unsupported(FadingSpan,
+          'A TikZ fading inside a transformed scope is not supported')
+      else if FScopeOpacity.Opacity < 1 then
+        Unsupported(FadingSpan,
+          'A TikZ fading inside a translucent scope is not supported')
+      else if Fading.Radial and ((FitFading <> 1) or HaveFadingTransform) then
+        Unsupported(FadingSpan,
+          'A radial TpX fading must be fitted to its path')
+      else if not Fading.Radial and ((FitFading <> 0) or
+        not HaveFadingTransform or (Abs(Turn) > 0.01)) then
+        Unsupported(FadingSpan,
+          'A linear TpX fading must follow the gradient direction')
+      else
+      begin
+        AObj.FillOpacity := Fading.StartOpacity;
+        AObj.GradientOpacity := Fading.EndOpacity;
+      end;
+    end
+    else
+    begin
+      if (FitFading >= 0) or HaveFadingTransform then
+        Unsupported(OptSpan, 'TikZ fading options need a TpX path fading');
+      AObj.GradientOpacity := AObj.FillOpacity;
     end;
     if ((AObj.BeginArrow <> '') or (AObj.EndArrow <> '')) and
       not AObj.StrokeEnabled then

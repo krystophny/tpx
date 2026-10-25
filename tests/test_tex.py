@@ -349,6 +349,75 @@ class TeXTests(unittest.TestCase):
                 self.assertLess(abs(stroke[1] - 128), 3, stroke)
                 self.assertEqual(overlap, stroke)
 
+    def ppm(self, pdf):
+        image = self.root / (Path(pdf).stem + ".ppm")
+        self.run_command(["gs", "-q", "-dSAFER", "-dBATCH", "-dNOPAUSE",
+                          "-sDEVICE=ppmraw", "-r72", "-sOutputFile=" + str(image),
+                          pdf])
+        data = image.read_bytes()
+        header = re.sub(rb"#[^\n]*\n", b"", data[:200]).split()
+        width, height = int(header[1]), int(header[2])
+        return width, height, data[-3 * width * height:]
+
+    @unittest.skipUnless(shutil.which("gs"), "Ghostscript is not installed")
+    def test_reopened_faded_gradients_render_alike(self):
+        # Gradients whose ends differ in opacity, over a white sheet that
+        # fixes the page box: TpX's export, and the TikZ document TpX
+        # writes after reopening that export, render the same.
+        source = self.root / "faded.TpX"
+        source.write_text(
+            '%<TpX v="5" PicScale="1" TeXFormat="tikz" PdfTeXFormat="tikz" '
+            'TeXFigure="none" TeXCenterFigure="0" Border="0">\n'
+            '%<rect x="-5" y="-5" w="100" h="20" li="none" fill="#FFFFFF"/>\n'
+            '%<rect x="0" y="0" w="30" h="10" lc="#00FF00" fill="#0000FF" '
+            'grad="linear" gc="#FFFF00" go="0.2" ga="30"/>\n'
+            '%<circle x="50" y="5" d="10" li="none" fill="#D00000" '
+            'grad="radial" go="0"/>\n'
+            '%<rect x="60" y="0" w="30" h="10" li="none" fill="#000000" '
+            'fo="0" grad="linear" gc="#000000" ga="180"/>\n'
+            '%</TpX>\n')
+        self.run_command([BINARY, "-f", source, "-o", "saved.TpX"])
+        exported = "".join(line for line in
+                           (self.root / "saved.TpX").read_text().splitlines(True)
+                           if not line.startswith("%"))
+        (self.root / "exported.tikz").write_text(exported, newline="")
+        (self.root / "original.tex").write_text(
+            "\\documentclass{standalone}\\usepackage{tikz}\\begin{document}"
+            "\\input{exported.tikz}\\end{document}\n")
+        # Reopen the export and write the reopened model as a new TikZ
+        # document with TpX's TikZ save.
+        self.run_command([BINARY, "-f", "exported.tikz", "-o", "reopened.TpX"])
+        self.run_command([BINARY, "-f", "reopened.TpX", "-o", "reopened.tex"])
+        self.assertIn("path fading=",
+                      (self.root / "reopened.tex").read_text())
+        for name in ("original", "reopened"):
+            self.run_command(["pdflatex", "-halt-on-error",
+                              "-interaction=nonstopmode", name + ".tex"])
+        width, height, original = self.ppm("original.pdf")
+        self.assertEqual(self.ppm("reopened.pdf")[:2], (width, height))
+        reopened = self.ppm("reopened.pdf")[2]
+
+        def pixel(data, x, y):
+            # Drawing millimetres from the sheet corner (-5, 15).
+            i = 3 * (round((15 - y) * 72 / 25.4) * width +
+                     round((x + 5) * 72 / 25.4))
+            return tuple(data[i:i + 3])
+
+        points = [(x, y) for x in (2, 8, 15, 22, 28, 47, 50, 53, 62, 75, 88)
+                  for y in (2, 5, 8)]
+        for x, y in points:
+            a, b = pixel(original, x, y), pixel(reopened, x, y)
+            self.assertLess(max(abs(p - q) for p, q in zip(a, b)), 12,
+                            (x, y, a, b))
+        # The fades are there: blue fades towards the top right, the red
+        # disc to its rim, and the black band from clear on the right to
+        # opaque on the left.
+        self.assertGreater(sum(pixel(original, 28, 8)), sum(pixel(original, 2, 2)))
+        self.assertLess(pixel(original, 50, 5)[1], 40)
+        self.assertGreater(pixel(original, 54.5, 5)[1], 200)
+        self.assertLess(sum(pixel(original, 62, 5)), 90)
+        self.assertGreater(sum(pixel(original, 88, 5)), 650)
+
     def test_scientific_examples_compile_with_tikz(self):
         examples = Path(__file__).resolve().parents[1] / "examples"
         expected_math = {
