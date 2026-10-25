@@ -1912,3 +1912,104 @@ begin
     Curve.Free;
   end;
 end;
+
+procedure TestArcArrowSymmetry;
+const
+  { TRealType is single precision here. }
+  Tolerance = 1e-4;
+  Radius = 10;
+  { Both h41 and h44 reach x = 4 in the arrow table, which is what
+    MeasureArrow returns for them. }
+  HeadLength = 4;
+
+  procedure CheckArc(const Name: string; SA, EA, Factor: TRealType;
+    Kind: TArrowKind; OnArc: Boolean);
+  var
+    Arc: TArc2D;
+    Begin_, End_: TPiece;
+    I, J: Integer;
+    Tip, Base: TPoint2D;
+    Chord: TRealType;
+    Found: Boolean;
+
+    function Mirrored(const P: TPoint2D): TPoint2D;
+    begin
+      Result := Point2D(-P.X, P.Y);
+    end;
+
+    procedure CheckBase(const Head: TPiece; const Which: string);
+    begin
+      { The head tip sits on the arc and the middle of the two base corners
+        (the last two points before the closing one) lies on the arc, at the
+        chord distance of the arrow length from the tip. }
+      Tip := Head[0];
+      Base := MixPoint(Head[1], Head[Head.Count - 2], 0.5);
+      Check(Abs(PointDistance2D(Point2D(0, 0), Tip) - Radius) < Tolerance,
+        Format('%s: %s arrow tip is off the arc', [Name, Which]));
+      Check(Abs(PointDistance2D(Point2D(0, 0), Base) - Radius) < Tolerance,
+        Format('%s: %s arrow base is off the arc', [Name, Which]));
+      Check(Abs(PointDistance2D(Tip, Base) - Chord) < Tolerance,
+        Format('%s: %s arrow base is %.6f from the tip instead of %.6f',
+        [Name, Which, PointDistance2D(Tip, Base), Chord]));
+    end;
+
+  begin
+    Arc := TArc2D.CreateSpec(-1, Point2D(0, 0), Radius, SA, EA);
+    try
+      Arc.BeginArrowKind := Kind;
+      Arc.EndArrowKind := Kind;
+      Arc.ArrowSizeFactor := Factor;
+      Arc.UpdateExtension(Arc);
+      Check(Arc.Pieces.Count = 3, Name + ': arc did not produce two arrowheads');
+      Begin_ := Arc.Pieces[1];
+      End_ := Arc.Pieces[2];
+      Chord := Arc.ArrowSize * HeadLength;
+      if OnArc then
+      begin
+        CheckBase(Begin_, 'begin');
+        CheckBase(End_, 'end');
+      end;
+      { The arc is symmetric about the y axis, so the end head is the mirror
+        image of the begin head. }
+      Check(Begin_.Count = End_.Count, Name + ': arrowheads differ in size');
+      for I := 0 to Begin_.Count - 1 do
+      begin
+        Found := False;
+        for J := 0 to End_.Count - 1 do
+          if PointDistance2D(Mirrored(Begin_[I]), End_[J]) < Tolerance then
+            Found := True;
+        Check(Found, Format('%s: begin arrow point %d has no mirror image in '
+          + 'the end arrow', [Name, I]));
+      end;
+    finally
+      Arc.Free;
+    end;
+  end;
+
+var
+  Arc: TArc2D;
+begin
+  { Mirroring x -> -x maps angle t to Pi - t. }
+  CheckArc('Short arc', Pi / 6, 5 * Pi / 6, 1, arrH44, True);
+  CheckArc('Large arc', -Pi / 3, 4 * Pi / 3, 1, arrH44, True);
+  CheckArc('Larger arrow', Pi / 6, 5 * Pi / 6, 2.5, arrH44, True);
+  CheckArc('Bent arrow', Pi / 6, 5 * Pi / 6, 1, arrH41, True);
+  { A chord longer than the radius is limited to a sixth of the circle, so the
+    base is no longer on the arc, but the heads stay symmetric. }
+  CheckArc('Oversized arrow', Pi / 6, 5 * Pi / 6, 4, arrH44, False);
+  { A zero arrow size gives no arrow geometry and no undefined angle. }
+  Arc := TArc2D.CreateSpec(-1, Point2D(0, 0), Radius, Pi / 6, 5 * Pi / 6);
+  try
+    Arc.BeginArrowKind := arrH44;
+    Arc.EndArrowKind := arrH44;
+    Arc.ArrowSizeFactor := 0;
+    Arc.UpdateExtension(Arc);
+    Check(Arc.Pieces.Count = 3, 'Zero-size arrows changed the piece count');
+    Check((Arc.Pieces[1].Count > 0) and
+      (PointDistance2D(Arc.Pieces[1][0], Arc.Pieces[1][1]) < Tolerance) and
+      (PointDistance2D(Arc.Pieces[2][0], Arc.Pieces[2][1]) < Tolerance),
+      'Zero-size arrowheads are not degenerate');
+  finally
+    Arc.Free;
+  end;
+end;
