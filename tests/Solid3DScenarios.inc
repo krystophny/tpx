@@ -545,6 +545,77 @@ begin
   WriteLn('PASS solid3d-editing');
 end;
 
+procedure TestSolid3DInsertFit;
+var
+  Drawing: TDrawing2D;
+  Mode: TInsertSizedGrObjMode;
+  Solid: TSolid3D;
+  Kind: TSolidKind;
+  Persp: Boolean;
+  A, B: TPoint2D;
+  Preview, Final: TRect2D;
+  W, H, Tol: Double;
+  What: string;
+  function SameBox(const R, S: TRect2D): Boolean;
+  begin
+    Result := (Abs(R.Left - S.Left) <= Tol) and (Abs(R.Right - S.Right) <= Tol) and
+      (Abs(R.Bottom - S.Bottom) <= Tol) and (Abs(R.Top - S.Top) <= Tol);
+  end;
+begin
+  Drawing := MainForm.TheDrawing;
+  Drawing.DeleteAllObjects;
+  // Drag with the mouse handlers of the insert tool: the preview while
+  // dragging and the placed object must both be fitted into the dragged box.
+  for Persp := False to True do
+    for Kind := skBox to skTorus do
+    begin
+      What := SolidKindNames[Kind] + IfThen(Persp, ' (perspective)', '');
+      MainForm.EventManager.SendMessage(Msg_InsertBox + Ord(Kind) - Ord(skBox), nil);
+      Check(MainForm.EventManager.Mode is TInsertSizedGrObjMode,
+        What + ': the insert tool did not start the sized insert mode');
+      Mode := TInsertSizedGrObjMode(MainForm.EventManager.Mode);
+      Solid := Mode.Obj as TSolid3D;
+      Solid.Perspective := Persp;
+      Mode.OnMouseDown(nil, mbLeft, [], 60, 50);
+      Mode.OnMouseMove(nil, [], 160, 150);
+      Mode.OnMouseMove(nil, [], 260, 200);
+      A := MainForm.LocalView.GetSnappedPoint(
+        MainForm.LocalView.ScreenToViewport(Point2D(60, 50)));
+      B := MainForm.LocalView.GetSnappedPoint(
+        MainForm.LocalView.ScreenToViewport(Point2D(260, 200)));
+      W := Abs(B.X - A.X);
+      H := Abs(B.Y - A.Y);
+      Tol := 1E-6 * Max(W, H);
+      Check((W > 1) and (H > 1), What + ': the drag did not span a box');
+      Preview := Solid.BoundingBox;
+      Mode.OnMouseUp(nil, mbLeft, [], 260, 200);
+      Check(MainForm.EventManager.Mode <> Mode,
+        What + ': releasing the mouse did not finish the insertion');
+      Check(Drawing.ObjectList.LastObj = Solid,
+        What + ': the dragged object was not added');
+      Final := Solid.BoundingBox;
+      Check(Solid.Placed and SameBox(Final, Preview),
+        What + ': the placed object differs from the drag preview');
+      Check((Final.Left >= Min(A.X, B.X) - Tol) and
+        (Final.Right <= Max(A.X, B.X) + Tol) and
+        (Final.Bottom >= Min(A.Y, B.Y) - Tol) and
+        (Final.Top <= Max(A.Y, B.Y) + Tol),
+        What + ': the placed object leaves the dragged box');
+      Check((Abs((Final.Left + Final.Right) - (A.X + B.X)) <= 2 * Tol) and
+        (Abs((Final.Bottom + Final.Top) - (A.Y + B.Y)) <= 2 * Tol),
+        What + ': the placed object is not centred in the dragged box');
+      Check((Abs((Final.Right - Final.Left) - W) <= Tol) or
+        (Abs((Final.Top - Final.Bottom) - H) <= Tol),
+        What + ': the placed object does not fill the dragged box');
+      // A redraw keeps the placement.
+      Solid.UpdateExtension(Solid);
+      Check(SameBox(Solid.BoundingBox, Final),
+        What + ': the placed object changed size on redraw');
+    end;
+  Drawing.DeleteAllObjects;
+  WriteLn('PASS solid3d-insert-fit');
+end;
+
 procedure TestSolid3DInspector;
 var
   Drawing: TDrawing2D;

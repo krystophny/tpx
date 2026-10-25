@@ -2370,6 +2370,7 @@ begin
     else if ParamStr(1) = 'solid3d-formats' then TestSolid3DFormats
     else if ParamStr(1) = 'solid3d-open-save' then TestSolid3DOpenSave
     else if ParamStr(1) = 'solid3d-editing' then TestSolid3DEditing
+    else if ParamStr(1) = 'solid3d-insert-fit' then TestSolid3DInsertFit
     else if ParamStr(1) = 'solid3d-inspector' then TestSolid3DInspector
     else if ParamStr(1) = 'open-examples' then TestOpenExamples
     else if ParamStr(1) = 'open-dialog-all-formats' then TestOpenDialogAllFormats
