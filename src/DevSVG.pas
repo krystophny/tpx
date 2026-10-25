@@ -14,10 +14,15 @@ type
     fDrawing2D: TDrawing2D;
     fXML: TXmlOutput;
     fPattIDs: TStringList;
+    fGradientCount: Integer;
+    fGradientID: string;
     fGlobalFaceName: string;
     fUseViewportOverride: Boolean;
     fPageWidthMM, fPageHeightMM: TRealType;
     fViewBoxLeft, fViewBoxTop, fViewBoxWidth, fViewBoxHeight: TRealType;
+    procedure WriteGradientDefs(const FillColor: TColor;
+      const Hatching: THatching; const RotDeg: TRealType;
+      const Center: TPoint2D);
     procedure SetStream(AStream: TStream); override;
     procedure RegisterPatt(const Hatching: THatching;
       const HatchColor, FillColor: TColor);
@@ -429,6 +434,13 @@ begin
   if Hatching <> haNone then
     fXML.AddAttribute('fill',
       'url(#' + GetPattID(Hatching, HatchColor, FillColor) + ')')
+  else if fGradientID <> '' then
+  begin
+    { Stop opacities carry the gradient's opacity. }
+    fXML.AddAttribute('fill', 'url(#' + fGradientID + ')');
+    fGradientID := '';
+    Exit;
+  end
   else if FillColor <> clDefault then
     fXML.AddAttribute('fill', ColorToHtml(FillColor))
   else
@@ -436,6 +448,74 @@ begin
   if ((Hatching <> haNone) or (FillColor <> clDefault)) and
     not IsOpaque(fPaint.FillOpacity) then
     fXML.AddAttribute('fill-opacity', OpacityText(fPaint.FillOpacity));
+end;
+
+{ A gradient fill is written as its own definition right before the shape,
+  in user space so that it follows the box layout of TPaintStyle exactly.
+  A rotated element maps user space through its rotation, which
+  RotDeg (SVG degrees about Center) undoes. }
+procedure TSvgDevice.WriteGradientDefs(const FillColor: TColor;
+  const Hatching: THatching; const RotDeg: TRealType;
+  const Center: TPoint2D);
+var
+  P1, P2, C0, C1: TPoint2D;
+  Rotation: string;
+  procedure WriteStop(const Offset: string; const Color: TColor;
+    const Opacity: TRealType);
+  begin
+    fXML.OpenTag('stop');
+    fXML.AddAttribute('offset', Offset);
+    fXML.AddAttribute('stop-color', ColorToHtml(Color));
+    if not IsOpaque(Opacity) then
+      fXML.AddAttribute('stop-opacity', OpacityText(Opacity));
+    fXML.CloseTag;
+  end;
+begin
+  fGradientID := '';
+  if (FillColor = clDefault) or (Hatching <> haNone) or
+    not HasGradient(fPaint) then Exit;
+  Inc(fGradientCount);
+  fGradientID := 'tpxgrad' + IntToStr(fGradientCount);
+  if RotDeg <> 0 then
+    Rotation := SVGFormat('rotate(%.15g %.15g %.15g)',
+      [RotDeg, Center.X, Center.Y])
+  else Rotation := '';
+  fXML.OpenTag('defs');
+  if fPaint.Gradient = fgRadial then
+  begin
+    C0 := TransformPoint2D(fPaint.Box.FirstEdge, fT);
+    C1 := TransformPoint2D(fPaint.Box.SecondEdge, fT);
+    fXML.OpenTag('radialGradient');
+    fXML.AddAttribute('id', fGradientID);
+    fXML.AddAttribute('gradientUnits', 'userSpaceOnUse');
+    fXML.AddAttribute('cx', '0');
+    fXML.AddAttribute('cy', '0');
+    fXML.AddAttribute('r', '1');
+    if Rotation <> '' then Rotation := Rotation + ' ';
+    fXML.AddAttribute('gradientTransform', Rotation +
+      SVGFormat('matrix(%.15g 0 0 %.15g %.15g %.15g)',
+      [Abs(C1.X - C0.X) / 2, Abs(C1.Y - C0.Y) / 2,
+      (C0.X + C1.X) / 2, (C0.Y + C1.Y) / 2]));
+  end
+  else
+  begin
+    LinearGradientEnds(fPaint, P1, P2);
+    P1 := TransformPoint2D(P1, fT);
+    P2 := TransformPoint2D(P2, fT);
+    fXML.OpenTag('linearGradient');
+    fXML.AddAttribute('id', fGradientID);
+    fXML.AddAttribute('gradientUnits', 'userSpaceOnUse');
+    fXML.AddAttribute('x1', SVGNum(P1.X));
+    fXML.AddAttribute('y1', SVGNum(P1.Y));
+    fXML.AddAttribute('x2', SVGNum(P2.X));
+    fXML.AddAttribute('y2', SVGNum(P2.Y));
+    if Rotation <> '' then
+      fXML.AddAttribute('gradientTransform', Rotation);
+  end;
+  WriteStop('0', FillColor, fPaint.FillOpacity);
+  WriteStop('1', fPaint.GradientColor, fPaint.GradientOpacity);
+  fXML.CloseTag;
+  fXML.CloseTag;
 end;
 
 procedure TSvgDevice.Poly(PP: TPointsSet2D;
@@ -458,6 +538,7 @@ var
     AddSt(SVGFormat('%.15g,%.15g', [P.X, P.Y]));
   end;
 begin
+  WriteGradientDefs(FillColor, Hatching, 0, Point2D(0, 0));
   if Closed then
     fXML.OpenTag('polygon')
   else
@@ -523,6 +604,7 @@ var
     AddSt(SVGFormat('%.15g,%.15g', [P.X, P.Y]));
   end;
 begin
+  WriteGradientDefs(FillColor, Hatching, 0, Point2D(0, 0));
   fXML.OpenTag('path');
   WritePrimitiveAttr0(LineColor, HatchColor, FillColor,
     LineStyle, LineWidth, Hatching, fMiterLimit);
@@ -549,6 +631,7 @@ procedure TSvgDevice.Rect(const P: TPoint2D;
   const LineStyle: TLineStyle; const LineWidth: TRealType;
   const Hatching: THatching);
 begin
+  WriteGradientDefs(FillColor, Hatching, 0, Point2D(0, 0));
   fXML.OpenTag('rect');
   fXML.AddAttribute('x', FF2(P.X));
   fXML.AddAttribute('y', FF2(P.Y - H));
@@ -674,6 +757,7 @@ procedure TSvgDevice.RotEllipse(const CP: TPoint2D;
   const LineStyle: TLineStyle; const LineWidth: TRealType;
   const Hatching: THatching);
 begin
+  WriteGradientDefs(FillColor, Hatching, RadToDeg(ARot), CP);
   fXML.OpenTag('ellipse');
   fXML.AddAttribute('cx', FF2(CP.X));
   fXML.AddAttribute('cy', FF2(CP.Y));
@@ -693,6 +777,7 @@ procedure TSvgDevice.Circle(const CP: TPoint2D; const R: TRealType;
   const LineStyle: TLineStyle; const LineWidth: TRealType;
   const Hatching: THatching);
 begin
+  WriteGradientDefs(FillColor, Hatching, 0, Point2D(0, 0));
   fXML.OpenTag('circle');
   fXML.AddAttribute('cx', FF2(CP.X));
   fXML.AddAttribute('cy', FF2(CP.Y));
@@ -722,6 +807,7 @@ begin
   SA := SA - Floor(SA / (2 * Pi)) * 2 * Pi;
   EA := EA - Floor(EA / (2 * Pi)) * 2 * Pi;
   if EA < SA then EA := EA + 2 * Pi;
+  WriteGradientDefs(FillColor, Hatching, 0, Point2D(0, 0));
   fXML.OpenTag('path');
   PathSt := 'M ';
   P1 := Point2D(CP.X + R * Cos(SA), CP.Y - R * Sin(SA));
@@ -820,6 +906,7 @@ var
     AddSt(SVGFormat(' %.15g,%.15g', [P.X, P.Y]));
   end;
 begin
+  WriteGradientDefs(FillColor, Hatching, 0, Point2D(0, 0));
   fXML.OpenTag('path');
   WritePrimitiveAttr0(LineColor, HatchColor, FillColor,
     LineStyle, LineWidth, Hatching, fMiterLimit);

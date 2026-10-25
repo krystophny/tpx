@@ -223,6 +223,22 @@ begin
   if XMLNode.AttributeNode['fo'] <> nil then
     Obj.FillOpacity := ClampOpacity(XMLNode.AttributeValue['fo'])
   else Obj.FillOpacity := 1;
+  Obj.FillGradient := fgNone;
+  if XMLNode.AttributeNode['grad'] <> nil then
+  begin
+    St := XMLNode.AttributeValue['grad'];
+    if St = 'linear' then Obj.FillGradient := fgLinear
+    else if St = 'radial' then Obj.FillGradient := fgRadial;
+  end;
+  if XMLNode.AttributeNode['gc'] <> nil then
+    Obj.GradientColor := HtmlToColor(XMLNode.AttributeValue['gc'])
+  else Obj.GradientColor := Graphics.clDefault;
+  if XMLNode.AttributeNode['go'] <> nil then
+    Obj.GradientOpacity := ClampOpacity(XMLNode.AttributeValue['go'])
+  else Obj.GradientOpacity := 1;
+  if XMLNode.AttributeNode['ga'] <> nil then
+    Obj.GradientAngle := XMLNode.AttributeValue['ga']
+  else Obj.GradientAngle := 0;
 end;
 
 procedure T_TpX_Loader.ReadArrows(XMLNode: TXMLDElement;

@@ -28,8 +28,25 @@ type
     each piece it draws (see TPrimitive2D.DeviceDrawPiece); every other
     caller leaves the opaque defaults in place. Opacities run from 0
     (transparent) to 1 (opaque). }
+  TFillGradient = (fgNone, fgLinear, fgRadial);
+
+  { A gradient fill runs from the fill colour and opacity (start, or
+    centre) to GradientColor and GradientOpacity (end, or edge). It is laid
+    out on Box, the axis-aligned bounding box of the filled path in the
+    coordinates the device receives, with the rules TikZ uses for its axis
+    and radial shadings, so every renderer agrees:
+    - linear: along the direction GradientAngle (degrees, counterclockwise
+      from +x), centred on the box, over the length
+      (w|cos a| + h|sin a|) / (|cos a| + |sin a|) (w and h at 0 and 90
+      degrees); outside it the end colours continue;
+    - radial: from the box centre to the ellipse inscribed in the box;
+      outside it the edge colour continues. }
   TPaintStyle = record
     LineOpacity, FillOpacity: TRealType;
+    Gradient: TFillGradient;
+    GradientColor: TColor;
+    GradientOpacity, GradientAngle: TRealType;
+    Box: TRect2D;
   end;
 
   TPathProc = procedure(PP: TPointsSet2D;
@@ -239,6 +256,9 @@ type
     { Current paint style; reset it with ResetPaint after drawing. }
     property Paint: TPaintStyle read fPaint write fPaint;
     procedure ResetPaint;
+    { Whether PieceCh draws the fill and the stroke of a piece as separate
+      paths; a device may need that for some paint styles. }
+    function NeedsDisjointFill: Boolean; virtual;
   end;
 
   TStreamDevice = class(TDevice)
@@ -274,6 +294,15 @@ function ClampOpacity(const Value: TRealType): TRealType;
 function IsOpaque(const Opacity: TRealType): Boolean;
 { Opacity as a short decimal with a '.' separator, for output formats. }
 function OpacityText(const Opacity: TRealType): string;
+{ True when the paint has a gradient fill with a non-degenerate box. }
+function HasGradient(const Paint: TPaintStyle): Boolean;
+{ Start and end points of a linear gradient in box coordinates. }
+procedure LinearGradientEnds(const Paint: TPaintStyle;
+  out P1, P2: TPoint2D);
+{ Gradient position from 0 (start or centre) to 1 (end or edge) of a
+  point given in box coordinates. }
+function GradientPosition(const Paint: TPaintStyle;
+  const P: TPoint2D): TRealType;
 
 implementation
 
@@ -292,6 +321,66 @@ function DefaultPaintStyle: TPaintStyle;
 begin
   Result.LineOpacity := 1;
   Result.FillOpacity := 1;
+  Result.Gradient := fgNone;
+  Result.GradientColor := clDefault;
+  Result.GradientOpacity := 1;
+  Result.GradientAngle := 0;
+  Result.Box := Rect2D(0, 0, 0, 0);
+end;
+
+function HasGradient(const Paint: TPaintStyle): Boolean;
+begin
+  Result := (Paint.Gradient <> fgNone) and
+    (Paint.Box.Right > Paint.Box.Left) and (Paint.Box.Top > Paint.Box.Bottom);
+end;
+
+function LinearGradientLength(const Paint: TPaintStyle): TRealType;
+var
+  C, S: TRealType;
+begin
+  C := Abs(Cos(DegToRad(Paint.GradientAngle)));
+  S := Abs(Sin(DegToRad(Paint.GradientAngle)));
+  Result := ((Paint.Box.Right - Paint.Box.Left) * C +
+    (Paint.Box.Top - Paint.Box.Bottom) * S) / (C + S);
+end;
+
+procedure LinearGradientEnds(const Paint: TPaintStyle;
+  out P1, P2: TPoint2D);
+var
+  CX, CY, L, A: TRealType;
+begin
+  CX := (Paint.Box.Left + Paint.Box.Right) / 2;
+  CY := (Paint.Box.Bottom + Paint.Box.Top) / 2;
+  L := LinearGradientLength(Paint) / 2;
+  A := DegToRad(Paint.GradientAngle);
+  P1 := Point2D(CX - L * Cos(A), CY - L * Sin(A));
+  P2 := Point2D(CX + L * Cos(A), CY + L * Sin(A));
+end;
+
+function GradientPosition(const Paint: TPaintStyle;
+  const P: TPoint2D): TRealType;
+var
+  CX, CY, RX, RY, L, A: TRealType;
+begin
+  Result := 0;
+  if not HasGradient(Paint) then Exit;
+  CX := (Paint.Box.Left + Paint.Box.Right) / 2;
+  CY := (Paint.Box.Bottom + Paint.Box.Top) / 2;
+  if Paint.Gradient = fgRadial then
+  begin
+    RX := (Paint.Box.Right - Paint.Box.Left) / 2;
+    RY := (Paint.Box.Top - Paint.Box.Bottom) / 2;
+    Result := Sqrt(Sqr((P.X - CX) / RX) + Sqr((P.Y - CY) / RY));
+  end
+  else
+  begin
+    L := LinearGradientLength(Paint);
+    if L <= 0 then Exit;
+    A := DegToRad(Paint.GradientAngle);
+    Result := 0.5 + ((P.X - CX) * Cos(A) + (P.Y - CY) * Sin(A)) / L;
+  end;
+  if Result < 0 then Result := 0
+  else if Result > 1 then Result := 1;
 end;
 
 function ClampOpacity(const Value: TRealType): TRealType;
@@ -334,6 +423,11 @@ end;
 procedure TDevice.ResetPaint;
 begin
   fPaint := DefaultPaintStyle;
+end;
+
+function TDevice.NeedsDisjointFill: Boolean;
+begin
+  Result := fDisjointFill;
 end;
 
 function TDevice.MultTransf(const Transf: TTransf2D): TTransf2D;
@@ -477,7 +571,7 @@ begin
         Exit;
       end;
     if ((Hatching = haNone) or fHasNativeHatching)
-      and not fDisjointFill then
+      and not NeedsDisjointFill then
     begin
       PiecePath(APiece, LineColor, HatchColor, FillColor,
         LineStyle, LineWidth, Hatching, Transf, APiece.Closed);

@@ -13,6 +13,7 @@ type
     tsoArc, tsoSector, tsoSegment, tsoText, tsoImage);
   TTikZPathCommandKind = (tpcMove, tpcLine, tpcCubic, tpcClose);
   TTikZLineKind = (tlSolid, tlDashed, tlDotted);
+  TTikZGradientKind = (tgNone, tgLinear, tgRadial);
   TTikZDependencyKind = (tdLineWidth, tdTextSize, tdTextBaseline, tdDashSize,
     tdDotSize, tdStrokeColor, tdFillColor, tdTextColor, tdTextBody,
     tdCoordinateX, tdCoordinateY, tdWidth, tdHeight, tdRadius,
@@ -71,6 +72,11 @@ type
     StrokeRGB, FillRGB: LongWord;
     { 'draw opacity', 'fill opacity' and 'opacity'; 1 when absent. }
     StrokeOpacity, FillOpacity: Double;
+    { Axis or radial shading from FillRGB to GradientRGB; GradientAngle is
+      the direction from start to end in degrees (TPaintStyle layout). }
+    Gradient: TTikZGradientKind;
+    GradientRGB: LongWord;
+    GradientAngle: Double;
     LineWidthMM, DashOnMM, DashOffMM: Double;
     LineKind: TTikZLineKind;
     TextBody, TextContent, ImageReference: RawByteString;
@@ -1911,6 +1917,11 @@ var
     OnMM, OffMM: Double;
     OnDependency, OffDependency: string;
     ColorSource, ValueSource: TTikZDependencySource;
+    ShadeKind: TTikZGradientKind;
+    ShadeAngle: Double;
+    TopRGB, BottomRGB, InnerRGB, OuterRGB: LongWord;
+    HaveTop, HaveBottom, HaveInner, HaveOuter: Boolean;
+    ShadeSpan: TTikZSourceSpan;
   begin
     AObj.LineWidthMM := FResult.Scene.LineWidthBaseMM;
     AObj.LineKind := tlSolid;
@@ -1918,6 +1929,16 @@ var
     AObj.FillRGB := $000000;
     AObj.StrokeOpacity := 1;
     AObj.FillOpacity := 1;
+    AObj.Gradient := tgNone;
+    AObj.GradientRGB := $000000;
+    AObj.GradientAngle := 0;
+    ShadeKind := tgNone;
+    ShadeAngle := 0;
+    HaveTop := False;
+    HaveBottom := False;
+    HaveInner := False;
+    HaveOuter := False;
+    ShadeSpan := SpanAtZero;
     AObj.StrokeEnabled := (RootCommand = 'draw') or (RootCommand = 'filldraw');
     AObj.FillEnabled := (RootCommand = 'fill') or (RootCommand = 'filldraw');
     OptSpan := SpanAtZero;
@@ -2120,6 +2141,63 @@ var
             -1, -1, Pi / 180, 'deg', False);
         end;
       end
+      else if (not IsNodeStyle) and ((Item.Key = 'left color') or
+        (Item.Key = 'right color') or (Item.Key = 'top color') or
+        (Item.Key = 'bottom color') or (Item.Key = 'inner color') or
+        (Item.Key = 'outer color')) then
+      begin
+        { Applied in order with the TikZ semantics: left/right set the
+          top/bottom colour and an angle of 90, top/bottom an angle of 0. }
+        if not ParseRGB(TrimASCII(CName), RGB) then
+        begin
+          Unsupported(Item.OptionSpan, 'Unresolved TikZ color: ' + CName);
+          Continue;
+        end;
+        ShadeSpan := Item.OptionSpan;
+        if (Item.Key = 'inner color') or (Item.Key = 'outer color') then
+        begin
+          ShadeKind := tgRadial;
+          if Item.Key = 'inner color' then
+          begin
+            InnerRGB := RGB;
+            HaveInner := True;
+          end
+          else
+          begin
+            OuterRGB := RGB;
+            HaveOuter := True;
+          end;
+        end
+        else
+        begin
+          ShadeKind := tgLinear;
+          if (Item.Key = 'left color') or (Item.Key = 'top color') then
+          begin
+            TopRGB := RGB;
+            HaveTop := True;
+          end
+          else
+          begin
+            BottomRGB := RGB;
+            HaveBottom := True;
+          end;
+          if (Item.Key = 'left color') or (Item.Key = 'right color') then
+            ShadeAngle := 90
+          else ShadeAngle := 0;
+        end;
+      end
+      else if (not IsNodeStyle) and (Item.Key = 'shading angle') then
+      begin
+        if not ParseInvariantFloat(TrimASCII(CName), Value) then
+          Unsupported(Item.OptionSpan, 'Unsupported TikZ shading angle')
+        else ShadeAngle := Value;
+      end
+      else if (not IsNodeStyle) and (Item.Key = 'shading') then
+      begin
+        if TrimASCII(CName) = 'axis' then ShadeKind := tgLinear
+        else if TrimASCII(CName) = 'radial' then ShadeKind := tgRadial
+        else Unsupported(Item.OptionSpan, 'Unsupported TikZ shading: ' + CName);
+      end
       else if (not IsNodeStyle) and ((Item.Key = 'opacity') or
         (Item.Key = 'fill opacity') or (Item.Key = 'draw opacity')) then
       begin
@@ -2149,6 +2227,44 @@ var
       end
       else
         Unsupported(Item.OptionSpan, 'Unsupported TikZ option: ' + Item.Key);
+    end;
+    if ShadeKind = tgRadial then
+    begin
+      if not (HaveInner and HaveOuter) then
+        Unsupported(ShadeSpan, 'A radial shading needs an inner and an outer color')
+      else
+      begin
+        AObj.Gradient := tgRadial;
+        AObj.FillEnabled := True;
+        AObj.FillRGB := InnerRGB;
+        AObj.GradientRGB := OuterRGB;
+      end;
+    end
+    else if ShadeKind = tgLinear then
+    begin
+      if not (HaveTop and HaveBottom) then
+        Unsupported(ShadeSpan, 'An axis shading needs both end colors')
+      else
+      begin
+        { The axis shading runs from bottom to top, rotated by its angle;
+          a run from right to left is kept as left to right. }
+        AObj.Gradient := tgLinear;
+        AObj.FillEnabled := True;
+        AObj.GradientAngle := 90 + ShadeAngle;
+        AObj.GradientAngle := AObj.GradientAngle -
+          360 * Floor(AObj.GradientAngle / 360);
+        if Abs(AObj.GradientAngle - 180) < 1E-9 then
+        begin
+          AObj.GradientAngle := 0;
+          AObj.FillRGB := TopRGB;
+          AObj.GradientRGB := BottomRGB;
+        end
+        else
+        begin
+          AObj.FillRGB := BottomRGB;
+          AObj.GradientRGB := TopRGB;
+        end;
+      end;
     end;
     if ((AObj.BeginArrow <> '') or (AObj.EndArrow <> '')) and
       not AObj.StrokeEnabled then

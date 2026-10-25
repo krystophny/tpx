@@ -49,6 +49,11 @@ type
       product of the element and ancestor opacity attributes, applied to
       both paints of each primitive. }
     FillOpacity, LineOpacity, Opacity: TRealType;
+    { Fill gradient from a url(#id) paint: kind, end colour, the stop
+      opacities (multiplied with the fill opacity) and the angle. }
+    FillGradient: TFillGradient;
+    GradientEndColor: TColor;
+    GradientStartOpacity, GradientEndOpacity, GradientAngle: TRealType;
     T: TTransf2D;
     FontHeight: TRealType;
     FontFamily: string;
@@ -90,6 +95,13 @@ type
     fNamedObjects: TStringList;
     fInvisibleList: TGraphicObjList;
     fGradientColors: TStringList;
+    { id=kind|start colour|start opacity|end colour|end opacity|angle
+      for gradients with at least two stops. }
+    fGradientInfo: TStringList;
+    fGradRadial: Boolean;
+    fGradStops: Integer;
+    fGradC0, fGradC1: TColor;
+    fGradA0, fGradA1: TRealType;
     fIgnoreUseReferences: Boolean;
     procedure StartElement(var E: TPrimElement);
     procedure SAX_Comment(const Comment: string);
@@ -104,6 +116,7 @@ type
     procedure GradientStartProc(var E: TPrimElement);
     procedure GradientEndProc(var E: TPrimElement);
     procedure GradientStopProc(var E: TPrimElement);
+    procedure ApplyGradientInfo(const Info: string);
     procedure CDATAProc(const CDATA: string);
     procedure Entities_Proc(const DOCTYPE: string;
       const Attributes: TAttributes);
@@ -239,6 +252,11 @@ begin
   FillOpacity := State.FillOpacity;
   LineOpacity := State.LineOpacity;
   Opacity := State.Opacity;
+  FillGradient := State.FillGradient;
+  GradientEndColor := State.GradientEndColor;
+  GradientStartOpacity := State.GradientStartOpacity;
+  GradientEndOpacity := State.GradientEndOpacity;
+  GradientAngle := State.GradientAngle;
   T := State.T;
   if State.FontHeight > 0 then FontHeight := State.FontHeight;
   FontFamily := State.FontFamily;
@@ -339,6 +357,7 @@ begin
   fNamedObjects := TStringList.Create;
   fInvisibleList := TGraphicObjList.Create;
   fGradientColors := TStringList.Create;
+  fGradientInfo := TStringList.Create;
 end;
 
 destructor T_SVG_Import.Destroy;
@@ -355,6 +374,7 @@ begin
   fNamedObjects.Free;
   fInvisibleList.Free;
   fGradientColors.Free;
+  fGradientInfo.Free;
   inherited Destroy;
 end;
 
@@ -454,6 +474,9 @@ begin
   fCurrState.FillOpacity := 1;
   fCurrState.LineOpacity := 1;
   fCurrState.Opacity := 1;
+  fCurrState.FillGradient := fgNone;
+  fCurrState.GradientStartOpacity := 1;
+  fCurrState.GradientEndOpacity := 1;
     //clBlack; //clSilver;Graphics.clDefault;
   fCurrState.T := IdentityTransf2D;
   fCurrState.FontHeight := 16;
@@ -893,12 +916,37 @@ begin
   StoreAttributes(E.Attributes, '');
   fCurrState.GradientStopOffset := 0;
   fCurrState.GradientColor := clRed;
+  fGradRadial := Pos('radial', E.Tag) > 0;
+  fGradStops := 0;
+end;
+
+function GradientCoordinate(const Attributes: TAttributes;
+  const Name: string; const Default: TRealType): TRealType;
+var
+  St: string;
+  Code: Integer;
+begin
+  Result := Default;
+  if Attributes.IndexOfName(Name) < 0 then Exit;
+  St := Trim(Attributes.Values[Name]);
+  if (St <> '') and (St[Length(St)] = '%') then
+  begin
+    Val(Copy(St, 1, Length(St) - 1), Result, Code);
+    if Code = 0 then Result := Result / 100 else Result := Default;
+  end
+  else
+  begin
+    Val(St, Result, Code);
+    if Code <> 0 then Result := Default;
+  end;
 end;
 
 procedure T_SVG_Import.GradientEndProc(var E: TPrimElement);
 var
-  LinkID: string;
+  LinkID, Info: string;
+  DX, DY, Angle: TRealType;
 begin
+  LinkID := '';
   if E.Attributes.IndexOfName('xlink:href') >= 0 then
   begin
     LinkID := E.Attributes.Values['xlink:href'];
@@ -912,8 +960,58 @@ begin
   begin
     fGradientColors.Values[E.Attributes.Values['id']]
       := ColorToHtml(fCurrState.GradientColor);
+    { The first and last stops make the two-stop model; the direction
+      comes from x1..y2 (y down) and centre, radius, focus and
+      gradientTransform are not modelled. Stops may come from a linked
+      gradient. }
+    Info := '';
+    if fGradStops >= 2 then
+      Info := Format('%s|%s|%s|%s', [ColorToHtml(fGradC0), FF_N(fGradA0, 6),
+        ColorToHtml(fGradC1), FF_N(fGradA1, 6)])
+    else if (LinkID <> '') and (fGradientInfo.IndexOfName(LinkID) >= 0) then
+    begin
+      Info := fGradientInfo.Values[LinkID];
+      Delete(Info, 1, Pos('|', Info));
+      Info := Copy(Info, 1, LastDelimiter('|', Info) - 1);
+    end;
+    if Info <> '' then
+    begin
+      DX := GradientCoordinate(E.Attributes, 'x2', 1) -
+        GradientCoordinate(E.Attributes, 'x1', 0);
+      DY := GradientCoordinate(E.Attributes, 'y2', 0) -
+        GradientCoordinate(E.Attributes, 'y1', 0);
+      if (DX = 0) and (DY = 0) then Angle := 0
+      else Angle := RadToDeg(ArcTan2(-DY, DX));
+      if fGradRadial then Info := 'radial|' + Info
+      else Info := 'linear|' + Info;
+      fGradientInfo.Values[E.Attributes.Values['id']] :=
+        Info + '|' + FF_N(Angle, 6);
+    end;
   end;
   EndStateProc(E);
+end;
+
+procedure T_SVG_Import.ApplyGradientInfo(const Info: string);
+var
+  Parts: TStringList;
+begin
+  Parts := TStringList.Create;
+  try
+    Parts.Delimiter := '|';
+    Parts.StrictDelimiter := True;
+    Parts.DelimitedText := Info;
+    if Parts.Count < 6 then Exit;
+    fCurrState.UpdateHA(haNone);
+    if Parts[0] = 'radial' then fCurrState.FillGradient := fgRadial
+    else fCurrState.FillGradient := fgLinear;
+    fCurrState.UpdateFill(HtmlToColor(Parts[1]));
+    fCurrState.GradientStartOpacity := StrToFloatDef(Parts[2], 1);
+    fCurrState.GradientEndColor := HtmlToColor(Parts[3]);
+    fCurrState.GradientEndOpacity := StrToFloatDef(Parts[4], 1);
+    fCurrState.GradientAngle := StrToFloatDef(Parts[5], 0);
+  finally
+    Parts.Free;
+  end;
 end;
 
 procedure T_SVG_Import.GradientStopProc(var E: TPrimElement);
@@ -921,13 +1019,30 @@ var
   Offset: TRealType;
   Color: TColor;
 begin
-  if fCurrState.GradientStopOffset = -1 then Exit;
   if E.Attributes.IndexOfName('style') >= 0 then
   begin
     ParseStyleAttributes(ReplaceEntities(E.Attributes.Values['style']));
     E.Attributes.AddStrings(fStyleAttributes);
     E.Attributes.Delete(E.Attributes.IndexOfName('style'));
   end;
+  if (E.Attributes.IndexOfName('stop-color') >= 0) and
+    (E.Attributes.Values['stop-color'] <> 'currentColor') and
+    (E.Attributes.Values['stop-color'] <> 'none') and
+    (Pos('url(', E.Attributes.Values['stop-color']) = 0) then
+  begin
+    fGradC1 := SVG_Color(E.Attributes.Values['stop-color']);
+    if E.Attributes.IndexOfName('stop-opacity') >= 0 then
+      fGradA1 := ClampOpacity(GetRealTypeAttr(
+        E.Attributes.Values['stop-opacity'], 1, 1))
+    else fGradA1 := 1;
+    if fGradStops = 0 then
+    begin
+      fGradC0 := fGradC1;
+      fGradA0 := fGradA1;
+    end;
+    Inc(fGradStops);
+  end;
+  if fCurrState.GradientStopOffset = -1 then Exit;
   if E.Attributes.IndexOfName('offset') >= 0 then
     Offset :=
       GetRealTypeAttr(E.Attributes.Values['offset'], 0, 1)
@@ -1452,8 +1567,13 @@ begin
       Delete(St, Length(St), 1);
       St := Trim(St);
       Delete(St, 1, 1);
-      if fGradientColors.IndexOfName(St) >= 0 then
-        fCurrState.UpdateFill(HtmlToColor(fGradientColors.Values[St]))
+      if fGradientInfo.IndexOfName(St) >= 0 then
+        ApplyGradientInfo(fGradientInfo.Values[St])
+      else if fGradientColors.IndexOfName(St) >= 0 then
+      begin
+        fCurrState.FillGradient := fgNone;
+        fCurrState.UpdateFill(HtmlToColor(fGradientColors.Values[St]));
+      end
       else
       begin
         fCurrState.UpdateHA(haDiagCross);
@@ -1464,6 +1584,7 @@ begin
     begin
       fCurrState.UpdateHA(haNone);
       fCurrState.UpdateFill(SVG_Color(Attributes.Values['fill']));
+      fCurrState.FillGradient := fgNone;
     end;
   end;
   if Attributes.IndexOfName('fill-opacity') >= 0 then
@@ -1551,6 +1672,19 @@ begin
       fCurrState.LineOpacity * fCurrState.Opacity;
     (fCurrObj as TPrimitive2D).FillOpacity :=
       fCurrState.FillOpacity * fCurrState.Opacity;
+    (fCurrObj as TPrimitive2D).FillGradient := fCurrState.FillGradient;
+    if fCurrState.FillGradient <> fgNone then
+    begin
+      (fCurrObj as TPrimitive2D).FillOpacity :=
+        fCurrState.FillOpacity * fCurrState.Opacity *
+        fCurrState.GradientStartOpacity;
+      (fCurrObj as TPrimitive2D).GradientOpacity :=
+        fCurrState.FillOpacity * fCurrState.Opacity *
+        fCurrState.GradientEndOpacity;
+      (fCurrObj as TPrimitive2D).GradientColor :=
+        fCurrState.GradientEndColor;
+      (fCurrObj as TPrimitive2D).GradientAngle := fCurrState.GradientAngle;
+    end;
   end;
   if not IsSameTransform2D(fCurrState.T, IdentityTransf2D) then
     fCurrObj.Transform(fCurrState.T);

@@ -160,3 +160,105 @@ begin
   Check(Bytes = Expected,
     'Opacity edits changed TikZ bytes outside their options: ' + Bytes);
 end;
+
+{ Gradient fills: inspector editing with undo and the canvas rendering of a
+  radial fade and a linear blend. }
+procedure TestPaintGradient;
+var
+  Drawing: TDrawing2D;
+  Mode: TTpXMode;
+  Disc: TCircle2D;
+  Band: TPolygon2D;
+  Prim: TPrimitive2D;
+  View: TViewport2D;
+  Frame: TBitmap;
+  C: TColor;
+  Combo: TComboBox;
+  Edit: TEdit;
+  ErrorText: string;
+begin
+  SetLiveTeXEnabled(False);
+  Mode := MainForm.EventManager.Mode as TTpXMode;
+  Mode.TpX_Manager.DocumentSession.Clear;
+  MainForm.SetBounds(20, 20, 900, 700);
+  MainForm.Show;
+  MainForm.ShowInspector;
+  PumpEvents;
+  Drawing := Mode.Drawing;
+  Drawing.Clear;
+  Disc := TCircle2D.Create(-1);
+  Disc.Points[0] := Point2D(15, 20);
+  Disc.Points[1] := Point2D(15, 30);
+  Disc.LineStyle := liNone;
+  Disc.FillColor := clBlack;
+  Drawing.AddObject(-1, Disc);
+  Band := TPolygon2D.CreateSpec(-1, [Point2D(30, 15), Point2D(50, 15),
+    Point2D(50, 25), Point2D(30, 25)]);
+  Band.LineStyle := liNone;
+  Band.FillColor := clRed;
+  Band.FillGradient := fgLinear;
+  Band.GradientColor := clBlue;
+  Drawing.AddObject(-1, Band);
+
+  Drawing.SelectionClear;
+  Drawing.SelectionAdd(Disc);
+  MainForm.RefreshInspectorSelection;
+  MainForm.Inspector.ShowMore := True;
+  MainForm.Inspector.FocusField(opfFillGradient);
+  Combo := MainForm.Inspector.EditorFor(opfFillGradient) as TComboBox;
+  Check(Combo.Text = 'Solid', 'A solid fill shows gradient ' + Combo.Text);
+  Combo.ItemIndex := Ord(fgRadial);
+  if Assigned(Combo.OnChange) then Combo.OnChange(Combo);
+  Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+    'Gradient kind edit failed: ' + ErrorText);
+  MainForm.Inspector.FocusField(opfGradientOpacity);
+  Edit := MainForm.Inspector.EditorFor(opfGradientOpacity) as TEdit;
+  Edit.Text := '0';
+  Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+    'Gradient end opacity edit failed: ' + ErrorText);
+  Prim := TikZSaveObjectAt(Drawing, 0) as TPrimitive2D;
+  Check((Prim.FillGradient = fgRadial) and (Prim.GradientOpacity = 0),
+    'Inspector did not set the radial fade');
+  Drawing.History.Undo;
+  Prim := TikZSaveObjectAt(Drawing, 0) as TPrimitive2D;
+  Check((Prim.FillGradient = fgRadial) and (Prim.GradientOpacity = 1),
+    'Undo did not restore only the end opacity');
+  Drawing.History.Undo;
+  Prim := TikZSaveObjectAt(Drawing, 0) as TPrimitive2D;
+  Check(Prim.FillGradient = fgNone, 'Undo did not restore the solid fill');
+  Drawing.History.Redo;
+  Drawing.History.Redo;
+  Prim := TikZSaveObjectAt(Drawing, 0) as TPrimitive2D;
+  Check((Prim.FillGradient = fgRadial) and (Prim.GradientOpacity = 0),
+    'Redo did not reapply the radial fade');
+
+  View := MainForm.LocalView;
+  Frame := TBitmap.Create;
+  try
+    View.ShowGrid := False;
+    View.ShowCrossHair := False;
+    View.VisualRect := Rect2D(0, 0, 60, 40);
+    View.Repaint;
+    PumpEvents;
+    Frame.SetSize(View.ClientWidth, View.ClientHeight);
+    View.RenderToCanvas(Frame.Canvas);
+    { Opaque black core, half way grey, nearly clear rim. }
+    C := PaintStylePixel(Frame, View, Point2D(15, 20));
+    CheckPaintChannel(Red(C), 0, 'disc centre');
+    C := PaintStylePixel(Frame, View, Point2D(20, 20));
+    CheckPaintChannel(Red(C), 128, 'disc half radius');
+    C := PaintStylePixel(Frame, View, Point2D(24.6, 20));
+    Check(Red(C) > 225, Format('disc rim is %d, expected nearly white',
+      [Red(C)]));
+    { Red at the left end, blue at the right end, purple in the middle. }
+    C := PaintStylePixel(Frame, View, Point2D(30.3, 20));
+    Check((Red(C) > 240) and (Blue(C) < 16), 'linear start is not red');
+    C := PaintStylePixel(Frame, View, Point2D(49.7, 20));
+    Check((Blue(C) > 240) and (Red(C) < 16), 'linear end is not blue');
+    C := PaintStylePixel(Frame, View, Point2D(40, 20));
+    CheckPaintChannel(Red(C), 128, 'linear middle red');
+    CheckPaintChannel(Blue(C), 128, 'linear middle blue');
+  finally
+    Frame.Free;
+  end;
+end;

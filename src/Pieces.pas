@@ -32,6 +32,8 @@ type
       arrowhead filled with the line colour also takes the line opacity. }
     function GetLineOpacity(Obj: TObject): TRealType;
     function GetFillOpacity(Obj: TObject): TRealType;
+    { Only the object's own fill takes its gradient. }
+    function GetFillGradient(Obj: TObject): TFillGradient;
     procedure Linearize(const PP: TPointsSet2D;
       const Precision: TRealType); virtual;
     procedure BezierPoints(const PP: TPointsSet2D); virtual;
@@ -357,6 +359,15 @@ begin
   else
     Result := 1;
   end;
+end;
+
+function TPiece.GetFillGradient(Obj: TObject): TFillGradient;
+begin
+  if (Fill = pfiDefault) and
+    ((Obj as TPrimitive2D).FillColor <> clDefault) then
+    Result := (Obj as TPrimitive2D).FillGradient
+  else
+    Result := fgNone;
 end;
 
 procedure TPiece.Linearize(const PP: TPointsSet2D;

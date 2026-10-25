@@ -179,10 +179,11 @@ const
     opfSymbolDiameter, opfSymbolRotation, opfRectangleRX, opfRectangleRY,
     opfBitmapLink, opfKeepAspectRatio, opfSolidSize1, opfSolidSize2,
     opfSolidSize3, opfSolidSize4, opfSolidSegments);
-  MoreFields: array[0..18] of TObjectPropertyField = (opfLineStyle,
+  MoreFields: array[0..22] of TObjectPropertyField = (opfLineStyle,
     opfLineColor, opfLineWidth, opfLineOpacity, opfBeginArrowKind,
     opfEndArrowKind, opfArrowSizeFactor, opfHatching, opfHatchColor,
-    opfFillColor, opfFillOpacity,
+    opfFillColor, opfFillOpacity, opfFillGradient, opfGradientColor,
+    opfGradientOpacity, opfGradientAngle,
     opfFontName, opfFontStyle, opfHAlignment, opfStarKind,
     opfStarSizeFactor, opfSolidAzimuth, opfSolidElevation,
     opfSolidPerspective);
@@ -229,6 +230,10 @@ begin
     opfFillColor: Result := 'FillColor';
     opfLineOpacity: Result := 'LineOpacity';
     opfFillOpacity: Result := 'FillOpacity';
+    opfFillGradient: Result := 'FillGradient';
+    opfGradientColor: Result := 'GradientColor';
+    opfGradientOpacity: Result := 'GradientOpacity';
+    opfGradientAngle: Result := 'GradientAngle';
     opfBeginArrowKind: Result := 'BeginArrow';
     opfEndArrowKind: Result := 'EndArrow';
     opfArrowSizeFactor: Result := 'ArrowSize';
@@ -271,7 +276,8 @@ end;
 
 function IsColorField(Field: TObjectPropertyField): Boolean;
 begin
-  Result := Field in [opfLineColor, opfHatchColor, opfFillColor];
+  Result := Field in [opfLineColor, opfHatchColor, opfFillColor,
+    opfGradientColor];
 end;
 
 function SameTargetSet(const A, B: TEditTargetIDs): Boolean;
@@ -436,6 +442,11 @@ begin
   AddField(opfHatchColor, 'Hatch color', True, True, False);
   AddField(opfFillColor, 'Fill color', True, True, False);
   AddField(opfFillOpacity, 'Fill opacity', False, False, False);
+  { The gradient runs from the fill color and opacity to these. }
+  AddField(opfFillGradient, 'Fill gradient', True, False, False);
+  AddField(opfGradientColor, 'Gradient end color', True, True, False);
+  AddField(opfGradientOpacity, 'Gradient end opacity', False, False, False);
+  AddField(opfGradientAngle, 'Gradient angle (°)', False, False, False);
   AddField(opfFontName, 'Font', False, False, False);
   AddField(opfFontStyle, 'Font style', True, False, False);
   AddField(opfHAlignment, 'Alignment', True, False, False);
@@ -746,7 +757,7 @@ begin
   Combo.Items.BeginUpdate;
   try
     case Field of
-      opfLineColor, opfHatchColor, opfFillColor:
+      opfLineColor, opfHatchColor, opfFillColor, opfGradientColor:
         begin
           Combo.Items.Add('Default');
           for I := 0 to TheHTMLColor.Count - 1 do
@@ -758,6 +769,12 @@ begin
           Combo.Items.Add('Solid');
           Combo.Items.Add('Dotted');
           Combo.Items.Add('Dashed');
+        end;
+      opfFillGradient:
+        begin
+          Combo.Items.Add('Solid');
+          Combo.Items.Add('Linear');
+          Combo.Items.Add('Radial');
         end;
       opfHatching:
         begin
@@ -877,7 +894,8 @@ begin
     opfTextRotation, opfStarSizeFactor, opfSymbolDiameter,
     opfSymbolRotation, opfRectangleRX, opfRectangleRY, opfSolidSize1,
     opfSolidSize2, opfSolidSize3, opfSolidSize4, opfSolidSegments,
-    opfSolidAzimuth, opfSolidElevation, opfLineOpacity, opfFillOpacity];
+    opfSolidAzimuth, opfSolidElevation, opfLineOpacity, opfFillOpacity,
+    opfGradientOpacity, opfGradientAngle];
 end;
 
 function TObjectInspector.NumericRange(
@@ -888,7 +906,8 @@ begin
     opfTextRotation, opfSymbolRotation, opfSolidSize2, opfSolidSize4,
     opfSolidAzimuth, opfSolidElevation: Result := nerFinite;
     opfSolidSize1, opfSolidSize3, opfSolidSegments: Result := nerPositive;
-    opfLineOpacity, opfFillOpacity: Result := nerUnit;
+    opfLineOpacity, opfFillOpacity, opfGradientOpacity: Result := nerUnit;
+    opfGradientAngle: Result := nerFinite;
   else
     Result := nerNonnegative;
   end;
@@ -907,7 +926,7 @@ begin
     opfFontName:
       if VarToStr(Value) = ' ' then Result := ''
       else Result := UTF8BytesToLCLText(TEditUtf8Text(VarToStr(Value)));
-    opfLineColor, opfHatchColor, opfFillColor:
+    opfLineColor, opfHatchColor, opfFillColor, opfGradientColor:
       if TColor(Integer(Value)) = clDefault then Result := 'Default'
       else Result := ColorToHtml(TColor(Integer(Value)));
     opfTextRotation, opfSymbolRotation:
@@ -917,7 +936,8 @@ begin
       end;
     opfLineWidth, opfArrowSizeFactor, opfTextHeight,
     opfStarSizeFactor, opfSymbolDiameter, opfRectangleRX,
-    opfRectangleRY, opfLineOpacity, opfFillOpacity:
+    opfRectangleRY, opfLineOpacity, opfFillOpacity, opfGradientOpacity,
+    opfGradientAngle:
       Result := InspectorNumberText(TRealType(Value));
     opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidSize4,
     opfSolidAzimuth, opfSolidElevation:
@@ -1246,6 +1266,8 @@ begin
       opfSolidElevation: Patch.SolidElevation := Number;
       opfLineOpacity: Patch.LineOpacity := Number;
       opfFillOpacity: Patch.FillOpacity := Number;
+      opfGradientOpacity: Patch.GradientOpacity := Number;
+      opfGradientAngle: Patch.GradientAngle := Number;
     end;
     Exit(True);
   end;
@@ -1268,6 +1290,7 @@ begin
         opfLineColor: Patch.LineColor := ColorValue;
         opfHatchColor: Patch.HatchColor := ColorValue;
         opfFillColor: Patch.FillColor := ColorValue;
+        opfGradientColor: Patch.GradientColor := ColorValue;
       end;
       Exit(True);
     end;
@@ -1279,6 +1302,7 @@ begin
     case Field of
       opfLineStyle: Patch.LineStyle := TLineStyle(Combo.ItemIndex);
       opfHatching: Patch.Hatching := THatching(Combo.ItemIndex);
+      opfFillGradient: Patch.FillGradient := TFillGradient(Combo.ItemIndex);
       opfBeginArrowKind: Patch.BeginArrowKind := TArrowKind(Combo.ItemIndex);
       opfEndArrowKind: Patch.EndArrowKind := TArrowKind(Combo.ItemIndex);
       opfFontStyle: Patch.FontStyle := FontStylesFromMask(Combo.ItemIndex);

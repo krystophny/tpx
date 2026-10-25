@@ -238,6 +238,21 @@ PSTricks transparency needs a PostScript-to-PDF route that allows it, such as
 Opaque drawings are saved exactly as before; the `.TpX` attributes are `lo`
 and `fo` and appear only when an opacity is below 1.
 
+A filled shape can also have a linear or radial gradient (**Fill gradient**
+in the Inspector). It runs from the fill color and fill opacity to the
+gradient end color (Default: the fill color) and end opacity, so a radial
+gradient with end opacity 0 gives a soft disc that fades out at its edge. A
+linear gradient follows **Gradient angle** (degrees counterclockwise from left
+to right). Both are laid out on the bounding box of the filled path with the
+rules of TikZ's axis and radial shadings, and the canvas, TikZ (shadings, with
+a fading when the two opacities differ) and SVG (user-space gradients) agree.
+PDF, PGF, PSTricks, EPS/PostScript, MetaPost, the LaTeX picture environment
+and EMF have no gradient output and fill with the start color and opacity.
+For curves, TikZ measures the box including Bézier control points, so a
+gradient there can sit slightly differently than on the canvas or in SVG. The
+`.TpX` attributes are `grad` (`linear` or `radial`), `gc`, `go` and `ga`;
+older TpX versions show the solid start color.
+
 Use **Edit → Object properties** to open the Object Inspector on the right;
 **View → Object inspector** toggles it, and its splitter can be dragged to
 resize the panel. Collapse a section to make room for the drawing. When a

@@ -132,6 +132,18 @@ begin
   else Primitive.FillColor := clDefault;
   Primitive.LineOpacity := Obj.StrokeOpacity;
   Primitive.FillOpacity := Obj.FillOpacity;
+  case Obj.Gradient of
+    tgLinear: Primitive.FillGradient := fgLinear;
+    tgRadial: Primitive.FillGradient := fgRadial;
+  else
+    Primitive.FillGradient := fgNone;
+  end;
+  if Obj.Gradient <> tgNone then
+  begin
+    Primitive.GradientColor := SceneColor(Obj.GradientRGB);
+    Primitive.GradientAngle := Obj.GradientAngle;
+    Primitive.GradientOpacity := Obj.FillOpacity;
+  end;
 end;
 
 function RotatePoint(const Point, Center: TPoint2D; Angle: Double): TPoint2D;

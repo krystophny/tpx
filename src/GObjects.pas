@@ -98,6 +98,9 @@ type
     fLineWidth: TRealType;
     fLineColor, fHatchColor, fFillColor: TColor;
     fLineOpacity, fFillOpacity: TRealType;
+    fFillGradient: TFillGradient;
+    fGradientColor: TColor;
+    fGradientOpacity, fGradientAngle: TRealType;
     fCanDeletePoints: Boolean;
     fDrawPathBezier: Boolean;
     fOwnsInterior: Boolean;
@@ -215,6 +218,17 @@ type
       write fLineOpacity;
     property FillOpacity: TRealType read fFillOpacity
       write fFillOpacity;
+    { Gradient fill from FillColor/FillOpacity to GradientColor (clDefault:
+      the fill colour) and GradientOpacity; GradientAngle in degrees
+      (linear only). See TPaintStyle for the layout. }
+    property FillGradient: TFillGradient read fFillGradient
+      write fFillGradient;
+    property GradientColor: TColor read fGradientColor
+      write fGradientColor;
+    property GradientOpacity: TRealType read fGradientOpacity
+      write fGradientOpacity;
+    property GradientAngle: TRealType read fGradientAngle
+      write fGradientAngle;
     property BeginArrowKind: TArrowKind read fBeginArrowKind write
       fBeginArrowKind;
     property EndArrowKind: TArrowKind read fEndArrowKind write
@@ -886,6 +900,10 @@ begin
   fFillColor := clDefault;
   fLineOpacity := 1;
   fFillOpacity := 1;
+  fFillGradient := fgNone;
+  fGradientColor := clDefault;
+  fGradientOpacity := 1;
+  fGradientAngle := 0;
   fCanDeletePoints := False;
   fDrawPathBezier := True;
   Pieces := TArrayOfPiece.Create(1);
@@ -917,6 +935,10 @@ begin
   fFillColor := (Obj as TPrimitive2D).fFillColor;
   fLineOpacity := (Obj as TPrimitive2D).fLineOpacity;
   fFillOpacity := (Obj as TPrimitive2D).fFillOpacity;
+  fFillGradient := (Obj as TPrimitive2D).fFillGradient;
+  fGradientColor := (Obj as TPrimitive2D).fGradientColor;
+  fGradientOpacity := (Obj as TPrimitive2D).fGradientOpacity;
+  fGradientAngle := (Obj as TPrimitive2D).fGradientAngle;
 end;
 
 procedure TPrimitive2D.Assign(const Obj: TGraphicObject);
@@ -983,6 +1005,10 @@ begin
   Stream.ReadBuffer(fFillColor, SizeOf(fFillColor));
   Stream.ReadBuffer(fLineOpacity, SizeOf(fLineOpacity));
   Stream.ReadBuffer(fFillOpacity, SizeOf(fFillOpacity));
+  Stream.ReadBuffer(fFillGradient, SizeOf(fFillGradient));
+  Stream.ReadBuffer(fGradientColor, SizeOf(fGradientColor));
+  Stream.ReadBuffer(fGradientOpacity, SizeOf(fGradientOpacity));
+  Stream.ReadBuffer(fGradientAngle, SizeOf(fGradientAngle));
   Stream.ReadBuffer(fCanDeletePoints, SizeOf(fCanDeletePoints));
   Stream.ReadBuffer(fDrawPathBezier, SizeOf(fDrawPathBezier));
   Stream.ReadBuffer(fOwnsInterior, SizeOf(fOwnsInterior));
@@ -1019,6 +1045,10 @@ begin
   Stream.Write(fFillColor, SizeOf(fFillColor));
   Stream.Write(fLineOpacity, SizeOf(fLineOpacity));
   Stream.Write(fFillOpacity, SizeOf(fFillOpacity));
+  Stream.Write(fFillGradient, SizeOf(fFillGradient));
+  Stream.Write(fGradientColor, SizeOf(fGradientColor));
+  Stream.Write(fGradientOpacity, SizeOf(fGradientOpacity));
+  Stream.Write(fGradientAngle, SizeOf(fGradientAngle));
   Stream.Write(fCanDeletePoints, SizeOf(fCanDeletePoints));
   Stream.Write(fDrawPathBezier, SizeOf(fDrawPathBezier));
   Stream.Write(fOwnsInterior, SizeOf(fOwnsInterior));
@@ -1082,6 +1112,17 @@ begin
   begin
     Paint.LineOpacity := ClampOpacity(Piece.GetLineOpacity(Self));
     Paint.FillOpacity := ClampOpacity(Piece.GetFillOpacity(Self));
+    Paint.Gradient := Piece.GetFillGradient(Self);
+    if Paint.Gradient <> fgNone then
+    begin
+      if fGradientColor = clDefault then
+        Paint.GradientColor := Piece.GetFillColor(Self)
+      else
+        Paint.GradientColor := fGradientColor;
+      Paint.GradientOpacity := ClampOpacity(fGradientOpacity);
+      Paint.GradientAngle := fGradientAngle;
+      Paint.Box := TransformBoundingBox2D(Piece.GetBoundingBox, Transf);
+    end;
   end;
   Dvc.Paint := Paint;
   try

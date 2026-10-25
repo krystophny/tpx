@@ -554,8 +554,62 @@ begin
   end;
 end;
 
+procedure TestShadingOptions;
+const
+  Source = '\begin{tikzpicture}' +
+    '\path[left color=red, right color=blue] (0,0) rectangle +(1,1);' +
+    '\path[bottom color=red, top color=blue, shading angle=-60] (0,2) rectangle +(1,1);' +
+    '\path[right color=blue, left color=red] (0,4) rectangle +(1,1);' +
+    '\path[draw, inner color=red, outer color=white, fill opacity=0.5] (3,0) circle (1);' +
+    '\end{tikzpicture}';
+  ThreeStops = '\begin{tikzpicture}' +
+    '\path[left color=red, middle color=green, right color=blue] (0,0) rectangle +(1,1);' +
+    '\end{tikzpicture}';
+var
+  Syntax: TTikZSyntaxResult;
+  Evaluated: TTikZSemanticResult;
+  Obj: TTikZSceneObject;
+  I: Integer;
+begin
+  Evaluated := ParseAndEvaluate(Source, Syntax);
+  try
+    CheckCore((Evaluated.Outcome = tsoAccepted) and
+      (Evaluated.Scene.ObjectCount = 4),
+      'axis and radial shadings should import as native gradients');
+    for I := 0 to 2 do
+    begin
+      Obj := Evaluated.Scene.ObjectAt(I);
+      CheckCore((Obj.Gradient = tgLinear) and Obj.FillEnabled and
+        (Obj.FillRGB = $FF0000) and (Obj.GradientRGB = $0000FF),
+        Format('axis shading %d should run from red to blue', [I]));
+    end;
+    CheckCore(Abs(Evaluated.Scene.ObjectAt(0).GradientAngle) < 1E-9,
+      'left/right colors run at angle 0');
+    CheckCore(Abs(Evaluated.Scene.ObjectAt(1).GradientAngle - 30) < 1E-9,
+      'bottom/top colors with shading angle -60 run at 30 degrees');
+    CheckCore(Abs(Evaluated.Scene.ObjectAt(2).GradientAngle) < 1E-9,
+      'left/right colors in either order run at angle 0');
+    Obj := Evaluated.Scene.ObjectAt(3);
+    CheckCore((Obj.Gradient = tgRadial) and (Obj.FillRGB = $FF0000) and
+      (Obj.GradientRGB = $FFFFFF) and (Obj.FillOpacity = 0.5),
+      'inner/outer colors import as a radial gradient with its opacity');
+  finally
+    Evaluated.Free;
+    Syntax.Free;
+  end;
+  Evaluated := ParseAndEvaluate(ThreeStops, Syntax);
+  try
+    CheckCore(Evaluated.Outcome = tsoUnsupported,
+      'a middle color has no two-stop gradient form');
+  finally
+    Evaluated.Free;
+    Syntax.Free;
+  end;
+end;
+
 initialization
   RegisterCoreTest('tikz-opacity-options', TestOpacityOptions);
+  RegisterCoreTest('tikz-shading-options', TestShadingOptions);
   RegisterCoreTest('tikz-pgf-scope-transform-order',
     TestPGFScopeTransformOrder);
   RegisterCoreTest('tikz-attached-devtikz-label-font',

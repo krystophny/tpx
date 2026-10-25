@@ -280,6 +280,21 @@ begin
     fXML.AddAttribute('lo', FF(Obj.LineOpacity));
   if Obj.FillOpacity <> 1 then
     fXML.AddAttribute('fo', FF(Obj.FillOpacity));
+  // Gradient fill from fill/fo to gc/go; readers without gradients keep
+  // the solid start colour.
+  if Obj.FillGradient <> fgNone then
+  begin
+    if Obj.FillGradient = fgLinear then
+      fXML.AddAttribute('grad', 'linear')
+    else
+      fXML.AddAttribute('grad', 'radial');
+    if Obj.GradientColor <> clDefault then
+      fXML.AddAttribute('gc', ColorToHtml(Obj.GradientColor));
+    if Obj.GradientOpacity <> 1 then
+      fXML.AddAttribute('go', FF(Obj.GradientOpacity));
+    if (Obj.FillGradient = fgLinear) and (Obj.GradientAngle <> 0) then
+      fXML.AddAttribute('ga', FF(Obj.GradientAngle));
+  end;
 end;
 
 procedure T_TpX_Saver.WriteArrows(Obj: TPrimitive2D);
