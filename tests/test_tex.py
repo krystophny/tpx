@@ -10,6 +10,10 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
+import headless_display
+
+headless_display.ensure_private_display()
+
 BINARY = Path(os.environ["TPX_BINARY"]).resolve()
 
 

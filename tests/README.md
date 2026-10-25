@@ -30,8 +30,11 @@ the manifest count when adding cases. A missing or zero-match suite fails.
 subset while still checking the complete discovered count.
 
 `make test-gui` builds TpX and runs the existing export and LCL runtime suites.
-`make test-tex` also launches the LCL application for export. On Linux, run both
-targets under `xvfb-run -a` as the CI workflow does. The TeX target requires
+`make test-tex` also launches the LCL application for export. On Linux, each
+GUI driver starts its own Xvfb server through `tests/headless_display.py`,
+points `DISPLAY` at it and removes `WAYLAND_DISPLAY`, so the application never
+opens on the desktop session; without Xvfb the drivers stop instead of using
+the session display. The TeX target requires
 `pdflatex`, so the suite cannot pass with every case skipped. Existing
 Ghostscript, dvips, and sam2p cases retain their explicit dependency-based
 skips when those optional paths are unavailable.
