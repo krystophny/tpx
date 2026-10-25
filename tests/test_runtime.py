@@ -35,7 +35,7 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "edit-session-autosave-cancel", "edit-session-recovery-disabled",
              "edit-session-deferred-reload",
              "edit-session-form-destroy",
-             "property-dimensions", "inspector-mixed-selection", "inspector-property-families",
+             "property-dimensions", "inspector-mixed-selection", "unknown-arrow-codes", "inspector-property-families",
              "inspector-doubleclick-selection",
              "inspector-visibility",
              "font-choice", "conversion-save",
