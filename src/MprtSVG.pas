@@ -1436,9 +1436,9 @@ begin
   RecordGeometry(E.Attributes.Values['points']);
   StoreAttributes(E.Attributes, 'polygon');
   AddPolygon;
-  FillPoints(fCurrObj as TPrimitive2D,
-    E.Attributes.Values['points'],
-    (fCurrObj as TPrimitive2D).Points);
+  if not FillPoints(E.Attributes.Values['points'],
+    (fCurrObj as TPrimitive2D).Points) then
+    raise EReadError.Create('SVG polygon points need x/y pairs');
   SetAttributes;
 end;
 
@@ -1448,9 +1448,9 @@ begin
   if E.Attributes.IndexOfName('points') < 0 then Exit;
   RecordGeometry(E.Attributes.Values['points']);
   AddPolyline;
-  FillPoints(fCurrObj as TPrimitive2D,
-    E.Attributes.Values['points'],
-    (fCurrObj as TPrimitive2D).Points);
+  if not FillPoints(E.Attributes.Values['points'],
+    (fCurrObj as TPrimitive2D).Points) then
+    raise EReadError.Create('SVG polyline points need x/y pairs');
   SetAttributes;
 end;
 

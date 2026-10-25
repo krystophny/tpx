@@ -484,6 +484,30 @@ class ExportTests(unittest.TestCase):
         result = self.run_tpx("-f", source, "-o", "faded.tikz", expect_success=False)
         self.assertIn("two opacities", result.stderr)
 
+    def test_point_list_elements_without_points_fail_cleanly(self):
+        # Point-list elements written with attributes or child elements
+        # instead of their "x,y x,y" text used to crash the loader.
+        for element in ('<polygon li="none" fill="#008000"><p x="70" y="0"/>'
+                        '<p x="90" y="0"/></polygon>',
+                        '<polyline x1="0" y1="0" x2="10" y2="5"/>',
+                        '<path x1="0" y1="0" x2="10" y2="5"/>',
+                        '<bezier/>', '<curve></curve>',
+                        '<compound/>'):
+            name = re.match(r"<(\w+)", element).group(1)
+            with self.subTest(element=name):
+                source = self.root / "malformed.TpX"
+                source.write_text('%<TpX v="5" PicScale="1">\n'
+                                  '%<line x1="0" y1="0" x2="20" y2="10"/>\n'
+                                  "%" + element + "\n%</TpX>\n")
+                for arguments in (("-o", "out.TpX"), ("-x", "svg", "-o", "out")):
+                    result = self.run_tpx("-f", source, *arguments,
+                                          expect_success=False)
+                    self.assertIn("<%s> element has no point list" % name,
+                                  result.stderr)
+                    self.assertNotIn("Access violation", result.stderr)
+                    self.assertFalse((self.root / "out.TpX").exists())
+                    self.assertFalse((self.root / "out.svg").exists())
+
     def test_cli_rejects_unsupported_output_clearly(self):
         source = self.drawing()
         result = self.run_tpx("-f", source, "-o", "drawing.pdf", expect_success=False)
