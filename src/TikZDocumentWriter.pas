@@ -13,6 +13,7 @@ implementation
 
 uses Classes, SysUtils, Math, Graphics, Geometry, GObjects,
   Devices, GObjBase, TikZLexer, TikZSyntax, TikZImport, TikZImportDrawing,
+  TikZFading,
   TikZWriter, DocumentIO, Pieces, Solid3D, TpXSaver;
 
 type
@@ -20,6 +21,7 @@ type
   TPatchArray = array of TTikZSourcePatch;
   TSpanArray = array of TTikZSourceSpan;
   TDefinitionArray = array of string;
+  TStatementPart = (spWhole, spFill, spStroke);
 
 function BytesOf(const S: RawByteString): TBytes;
 var I: SizeInt;
@@ -774,13 +776,91 @@ begin
   else Result := ColorToRGB24(Native.GradientColor);
 end;
 
+{ A gradient whose two ends differ in opacity: TikZ needs a fading for it,
+  and the fading would also fade a stroke, which TpX therefore draws as a
+  separate path (as T_TikZ_Device does). }
+function FadedGradient(Primitive: TPrimitive2D): Boolean;
+begin
+  Result := (Primitive.FillColor <> clDefault) and
+    (Primitive.FillGradient <> fgNone) and
+    (Abs(ClampOpacity(Primitive.FillOpacity) -
+    ClampOpacity(Primitive.GradientOpacity)) > 0.0005);
+end;
+
+function ShortNumber(Value: Extended; Digits: Integer = 6): string;
+var
+  Settings: TFormatSettings;
+begin
+  Settings := DefaultFormatSettings;
+  Settings.DecimalSeparator := '.';
+  Result := FloatToStrF(Value, ffGeneral, Digits, 0, Settings);
+end;
+
+{ True when Fading is the declaration the faded gradient of Primitive
+  needs: same kind and the opacities TpX writes for it. }
+function FadingFits(Primitive: TPrimitive2D;
+  const Fading: TTikZFadingDeclaration): Boolean;
+begin
+  { Names spell out the stops, so the name decides. }
+  Result := FadedGradient(Primitive) and
+    (Fading.Radial = (Primitive.FillGradient = fgRadial)) and
+    (Fading.Name = TikZFadingName(Fading.Radial,
+    TikZFadingStopText(Primitive.FillOpacity),
+    TikZFadingStopText(Primitive.GradientOpacity)));
+end;
+
+{ The fading declaration of a faded gradient, shared with the export. }
+function FadingDeclarationText(Primitive: TPrimitive2D;
+  out Name: string): string;
+begin
+  Result := TikZFadingDeclaration(Primitive.FillGradient = fgRadial,
+    TikZFadingStopText(Primitive.FillOpacity),
+    TikZFadingStopText(Primitive.GradientOpacity), Name);
+end;
+
+{ Shading keys of a gradient fill from Start to Finish, laid out as
+  TPaintStyle describes. }
+function ShadingText(Primitive: TPrimitive2D;
+  const Start, Finish: string): string;
+var
+  Angle: Extended;
+begin
+  Angle := Primitive.GradientAngle - 360 * Floor(Primitive.GradientAngle / 360);
+  if Primitive.FillGradient = fgRadial then
+    Result := 'inner color=' + Start + ', outer color=' + Finish
+  else if Abs(Angle) < 1E-9 then
+    Result := 'left color=' + Start + ', right color=' + Finish
+  else
+    Result := 'bottom color=' + Start + ', top color=' + Finish +
+      ', shading angle=' + FormatTikZReal(Angle - 90, SizeOf(TRealType));
+end;
+
+{ The fading keys of a faded gradient using the fading Name. }
+function FadingOptionsText(Primitive: TPrimitive2D; const Name: string): string;
+var
+  Shift: TTikZPoint;
+  Rotation, XScale, YScale: Double;
+begin
+  Result := 'path fading=' + Name;
+  if Primitive.FillGradient = fgRadial then
+    Exit(Result + ', fit fading=true');
+  if not TikZLinearFadingOf(Primitive, Shift, Rotation, XScale, YScale) then
+    raise EWriteError.Create('the faded gradient has no area to fill');
+  Result := Result + ', fit fading=false, fading transform={shift={(' +
+    ShortNumber(RoundTo(Shift.X, -4), 12) + 'mm,' +
+    ShortNumber(RoundTo(Shift.Y, -4), 12) + 'mm)}, rotate=' +
+    ShortNumber(Rotation) + ', xscale=' + ShortNumber(XScale) +
+    ', yscale=' + ShortNumber(YScale) + '}';
+end;
+
 function SameGradient(Native: TPrimitive2D;
   SceneObject: TTikZSceneObject): Boolean;
 begin
   Result := NativeGradient(Native) = SceneObject.Gradient;
   if not Result or (SceneObject.Gradient = tgNone) then Exit;
   Result := (NativeGradientRGB(Native) = (SceneObject.GradientRGB and $FFFFFF))
-    and NearValue(Native.GradientOpacity, SceneObject.FillOpacity) and
+    and NearValue(ClampOpacity(Native.GradientOpacity),
+    SceneObject.GradientOpacity) and
     ((SceneObject.Gradient = tgRadial) or
     NearValue(Native.GradientAngle - 360 * Floor(Native.GradientAngle / 360),
     SceneObject.GradientAngle));
@@ -798,7 +878,8 @@ end;
 procedure AddOpacityChanges(Context: TTikZImportContext;
   BindingIndex: SizeInt; Native: TPrimitive2D;
   SceneObject: TTikZSceneObject; const Source: TBytes;
-  var Insertion: string; var Patches: TPatchArray);
+  var Insertion: string; var Patches: TPatchArray;
+  IncludeStroke, IncludeFill: Boolean; SharedDone: Boolean = False);
 var
   Binding: TTikZSourceBinding;
   StrokeChanged, FillChanged, StrokeViaShared, FillViaShared: Boolean;
@@ -806,10 +887,13 @@ var
   Keyword: string;
 begin
   Binding := Context.BindingAt(BindingIndex);
-  StrokeChanged := SceneObject.StrokeEnabled and
+  StrokeChanged := IncludeStroke and SceneObject.StrokeEnabled and
     not NearValue(Native.LineOpacity, SceneObject.StrokeOpacity);
-  FillChanged := SceneObject.FillEnabled and
+  FillChanged := IncludeFill and SceneObject.FillEnabled and
     not NearValue(Native.FillOpacity, SceneObject.FillOpacity);
+  { A shared option already rewritten to the native stroke opacity. }
+  if SharedDone and (FindDependency(Binding, tdStrokeOpacity) < 0) then
+    StrokeChanged := False;
   if not (StrokeChanged or FillChanged) then Exit;
   if (Native.LineOpacity < 0) or (Native.LineOpacity > 1) or
     (Native.FillOpacity < 0) or (Native.FillOpacity > 1) then
@@ -842,9 +926,336 @@ begin
     Source, Insertion, Patches);
 end;
 
+{ The bytes of an object-local option (key and value). }
+function LocalOptionSpan(const Binding: TTikZSourceBinding;
+  const Dep: TTikZPropertyDependency; const What: string): TTikZSourceSpan;
+begin
+  Result := Dep.PropertyKeySpan;
+  if Dep.ValueSpan.EndByte > Result.EndByte then
+    Result.EndByte := Dep.ValueSpan.EndByte;
+  if (Result.StartByte < Binding.StatementSpan.StartByte) or
+    (Result.EndByte > Binding.StatementSpan.EndByte) or
+    (Result.EndByte <= Result.StartByte) then
+    raise EWriteError.Create('the ' + What +
+      ' comes from an enclosing TikZ style and cannot be edited locally');
+end;
+
+{ A shared 'opacity' option of a statement whose fill options are rewritten
+  keeps only its stroke part, as 'draw opacity' with the native value; the
+  fill options then carry the fill opacity. Without a stroke it goes with
+  the fill options. Returns whether the option was rewritten here. }
+function RewriteSharedOpacity(Context: TTikZImportContext;
+  BindingIndex: SizeInt; Native: TPrimitive2D; Stroked: Boolean;
+  var Patches: TPatchArray): Boolean;
+var
+  Binding: TTikZSourceBinding;
+  DepIndex: SizeInt;
+  Patch: TTikZSourcePatch;
+begin
+  Binding := Context.BindingAt(BindingIndex);
+  DepIndex := FindDependency(Binding, tdOpacity);
+  Result := (DepIndex >= 0) and Stroked;
+  if not Result then Exit;
+  Patch.Span := LocalOptionSpan(Binding, Binding.Dependencies[DepIndex],
+    'opacity');
+  Patch.Replacement := BytesOf(RawByteString(OpacityOption('draw opacity',
+    ClampOpacity(Native.LineOpacity))));
+  MergePatch(Patches, Patch);
+end;
+
+{ The source name for a colour of an edited fill: the name the statement
+  already uses for that colour, or a safe standard name. }
+function EditedFillColorName(RGB: LongWord; SceneObject: TTikZSceneObject;
+  const Role: string): string;
+begin
+  if (RGB = (SceneObject.FillRGB and $FFFFFF)) and
+    (SceneObject.FillColorName <> '') then Exit(SceneObject.FillColorName);
+  if (SceneObject.Gradient <> tgNone) and
+    (RGB = (SceneObject.GradientRGB and $FFFFFF)) and
+    (SceneObject.GradientColorName <> '') then
+    Exit(SceneObject.GradientColorName);
+  if not RGBColorName(RGB, Result) then
+    raise EWriteError.Create('This edited ' + Role +
+      ' color has no safe local TikZ color name');
+end;
+
+{ The fill options of an edited native fill, reusing the statement's colour
+  names. A faded gradient reuses the fading its statement already names, or
+  an earlier declaration of the same fading, or declares it right before the
+  statement. }
+function EditedFillText(Context: TTikZImportContext; BindingIndex: SizeInt;
+  Native: TPrimitive2D; SceneObject: TTikZSceneObject; const Source: TBytes;
+  var Patches: TPatchArray): string;
+var
+  Binding: TTikZSourceBinding;
+  Start, Finish, Name, Declaration: string;
+  I, Found: SizeInt;
+  Patch: TTikZSourcePatch;
+begin
+  Binding := Context.BindingAt(BindingIndex);
+  Start := EditedFillColorName(ColorToRGB24(Native.FillColor), SceneObject,
+    'fill');
+  if Native.FillGradient = fgNone then
+    Result := 'fill=' + Start
+  else
+  begin
+    Finish := EditedFillColorName(NativeGradientRGB(Native), SceneObject,
+      'gradient end');
+    Result := ShadingText(Native, Start, Finish);
+  end;
+  if not FadedGradient(Native) then
+  begin
+    if not IsOpaque(Native.FillOpacity) then
+      Result := Result + ', ' + OpacityOption('fill opacity',
+        ClampOpacity(Native.FillOpacity));
+    Exit;
+  end;
+  if (SceneObject.FadingDeclaration >= 0) and FadingFits(Native,
+    Context.Scene.Fadings[SceneObject.FadingDeclaration]) then
+    Name := SceneObject.FadingName
+  else
+  begin
+    Declaration := FadingDeclarationText(Native, Name);
+    Found := -1;
+    for I := 0 to High(Context.Scene.Fadings) do
+      if (Context.Scene.Fadings[I].Name = Name) and
+        (Context.Scene.Fadings[I].Span.EndByte <=
+        Binding.StatementSpan.StartByte) then Found := I;
+    if (Found < 0) or not FadingFits(Native, Context.Scene.Fadings[Found]) then
+    begin
+      Patch.Span := Binding.StatementSpan;
+      Patch.Span.EndByte := Patch.Span.StartByte;
+      Patch.Replacement := BytesOf(RawByteString(Declaration) + EOLBytes(Source));
+      MergePatch(Patches, Patch);
+    end;
+  end;
+  Result := Result + ', ' + FadingOptionsText(Native, Name);
+end;
+
+{ Replaces the fill options of a statement (fill colour, fill opacity,
+  shading and fading keys) by Text at the place of the first one, removing
+  the others with their separators, or inserts Text when there are none. }
+procedure ReplaceFillOptions(Context: TTikZImportContext;
+  BindingIndex: SizeInt; const Source: TBytes; const Text: string;
+  var Insertion: string; var Patches: TPatchArray;
+  KeepTransform: Boolean = False; IncludeShared: Boolean = False);
+var
+  Binding: TTikZSourceBinding;
+  Dep: TTikZPropertyDependency;
+  Spans, ValueSpans: TSpanArray;
+  Keys: array of string;
+  Items: TStringList;
+  Span, Merged: TTikZSourceSpan;
+  I, J, P: SizeInt;
+  Patch: TTikZSourcePatch;
+  Key, Value, Old: string;
+  A, B: Double;
+  SameKeys: Boolean;
+  Settings: TFormatSettings;
+  function IsBlank(Value: Byte): Boolean;
+  begin
+    Result := Value in [Ord(' '), 9, 10, 13];
+  end;
+  function SplitItems(const Value: string): TStringList;
+  var K, Depth, First: SizeInt;
+  begin
+    Result := TStringList.Create;
+    Depth := 0;
+    First := 1;
+    for K := 1 to Length(Value) + 1 do
+      if (K <= Length(Value)) and (Value[K] in ['{', '(']) then Inc(Depth)
+      else if (K <= Length(Value)) and (Value[K] in ['}', ')']) then Dec(Depth)
+      else if (K > Length(Value)) or ((Value[K] = ',') and (Depth = 0)) then
+      begin
+        Result.Add(Trim(Copy(Value, First, K - First)));
+        First := K + 1;
+      end;
+  end;
+begin
+  Binding := Context.BindingAt(BindingIndex);
+  Spans := nil;
+  ValueSpans := nil;
+  Keys := nil;
+  for I := 0 to High(Binding.Dependencies) do
+  begin
+    Dep := Binding.Dependencies[I];
+    if not ((Dep.Kind in [tdFillPaint, tdFillOpacity]) or
+      (IncludeShared and (Dep.Kind = tdOpacity)) or
+      ((Dep.Kind = tdFillColor) and
+      (Dep.PropertyKeySpan.EndByte > Dep.PropertyKeySpan.StartByte))) then
+      Continue;
+    Span := LocalOptionSpan(Binding, Dep, 'fill');
+    if SpanAlreadyPresent(Spans, Span) then Continue;
+    AddSpan(Spans, Span);
+    AddSpan(ValueSpans, Dep.ValueSpan);
+    SetLength(Keys, Length(Keys) + 1);
+    Keys[High(Keys)] := Trim(SourceText(Source, Dep.PropertyKeySpan));
+  end;
+  { With the same keys, only the values that changed are replaced. }
+  if (Text <> '') and (Length(Spans) > 0) then
+  begin
+    Items := SplitItems(Text);
+    try
+      SameKeys := Items.Count = Length(Keys);
+      for I := 0 to Items.Count - 1 do
+      begin
+        Key := Trim(Copy(Items[I], 1, Pos('=', Items[I]) - 1));
+        J := 0;
+        while (J <= High(Keys)) and (Keys[J] <> Key) do Inc(J);
+        if J > High(Keys) then SameKeys := False;
+      end;
+      if SameKeys then
+      begin
+        Settings := DefaultFormatSettings;
+        Settings.DecimalSeparator := '.';
+        for I := 0 to Items.Count - 1 do
+        begin
+          P := Pos('=', Items[I]);
+          Key := Trim(Copy(Items[I], 1, P - 1));
+          Value := Trim(Copy(Items[I], P + 1, MaxInt));
+          J := 0;
+          while Keys[J] <> Key do Inc(J);
+          Old := Trim(SourceText(Source, ValueSpans[J]));
+          if Old = Value then Continue;
+          if (Key = 'fading transform') and KeepTransform then Continue;
+          if TryStrToFloat(Old, A, Settings) and
+            TryStrToFloat(Value, B, Settings) and NearValue(A, B) then Continue;
+          Patch.Span := ValueSpans[J];
+          Patch.Replacement := BytesOf(RawByteString(Value));
+          MergePatch(Patches, Patch);
+        end;
+        Exit;
+      end;
+    finally
+      Items.Free;
+    end;
+  end;
+  for I := 1 to High(Spans) do
+  begin
+    Span := Spans[I];
+    J := I - 1;
+    while (J >= 0) and (Spans[J].StartByte > Span.StartByte) do
+    begin
+      Spans[J + 1] := Spans[J];
+      Dec(J);
+    end;
+    Spans[J + 1] := Span;
+  end;
+  if Length(Spans) = 0 then
+  begin
+    if Text <> '' then
+    begin
+      if Insertion <> '' then Insertion := Insertion + ', ';
+      Insertion := Insertion + Text;
+    end;
+    Exit;
+  end;
+  J := 0;
+  if Text <> '' then
+  begin
+    Patch.Span := Spans[0];
+    Patch.Replacement := BytesOf(RawByteString(Text));
+    MergePatch(Patches, Patch);
+    J := 1;
+  end;
+  { Each removed option takes the separator after it, or the one before
+    it when it ends the list; touching removals are merged. }
+  Merged.StartByte := -1;
+  Merged.EndByte := -1;
+  for I := J to High(Spans) do
+  begin
+    Span := Spans[I];
+    P := Span.EndByte;
+    while (P < Binding.StatementSpan.EndByte) and IsBlank(Source[P]) do Inc(P);
+    if (P < Binding.StatementSpan.EndByte) and (Source[P] = Ord(',')) then
+    begin
+      Inc(P);
+      while (P < Binding.StatementSpan.EndByte) and IsBlank(Source[P]) do Inc(P);
+      Span.EndByte := P;
+    end
+    else
+    begin
+      P := Span.StartByte;
+      while (P > Binding.StatementSpan.StartByte) and IsBlank(Source[P - 1]) do
+        Dec(P);
+      if (P > Binding.StatementSpan.StartByte) and (Source[P - 1] = Ord(',')) then
+        Span.StartByte := P - 1;
+    end;
+    if (Merged.StartByte >= 0) and (Span.StartByte <= Merged.EndByte) then
+    begin
+      if Span.EndByte > Merged.EndByte then Merged.EndByte := Span.EndByte;
+      Continue;
+    end;
+    if Merged.StartByte >= 0 then
+    begin
+      Patch.Span := Merged;
+      Patch.Replacement := nil;
+      MergePatch(Patches, Patch);
+    end;
+    Merged := Span;
+  end;
+  if Merged.StartByte >= 0 then
+  begin
+    Patch.Span := Merged;
+    Patch.Replacement := nil;
+    MergePatch(Patches, Patch);
+  end;
+end;
+
+{ Gradient, fill colour and fill opacity edits of a statement whose fill is
+  or becomes a gradient. }
+procedure AddFillPaintChanges(Context: TTikZImportContext;
+  BindingIndex: SizeInt; Native: TPrimitive2D;
+  SceneObject: TTikZSceneObject; const Source: TBytes;
+  var Insertion: string; var Patches: TPatchArray;
+  out SharedOpacityDone: Boolean);
+var
+  Changed, KeepTransform: Boolean;
+  Shift: TTikZPoint;
+  Rotation, XScale, YScale: Double;
+begin
+  Changed := not SameGradient(Native, SceneObject) or
+    (ColorToRGB24(Native.FillColor) <> (SceneObject.FillRGB and $FFFFFF)) or
+    not NearValue(ClampOpacity(Native.FillOpacity), SceneObject.FillOpacity) or
+    (FadedGradient(Native) <> (SceneObject.FadingName <> ''));
+  if not Changed and FadedGradient(Native) then
+  begin
+    if (SceneObject.FadingDeclaration < 0) or not FadingFits(Native,
+      Context.Scene.Fadings[SceneObject.FadingDeclaration]) then
+      Changed := True
+    else if Native.FillGradient = fgLinear then
+      { A geometry edit moves the box the fading is laid out on. }
+      Changed := not TikZLinearFadingOf(Native, Shift, Rotation, XScale,
+        YScale) or not SameTikZFadingTransform(SceneObject.FadingShift,
+        SceneObject.FadingRotation, SceneObject.FadingXScale,
+        SceneObject.FadingYScale, Shift, Rotation, XScale, YScale,
+        Context.Scene.PictureScaleX);
+  end;
+  SharedOpacityDone := False;
+  if not Changed then Exit;
+  SharedOpacityDone := RewriteSharedOpacity(Context, BindingIndex, Native,
+    SceneObject.StrokeEnabled, Patches);
+  KeepTransform := (SceneObject.FadingName <> '') and
+    (Native.FillGradient = fgLinear) and
+    TikZLinearFadingOf(Native, Shift, Rotation, XScale, YScale) and
+    SameTikZFadingTransform(SceneObject.FadingShift,
+    SceneObject.FadingRotation, SceneObject.FadingXScale,
+    SceneObject.FadingYScale, Shift, Rotation, XScale, YScale,
+    Context.Scene.PictureScaleX);
+  ReplaceFillOptions(Context, BindingIndex, Source,
+    EditedFillText(Context, BindingIndex, Native, SceneObject, Source, Patches),
+    Insertion, Patches, KeepTransform, not SharedOpacityDone);
+end;
+
+{ Part names the paint a statement carries for its native object: all of
+  it, or only the fill or only the stroke when TpX writes the fill of a
+  faded gradient and its stroke as two statements. ExtraOptions are
+  inserted at the start of the statement's options. }
 procedure AddNativeChanges(Context: TTikZImportContext; BindingIndex: SizeInt;
   Native: TPrimitive2D; Drawing: TDrawing2D; Source: TBytes;
-  var Edits: TEditArray; var StylePatches: TPatchArray);
+  var Edits: TEditArray; var StylePatches: TPatchArray;
+  Part: TStatementPart = spWhole; const ExtraOptions: string = '';
+  SharedOpacityDone: Boolean = False);
 var
   Binding: TTikZSourceBinding;
   SceneObject: TTikZSceneObject;
@@ -864,6 +1275,7 @@ var
   CenterPoint: TPoint2D;
   NativeRadiusX, NativeRadiusY, NativeAngle: TRealType;
   Insertion, Problem: string;
+  Shared: Boolean;
   procedure AddScalarEdit(Kind: TTikZDependencyKind; ScalarValue: Extended);
   var D: TTikZPropertyDependency; SourceValue, PhysicalTolerance: Extended;
   begin
@@ -980,8 +1392,10 @@ begin
 
   if (SceneObject.Kind <> tsoImage) and (SceneObject.Kind <> tsoText) then
   begin
+  Insertion := ExtraOptions;
   DepIndex := FindDependency(Binding, tdLineWidth);
-  if Native.LineStyle <> liNone then
+  if Part = spFill then
+  else if Native.LineStyle <> liNone then
   begin
     if not SceneObject.StrokeEnabled then
       raise EWriteError.Create('Adding a stroke to an unpainted TikZ object is not supported');
@@ -999,10 +1413,11 @@ begin
   end
   else if SceneObject.StrokeEnabled then
     raise EWriteError.Create('Removing a TikZ stroke is not supported');
-  if not SceneObject.StrokeEnabled and (Native.LineStyle <> liNone) then
+  if (Part <> spFill) and not SceneObject.StrokeEnabled and
+    (Native.LineStyle <> liNone) then
     raise EWriteError.Create('Adding a stroke to an unpainted TikZ object is not supported');
 
-  if SceneObject.StrokeEnabled then
+  if (Part <> spFill) and SceneObject.StrokeEnabled then
   begin
     RGB := ColorToRGB24(Native.LineColor);
     if RGB <> (SceneObject.StrokeRGB and $FFFFFF) then
@@ -1017,10 +1432,17 @@ begin
     end;
   end;
 
-  if not SameGradient(Native, SceneObject) then
-    raise EWriteError.Create(
-      'Gradient edits on an existing TikZ statement are not supported');
-  if SceneObject.FillEnabled then
+  if Part = spStroke then
+  else if (NativeGradient(Native) <> tgNone) or
+    (SceneObject.Gradient <> tgNone) then
+  begin
+    if Native.FillColor = clDefault then
+      raise EWriteError.Create('Removing a TikZ fill is not supported');
+    AddFillPaintChanges(Context, BindingIndex, Native, SceneObject, Source,
+      Insertion, StylePatches, Shared);
+    SharedOpacityDone := SharedOpacityDone or Shared;
+  end
+  else if SceneObject.FillEnabled then
   begin
     if Native.FillColor = clDefault then
       raise EWriteError.Create('Removing a TikZ fill is not supported');
@@ -1039,10 +1461,12 @@ begin
   else if Native.FillColor <> clDefault then
     raise EWriteError.Create('Adding a fill to an unfilled TikZ object is not supported');
 
-  Insertion := '';
   AddOpacityChanges(Context, BindingIndex, Native, SceneObject, Source,
-    Insertion, StylePatches);
-  if SceneObject.StrokeEnabled and
+    Insertion, StylePatches, Part <> spFill, (Part = spWhole) and
+    (NativeGradient(Native) = tgNone) and (SceneObject.Gradient = tgNone),
+    SharedOpacityDone);
+  if Part = spFill then
+  else if SceneObject.StrokeEnabled and
     (((SceneObject.LineKind = tlSolid) and (Native.LineStyle <> liSolid)) or
     ((SceneObject.LineKind = tlDashed) and (Native.LineStyle <> liDashed)) or
     ((SceneObject.LineKind = tlDotted) and (Native.LineStyle <> liDotted))) then
@@ -1054,8 +1478,8 @@ begin
       Source, Insertion, StylePatches);
   end;
   Problem := ArrowSpec(Native, Value);
-  if Problem <> '' then raise EWriteError.Create(Problem);
-  if (Native.BeginArrowKind <> TikZTipArrowKind(SceneObject.BeginArrow)) or
+  if (Problem <> '') and (Part <> spFill) then raise EWriteError.Create(Problem);
+  if (Part <> spFill) and (Native.BeginArrowKind <> TikZTipArrowKind(SceneObject.BeginArrow)) or
     (Native.EndArrowKind <> TikZTipArrowKind(SceneObject.EndArrow)) then
   begin
     if Value = '' then Value := '-';
@@ -1165,11 +1589,13 @@ end;
 { Build the option list of a new statement. The result is '' on success or
   names the native property that has no TikZ source form. }
 function NewObjectOptions(Primitive: TPrimitive2D; Drawing: TDrawing2D;
-  var Definitions: TDefinitionArray; out Options: string): string;
-var Spec, Start, Finish: string; WidthMM, Angle: Extended;
+  var Definitions: TDefinitionArray; out Options, FadedFill: string): string;
+var Spec, Start, Finish, Name, Declaration: string; WidthMM: Extended;
+  I: SizeInt;
 begin
   Result := '';
   Options := '';
+  FadedFill := '';
   if Primitive.Hatching <> haNone then
     Exit('hatching has no TikZ source form');
   if Primitive is TText2D then
@@ -1204,25 +1630,31 @@ begin
   end
   else if Spec <> '' then
     Exit('arrows on an object without a stroke have no TikZ source form');
-  if (Primitive.FillColor <> clDefault) and
+  if FadedGradient(Primitive) then
+  begin
+    { The fill becomes its own statement with a fading, declared once
+      among the definitions; Options keep only the stroke. }
+    Start := TikZColor(ColorToRGB24(Primitive.FillColor), Definitions);
+    Finish := TikZColor(NativeGradientRGB(Primitive), Definitions);
+    Declaration := FadingDeclarationText(Primitive, Name);
+    I := 0;
+    while (I <= High(Definitions)) and (Definitions[I] <> Declaration) do Inc(I);
+    if I > High(Definitions) then
+    begin
+      SetLength(Definitions, I + 1);
+      Definitions[I] := Declaration;
+    end;
+    FadedFill := ShadingText(Primitive, Start, Finish) + ', ' +
+      FadingOptionsText(Primitive, Name);
+  end
+  else if (Primitive.FillColor <> clDefault) and
     (Primitive.FillGradient <> fgNone) then
   begin
     { TikZ axis and radial shadings, laid out as TPaintStyle describes. }
-    if Abs(ClampOpacity(Primitive.FillOpacity) -
-      ClampOpacity(Primitive.GradientOpacity)) > 0.0005 then
-      Exit('a gradient between two opacities has no TikZ source form');
     if Options <> '' then Options := Options + ', ';
     Start := TikZColor(ColorToRGB24(Primitive.FillColor), Definitions);
     Finish := TikZColor(NativeGradientRGB(Primitive), Definitions);
-    Angle := Primitive.GradientAngle -
-      360 * Floor(Primitive.GradientAngle / 360);
-    if Primitive.FillGradient = fgRadial then
-      Options := Options + 'inner color=' + Start + ', outer color=' + Finish
-    else if Abs(Angle) < 1E-9 then
-      Options := Options + 'left color=' + Start + ', right color=' + Finish
-    else
-      Options := Options + 'bottom color=' + Start + ', top color=' + Finish +
-        ', shading angle=' + FormatTikZReal(Angle - 90, SizeOf(TRealType));
+    Options := Options + ShadingText(Primitive, Start, Finish);
   end
   else if Primitive.FillColor <> clDefault then
   begin
@@ -1233,7 +1665,8 @@ begin
   if (Primitive.LineStyle <> liNone) and (Primitive.LineOpacity <> 1) then
     Options := Options + ', ' +
       OpacityOption('draw opacity', ClampOpacity(Primitive.LineOpacity));
-  if (Primitive.FillColor <> clDefault) and (Primitive.FillOpacity <> 1) then
+  if (Primitive.FillColor <> clDefault) and (Primitive.FillOpacity <> 1) and
+    (FadedFill = '') then
     Options := Options + ', ' +
       OpacityOption('fill opacity', ClampOpacity(Primitive.FillOpacity));
 end;
@@ -1259,19 +1692,21 @@ begin
   else Result := Format('Object %d (%s)', [Index, Obj.ClassName]);
 end;
 
+{ The path of a new primitive after its options, with the terminating
+  semicolon. }
+function NewPrimitiveGeometry(Primitive: TPrimitive2D): RawByteString; forward;
+
 function SerializeNewPrimitive(Primitive: TPrimitive2D;
-  Drawing: TDrawing2D; var Definitions: TDefinitionArray): RawByteString;
+  Drawing: TDrawing2D; var Definitions: TDefinitionArray;
+  const EOL: RawByteString): RawByteString;
 var
-  Options, Body, Problem: string;
-  I, N: SizeInt;
-  A, B, C: TPoint2D;
+  Options, FadedFill, Body, Problem: string;
   TextObject: TText2D;
   SizeRatio: Extended;
-  Bezier: Boolean;
-  CX, CY, Radius, StartAngle, EndAngle: TRealType;
-  ArcText: string;
+  Geometry: RawByteString;
 begin
-  Problem := NewObjectOptions(Primitive, Drawing, Definitions, Options);
+  Problem := NewObjectOptions(Primitive, Drawing, Definitions, Options,
+    FadedFill);
   if Problem <> '' then raise EWriteError.Create(Problem);
   if Primitive is TText2D then
   begin
@@ -1301,6 +1736,16 @@ begin
     Exit(RawByteString('\node' + Options + ' at ' +
       PointText(Primitive.Points[0]) + ' {' + Body + '};'));
   end;
+  Geometry := NewPrimitiveGeometry(Primitive);
+  if FadedFill <> '' then
+  begin
+    { As T_TikZ_Device writes it: the faded fill, then the stroke. }
+    Result := RawByteString('\path[' + FadedFill + '] ') + Geometry;
+    if Primitive.LineStyle <> liNone then
+      Result := Result + EOL + RawByteString('\draw[' + Options + '] ') +
+        Geometry;
+    Exit;
+  end;
   if Primitive.LineStyle = liNone then
   begin
     if Primitive.FillColor <> clDefault then
@@ -1308,6 +1753,18 @@ begin
     else Result := '\path ';
   end
   else Result := RawByteString('\draw[' + Options + '] ');
+  Result := Result + Geometry;
+end;
+
+function NewPrimitiveGeometry(Primitive: TPrimitive2D): RawByteString;
+var
+  I, N: SizeInt;
+  A, B, C: TPoint2D;
+  Bezier: Boolean;
+  CX, CY, Radius, StartAngle, EndAngle: TRealType;
+  ArcText: string;
+begin
+  Result := '';
   if Primitive is TCircular2D then
   begin
     TCircular2D(Primitive).GetArcParams(CX, CY, Radius, StartAngle, EndAngle);
@@ -1493,7 +1950,8 @@ begin
 end;
 
 function SerializeNewObject(Obj: TObject2D; Drawing: TDrawing2D;
-  Index: SizeInt; var Definitions: TDefinitionArray): RawByteString;
+  Index: SizeInt; var Definitions: TDefinitionArray;
+  const EOL: RawByteString): RawByteString;
 begin
   try
     if Obj is TSolid3D then
@@ -1501,7 +1959,8 @@ begin
     if not (Obj is TPrimitive2D) then
       raise EWriteError.Create(
         'only standalone primitive objects can be inserted into a TikZ picture');
-    Result := SerializeNewPrimitive(TPrimitive2D(Obj), Drawing, Definitions);
+    Result := SerializeNewPrimitive(TPrimitive2D(Obj), Drawing, Definitions,
+      EOL);
   except
     on E: EWriteError do
       raise EWriteError.Create(ObjectLabel(Obj, Index) + ': ' + E.Message);
@@ -1542,7 +2001,8 @@ begin
   Obj := Drawing.ObjectList.FirstObj as TObject2D;
   while Obj <> nil do
   begin
-    Body := Body + SerializeNewObject(Obj, Drawing, Index, Definitions) + EOL;
+    Body := Body + SerializeNewObject(Obj, Drawing, Index, Definitions, EOL) +
+      EOL;
     Inc(Index);
     Obj := Drawing.ObjectList.NextObj as TObject2D;
   end;
@@ -1602,6 +2062,9 @@ var
   ObjectIndex, DefinitionsBefore: SizeInt;
   SolidIndex: SizeInt;
   SolidRegion: TTikZSolidRegion;
+  SceneObject: TTikZSceneObject;
+  Referenced, Kept: Boolean;
+  Live: TObject2D;
   function SpanText(const Bytes: TBytes; const Span: TTikZSourceSpan): RawByteString;
   var
     K: SizeInt;
@@ -1609,6 +2072,90 @@ var
     SetLength(Result, Span.EndByte - Span.StartByte);
     for K := 1 to Length(Result) do Result[K] := Char(Bytes[Span.StartByte + K - 1]);
   end;
+  { A faded fill and the stroke TpX writes after it. While the gradient
+    stays faded each statement takes its part of the edit; otherwise the
+    fill statement goes and its fill joins the stroke statement. }
+  procedure AddFadedPairChanges(FillIndex, StrokeIndex: SizeInt);
+  var
+    Fill, Stroke: TTikZSceneObject;
+    FillText: string;
+    procedure CheckName(const Name: string);
+    begin
+      if (Name <> '') and (Pos(',' + Name + ',', Stroke.ColorsSinceFill) > 0) and
+        (Pos('=' + Name, FillText) > 0) then
+        raise EWriteError.Create('the fill color ' + Name +
+          ' is redefined before the stroke path it would join');
+    end;
+  begin
+    Fill := Context.Scene.ObjectAt(FillIndex);
+    Stroke := Context.Scene.ObjectAt(StrokeIndex);
+    if FadedGradient(Primitive) then
+    begin
+      AddNativeChanges(Context, FillIndex, Primitive, Drawing, Source,
+        Edits, StylePatches, spFill);
+      AddNativeChanges(Context, StrokeIndex, Primitive, Drawing, Source,
+        Edits, StylePatches, spStroke);
+      Exit;
+    end;
+    if Primitive.FillColor = clDefault then
+      raise EWriteError.Create('Removing a TikZ fill is not supported');
+    FillText := EditedFillText(Context, FillIndex, Primitive, Fill, Source,
+      StylePatches);
+    CheckName(Fill.FillColorName);
+    CheckName(Fill.GradientColorName);
+    AddSpan(DeletedSpans, Context.BindingAt(FillIndex).StatementSpan);
+    AddPatch(Patches, Context.BindingAt(FillIndex).StatementSpan, '');
+    AddNativeChanges(Context, StrokeIndex, Primitive, Drawing, Source,
+      Edits, StylePatches, spStroke, FillText);
+  end;
+
+  { A stroked statement whose gradient becomes faded: the fill moves to a
+    new statement before it, as TpX writes such a gradient. }
+  procedure SplitFadedFill(StatementIndex: SizeInt);
+  var
+    SceneObj: TTikZSceneObject;
+    FillText, Ignored: string;
+    Declarations: TPatchArray;
+    Patch: TTikZSourcePatch;
+    T: TTikZAffineTransform;
+    P, Q: SizeInt;
+    Command: string;
+  begin
+    SceneObj := Context.Scene.ObjectAt(StatementIndex);
+    T := SceneObj.ScopeTransform;
+    if (T.XX <> 1) or (T.XY <> 0) or (T.YX <> 0) or (T.YY <> 1) or
+      (T.TX <> 0) or (T.TY <> 0) then
+      raise EWriteError.Create(
+        'a faded gradient inside a transformed TikZ scope is not supported');
+    Declarations := nil;
+    FillText := EditedFillText(Context, StatementIndex, Primitive, SceneObj,
+      Source, Declarations);
+    AddNativeChanges(Context, StatementIndex, Primitive, Drawing, Source,
+      Edits, StylePatches, spStroke, '', RewriteSharedOpacity(Context,
+      StatementIndex, Primitive, True, StylePatches));
+    Ignored := '';
+    ReplaceFillOptions(Context, StatementIndex, Source, '', Ignored,
+      StylePatches);
+    Patch.Span := Context.BindingAt(StatementIndex).StatementSpan;
+    Patch.Span.EndByte := Patch.Span.StartByte;
+    Patch.Replacement := BytesOf(RawByteString('\path[' + FillText + '] ') +
+      NewPrimitiveGeometry(Primitive) + EOL);
+    MergePatch(StylePatches, Patch);
+    for P := 0 to High(Declarations) do MergePatch(StylePatches, Declarations[P]);
+    { \fill and \filldraw fill by themselves. }
+    P := Patch.Span.StartByte + 1;
+    Q := P;
+    while (Q < Length(Source)) and (Chr(Source[Q]) in ['A'..'Z', 'a'..'z']) do
+      Inc(Q);
+    Patch.Span.EndByte := Q;
+    Command := SourceText(Source, Patch.Span);
+    if (Command = '\fill') or (Command = '\filldraw') then
+    begin
+      Patch.Replacement := BytesOf('\draw');
+      MergePatch(StylePatches, Patch);
+    end;
+  end;
+
   function EditAffectsBounds(const Edit: TTikZBoundEdit): Boolean;
   var B: TTikZSourceBinding; Kind: TTikZDependencyKind;
   begin
@@ -1674,7 +2221,8 @@ begin
       if not SupportsTikZStructuralOperation(tsoInsertStatement) then
         raise EWriteError.Create('TikZ statement insertion is not supported');
       DefinitionsBefore := Length(Definitions);
-      Replacement := SerializeNewObject(Obj, Drawing, ObjectIndex, Definitions);
+      Replacement := SerializeNewObject(Obj, Drawing, ObjectIndex, Definitions,
+        EOL);
       for K := High(Definitions) downto DefinitionsBefore do
         Replacement := RawByteString(Definitions[K]) + EOL + Replacement;
       if Inserted = '' then
@@ -1699,8 +2247,18 @@ begin
       Primitive := TPrimitive2D(Obj);
       EditsBefore := Length(Edits);
       try
-        AddNativeChanges(Context, BindingIndex, Primitive, Drawing, Source,
-          Edits, StylePatches);
+        SceneObject := Context.Scene.ObjectAt(Binding.ObjectIndex);
+        if SceneObject.StrokeCompanion >= 0 then
+        begin
+          PreviousIndex := SceneObject.StrokeCompanion;
+          AddFadedPairChanges(BindingIndex, SceneObject.StrokeCompanion);
+        end
+        else if FadedGradient(Primitive) and SceneObject.StrokeEnabled and
+          (Primitive.LineStyle <> liNone) then
+          SplitFadedFill(BindingIndex)
+        else
+          AddNativeChanges(Context, BindingIndex, Primitive, Drawing, Source,
+            Edits, StylePatches);
       except
         on E: EWriteError do
           raise EWriteError.Create(ObjectLabel(Obj, ObjectIndex) + ': ' +
@@ -1755,6 +2313,27 @@ begin
       AddSpan(DeletedSpans, Binding.StatementSpan);
       AddPatch(Patches, Binding.StatementSpan, '');
     end;
+  end;
+
+  { A fading declaration goes with the last statement that used it. }
+  for I := 0 to High(Context.Scene.Fadings) do
+  begin
+    Referenced := False;
+    Kept := False;
+    for J := 0 to Context.BindingCount - 1 do
+    begin
+      Binding := Context.BindingAt(J);
+      if Context.Scene.ObjectAt(Binding.ObjectIndex).FadingDeclaration <> I then
+        Continue;
+      Referenced := True;
+      Live := Drawing.GetObject(Binding.NativeObjectID);
+      if (Live is TPrimitive2D) and
+        FadingFits(TPrimitive2D(Live), Context.Scene.Fadings[I]) and
+        not SpanAlreadyPresent(DeletedSpans, Binding.StatementSpan) then
+        Kept := True;
+    end;
+    if Referenced and not Kept then
+      AddPatch(Patches, Context.Scene.Fadings[I].Span, '');
   end;
 
   if not BuildTikZPropertyPatches(Source, Region, Bindings, Edits,
@@ -1837,7 +2416,7 @@ procedure RebindTikZDocumentContext(LiveDrawing, ParsedDrawing: TDrawing2D;
   CodecContext: TObject);
 var
   Context: TTikZImportContext;
-  LiveObject, ParsedObject: TObject2D;
+  LiveObject, ParsedObject, LastLive, LastParsed: TObject2D;
   I, SolidIndex: SizeInt;
   Binding: TTikZSourceBinding;
 begin
@@ -1851,6 +2430,8 @@ begin
 
   LiveObject := LiveDrawing.ObjectList.FirstObj as TObject2D;
   ParsedObject := ParsedDrawing.ObjectList.FirstObj as TObject2D;
+  LastLive := nil;
+  LastParsed := nil;
   for I := 0 to Context.BindingCount - 1 do
   begin
     SolidIndex := Context.SolidRegionOfBinding(I);
@@ -1866,14 +2447,24 @@ begin
       ParsedObject := ParsedDrawing.ObjectList.NextObj as TObject2D;
       Continue;
     end;
-    if (LiveObject = nil) or (ParsedObject = nil) then
-      raise EWriteError.Create('TikZ save-back changed the bound object count');
     Binding := Context.BindingAt(I);
     if Binding.ObjectIndex <> I then
       raise EWriteError.Create('TikZ source bindings are not in object order');
+    if (Context.Scene.ObjectAt(I).StrokeOf >= 0) and (LastLive <> nil) then
+    begin
+      // The stroke of a faded fill belongs to the object bound before it.
+      if ParsedDrawing.GetObject(Binding.NativeObjectID) <> LastParsed then
+        raise EWriteError.Create('TikZ parsed object order no longer matches its source bindings');
+      Context.BindNativeObject(I, LastLive.ID);
+      Continue;
+    end;
+    if (LiveObject = nil) or (ParsedObject = nil) then
+      raise EWriteError.Create('TikZ save-back changed the bound object count');
     if ParsedDrawing.GetObject(Binding.NativeObjectID) <> ParsedObject then
       raise EWriteError.Create('TikZ parsed object order no longer matches its source bindings');
     Context.BindNativeObject(I, LiveObject.ID);
+    LastLive := LiveObject;
+    LastParsed := ParsedObject;
     LiveObject := LiveDrawing.ObjectList.NextObj as TObject2D;
     ParsedObject := ParsedDrawing.ObjectList.NextObj as TObject2D;
   end;

@@ -2374,6 +2374,9 @@ begin
     else if ParamStr(1) = 'paint-opacity' then TestPaintOpacity
     else if ParamStr(1) = 'paint-gradient' then TestPaintGradient
     else if ParamStr(1) = 'paint-arrow-opacity' then TestPaintArrowOpacity
+    else if ParamStr(1) = 'tikz-fading-patches' then TestTikZFadingPatches
+    else if ParamStr(1) = 'tikz-fading-names' then
+      TestTikZFadingNamesAndSharedOpacity
     else if ParamStr(1) = 'bitmap-eps' then TestBitmapEps
     else if ParamStr(1) = 'svg-linked-image-copy' then TestSvgLinkedImageCopy
     else if ParamStr(1) = 'svg-codec' then TestSvgCodec

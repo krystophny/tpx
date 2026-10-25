@@ -23,6 +23,10 @@ procedure RegisterTikZDocumentLoader;
   h44 the filled "latex" triangle and h42 the notched "stealth" tip. }
 function TikZTipArrowKind(const Tip: string): TArrowKind;
 function ArrowKindTikZTip(Kind: TArrowKind; out Tip: string): Boolean;
+{ Fading transform of a linear gradient whose ends differ in opacity, laid
+  out on the box of the primitive's gradient fill as TpX writes it. }
+function TikZLinearFadingOf(Primitive: TPrimitive2D; out Shift: TTikZPoint;
+  out Rotation, XScale, YScale: Double): Boolean;
 
 implementation
 
@@ -100,18 +104,9 @@ begin
   end;
 end;
 
-procedure ApplyStyle(Primitive: TPrimitive2D; const Obj: TTikZSceneObject;
-  Drawing: TDrawing2D);
+procedure ApplyStrokeStyle(Primitive: TPrimitive2D;
+  const Obj: TTikZSceneObject; Drawing: TDrawing2D);
 begin
-  if Obj.Kind = tsoText then
-  begin
-    { TText2D.LineColor controls glyphs; node draw/fill is rejected by the
-      semantic importer because native text has no matching frame primitive. }
-    Primitive.LineColor := SceneColor(Obj.StrokeRGB);
-    Primitive.LineStyle := liNone;
-    Primitive.FillColor := clDefault;
-    Exit;
-  end;
   if Obj.StrokeEnabled then
   begin
     case Obj.LineKind of
@@ -128,9 +123,24 @@ begin
   else Primitive.LineStyle := liNone;
   Primitive.BeginArrowKind := TikZTipArrowKind(Obj.BeginArrow);
   Primitive.EndArrowKind := TikZTipArrowKind(Obj.EndArrow);
+  Primitive.LineOpacity := Obj.StrokeOpacity;
+end;
+
+procedure ApplyStyle(Primitive: TPrimitive2D; const Obj: TTikZSceneObject;
+  Drawing: TDrawing2D);
+begin
+  if Obj.Kind = tsoText then
+  begin
+    { TText2D.LineColor controls glyphs; node draw/fill is rejected by the
+      semantic importer because native text has no matching frame primitive. }
+    Primitive.LineColor := SceneColor(Obj.StrokeRGB);
+    Primitive.LineStyle := liNone;
+    Primitive.FillColor := clDefault;
+    Exit;
+  end;
+  ApplyStrokeStyle(Primitive, Obj, Drawing);
   if Obj.FillEnabled then Primitive.FillColor := SceneColor(Obj.FillRGB)
   else Primitive.FillColor := clDefault;
-  Primitive.LineOpacity := Obj.StrokeOpacity;
   Primitive.FillOpacity := Obj.FillOpacity;
   case Obj.Gradient of
     tgLinear: Primitive.FillGradient := fgLinear;
@@ -142,8 +152,62 @@ begin
   begin
     Primitive.GradientColor := SceneColor(Obj.GradientRGB);
     Primitive.GradientAngle := Obj.GradientAngle;
-    Primitive.GradientOpacity := Obj.FillOpacity;
+    Primitive.GradientOpacity := Obj.GradientOpacity;
   end;
+end;
+
+{ The box of the gradient fill of a primitive, as TPrimitive2D.DeviceDrawPiece
+  hands it to the devices. }
+function GradientBox(Primitive: TPrimitive2D; out Box: TRect2D): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  Primitive.UpdateExtension(nil);
+  for I := 0 to Primitive.Pieces.Count - 1 do
+    if Primitive.Pieces[I].GetFillGradient(Primitive) <> fgNone then
+    begin
+      Box := Primitive.Pieces[I].GetBoundingBox;
+      Exit(True);
+    end;
+end;
+
+function TikZLinearFadingOf(Primitive: TPrimitive2D; out Shift: TTikZPoint;
+  out Rotation, XScale, YScale: Double): Boolean;
+var
+  Paint: TPaintStyle;
+  P1, P2: TPoint2D;
+  A, B: TTikZPoint;
+begin
+  Paint := DefaultPaintStyle;
+  Paint.Gradient := fgLinear;
+  Paint.GradientAngle := Primitive.GradientAngle;
+  Result := GradientBox(Primitive, Paint.Box) and HasGradient(Paint);
+  if not Result then Exit;
+  LinearGradientEnds(Paint, P1, P2);
+  A.X := P1.X; A.Y := P1.Y;
+  B.X := P2.X; B.Y := P2.Y;
+  TikZLinearFadingTransform(A, B,
+    PointDistance2D(Paint.Box.FirstEdge, Paint.Box.SecondEdge),
+    Shift, Rotation, XScale, YScale);
+end;
+
+{ A linear TpX fading is placed along the gradient of its path; its
+  transform must match the one TpX writes for the box of the native fill. }
+function FadingMatchesBox(Primitive: TPrimitive2D; const Obj: TTikZSceneObject;
+  Scene: TTikZScene): Boolean;
+var
+  Shift: TTikZPoint;
+  Rotation, XScale, YScale: Double;
+begin
+  Result := True;
+  if (Obj.FadingName = '') or (Obj.Gradient <> tgLinear) then Exit;
+  if not TikZLinearFadingOf(Primitive, Shift, Rotation, XScale, YScale) then
+    Exit(False);
+  { The direction was checked against the shading during evaluation. }
+  Result := SameTikZFadingTransform(Obj.FadingShift, Obj.FadingRotation,
+    Obj.FadingXScale, Obj.FadingYScale, Shift, Obj.FadingRotation, XScale,
+    YScale, Scene.PictureScaleX);
 end;
 
 function RotatePoint(const Point, Center: TPoint2D; Angle: Double): TPoint2D;
@@ -416,10 +480,26 @@ begin
     for I := 0 to Scene.ObjectCount - 1 do
     begin
       Obj := Scene.ObjectAt(I);
+      if Obj.StrokeOf >= 0 then
+      begin
+        { The stroke TpX writes after a faded fill belongs to the fill's
+          object; its statement stays bound to that object. }
+        ApplyStrokeStyle(StagedObjects[Obj.StrokeOf] as TPrimitive2D, Obj,
+          Drawing);
+        StagedObjects.Add(nil);
+        Continue;
+      end;
       Native := BuildNativeObject(Obj, Drawing, Resolver, DocumentFileName,
         AssetEntries, Diagnostics);
       if Native = nil then Exit;
       StagedObjects.Add(Native);
+      if (Native is TPrimitive2D) and
+        not FadingMatchesBox(TPrimitive2D(Native), Obj, Scene) then
+      begin
+        AddDiagnostic(Diagnostics, Obj.SourceSpan,
+          'The fading transform does not follow the gradient of its path');
+        Exit;
+      end;
     end;
     for I := 0 to AssetEntries.Count - 1 do
     begin
@@ -437,6 +517,12 @@ begin
     end;
     for I := 0 to StagedObjects.Count - 1 do
     begin
+      if StagedObjects[I] = nil then
+      begin
+        { A stroke companion: Native is still the faded fill before it. }
+        if Context <> nil then Context.BindNativeObject(I, Native.ID);
+        Continue;
+      end;
       Native := StagedObjects[I] as TObject2D;
       Drawing.AddObject(-1, Native);
       StagedObjects[I] := nil;

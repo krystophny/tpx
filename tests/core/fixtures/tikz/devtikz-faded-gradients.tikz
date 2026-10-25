@@ -1,0 +1,29 @@
+\begingroup%
+\providecommand{\tpxLineWidth}{0.3mm}%
+\providecommand{\tpxTextSize}{14.2264pt}%
+\providecommand{\tpxDashSize}{1mm}%
+\providecommand{\tpxDotSize}{0.5mm}%
+\begin{tikzpicture}[x=1.00mm, y=1.00mm, inner xsep=0pt, inner ysep=0pt, outer xsep=0pt, outer ysep=0pt]
+\path[line width=0mm] (-2.00,-2.00) rectangle +(64.00,34.00);
+\definecolor{F}{rgb}{0,0,1}
+\definecolor{G}{rgb}{1,1,0}
+\pgfinterruptpicture\pgfdeclarehorizontalshading{tpxfadeL1x0p2s}{100bp}{gray(0bp)=(1);gray(25bp)=(1);gray(75bp)=(0.2);gray(100bp)=(0.2)}\pgfdeclarefading{tpxfadeL1x0p2}{\pgfuseshading{tpxfadeL1x0p2s}}\endpgfinterruptpicture%
+\path[bottom color=F, top color=G, shading angle=-60, path fading=tpxfadeL1x0p2, fit fading=false, fading transform={shift={(15,5)}, rotate=30, xscale=1.28577, yscale=1.79279}] (0.00,0.00) rectangle +(30.00,10.00);
+\definecolor{L}{rgb}{0,1,0}
+\path[line width=1*\tpxLineWidth, draw=L] (0.00,0.00) rectangle +(30.00,10.00);
+\definecolor{F}{rgb}{0.816,0,0}
+\definecolor{G}{rgb}{0.816,0,0}
+\pgfinterruptpicture\pgfdeclareradialshading{tpxfadeR1x0s}{\pgfpointorigin}{gray(0bp)=(1);gray(25bp)=(0);gray(50bp)=(0)}\pgfdeclarefading{tpxfadeR1x0}{\pgfuseshading{tpxfadeR1x0s}}\endpgfinterruptpicture%
+\path[inner color=F, outer color=G, path fading=tpxfadeR1x0, fit fading=true] (50.00,5.00) circle (5.00mm);
+\definecolor{F}{rgb}{0,0,1}
+\definecolor{G}{rgb}{1,1,0}
+\pgfinterruptpicture\pgfdeclarehorizontalshading{tpxfadeL0p5x1s}{100bp}{gray(0bp)=(0.5);gray(25bp)=(0.5);gray(75bp)=(1);gray(100bp)=(1)}\pgfdeclarefading{tpxfadeL0p5x1}{\pgfuseshading{tpxfadeL0p5x1s}}\endpgfinterruptpicture%
+\path[left color=F, right color=G, path fading=tpxfadeL0p5x1, fit fading=false, fading transform={shift={(15,25)}, rotate=0, xscale=1.70079, yscale=1.79279}] (0.00,20.00) rectangle +(30.00,10.00);
+\definecolor{L}{rgb}{0,0,0}
+\path[line width=1*\tpxLineWidth, draw=L] (0.00,20.00) rectangle +(30.00,10.00);
+\definecolor{F}{rgb}{1,0,0}
+\definecolor{G}{rgb}{0,0,1}
+\pgfinterruptpicture\pgfdeclarehorizontalshading{tpxfadeL0p3x0p9s}{100bp}{gray(0bp)=(0.3);gray(25bp)=(0.3);gray(75bp)=(0.9);gray(100bp)=(0.9)}\pgfdeclarefading{tpxfadeL0p3x0p9}{\pgfuseshading{tpxfadeL0p3x0p9s}}\endpgfinterruptpicture%
+\path[bottom color=F, top color=G, shading angle=90, path fading=tpxfadeL0p3x0p9, fit fading=false, fading transform={shift={(50,25)}, rotate=180, xscale=1.13386, yscale=1.26769}] (40.00,20.00) rectangle +(20.00,10.00);
+\end{tikzpicture}%
+\endgroup%

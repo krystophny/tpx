@@ -50,8 +50,8 @@ The inventory below is derived from `src/DevTikZ.pas`:
   radial shadings (`left color`/`right color`, `bottom color`/`top color` with
   `shading angle`, `inner color`/`outer color`) for gradient fills, and the
   generated dash/dot macros. A gradient whose two ends differ in opacity also
-  declares a pgf fading inside `\pgfinterruptpicture` and uses `path fading`;
-  that output renders with pdfLaTeX but is not reopened for editing.
+  declares a pgf fading inside `\pgfinterruptpicture`, uses it with
+  `path fading`, and draws the stroke of that shape as a separate path.
 - Generated text nodes with `anchor`, optional rotation, nested text groups,
   `\pgfmathsetlengthmacro` font-size/baseline expressions, `\fontsize`,
   `\selectfont`, and text from `Get_TeXText`.
@@ -125,7 +125,21 @@ node `text=<color>`, literal line widths, `solid`, `dashed`, and `dotted`
 strokes, literal `draw opacity`, `fill opacity`, and `opacity` values from
 0 to 1 on paths, and two-color axis and radial shadings on paths (`left color`,
 `right color`, `top color`, `bottom color`, `shading angle`, `inner color`,
-`outer color`, `shading=axis|radial`). On stroked paths the core arrow specifications `-`, `->`, `<-`, and
+`outer color`, `shading=axis|radial`). A gradient whose ends differ in
+opacity is read back from the form TpX writes: a fading declaration
+`\pgfinterruptpicture\pgfdeclarehorizontalshading{tpxfadeL<a>x<b>s}...` (or
+`\pgfdeclareradialshading{tpxfadeR<a>x<b>s}...`) followed by
+`\pgfdeclarefading` and `\endpgfinterruptpicture`, byte for byte as the writer
+emits it, where `<a>` and `<b>` are the two opacity stops with `p` for the
+decimal point (`tpxfadeL1x0p25`), so equal names mean equal declarations;
+an unstroked axis or radial shading without a fill opacity of its
+own that names it with `path fading`, with `fit fading=true` when radial, and
+with `fit fading=false` and a literal `fading transform={shift={(x,y)},
+rotate=..., xscale=..., yscale=...}` along the gradient and matching the
+gradient box (to the 0.01-unit precision of the writer's coordinates) when
+linear; and, directly after it apart from color definitions, a stroke-only
+statement of the same geometry, which becomes the stroke of the same object.
+Fadings are not accepted inside transformed scopes. On stroked paths the core arrow specifications `-`, `->`, `<-`, and
 `<->` map to the native h40 arrowhead, and `latex` and `stealth` tips at
 either end map to h44 and h42.
 Colored node frames and fills are rejected because native text has no matching
@@ -134,7 +148,7 @@ dash, and dot defaults are evaluated and retained as source dependencies.
 Dash patterns are accepted only when they map exactly to the native solid,
 dashed, or dotted line styles. Unsupported option keys, unresolved macros,
 library styles, opacity on nodes, clipping, `middle color` and other
-shadings, fadings, and pattern fills produce a
+shadings, other fadings, and pattern fills produce a
 source-located import error. Other arrow-head options such as `->>`,
 `arrows=...`, `>=Stealth`, or `arrows.meta` tips are unsupported; TpX-generated
 arrow artwork is accepted only when it is emitted as ordinary supported
@@ -145,8 +159,18 @@ edits replace the object's own style option or insert one at the start of its
 option list. An edited opacity whose source came from a shared `opacity`
 option rewrites that option, as `draw opacity`/`fill opacity` when the two
 values now differ. New objects write their gradient as a shading; a gradient
-whose ends differ in opacity has no source form and rejects the save, and
-gradient edits on existing statements are rejected as well.
+whose ends differ in opacity is written in the faded form above, with its
+declaration among the new definitions. Gradient, fill color and fill opacity
+edits on an existing statement replace only the changed values of its fill
+options (or all of them when the kind of shading changes), and a changed
+fading is declared right before the statement while a declaration no
+statement uses any more is removed. When the end opacities of a stroked
+gradient become different, the fill moves to a new statement before the
+stroke; when they become equal, the fill statement is removed and its fill
+options join the stroke statement. A shared `opacity` option on a statement
+whose fill options change becomes `draw opacity` with the stroke opacity, or
+goes with the fill options on an unstroked statement, and the fill options
+carry the fill opacity or the fading.
 New objects use named standard colors where possible and otherwise a local
 literal RGB `\definecolor`; new arcs, sectors, and segments use the legacy
 `arc (start:end:radius)` syntax. A native property outside this subset, such

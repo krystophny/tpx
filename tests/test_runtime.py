@@ -460,6 +460,21 @@ class RuntimeTests(unittest.TestCase):
     def test_paint_arrow_opacity(self):
         self.run_scenario("paint-arrow-opacity")
 
+    def test_tikz_fading_patches(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-tikz-fading-") as directory:
+            self.run_scenario("tikz-fading-patches", {
+                "TPX_PAINT_STYLE_DIR": str(Path(directory).resolve()),
+                "TPX_TIKZ_FADING_FIXTURE": str(
+                    Path(__file__).parent / "core" / "fixtures" / "tikz" /
+                    "devtikz-faded-gradients.tikz"),
+            })
+
+    def test_tikz_fading_names_and_shared_opacity(self):
+        with tempfile.TemporaryDirectory(prefix="tpx-tikz-fading-") as directory:
+            self.run_scenario("tikz-fading-names", {
+                "TPX_PAINT_STYLE_DIR": str(Path(directory).resolve()),
+            })
+
     def test_tikz_line_styles_and_example_round_trip(self):
         with tempfile.TemporaryDirectory(prefix="tpx-tikz-style-") as directory:
             root = Path(directory).resolve()

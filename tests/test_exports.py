@@ -510,8 +510,8 @@ class ExportTests(unittest.TestCase):
                          ("radial", "0", None))
         tikz = (self.root / "saved.TpX").read_text()
         self.assertIn("left color=F, right color=G", tikz)
-        self.assertIn("inner color=F, outer color=G, path fading=tpxfadeR1000x0", tikz)
-        self.assertIn("\\pgfdeclarefading{tpxfadeR1000x0}", tikz)
+        self.assertIn("inner color=F, outer color=G, path fading=tpxfadeR1x0", tikz)
+        self.assertIn("\\pgfdeclarefading{tpxfadeR1x0}", tikz)
         self.run_tpx("-f", source, "-x", "svg", "-o", "drawing")
         svg = ET.parse(self.root / "drawing.svg").getroot()
         linear = svg.find(".//" + SVG + "linearGradient")
@@ -575,9 +575,102 @@ class ExportTests(unittest.TestCase):
         self.assertEqual((back.find("rect").get("grad"), back.find("rect").get("ga")),
                          ("linear", "30"))
         self.assertEqual(back.find("circle").get("gc"), "white")
-        source.write_text(source.read_text().replace('gc="#FFFFFF"', 'go="0"'))
-        result = self.run_tpx("-f", source, "-o", "faded.tikz", expect_success=False)
-        self.assertIn("two opacities", result.stderr)
+
+    FADED_SHAPES = (
+        '%<rect x="0" y="0" w="30" h="10" lc="#00FF00" fill="#0000FF" '
+        'grad="linear" gc="#FFFF00" go="0.2" ga="30"/>\n'
+        '%<circle x="50" y="5" d="10" li="none" fill="#D00000" grad="radial" '
+        'go="0"/>\n'
+        '%<rect x="0" y="20" w="30" h="10" fill="#0000FF" fo="0.5" '
+        'grad="linear" gc="#FFFF00"/>\n'
+        '%<rect x="40" y="20" w="20" h="10" li="none" fill="#FF0000" fo="0.3" '
+        'go="0.9" grad="linear" gc="#0000FF" ga="180"/>\n'
+        '%<polygon li="none" fill="#008000" fo="0.75" go="0.1" grad="linear" '
+        'ga="-45">70,0 90,0 80,20</polygon>\n')
+
+    @staticmethod
+    def paint(element):
+        # The shape and paint of an object, with the defaults filled in.
+        fill = element.get("fill")
+        return (element.tag,
+                tuple(element.get(k) for k in ("x", "y", "w", "h", "d")),
+                (element.text or "").split(),
+                element.get("li", "solid"), element.get("lc", "black"),
+                float(element.get("lw", "1")), fill,
+                element.get("grad"), element.get("gc", fill),
+                float(element.get("fo", "1")), float(element.get("go", "1")),
+                float(element.get("ga", "0")) % 360)
+
+    def test_faded_gradient_tikz_round_trip(self):
+        source = self.root / "faded.TpX"
+        source.write_text('%<TpX v="5" PicScale="1" TeXFormat="tikz" '
+                          'PdfTeXFormat="tikz" TeXFigure="none" '
+                          'TeXCenterFigure="0">\n' +
+                          self.FADED_SHAPES + '%</TpX>\n')
+        self.run_tpx("-f", source, "-o", "saved.TpX")
+        saved = self.read_tpx(self.root / "saved.TpX")
+        exported = "".join(line for line in
+                           (self.root / "saved.TpX").read_text().splitlines(True)
+                           if not line.startswith("%<") and not line.startswith("%  ")
+                           and not line.startswith("%</"))
+        self.assertEqual(exported.count("\\pgfdeclarefading"), 5)
+        (self.root / "exported.tikz").write_text(exported, newline="")
+        # The export reopens with one object per gradient and the same paint.
+        self.run_tpx("-f", "exported.tikz", "-o", "reopened.TpX")
+        reopened = self.read_tpx(self.root / "reopened.TpX")
+        self.assertEqual([self.paint(e) for e in reopened],
+                         [self.paint(e) for e in saved])
+        # Saving it unchanged keeps every byte.
+        self.run_tpx("-f", "exported.tikz", "-o", "resaved.tikz")
+        self.assertEqual((self.root / "resaved.tikz").read_bytes(),
+                         (self.root / "exported.tikz").read_bytes())
+        # TikZ save writes the same construct for new objects.
+        self.run_tpx("-f", source, "-o", "new.tikz")
+        new = (self.root / "new.tikz").read_text()
+        self.assertEqual(new.count("\\pgfdeclarefading"), 5)
+        self.assertIn("path fading=tpxfadeR1x0, fit fading=true", new)
+        self.assertIn("\\draw[line width=0.300000012mm, draw=green] "
+                      "(0mm,0mm) rectangle (30mm,10mm);", new)
+        self.run_tpx("-f", "new.tikz", "-o", "new-back.TpX")
+        back = self.read_tpx(self.root / "new-back.TpX")
+        self.assertEqual([self.paint(e)[:5] + self.paint(e)[6:] for e in back],
+                         [self.paint(e)[:5] + self.paint(e)[6:] for e in saved])
+        self.run_tpx("-f", "new.tikz", "-o", "new-again.tikz")
+        self.assertEqual((self.root / "new-again.tikz").read_bytes(),
+                         (self.root / "new.tikz").read_bytes())
+
+    def test_close_fade_opacities_get_their_own_fadings(self):
+        # End opacities that differ only in the fourth decimal.
+        source = self.root / "close.TpX"
+        source.write_text(
+            '%<TpX v="5" PicScale="1" TeXFormat="tikz" PdfTeXFormat="tikz" '
+            'TeXFigure="none" TeXCenterFigure="0">\n'
+            '%<circle x="10" y="10" d="10" li="none" fill="#000000" '
+            'grad="radial" go="0.2501"/>\n'
+            '%<circle x="30" y="10" d="10" li="none" fill="#000000" '
+            'grad="radial" go="0.2504"/>\n'
+            '%</TpX>\n')
+        self.run_tpx("-f", source, "-o", "saved.TpX")
+        exported = "".join(line for line in
+                           (self.root / "saved.TpX").read_text().splitlines(True)
+                           if not line.startswith("%"))
+        self.assertIn("\\pgfdeclarefading{tpxfadeR1x0p2501}", exported)
+        self.assertIn("\\pgfdeclarefading{tpxfadeR1x0p2504}", exported)
+        (self.root / "close.tikz").write_text(exported, newline="")
+        self.run_tpx("-f", "close.tikz", "-o", "back.TpX")
+        back = self.read_tpx(self.root / "back.TpX")
+        self.assertEqual([c.get("go") for c in back.findall("circle")],
+                         ["0.2501", "0.2504"])
+
+    def test_foreign_tikz_fading_is_rejected(self):
+        source = self.root / "foreign.tikz"
+        source.write_text(
+            "\\begin{tikzpicture}\n"
+            "\\path[inner color=red, outer color=red, path fading=east] "
+            "(0,0) circle (1);\n"
+            "\\end{tikzpicture}\n")
+        self.run_tpx("-f", source, "-o", "foreign.TpX", expect_success=False)
+        self.assertFalse((self.root / "foreign.TpX").exists())
 
     def test_point_list_elements_without_points_fail_cleanly(self):
         # Point-list elements written with attributes or child elements

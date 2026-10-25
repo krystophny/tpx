@@ -1001,7 +1001,14 @@ var
             (Cmd = 'fill') or (Cmd = 'filldraw') or
             (Cmd = 'begin') or (Cmd = 'end') or
             (Cmd = 'tpxLineWidth') or (Cmd = 'tpxDashSize') or
-            (Cmd = 'tpxDotSize') or (Cmd = 'tpxTextSize')
+            (Cmd = 'tpxDotSize') or (Cmd = 'tpxTextSize') or
+            { The parts of a TpX fading declaration; the semantic layer
+              accepts only the exact form TpX writes. }
+            (Cmd = 'pgfinterruptpicture') or
+            (Cmd = 'endpgfinterruptpicture') or
+            (Cmd = 'pgfdeclarehorizontalshading') or
+            (Cmd = 'pgfdeclareradialshading') or
+            (Cmd = 'pgfdeclarefading')
         else
           Allowed := (Cmd = 'begin') or (Cmd = 'end') or
             (Cmd = 'begingroup') or (Cmd = 'endgroup') or
@@ -1105,6 +1112,37 @@ var
             end;
             Continue;
           end;
+        end;
+        if Cmd = 'pgfinterruptpicture' then
+        begin
+          { A fading declaration between statements; its content is
+            checked by the semantic layer. }
+          if StatementOpen then
+            MarkUnsupported(C, tdcUnsupportedContext,
+              'Fading declarations must occur between drawing statements');
+          ArgToken := C + 1;
+          while ArgToken < Doc.TokenCount do
+          begin
+            if (Doc.TokenAt(ArgToken).Kind = ttkControlWord) and
+              (ControlName(Doc.FSource, Doc.TokenAt(ArgToken)) =
+              'endpgfinterruptpicture') then Break;
+            if Doc.TokenAt(ArgToken).Kind in [ttkOpenBrace, ttkOpenBracket,
+              ttkOpenParen] then
+            begin
+              CloseToken := GroupClose(Doc, ArgToken);
+              if CloseToken < ArgToken then Break;
+              ArgToken := CloseToken + 1;
+            end
+            else Inc(ArgToken);
+          end;
+          if ArgToken < Doc.TokenCount then C := ArgToken + 1
+          else
+          begin
+            MarkUnsupported(C, tdcUnsupportedContext,
+              '\pgfinterruptpicture is not closed');
+            Inc(C);
+          end;
+          Continue;
         end;
         if Cmd = 'definecolor' then
         begin
