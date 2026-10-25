@@ -880,3 +880,292 @@ begin
   Drawing.DeleteAllObjects;
   WriteLn('PASS solid3d-torus-segment');
 end;
+
+// Closed forms of the camera, written out independently of ProjectScene:
+// a point (x, y, 0) of the ground plane has u = x cos az + y sin az along
+// the view and w = -x sin az + y cos az across it. The default torus
+// (r1 0.6, r2 0.25, 36 x 16) spans 2 * 0.85 in x and y and 0.5 in z, and
+// perspective puts the eye at three times that diagonal.
+function TorusEye: Double;
+begin
+  Result := 3 * Sqrt(2 * Sqr(2 * 0.85) + Sqr(2 * 0.25));
+end;
+
+function TorusGroundToDrawing(const Solid: TSolid3D; const R, A: Double): TPoint2D;
+var
+  Az, El, U, W, F: Double;
+  Origin: TPoint2D;
+  Scale, Angle: Double;
+begin
+  Az := DegToRad(Solid.Azimuth);
+  El := DegToRad(Solid.Elevation);
+  U := R * Cos(DegToRad(A) - Az);
+  W := R * Sin(DegToRad(A) - Az);
+  F := 1;
+  if Solid.Perspective then F := TorusEye / (TorusEye - Cos(El) * U);
+  Solid.GetPlacement(Origin, Scale, Angle);
+  Result := Point2D(Origin.X + Scale * W * F, Origin.Y - Scale * Sin(El) * U * F);
+end;
+
+function TorusDrawingToAngle(const Solid: TSolid3D; const P: TPoint2D): Double;
+var
+  Az, El, X, Y, U, W: Double;
+  Origin: TPoint2D;
+  Scale, Angle: Double;
+begin
+  Az := DegToRad(Solid.Azimuth);
+  El := DegToRad(Solid.Elevation);
+  Solid.GetPlacement(Origin, Scale, Angle);
+  X := (P.X - Origin.X) / Scale;
+  Y := (P.Y - Origin.Y) / Scale;
+  if Solid.Perspective then
+  begin
+    U := Y * TorusEye / (Y * Cos(El) - TorusEye * Sin(El));
+    W := X * (TorusEye - U * Cos(El)) / TorusEye;
+  end
+  else
+  begin
+    U := -Y / Sin(El);
+    W := X;
+  end;
+  Result := RadToDeg(Az + ArcTan2(W, U));
+  Result := Result - 360 * Floor((Result + 180) / 360);
+end;
+
+function AngleGap(const A, B: Double): Double;
+begin
+  Result := A - B;
+  Result := Abs(Result - 360 * Round(Result / 360));
+end;
+
+procedure TestSolid3DTorusHandles;
+var
+  Drawing: TDrawing2D;
+  Mode: TInsertTorusSegmentMode;
+  Probe, Torus: TSolid3D;
+  Body: TSolidBody;
+  H: TPoint2D;
+  Origin: TPoint2D;
+  Scale, Angle, Expected, EndAngle, Start0, Sweep0: Double;
+  D: TRealType;
+  Pass: Integer;
+  OldSnap, OldShapeSnap: Boolean;
+  function TheTorus: TSolid3D;
+  begin
+    Result := Drawing.ObjectList.FirstObj as TSolid3D;
+  end;
+  function ScreenOf(const P: TPoint2D): TPoint;
+  begin
+    Result := Point2DToPoint(MainForm.LocalView.ViewportToScreen(P));
+  end;
+  function WorldOf(const P: TPoint): TPoint2D;
+  begin
+    Result := MainForm.LocalView.ScreenToViewport(Point2D(P.X, P.Y));
+  end;
+  // Presses on handle Index, moves to the drawing point Target in two steps
+  // and returns the drawing point the release pixel stands for. Stops
+  // before the release when Release is False.
+  function DragHandle(const Index: Integer; const Target: TPoint2D;
+    const Shift: TShiftState; const Release: Boolean): TPoint2D;
+  var
+    S, T, M: TPoint;
+    Live: TSolid3D;
+    Before3, Before4, Pointer: Double;
+  begin
+    Check(TheTorus.AngleHandle(Index, H), 'the torus segment has no handle ' +
+      IntToStr(Index));
+    Before3 := TheTorus.Bodies[0].Size3;
+    Before4 := TheTorus.Bodies[0].Size4;
+    S := ScreenOf(H);
+    T := ScreenOf(Target);
+    // The viewport handlers the mouse calls, which also refresh the
+    // Inspector on release.
+    MainForm.LocalViewMouseDown2D(MainForm.LocalView, mbLeft, Shift,
+      WorldOf(S).X, WorldOf(S).Y, S.X, S.Y);
+    M := Point((S.X + T.X) div 2, (S.Y + T.Y) div 2);
+    MainForm.LocalViewMouseMove2D(MainForm.LocalView, [ssLeft] + Shift,
+      WorldOf(M).X, WorldOf(M).Y, M.X, M.Y);
+    Check(MainForm.EventManager.Mode is TMoveControlPointMode,
+      Format('dragging angle handle %d from (%d, %d) to (%d, %d) started %s',
+      [Index, S.X, S.Y, T.X, T.Y, MainForm.EventManager.Mode.ClassName]));
+    Check(MoveControlPointMode.PointIndex = TheTorus.Points.Count + Index,
+      Format('the drag took control point %d, not angle handle %d',
+      [MoveControlPointMode.PointIndex, Index]));
+    Result := WorldOf(T);
+    MainForm.LocalViewMouseMove2D(MainForm.LocalView, [ssLeft] + Shift,
+      Result.X, Result.Y, T.X, T.Y);
+    // Live: the dragged copy follows, the object itself waits for release.
+    Live := MoveControlPointMode.CurrentPrimitive as TSolid3D;
+    Pointer := TorusDrawingToAngle(Live, Result);
+    if ssShift in Shift then Pointer := Round(Pointer / 15) * 15;
+    Check(AngleGap(Live.Bodies[0].Size4 + Live.Bodies[0].Size3 * Ord(Odd(Index)),
+      Pointer) < 1E-3, Format('dragged handle %d is at %g, not under the ' +
+      'pointer at %g', [Index, Live.Bodies[0].Size4 + Live.Bodies[0].Size3 *
+      Ord(Odd(Index)), Pointer]));
+    Check((TheTorus.Bodies[0].Size3 = Before3) and (TheTorus.Bodies[0].Size4 = Before4),
+      'the torus changed before the drag was released');
+    if Release then
+    begin
+      MainForm.LocalViewMouseUp2D(MainForm.LocalView, mbLeft, Shift,
+        Result.X, Result.Y, T.X, T.Y);
+      Application.ProcessMessages;
+      Check(MainForm.EventManager.Mode = BaseMode, 'the handle drag did not end');
+    end;
+  end;
+  procedure CheckHandles(const What: string);
+  var
+    K: Integer;
+  begin
+    Torus := TheTorus;
+    for K := 0 to 1 do
+    begin
+      Check(Torus.AngleHandle(K, H), What + ': handle missing');
+      Expected := Torus.Bodies[0].Size4 + K * Torus.Bodies[0].Size3;
+      Check(PointDistance2D(H, TorusGroundToDrawing(Torus, Torus.Bodies[0].Size1,
+        Expected)) < 1E-4, Format('%s: handle %d at (%g, %g) is not on the ' +
+        'projected centre circle at (%g, %g)', [What, K, H.X, H.Y,
+        TorusGroundToDrawing(Torus, Torus.Bodies[0].Size1, Expected).X,
+        TorusGroundToDrawing(Torus, Torus.Bodies[0].Size1, Expected).Y]));
+      Check(Torus.OnMe(H, MainForm.LocalView.PixelSize * 4, D) =
+        Torus.Points.Count + K, What + ': the handle cannot be picked');
+    end;
+  end;
+begin
+  SetLiveTeXEnabled(False);
+  MainForm.Show;
+  MainForm.ShowInspector;
+  Application.ProcessMessages;
+  OldSnap := UseSnap;
+  OldShapeSnap := UseShapeSnap;
+  UseSnap := False;
+  UseShapeSnap := False;
+  Drawing := MainForm.TheDrawing;
+  Drawing.DeleteAllObjects;
+  MainForm.LocalView.VisualRect := Rect2D(40, 40, 160, 160);
+  // Insert 30..285 degrees with outer radius 40 around (100, 100).
+  MainForm.EventManager.SendMessage(Msg_InsertTorusSegment, nil);
+  Mode := TInsertTorusSegmentMode(MainForm.EventManager.Mode);
+  Mode.TorusPointSelected(Point2D(100, 100), []);
+  Probe := Mode.Obj as TSolid3D;
+  Probe.SetPlacement(Point2D(100, 100), 40 / 0.85, 0);
+  Mode.TorusPointSelected(TorusGroundToDrawing(Probe, 0.85, 30), [ssShift]);
+  Mode.TorusPointSelected(TorusGroundToDrawing(Probe, 0.6, 283), [ssShift]);
+  Torus := TheTorus;
+  Check((Drawing.SelectedObjects.Count = 1) and Torus.Bodies[0].IsTorusSegment and
+    (Abs(Torus.Bodies[0].Size4 - 30) < 1E-9) and (Abs(Torus.Bodies[0].Size3 - 255) < 1E-9),
+    'the torus segment for the handle test was not inserted');
+  // A full torus has no angle handles; neither has a box.
+  Body := TSolidBody.Create(skTorus);
+  Probe := TSolid3D.Create(-1);
+  try
+    Probe.AdoptBody(Body);
+    Check(not Probe.AngleHandle(0, H) and not Probe.AngleHandle(1, H),
+      'a full torus shows angle handles');
+  finally
+    Probe.Free;
+  end;
+  for Pass := 0 to 1 do
+  begin
+    if Pass = 1 then
+    begin
+      // Perspective on, then orbit the camera with the mouse.
+      Drawing.SelectionClear;
+      Drawing.SelectionAdd(TheTorus);
+      MainForm.EventManager.SendMessage(Msg_View3DPerspective, nil);
+      Check(TheTorus.Perspective, 'View -> Perspective did not switch on');
+      MainForm.EventManager.SendMessage(Msg_StartRotate, nil);
+      MainForm.EventManager.Mode.OnMouseMove(nil, [], 100, 100);
+      MainForm.EventManager.Mode.OnMouseUp(nil, mbLeft, [], 70, 130);
+      Check((Abs(TheTorus.Azimuth - (Solid_DefaultAzimuth + 15)) < 1E-9) and
+        (Abs(TheTorus.Elevation - (Solid_DefaultElevation + 15)) < 1E-9),
+        'the orbit did not turn the camera');
+    end;
+    CheckHandles(IfThen(Pass = 0, 'parallel', 'perspective'));
+    // Drag the end handle to about 200 degrees: the start stays, the end
+    // is the angle of the ground point under the release pixel.
+    Torus := TheTorus;
+    Start0 := Torus.Bodies[0].Size4;
+    Sweep0 := Torus.Bodies[0].Size3;
+    H := DragHandle(1, TorusGroundToDrawing(Torus, 0.7, 200 - 20 * Pass), [], True);
+    Torus := TheTorus;
+    Expected := TorusDrawingToAngle(Torus, H);
+    Check((Torus.Bodies[0].Size4 = Start0) and
+      (AngleGap(Torus.Bodies[0].Size3, Expected - Start0) < 1E-3),
+      Format('dragging the end handle set start %g and angle %g, not %g and %g',
+      [Torus.Bodies[0].Size4, Torus.Bodies[0].Size3, Start0, Expected - Start0]));
+    CheckHandles('after the end drag');
+    // One undo step per drag.
+    Drawing.History.Undo;
+    Check(TheTorus.Bodies[0].Size3 = Sweep0, 'Undo did not restore the angle');
+    Drawing.History.Redo;
+    Check(AngleGap(TheTorus.Bodies[0].Size3, Expected - Start0) < 1E-3,
+      'Redo did not reapply the dragged angle');
+    // Undo replaces the objects; select the torus again, as with a click.
+    Drawing.SelectionClear;
+    Drawing.SelectionAdd(TheTorus);
+    MainForm.RefreshInspectorSelection;
+    EndAngle := Start0 + TheTorus.Bodies[0].Size3;
+    // Shift snaps the start to 15 degrees; the end stays exactly.
+    H := DragHandle(0, TorusGroundToDrawing(TheTorus, 0.6, 52 + 30 * Pass),
+      [ssShift], True);
+    Torus := TheTorus;
+    Expected := Round(TorusDrawingToAngle(Torus, H) / 15) * 15;
+    Check((Abs(Torus.Bodies[0].Size4 - Expected) < 1E-9) and
+      (AngleGap(Torus.Bodies[0].Size4 + Torus.Bodies[0].Size3, EndAngle) < 1E-9),
+      Format('the Shift drag set start %g and end %g, not %g and %g',
+      [Torus.Bodies[0].Size4, Torus.Bodies[0].Size4 + Torus.Bodies[0].Size3,
+      Expected, EndAngle]));
+    Check((MainForm.Inspector.EditorFor(opfSolidSize4) as TEdit).Text =
+      FloatToStr(Expected), 'the Inspector did not show the dragged start angle (' +
+      (MainForm.Inspector.EditorFor(opfSolidSize4) as TEdit).Text + ')');
+    // Escape cancels a drag without an undo step.
+    DragHandle(1, TorusGroundToDrawing(TheTorus, 0.6, 120), [], False);
+    MainForm.EventManager.SendMessage(Msg_Escape, nil);
+    Check(MainForm.EventManager.Mode = BaseMode, 'Escape did not end the handle drag');
+    Check((Abs(TheTorus.Bodies[0].Size4 - Expected) < 1E-9) and
+      (AngleGap(TheTorus.Bodies[0].Size4 + TheTorus.Bodies[0].Size3, EndAngle) < 1E-9),
+      'Escape did not cancel the handle drag');
+    Drawing.History.Undo;
+    Check(TheTorus.Bodies[0].Size4 = Start0,
+      'Escape left an undo step, or Undo missed the Shift drag');
+    Drawing.History.Redo;
+    Drawing.SelectionClear;
+    Drawing.SelectionAdd(TheTorus);
+  end;
+  // The placement points still move the solid; the angles stay.
+  Torus := TheTorus;
+  Torus.GetPlacement(Origin, Scale, Angle);
+  Expected := Torus.Bodies[0].Size4;
+  TikZSaveDragPoint(Torus, 0, 20, 0);
+  Torus := TheTorus;
+  Torus.GetPlacement(H, Scale, Angle);
+  Check((H.X > Origin.X + 1) and (Abs(Torus.Bodies[0].Size4 - Expected) < 1E-9),
+    'the placement point no longer moves the torus segment');
+  Drawing.SelectionClear;
+  Drawing.DeleteAllObjects;
+  // Insertion under perspective: the rim point at 30 degrees with outer
+  // radius 40 and the centre-circle point at 283 degrees are hit exactly.
+  MainForm.EventManager.SendMessage(Msg_InsertTorusSegment, nil);
+  Mode := TInsertTorusSegmentMode(MainForm.EventManager.Mode);
+  Mode.TorusPointSelected(Point2D(100, 100), []);
+  Probe := Mode.Obj as TSolid3D;
+  Probe.Perspective := True;
+  Probe.SetView(-35, 40);
+  Probe.SetPlacement(Point2D(100, 100), 40 / 0.85, 0);
+  H := TorusGroundToDrawing(Probe, 0.85, 30);
+  Mode.TorusPointSelected(H, []);
+  Probe.GetPlacement(Origin, Scale, Angle);
+  Check((Abs(Scale - 40 / 0.85) < 1E-3) and (Abs(Probe.Bodies[0].Size4 - 30) < 1E-3),
+    Format('perspective insertion: rim gave scale %g and start %g, not %g and 30',
+    [Scale, Probe.Bodies[0].Size4, 40 / 0.85]));
+  Mode.TorusPointMoved(TorusGroundToDrawing(Probe, 0.6, 283), []);
+  Check(Abs(Probe.Bodies[0].Size3 - 253) < 1E-3, Format(
+    'perspective insertion: the end angle gave a sweep of %g, not 253',
+    [Probe.Bodies[0].Size3]));
+  MainForm.EventManager.SendMessage(Msg_Escape, nil);
+  Drawing.SelectionClear;
+  Drawing.DeleteAllObjects;
+  UseSnap := OldSnap;
+  UseShapeSnap := OldShapeSnap;
+  WriteLn('PASS solid3d-torus-handles');
+end;

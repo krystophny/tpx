@@ -2795,7 +2795,8 @@ var
   Solid: TSolid3D;
   Body: TSolidBody;
   V: TVec3;
-  R, Sweep: Double;
+  Rim: TPoint2D;
+  A, R, L, Sweep: Double;
 begin
   Solid := TSolid3D(Obj);
   Body := Solid.Bodies[0];
@@ -2803,13 +2804,23 @@ begin
   begin
     // The pointer is on the outer rim at the start angle; the torus shows
     // whole until the end angle is chosen.
-    Solid.SetPlacement(Solid.Points[0], 1, 0);
-    V := Solid.UnprojectToBase(P);
-    R := Sqrt(Sqr(V.X) + Sqr(V.Y));
-    if R < ViewPort.PixelSize then R := ViewPort.PixelSize;
-    Solid.SetPlacement(Solid.Points[0], R / (Body.Size1 + Body.Size2), 0);
-    fStart := PointerAngle(P, Shift);
     Body.Size3 := 360;
+    // The ground line from the centre through the pointer does not depend
+    // on the scale, so the angle comes first, from a scale that keeps the
+    // pointer near the centre and in front of the eye. The scale then puts
+    // the projected rim point at that angle exactly under the pointer, with
+    // or without perspective.
+    R := Max(PointDistance2D(P, Solid.Points[0]), ViewPort.PixelSize);
+    Solid.SetPlacement(Solid.Points[0],
+      100 * R / (Body.Size1 + Body.Size2), 0);
+    V := Solid.UnprojectToBase(P);
+    fStart := PointerAngle(P, Shift);
+    Solid.SetPlacement(Solid.Points[0], 1, 0);
+    A := ArcTan2(V.Y, V.X);
+    Rim := Solid.ProjectScene(Vec3((Body.Size1 + Body.Size2) * Cos(A),
+      (Body.Size1 + Body.Size2) * Sin(A), 0));
+    L := PointDistance2D(Rim, Solid.Points[0]);
+    if L > 0 then Solid.SetPlacement(Solid.Points[0], R / L, 0);
     Body.Size4 := fStart;
   end
   else
@@ -3387,7 +3398,8 @@ begin
     IdentityTransf2D);
   P := ViewPort.GetSnappedPoint(
     ViewPort.ScreenToViewport(Point2D(X, Y)));
-  if UseAngularSnap then
+  // Angle handles of a solid lie beyond its points and snap themselves.
+  if UseAngularSnap and (PointIndex < OriginalPrimitive.Points.Count) then
     Make45_2D(OriginalPrimitive.Points[PointIndex], P);
   P := ViewPort.WorldToObject(CurrentPrimitive, P);
   CurrentPrimitive.MoveControlPoint0(PointIndex, P, Shift, False);

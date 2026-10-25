@@ -64,7 +64,12 @@ type
     fFit: Boolean;
     fFitOrigin: TPoint2D;
     fFitScale: Double;
+    // While an angle handle is dragged: its control point index and the
+    // angle of the other end, which stays fixed (-1 when not dragging).
+    fHandleIndex: Integer;
+    fHandleFixed: Double;
     function GeometryKey: string;
+    function EyeDistance: Double;
     procedure BoxPlacement(const A, B: TPoint2D; out Origin: TPoint2D;
       out Scale: Double);
     function GetBody(I: Integer): TSolidBody;
@@ -81,6 +86,18 @@ type
     procedure Assign(const Obj: TGraphicObject); override;
     procedure FillPieces; override;
     procedure FinishFirstDraw; override;
+    procedure DrawControlPoints0(const VT: TTransf2D;
+      const ClipRect2D: TRect2D; const Width: Integer); override;
+    function OnMe(P: TPoint2D; Aperture: TRealType;
+      var Distance: TRealType): Integer; override;
+    procedure MoveControlPoint0(const Pos: Integer;
+      P: TPoint2D; const Shift: TShiftState; const Final: Boolean);
+      override;
+    // Angle handles of torus segments follow the placement points: control
+    // point Points.Count + 2 * I is the start and the next one the end of
+    // body I, on the centre circle of the tube. False when body I has none.
+    function AngleHandle(const Index: Integer; out P: TPoint2D): Boolean;
+    function AngleHandleCount: Integer;
     function AddBody(AKind: TSolidKind): TSolidBody;
     procedure AdoptBody(Body: TSolidBody);
     function ExtractBody(I: Integer): TSolidBody;
@@ -100,7 +117,13 @@ type
     function ProjectScene(const P: TVec3): TPoint2D;
     // Model-space vector that projects to the 2D drawing offset D.
     function UnprojectOffset(const D: TPoint2D): TVec3;
-    // The point of the scene plane z = 0 that a parallel view shows at P.
+    // The point of the plane z = 0 of Body (in body coordinates) that the
+    // camera shows at P: the pointer ray, inverted from the actual parallel
+    // or perspective projection, meets that plane. False when the plane is
+    // seen edge-on or the point would lie behind the eye.
+    function UnprojectToBody(const P: TPoint2D; const Body: TSolidBody;
+      out V: TVec3): Boolean;
+    // The point of the scene plane z = 0 that the camera shows at P.
     function UnprojectToBase(const P: TPoint2D): TVec3;
     procedure SceneBounds(out Lo, Hi: TVec3);
     property Bodies[I: Integer]: TSolidBody read GetBody;
@@ -157,7 +180,7 @@ procedure HatchPolygon(const PP: TPointsSet2D; const Hatching: THatching;
 
 implementation
 
-uses md5;
+uses md5, Drawings;
 
 function NormalizeGeometry(const S: string): string;
 var
@@ -408,6 +431,30 @@ begin
   Result.X := M[0] * P.X + M[1] * P.Y + M[2] * P.Z;
   Result.Y := M[4] * P.X + M[5] * P.Y + M[6] * P.Z;
   Result.Z := M[8] * P.X + M[9] * P.Y + M[10] * P.Z;
+end;
+
+function InvertMat34(const M: TMat34; out Inv: TMat34): Boolean;
+var
+  Det: Double;
+  T: TVec3;
+begin
+  Det := M[0] * (M[5] * M[10] - M[6] * M[9]) -
+    M[1] * (M[4] * M[10] - M[6] * M[8]) +
+    M[2] * (M[4] * M[9] - M[5] * M[8]);
+  Result := Abs(Det) > 1E-12;
+  if not Result then Exit;
+  Inv[0] := (M[5] * M[10] - M[6] * M[9]) / Det;
+  Inv[1] := (M[2] * M[9] - M[1] * M[10]) / Det;
+  Inv[2] := (M[1] * M[6] - M[2] * M[5]) / Det;
+  Inv[4] := (M[6] * M[8] - M[4] * M[10]) / Det;
+  Inv[5] := (M[0] * M[10] - M[2] * M[8]) / Det;
+  Inv[6] := (M[2] * M[4] - M[0] * M[6]) / Det;
+  Inv[8] := (M[4] * M[9] - M[5] * M[8]) / Det;
+  Inv[9] := (M[1] * M[8] - M[0] * M[9]) / Det;
+  Inv[10] := (M[0] * M[5] - M[1] * M[4]) / Det;
+  Inv[3] := 0; Inv[7] := 0; Inv[11] := 0;
+  T := ApplyLinear(Inv, Vec3(M[3], M[7], M[11]));
+  Inv[3] := -T.X; Inv[7] := -T.Y; Inv[11] := -T.Z;
 end;
 
 function SolidKindFromID(const ID: string; out Kind: TSolidKind): Boolean;
@@ -972,6 +1019,7 @@ begin
   Points.Add(Point2D(0, 0));
   Points.Add(Point2D(1, 0));
   fCanDeletePoints := False;
+  fHandleIndex := -1;
 end;
 
 destructor TSolid3D.Destroy;
@@ -1083,6 +1131,7 @@ var
   Piece: TPolyLinPiece;
 begin
   inherited CreateFromStream(Stream);
+  fHandleIndex := -1;
   fBodies := TObjectList.Create(True);
   Stream.ReadBuffer(Version, SizeOf(Version));
   if (Version < 1) or (Version > SolidStreamVersion) then
@@ -1192,9 +1241,11 @@ begin
   U := Vec3(-Sin(El) * Cos(Az), -Sin(El) * Sin(Az), Cos(El));
 end;
 
-procedure TSolid3D.SceneBounds(out Lo, Hi: TVec3);
+procedure BodiesBounds(const Solid: TSolid3D; const FullTori: Boolean;
+  out Lo, Hi: TVec3);
 var
   Faces: TObjectList;
+  Whole: TSolidBody;
   I, J, K: Integer;
   F: TFace;
   procedure Grow(const P: TVec3);
@@ -1207,7 +1258,21 @@ begin
   Hi := Vec3(-MaxDouble, -MaxDouble, -MaxDouble);
   Faces := TObjectList.Create(True);
   try
-    for I := 0 to BodyCount - 1 do TessellateBody(Bodies[I], Faces);
+    for I := 0 to Solid.BodyCount - 1 do
+      if FullTori and Solid.Bodies[I].IsTorusSegment then
+      begin
+        Whole := TSolidBody.Create(skTorus);
+        try
+          Whole.Assign(Solid.Bodies[I]);
+          Whole.Size3 := 360;
+          Whole.Size4 := 0;
+          TessellateBody(Whole, Faces);
+        finally
+          Whole.Free;
+        end;
+      end
+      else
+        TessellateBody(Solid.Bodies[I], Faces);
     for I := 0 to Faces.Count - 1 do
     begin
       F := TFace(Faces[I]);
@@ -1228,6 +1293,21 @@ begin
     Lo := Vec3(0, 0, 0);
     Hi := Vec3(0, 0, 0);
   end;
+end;
+
+procedure TSolid3D.SceneBounds(out Lo, Hi: TVec3);
+begin
+  BodiesBounds(Self, False, Lo, Hi);
+end;
+
+function TSolid3D.EyeDistance: Double;
+var
+  Lo, Hi: TVec3;
+begin
+  // A torus segment counts as the whole torus from angle 0, so dragging
+  // its angles keeps the camera and the pointer stays on the handle.
+  BodiesBounds(Self, True, Lo, Hi);
+  Result := 3 * Max(VLen(VSub(Hi, Lo)), 1E-9);
 end;
 
 procedure TSolid3D.GetPlacement(out Origin: TPoint2D; out Scale,
@@ -1336,7 +1416,6 @@ var
   R, U, C: TVec3;
   X, Y, F, Scale, Angle: Double;
   Origin: TPoint2D;
-  Lo, Hi: TVec3;
 begin
   ProjectBasis(R, U, C);
   X := VDot(P, R);
@@ -1344,11 +1423,7 @@ begin
   if fPerspective then
   begin
     F := fEyeDistance;
-    if F <= 0 then
-    begin
-      SceneBounds(Lo, Hi);
-      F := 3 * Max(VLen(VSub(Hi, Lo)), 1E-9);
-    end;
+    if F <= 0 then F := EyeDistance;
     F := F / Max(F - VDot(P, C), 1E-9 * F);
     X := X * F;
     Y := Y * F;
@@ -1378,15 +1453,151 @@ begin
   Result := VAdd(VScale(R, X), VScale(U, Y));
 end;
 
+function TSolid3D.UnprojectToBody(const P: TPoint2D; const Body: TSolidBody;
+  out V: TVec3): Boolean;
+var
+  R, U, C, X, From, Dir: TVec3;
+  Inv: TMat34;
+  T: Double;
+begin
+  V := Vec3(0, 0, 0);
+  Result := InvertMat34(Body.M, Inv);
+  if not Result then Exit;
+  ProjectBasis(R, U, C);
+  // X is the scene point of the picture plane (through the origin, facing
+  // the camera) that projects to P with either projection.
+  X := UnprojectOffset(Point2D(P.X - Points[0].X, P.Y - Points[0].Y));
+  if fPerspective then
+  begin
+    // ProjectScene puts the eye at distance F along the view direction.
+    From := VScale(C, EyeDistance);
+    Dir := VSub(X, From);
+  end
+  else
+  begin
+    From := X;
+    Dir := C;
+  end;
+  From := ApplyMat34(Inv, From);
+  Dir := ApplyLinear(Inv, Dir);
+  Result := Abs(Dir.Z) > 1E-3 * VLen(Dir);
+  if not Result then Exit;
+  T := -From.Z / Dir.Z;
+  // In perspective, T > 0 is in front of the eye.
+  Result := not fPerspective or (T > 0);
+  if Result then V := VAdd(From, VScale(Dir, T));
+end;
+
 function TSolid3D.UnprojectToBase(const P: TPoint2D): TVec3;
 var
-  R, U, C: TVec3;
+  Base: TSolidBody;
 begin
-  Result := UnprojectOffset(Point2D(P.X - Points[0].X, P.Y - Points[0].Y));
-  ProjectBasis(R, U, C);
-  // Slide along the line of sight onto z = 0; seen edge-on, keep the offset.
-  if Abs(C.Z) > 1E-3 then
-    Result := VSub(Result, VScale(C, Result.Z / C.Z));
+  Base := TSolidBody.Create(skBox);
+  try
+    // Seen edge-on, keep the offset in the picture plane.
+    if not UnprojectToBody(P, Base, Result) then
+      Result := UnprojectOffset(Point2D(P.X - Points[0].X, P.Y - Points[0].Y));
+  finally
+    Base.Free;
+  end;
+end;
+
+function TSolid3D.AngleHandleCount: Integer;
+begin
+  Result := 2 * BodyCount;
+end;
+
+function TSolid3D.AngleHandle(const Index: Integer; out P: TPoint2D): Boolean;
+var
+  Body: TSolidBody;
+  A: Double;
+begin
+  P := Point2D(0, 0);
+  Result := (Index >= 0) and (Index < AngleHandleCount);
+  if not Result then Exit;
+  Body := Bodies[Index div 2];
+  Result := Body.IsTorusSegment;
+  if not Result then Exit;
+  A := Body.Size4;
+  if Odd(Index) then A := A + Body.Size3;
+  A := DegToRad(A);
+  P := ProjectScene(ApplyMat34(Body.M,
+    Vec3(Body.Size1 * Cos(A), Body.Size1 * Sin(A), 0)));
+end;
+
+procedure TSolid3D.DrawControlPoints0(const VT: TTransf2D;
+  const ClipRect2D: TRect2D; const Width: Integer);
+var
+  I: Integer;
+  P: TPoint2D;
+begin
+  inherited DrawControlPoints0(VT, ClipRect2D, Width);
+  // Round handles tell the angles apart from the square placement points.
+  for I := 0 to AngleHandleCount - 1 do
+    if AngleHandle(I, P) then
+      (OwnerDrawing as TDrawing2D).OnControlPoint2(P, VT, ClipRect2D);
+end;
+
+function TSolid3D.OnMe(P: TPoint2D; Aperture: TRealType;
+  var Distance: TRealType): Integer;
+var
+  I: Integer;
+  H: TPoint2D;
+  D: TRealType;
+begin
+  Result := inherited OnMe(P, Aperture, Distance);
+  if Result = PICK_NOOBJECT then Exit;
+  D := Aperture;
+  // An angle handle wins over the faces it lies on, like a control point.
+  for I := 0 to AngleHandleCount - 1 do
+    if AngleHandle(I, H) and NearPoint2D(P, H, Aperture, D) and
+      ((Result < 0) or (D < Distance)) then
+    begin
+      Result := Points.Count + I;
+      Distance := D;
+    end;
+end;
+
+procedure TSolid3D.MoveControlPoint0(const Pos: Integer; P: TPoint2D;
+  const Shift: TShiftState; const Final: Boolean);
+var
+  Body: TSolidBody;
+  V: TVec3;
+  A, Sweep: Double;
+  IsEnd: Boolean;
+begin
+  if Pos < Points.Count then
+  begin
+    inherited MoveControlPoint0(Pos, P, Shift, Final);
+    Exit;
+  end;
+  if Pos - Points.Count >= AngleHandleCount then Exit;
+  Body := Bodies[(Pos - Points.Count) div 2];
+  if Body.Kind <> skTorus then Exit;
+  IsEnd := Odd(Pos - Points.Count);
+  // The other end stays where it was when the drag started, as for arcs.
+  if fHandleIndex <> Pos then
+  begin
+    fHandleIndex := Pos;
+    if IsEnd then fHandleFixed := Body.Size4
+    else fHandleFixed := Body.Size4 + Body.Size3;
+  end;
+  if UnprojectToBody(P, Body, V) and ((V.X <> 0) or (V.Y <> 0)) then
+  begin
+    A := RadToDeg(ArcTan2(V.Y, V.X));
+    if ssShift in Shift then A := Round(A / 15) * 15
+    else if UseAngularSnap then A := Round(A / 45) * 45;
+    // Counterclockwise from start to end; the ends meeting close the
+    // torus, as when inserting.
+    if IsEnd then Sweep := A - fHandleFixed
+    else Sweep := fHandleFixed - A;
+    Sweep := Sweep - 360 * Floor(Sweep / 360);
+    if Sweep < 1 then Sweep := 360;
+    if not IsEnd then Body.Size4 := A;
+    Body.Size3 := Sweep;
+    UpdateExtension(Self);
+  end;
+  if Final then fHandleIndex := -1;
 end;
 
 procedure TSolid3D.SetView(const Azimuth, Elevation: Double);
@@ -1412,7 +1623,6 @@ var
   Faces: TObjectList;
   I, J, K: Integer;
   F: TFace;
-  Lo, Hi: TVec3;
   MinU, MaxU, MinV, MaxV, W, H: Double;
   procedure Grow(const P: TVec3);
   var
@@ -1435,11 +1645,7 @@ begin
   Faces := TObjectList.Create(True);
   try
     for I := 0 to BodyCount - 1 do TessellateBody(Bodies[I], Faces);
-    if fPerspective then
-    begin
-      SceneBounds(Lo, Hi);
-      fEyeDistance := 3 * Max(VLen(VSub(Hi, Lo)), 1E-9);
-    end;
+    if fPerspective then fEyeDistance := EyeDistance;
     for I := 0 to Faces.Count - 1 do
     begin
       F := TFace(Faces[I]);
@@ -1510,7 +1716,7 @@ var
   I, J, K: Integer;
   F: TFace;
   Item: TProjected;
-  R, U, C, Sum, Lo, Hi: TVec3;
+  R, U, C, Sum: TVec3;
   Piece: TPolyLinPiece;
   L: TCapLoop;
   Count: Integer;
@@ -1625,11 +1831,7 @@ begin
   Order := TObjectList.Create(True);
   try
     for I := 0 to BodyCount - 1 do TessellateBody(Bodies[I], Faces);
-    if fPerspective then
-    begin
-      SceneBounds(Lo, Hi);
-      fEyeDistance := 3 * Max(VLen(VSub(Hi, Lo)), 1E-9);
-    end;
+    if fPerspective then fEyeDistance := EyeDistance;
     ProjectBasis(R, U, C);
     for I := 0 to Faces.Count - 1 do
     begin
