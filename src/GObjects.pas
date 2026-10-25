@@ -2518,29 +2518,29 @@ var
   APiece: TCircularPiece;
   P0, P1, P2: TPoint2D;
   procedure FillArcArrows;
-  var
-    Delta: TRealType;
-    function GetDelta(const A: TRealType): TRealType;
+    function GetDelta(const Kind: TArrowKind): TRealType;
+    var
+      A: TRealType;
     begin
+      // Angle subtended by a chord of the arrow length on this arc.
+      Result := 0;
+      if (APiece.R <= 0) or (ArrowSize <= 0) then Exit;
+      A := ArrowSize * MeasureArrow(Kind) / APiece.R;
       if A > 1 then Result := Pi / 3
-      else if A > 0 then Result := ArcCos(1 - Sqr(A) / 2);
+      else Result := ArcCos(1 - Sqr(A) / 2);
     end;
   begin
     // First arrow-head
-    Delta := GetDelta(ArrowSize *
-      MeasureArrow(fBeginArrowKind) / APiece.R);
     FillArrow(fBeginArrowKind,
       ShiftPoint(P0, PolarVector(APiece.R, APiece.SA)),
-      ShiftPoint(P0, PolarVector(APiece.R, APiece.SA + Delta)),
+      ShiftPoint(P0, PolarVector(APiece.R,
+      APiece.SA + GetDelta(fBeginArrowKind))),
       ArrowSize, Pieces);
     // Second arrow-head
-    Delta := GetDelta(ArrowSize *
-      MeasureArrow(fEndArrowKind) / APiece.R);
-    if Delta > 1 then Delta := Pi / 3
-    else Delta := ArcCos(1 - Sqr(Delta) / 2);
     FillArrow(fEndArrowKind,
       ShiftPoint(P0, PolarVector(APiece.R, APiece.EA)),
-      ShiftPoint(P0, PolarVector(APiece.R, APiece.EA - Delta)),
+      ShiftPoint(P0, PolarVector(APiece.R,
+      APiece.EA - GetDelta(fEndArrowKind))),
       ArrowSize, Pieces);
   end;
 begin

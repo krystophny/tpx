@@ -40,7 +40,7 @@ SCENARIOS = ("exit-clean", "exit-no", "exit-cancel", "exit-cancel-retry", "exit-
              "inspector-doubleclick-selection",
              "inspector-visibility",
              "font-choice", "conversion-save",
-             "unsupported-exports", "arc-flip", "selection-drag", "live-tex-missing-tool", "clipboard-format-width",
+             "unsupported-exports", "arc-flip", "arc-arrow-symmetry", "selection-drag", "live-tex-missing-tool", "clipboard-format-width",
              "clipboard-roundtrip", "color-box-custom-state", "open-examples", "open-dialog-all-formats",
              "platform-shortcuts", "svg-linked-image-copy", "svg-codec",
              "solid3d-formats", "solid3d-open-save", "solid3d-editing",
