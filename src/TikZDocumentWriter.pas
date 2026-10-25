@@ -755,6 +755,37 @@ begin
   end;
 end;
 
+function NativeGradient(Native: TPrimitive2D): TTikZGradientKind;
+begin
+  if Native.FillColor = clDefault then Result := tgNone
+  else
+    case Native.FillGradient of
+      fgLinear: Result := tgLinear;
+      fgRadial: Result := tgRadial;
+    else
+      Result := tgNone;
+    end;
+end;
+
+function NativeGradientRGB(Native: TPrimitive2D): LongWord;
+begin
+  if Native.GradientColor = clDefault then
+    Result := ColorToRGB24(Native.FillColor)
+  else Result := ColorToRGB24(Native.GradientColor);
+end;
+
+function SameGradient(Native: TPrimitive2D;
+  SceneObject: TTikZSceneObject): Boolean;
+begin
+  Result := NativeGradient(Native) = SceneObject.Gradient;
+  if not Result or (SceneObject.Gradient = tgNone) then Exit;
+  Result := (NativeGradientRGB(Native) = (SceneObject.GradientRGB and $FFFFFF))
+    and NearValue(Native.GradientOpacity, SceneObject.FillOpacity) and
+    ((SceneObject.Gradient = tgRadial) or
+    NearValue(Native.GradientAngle - 360 * Floor(Native.GradientAngle / 360),
+    SceneObject.GradientAngle));
+end;
+
 function OpacityOption(const Key: string; Value: Double): string;
 begin
   { Opacities are stored in single precision; four digits keep the
@@ -986,6 +1017,9 @@ begin
     end;
   end;
 
+  if not SameGradient(Native, SceneObject) then
+    raise EWriteError.Create(
+      'Gradient edits on an existing TikZ statement are not supported');
   if SceneObject.FillEnabled then
   begin
     if Native.FillColor = clDefault then
@@ -1132,7 +1166,7 @@ end;
   names the native property that has no TikZ source form. }
 function NewObjectOptions(Primitive: TPrimitive2D; Drawing: TDrawing2D;
   var Definitions: TDefinitionArray; out Options: string): string;
-var Spec: string; WidthMM: Extended;
+var Spec, Start, Finish: string; WidthMM, Angle: Extended;
 begin
   Result := '';
   Options := '';
@@ -1170,7 +1204,27 @@ begin
   end
   else if Spec <> '' then
     Exit('arrows on an object without a stroke have no TikZ source form');
-  if Primitive.FillColor <> clDefault then
+  if (Primitive.FillColor <> clDefault) and
+    (Primitive.FillGradient <> fgNone) then
+  begin
+    { TikZ axis and radial shadings, laid out as TPaintStyle describes. }
+    if Abs(ClampOpacity(Primitive.FillOpacity) -
+      ClampOpacity(Primitive.GradientOpacity)) > 0.0005 then
+      Exit('a gradient between two opacities has no TikZ source form');
+    if Options <> '' then Options := Options + ', ';
+    Start := TikZColor(ColorToRGB24(Primitive.FillColor), Definitions);
+    Finish := TikZColor(NativeGradientRGB(Primitive), Definitions);
+    Angle := Primitive.GradientAngle -
+      360 * Floor(Primitive.GradientAngle / 360);
+    if Primitive.FillGradient = fgRadial then
+      Options := Options + 'inner color=' + Start + ', outer color=' + Finish
+    else if Abs(Angle) < 1E-9 then
+      Options := Options + 'left color=' + Start + ', right color=' + Finish
+    else
+      Options := Options + 'bottom color=' + Start + ', top color=' + Finish +
+        ', shading angle=' + FormatTikZReal(Angle - 90, SizeOf(TRealType));
+  end
+  else if Primitive.FillColor <> clDefault then
   begin
     if Options <> '' then Options := Options + ', ';
     Options := Options + 'fill=' +

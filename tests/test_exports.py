@@ -393,6 +393,97 @@ class ExportTests(unittest.TestCase):
         self.assertAlmostEqual(float(circle.get("fo")), 0.25, places=5)
         self.assertIsNone(circle.get("lo"))
 
+    def gradient_drawing(self):
+        source = self.root / "gradient.TpX"
+        source.write_text(
+            '%<TpX v="5" PicScale="1" TeXFormat="tikz" PdfTeXFormat="tikz">\n'
+            '%<rect x="0" y="0" w="30" h="10" li="none" fill="#0000FF" '
+            'grad="linear" gc="#FFFF00"/>\n'
+            '%<circle x="50" y="5" d="10" li="none" fill="#D00000" '
+            'grad="radial" go="0"/>\n'
+            '%</TpX>\n')
+        return source
+
+    def test_gradient_round_trip_and_vector_exports(self):
+        source = self.gradient_drawing()
+        self.run_tpx("-f", source, "-o", "saved.TpX")
+        saved = self.read_tpx(self.root / "saved.TpX")
+        rect, circle = saved.find("rect"), saved.find("circle")
+        self.assertEqual((rect.get("grad"), rect.get("gc"), rect.get("ga")),
+                         ("linear", "yellow", None))
+        self.assertEqual((circle.get("grad"), circle.get("go"), circle.get("gc")),
+                         ("radial", "0", None))
+        tikz = (self.root / "saved.TpX").read_text()
+        self.assertIn("left color=F, right color=G", tikz)
+        self.assertIn("inner color=F, outer color=G, path fading=tpxfadeR1000x0", tikz)
+        self.assertIn("\\pgfdeclarefading{tpxfadeR1000x0}", tikz)
+        self.run_tpx("-f", source, "-x", "svg", "-o", "drawing")
+        svg = ET.parse(self.root / "drawing.svg").getroot()
+        linear = svg.find(".//" + SVG + "linearGradient")
+        # The axis runs across the box width at angle 0.
+        self.assertEqual([float(linear.get(k)) for k in ("x1", "x2")], [0, 30])
+        self.assertEqual(linear.get("y1"), linear.get("y2"))
+        stops = linear.findall(SVG + "stop")
+        self.assertEqual([s.get("stop-color") for s in stops], ["blue", "yellow"])
+        radial = svg.find(".//" + SVG + "radialGradient")
+        self.assertIn("matrix(5 0 0 5 50", radial.get("gradientTransform"))
+        self.assertEqual(radial.findall(SVG + "stop")[1].get("stop-opacity"), "0")
+        self.assertEqual(svg.find(SVG + "circle").get("fill"),
+                         "url(#" + radial.get("id") + ")")
+        self.run_tpx("-f", "drawing.svg", "-o", "from-svg.TpX")
+        reopened = self.read_tpx(self.root / "from-svg.TpX")
+        self.assertEqual(reopened.find("rect").get("grad"), "linear")
+        self.assertEqual(reopened.find("circle").get("go"), "0")
+
+    def test_svg_gradient_import(self):
+        source = self.root / "gradient.svg"
+        source.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" '
+            'xmlns:xlink="http://www.w3.org/1999/xlink" width="80mm" height="40mm" '
+            'viewBox="0 0 80 40"><defs>'
+            '<linearGradient id="stops"><stop offset="0" '
+            'style="stop-color:#ff0000"/><stop offset="1" '
+            'style="stop-color:#0000ff;stop-opacity:0.5"/></linearGradient>'
+            '<linearGradient id="up" xlink:href="#stops" x1="0" y1="1" x2="0" y2="0"/>'
+            '<radialGradient id="blob"><stop offset="0%" stop-color="red"/>'
+            '<stop offset="100%" stop-color="red" stop-opacity="0"/></radialGradient>'
+            '</defs><rect x="10" y="10" width="20" height="10" fill="url(#up)"/>'
+            '<circle cx="50" cy="20" r="8" fill="url(#blob)" fill-opacity="0.5"/>'
+            '</svg>')
+        self.run_tpx("-f", source, "-o", "imported.TpX")
+        imported = self.read_tpx(self.root / "imported.TpX")
+        rect = imported.find(".//rect")
+        self.assertEqual((rect.get("fill"), rect.get("gc"), rect.get("grad")),
+                         ("red", "blue", "linear"))
+        self.assertAlmostEqual(float(rect.get("ga")), 90, places=4)
+        self.assertAlmostEqual(float(rect.get("go")), 0.5, places=5)
+        circle = imported.find(".//circle")
+        self.assertEqual(circle.get("grad"), "radial")
+        self.assertAlmostEqual(float(circle.get("fo")), 0.5, places=5)
+        self.assertEqual(circle.get("go"), "0")
+
+    def test_tikz_document_gradient_save(self):
+        source = self.root / "shaded.TpX"
+        source.write_text(
+            '%<TpX v="5" PicScale="1">\n'
+            '%<rect x="0" y="0" w="30" h="10" li="none" fill="#0000FF" '
+            'grad="linear" gc="#FFFF00" ga="30"/>\n'
+            '%<circle x="50" y="5" d="10" li="none" fill="#FF0000" '
+            'grad="radial" gc="#FFFFFF"/>\n'
+            '%</TpX>\n')
+        self.run_tpx("-f", source, "-o", "shaded.tikz")
+        tikz = (self.root / "shaded.tikz").read_text()
+        self.assertIn("bottom color=blue, top color=yellow, shading angle=-60", tikz)
+        self.assertIn("inner color=red, outer color=white", tikz)
+        self.run_tpx("-f", "shaded.tikz", "-o", "back.TpX")
+        back = self.read_tpx(self.root / "back.TpX")
+        self.assertEqual((back.find("rect").get("grad"), back.find("rect").get("ga")),
+                         ("linear", "30"))
+        self.assertEqual(back.find("circle").get("gc"), "white")
+        source.write_text(source.read_text().replace('gc="#FFFFFF"', 'go="0"'))
+        result = self.run_tpx("-f", source, "-o", "faded.tikz", expect_success=False)
+        self.assertIn("two opacities", result.stderr)
+
     def test_cli_rejects_unsupported_output_clearly(self):
         source = self.drawing()
         result = self.run_tpx("-f", source, "-o", "drawing.pdf", expect_success=False)

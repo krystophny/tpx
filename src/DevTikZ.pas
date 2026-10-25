@@ -2,7 +2,7 @@ unit DevTikZ;
 
 interface
 
-uses SysUtils, Geometry, Graphics, Devices;
+uses SysUtils, Classes, Geometry, Graphics, Devices;
 
 type
 
@@ -10,8 +10,12 @@ type
 
   T_TikZ_Device = class(TFileDevice)
   protected
-    fCurrLineColor, fCurrFillColor, fCurrTextColor: TColor;
+    fCurrLineColor, fCurrFillColor, fCurrTextColor, fCurrGradColor: TColor;
     fHatchPass: Boolean;
+    fFadings: TStringList;
+    function GradientFading: Boolean;
+    function DeclareFading: string;
+    function ShadingOptions: string;
     procedure DefineColor(Color: TColor; ID: Char);
     procedure WriteAttr(
       const LineColor, HatchColor, FillColor: TColor;
@@ -60,6 +64,8 @@ type
     DefaultFontHeight: TRealType;
     DvipsFixBB: Boolean;
     constructor Create;
+    destructor Destroy; override;
+    function NeedsDisjointFill: Boolean; override;
     procedure Poly(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
       const LineStyle: TLineStyle; const LineWidth: TRealType;
@@ -71,7 +77,7 @@ type
 
 implementation
 
-uses ColorEtc, Output, Bitmaps;
+uses Math, ColorEtc, Output, Bitmaps;
 
 // =====================================================================
 // T_TikZ_Device
@@ -98,10 +104,121 @@ begin
   fCurrLineColor := clNone;
   fCurrFillColor := clNone;
   fCurrTextColor := clNone;
+  fCurrGradColor := clNone;
+  fFadings := TStringList.Create;
+end;
+
+destructor T_TikZ_Device.Destroy;
+begin
+  fFadings.Free;
+  inherited Destroy;
+end;
+
+{ A gradient whose two ends differ in opacity needs a fading; the fading
+  would also act on the stroke, so the stroke is then drawn on its own. }
+function T_TikZ_Device.GradientFading: Boolean;
+begin
+  Result := HasGradient(fPaint) and
+    (Abs(ClampOpacity(fPaint.FillOpacity) -
+    ClampOpacity(fPaint.GradientOpacity)) > 0.0005);
+end;
+
+function T_TikZ_Device.NeedsDisjointFill: Boolean;
+begin
+  Result := inherited NeedsDisjointFill or GradientFading;
+end;
+
+{ Declares the fading of the current gradient once per picture and returns
+  its name. A fading is a luminosity mask (white opaque, black clear) laid
+  out like the matching TikZ shading. pgf declarations inside a picture
+  need \pgfinterruptpicture. }
+function T_TikZ_Device.DeclareFading: string;
+var
+  A0, A1: string;
+begin
+  A0 := OpacityText(fPaint.FillOpacity);
+  A1 := OpacityText(fPaint.GradientOpacity);
+  if fPaint.Gradient = fgRadial then Result := 'tpxfadeR'
+  else Result := 'tpxfadeL';
+  Result := Result + IntToStr(Round(ClampOpacity(fPaint.FillOpacity) * 1000)) +
+    'x' + IntToStr(Round(ClampOpacity(fPaint.GradientOpacity) * 1000));
+  if fFadings.IndexOf(Result) >= 0 then Exit;
+  fFadings.Add(Result);
+  WriteStream('\pgfinterruptpicture');
+  if fPaint.Gradient = fgRadial then
+    WriteStream(Format('\pgfdeclareradialshading{%ss}{\pgfpointorigin}' +
+      '{gray(0bp)=(%s);gray(25bp)=(%s);gray(50bp)=(%s)}', [Result, A0, A1, A1]))
+  else
+    WriteStream(Format('\pgfdeclarehorizontalshading{%ss}{100bp}' +
+      '{gray(0bp)=(%s);gray(25bp)=(%s);gray(75bp)=(%s);gray(100bp)=(%s)}',
+      [Result, A0, A0, A1, A1]));
+  WriteStream(Format('\pgfdeclarefading{%s}{\pgfuseshading{%ss}}',
+    [Result, Result]));
+  WriteLnStream('\endpgfinterruptpicture%');
+end;
+
+function FormatTikZNumber(const X: TRealType): string;
+var
+  Settings: TFormatSettings;
+begin
+  Settings := DefaultFormatSettings;
+  Settings.DecimalSeparator := '.';
+  Result := FloatToStrF(X, ffGeneral, 6, 0, Settings);
+end;
+
+{ Shading options for the current gradient fill (colours F and G). TikZ
+  stretches its axis and radial shadings to the path's bounding box with
+  the rules TPaintStyle describes. }
+function T_TikZ_Device.ShadingOptions: string;
+var
+  Angle, UnitBP, L, D: TRealType;
+  P1, P2, C0, C1: TPoint2D;
+begin
+  if fPaint.Gradient = fgRadial then
+    Result := 'inner color=F, outer color=G'
+  else
+  begin
+    Angle := fPaint.GradientAngle - 360 * Floor(fPaint.GradientAngle / 360);
+    if Abs(Angle) < 1E-9 then
+      Result := 'left color=F, right color=G'
+    else
+      Result := 'bottom color=F, top color=G, shading angle=' +
+        FormatTikZNumber(Angle - 90);
+  end;
+  if not GradientFading then
+  begin
+    if not IsOpaque(fPaint.FillOpacity) then
+      Result := Result + ', fill opacity=' + OpacityText(fPaint.FillOpacity);
+    Exit;
+  end;
+  Result := Result + ', path fading=' + DeclareFading;
+  if fPaint.Gradient = fgRadial then
+    Result := Result + ', fit fading=true'
+  else
+  begin
+    { Place the fading in picture coordinates so it follows the colour
+      axis exactly: centred on the box, along the gradient direction, its
+      50bp ramp scaled to the gradient length and its height to cover the
+      box. }
+    LinearGradientEnds(fPaint, P1, P2);
+    P1 := TransformPoint2D(P1, T);
+    P2 := TransformPoint2D(P2, T);
+    C0 := TransformPoint2D(fPaint.Box.FirstEdge, T);
+    C1 := TransformPoint2D(fPaint.Box.SecondEdge, T);
+    UnitBP := StrToFloat(Format('%.2f', [1 / fFactorMM])) * 72 / 25.4;
+    L := PointDistance2D(P1, P2);
+    D := PointDistance2D(C0, C1);
+    Result := Result + Format(', fit fading=false, fading transform=' +
+      '{shift={(%s,%s)}, rotate=%s, xscale=%s, yscale=%s}',
+      [FormatTikZNumber((P1.X + P2.X) / 2), FormatTikZNumber((P1.Y + P2.Y) / 2),
+      FormatTikZNumber(RadToDeg(ArcTan2(P2.Y - P1.Y, P2.X - P1.X))),
+      FormatTikZNumber(L * UnitBP / 50), FormatTikZNumber(D * UnitBP / 50)]);
+  end;
 end;
 
 procedure T_TikZ_Device.WriteHeader(ExtRect: TRect2D);
 begin
+  fFadings.Clear;
   if fFactorMM = 0 then fFactorMM := 1;
 //  if DvipsFixBB then
 //    WriteLnStream(DvipsFixBB_RuleStr(ExtRect, fFactorMM));
@@ -156,6 +273,8 @@ begin
       else fCurrFillColor := Color;
     'T': if Color = fCurrTextColor then Exit
       else fCurrTextColor := Color;
+    'G': if Color = fCurrGradColor then Exit
+      else fCurrGradColor := Color;
   end;
   RGB := PS_RGB(Color);
   WriteLnStream(Format('\definecolor{%s}{rgb}{%.3g,%.3g,%.3g}',
@@ -178,6 +297,8 @@ procedure T_TikZ_Device.WriteAttr(
   const Hatching: THatching);
 var
   NAttr: Integer;
+  Shaded: Boolean;
+  Shading: string;
   procedure AddAttr(const Attr: string);
   begin
     if NAttr = 0 then
@@ -191,6 +312,12 @@ begin
     if LineColor <> clDefault then DefineColor(LineColor, 'L')
     else DefineColor(clBlack, 'L');
   if FillColor <> clDefault then DefineColor(FillColor, 'F');
+  Shaded := (FillColor <> clDefault) and HasGradient(fPaint);
+  if Shaded then
+  begin
+    DefineColor(fPaint.GradientColor, 'G');
+    Shading := ShadingOptions;
+  end;
   WriteStream('\path');
   WriteStream('[');
   NAttr := 0;
@@ -199,7 +326,8 @@ begin
     AddAttr(Format('line width=%.6g*\tpxLineWidth', [LineWidth]));
     AddAttr('draw=L');
   end;
-  if FillColor <> clDefault then AddAttr('fill=F');
+  if Shaded then AddAttr(Shading)
+  else if FillColor <> clDefault then AddAttr('fill=F');
   { Hatching lines belong to the fill and take its opacity. }
   if (LineStyle <> liNone) and fHatchPass and
     not IsOpaque(fPaint.FillOpacity) then
@@ -207,7 +335,8 @@ begin
   else if (LineStyle <> liNone) and not fHatchPass and
     not IsOpaque(fPaint.LineOpacity) then
     AddAttr('draw opacity=' + OpacityText(fPaint.LineOpacity));
-  if (FillColor <> clDefault) and not IsOpaque(fPaint.FillOpacity) then
+  if (FillColor <> clDefault) and not Shaded and
+    not IsOpaque(fPaint.FillOpacity) then
     AddAttr('fill opacity=' + OpacityText(fPaint.FillOpacity));
   case LineStyle of
     liDotted:

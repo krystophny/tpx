@@ -218,7 +218,8 @@ const
     opfArrowSizeFactor, opfTextHeight, opfTextRotation, opfStarSizeFactor,
     opfSymbolDiameter, opfSymbolRotation, opfRectangleRX, opfRectangleRY,
     opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidSize4,
-    opfSolidAzimuth, opfSolidElevation, opfLineOpacity, opfFillOpacity];
+    opfSolidAzimuth, opfSolidElevation, opfLineOpacity, opfFillOpacity,
+    opfGradientOpacity, opfGradientAngle];
 
 procedure WriteFieldValue(Stream: TStream; const Patch: TObjectPropertyPatch;
   Field: TObjectPropertyField);
@@ -271,6 +272,10 @@ begin
     opfRectangleRY: R := Patch.RectangleRY;
     opfLineOpacity: R := Patch.LineOpacity;
     opfFillOpacity: R := Patch.FillOpacity;
+    opfGradientOpacity: R := Patch.GradientOpacity;
+    opfGradientAngle: R := Patch.GradientAngle;
+    opfFillGradient: I := Ord(Patch.FillGradient);
+    opfGradientColor: I := LongInt(Patch.GradientColor);
   end;
   if Field in RealRecoveryFields then
     Stream.WriteBuffer(R, SizeOf(R))
@@ -323,6 +328,8 @@ begin
       opfSolidElevation: Patch.SolidElevation := R;
       opfLineOpacity: Patch.LineOpacity := R;
       opfFillOpacity: Patch.FillOpacity := R;
+      opfGradientOpacity: Patch.GradientOpacity := R;
+      opfGradientAngle: Patch.GradientAngle := R;
     end;
     Exit;
   end;
@@ -339,6 +346,8 @@ begin
     opfHAlignment: Patch.HAlignment := THAlignment(I);
     opfStarKind: Patch.StarKind := TStarKind(I);
     opfSymbolKind: Patch.SymbolKind := TSymbolKind(I);
+    opfFillGradient: Patch.FillGradient := TFillGradient(I);
+    opfGradientColor: Patch.GradientColor := TColor(I);
   end;
 end;
 
@@ -697,6 +706,11 @@ begin
           Destination.SolidPerspective := Source.SolidPerspective;
         opfLineOpacity: Destination.LineOpacity := Source.LineOpacity;
         opfFillOpacity: Destination.FillOpacity := Source.FillOpacity;
+        opfFillGradient: Destination.FillGradient := Source.FillGradient;
+        opfGradientColor: Destination.GradientColor := Source.GradientColor;
+        opfGradientOpacity:
+          Destination.GradientOpacity := Source.GradientOpacity;
+        opfGradientAngle: Destination.GradientAngle := Source.GradientAngle;
       end;
       Include(Destination.Fields, Field);
     end;

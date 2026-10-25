@@ -27,6 +27,8 @@ type
     fCnv: TCanvas;
     fFaceName: string;
     fCanBlend: Boolean;
+    { Maps the coordinates of the paint box to canvas pixels. }
+    fBlendTransf: TTransf2D;
     { Draws a path with the current paint style. Translucent parts are
       composited over the pixels already on the canvas when CanBlend is
       set; otherwise they are drawn opaque. }
@@ -39,9 +41,10 @@ type
       const Closed: Boolean; const Pnts: array of TPoint;
       const LineStyle: TLineStyle; const LineWidth: TRealType;
       const IsFill: Boolean; const Color: TColor;
-      const Alpha: TRealType);
+      const Alpha: TRealType; const Gradient: Boolean = False);
     procedure BlendMask(const Mask: TBitmap; const Origin: TPoint;
-      const Color: TColor; const Alpha: TRealType);
+      const Color: TColor; const Alpha: TRealType;
+      const Gradient: Boolean = False);
     function CanvasBounds(var R: TRect): Boolean;
     procedure WriteHatchingLines(const Lines: TPointsSet2D;
       const HatchColor: TColor; const LineWidth: TRealType); override;
@@ -1188,6 +1191,7 @@ begin
   for I := 0 to PP.Count - 1 do
     Pnts[I] := Point2DToPoint(TransformPoint2D(PP[I],
       MultTransf(Transf)));
+  fBlendTransf := MultTransf(Transf);
   DrawPaintedPath(CnvDrawPolylinePath, Closed, Pnts,
     LineColor, HatchColor, FillColor, LineStyle, LineWidth, Hatching);
 end;
@@ -1207,6 +1211,7 @@ begin
   for I := 0 to PP.Count - 1 do
     Pnts[I] := Point2DToPoint(TransformPoint2D(PP[I],
       MultTransf(Transf)));
+  fBlendTransf := MultTransf(Transf);
   DrawPaintedPath(CnvDrawBezierPath, Closed, Pnts,
     LineColor, HatchColor, FillColor, LineStyle, LineWidth, Hatching);
 end;
@@ -1219,10 +1224,12 @@ procedure TCanvasDevice.DrawPaintedPath(const PathProc: TDrawPathProc;
 var
   FillAlpha, LineAlpha: TRealType;
   StrokeColor: TColor;
+  Shaded: Boolean;
 begin
   FillAlpha := ClampOpacity(fPaint.FillOpacity);
   LineAlpha := ClampOpacity(fPaint.LineOpacity);
-  if ((FillColor = clDefault) or (FillAlpha >= 1)) and
+  Shaded := (FillColor <> clDefault) and HasGradient(fPaint) and fCanBlend;
+  if not Shaded and ((FillColor = clDefault) or (FillAlpha >= 1)) and
     ((LineStyle = liNone) or (LineAlpha >= 1)) then
   begin
     DrawNative0(fCnv, PathProc, Rect2D(0, 0, 0, 0),
@@ -1231,8 +1238,12 @@ begin
       fLineWidthBase, fFactorMM, fMiterLimit);
     Exit;
   end;
-  { Fill first, then the stroke on top, as the single opaque call would. }
-  if (FillColor <> clDefault) and (FillAlpha > 0) then
+  { Fill first, then the stroke on top, as the single opaque call would.
+    Without read-back a gradient falls back to its start colour. }
+  if Shaded then
+    BlendPath(PathProc, Closed, Pnts, liNone, LineWidth, True,
+      FillColor, FillAlpha, True)
+  else if (FillColor <> clDefault) and (FillAlpha > 0) then
     if (FillAlpha >= 1) or not fCanBlend then
       DrawNative0(fCnv, PathProc, Rect2D(0, 0, 0, 0),
         Closed, Pnts, nil, IdentityTransf2D, liNone, LineWidth,
@@ -1272,7 +1283,7 @@ procedure TCanvasDevice.BlendPath(const PathProc: TDrawPathProc;
   const Closed: Boolean; const Pnts: array of TPoint;
   const LineStyle: TLineStyle; const LineWidth: TRealType;
   const IsFill: Boolean; const Color: TColor;
-  const Alpha: TRealType);
+  const Alpha: TRealType; const Gradient: Boolean);
 {$IFDEF FPC}
 var
   R: TRect;
@@ -1312,7 +1323,7 @@ begin
       Closed, Shifted, nil, IdentityTransf2D, LineStyle, LineWidth,
       haNone, clWhite, MaskFill, clWhite,
       fLineWidthBase, fFactorMM, fMiterLimit);
-    BlendMask(Mask, R.TopLeft, Color, Alpha);
+    BlendMask(Mask, R.TopLeft, Color, Alpha, Gradient);
   finally
     Mask.Free;
   end;
@@ -1323,17 +1334,24 @@ end;
 {$ENDIF}
 
 procedure TCanvasDevice.BlendMask(const Mask: TBitmap;
-  const Origin: TPoint; const Color: TColor; const Alpha: TRealType);
+  const Origin: TPoint; const Color: TColor; const Alpha: TRealType;
+  const Gradient: Boolean);
 {$IFDEF FPC}
 var
   Back: TBitmap;
   BackImage, MaskImage: TLazIntfImage;
   X, Y: Integer;
-  Src, Dst: TFPColor;
-  A: Double;
+  Src, Dst, Src0, Src1: TFPColor;
+  A, A0, A1, T: Double;
+  Inverse: TTransf2D;
 begin
   Src := TColorToFPColor(ColorToRGB(Color));
   A := ClampOpacity(Alpha);
+  Src0 := Src;
+  A0 := A;
+  Src1 := TColorToFPColor(ColorToRGB(fPaint.GradientColor));
+  A1 := ClampOpacity(fPaint.GradientOpacity);
+  if Gradient then Inverse := InvertTransform2D(fBlendTransf);
   Back := TBitmap.Create;
   BackImage := nil;
   MaskImage := nil;
@@ -1349,6 +1367,16 @@ begin
       for X := 0 to Mask.Width - 1 do
         if MaskImage.Colors[X, Y].green >= $8000 then
         begin
+          if Gradient then
+          begin
+            { Evaluate the gradient at the pixel centre in box space. }
+            T := GradientPosition(fPaint, TransformPoint2D(Point2D(
+              Origin.X + X + 0.5, Origin.Y + Y + 0.5), Inverse));
+            Src.red := Round(Src0.red + (Src1.red - Src0.red) * T);
+            Src.green := Round(Src0.green + (Src1.green - Src0.green) * T);
+            Src.blue := Round(Src0.blue + (Src1.blue - Src0.blue) * T);
+            A := A0 + (A1 - A0) * T;
+          end;
           Dst := BackImage.Colors[X, Y];
           Dst.red := Round(Dst.red + (Src.red - Dst.red) * A);
           Dst.green := Round(Dst.green + (Src.green - Dst.green) * A);

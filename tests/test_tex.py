@@ -276,6 +276,36 @@ class TeXTests(unittest.TestCase):
         self.assertLess(abs(middle[width // 4] - 128), 24, middle[width // 4])
         self.assertLess(middle[3 * width // 4], 24)
 
+    @unittest.skipUnless(shutil.which("gs"), "Ghostscript is not installed")
+    def test_tikz_radial_fade_renders(self):
+        # A black disc that fades to transparent towards its edge.
+        source = self.root / "blob.TpX"
+        source.write_text(
+            '%<TpX v="5" PicScale="1" TeXFormat="tikz" PdfTeXFormat="tikz" '
+            'TeXFigure="none" Border="0">\n'
+            '%<rect x="0" y="0" w="40" h="40" li="none" fill="#FFFFFF"/>\n'
+            '%<circle x="20" y="20" d="40" li="none" fill="#000000" '
+            'grad="radial" go="0"/>\n'
+            '%</TpX>\n')
+        self.run_command([BINARY, "-f", source, "-o", "saved.TpX"])
+        (self.root / "blob.tex").write_text(
+            "\\documentclass{standalone}\\usepackage{tikz}\\begin{document}"
+            "\\input{saved.TpX}\\end{document}\n")
+        self.run_command(["pdflatex", "-halt-on-error", "-interaction=nonstopmode",
+                          "blob.tex"])
+        image = self.root / "blob.pgm"
+        self.run_command(["gs", "-q", "-dSAFER", "-dBATCH", "-dNOPAUSE",
+                          "-sDEVICE=pgmraw", "-r72", "-sOutputFile=" + str(image),
+                          "blob.pdf"])
+        data = image.read_bytes()
+        header = re.sub(rb"#[^\n]*\n", b"", data[:200]).split()
+        width, height = int(header[1]), int(header[2])
+        row = data[-width * height:][(height // 2) * width:(height // 2 + 1) * width]
+        # Opaque core, half transparent at half the radius, clear at the rim.
+        self.assertLess(row[width // 2], 24, row[width // 2])
+        self.assertLess(abs(row[width // 4] - 128), 30, row[width // 4])
+        self.assertGreater(row[2], 230, row[2])
+
     def test_scientific_examples_compile_with_tikz(self):
         examples = Path(__file__).resolve().parents[1] / "examples"
         expected_math = {

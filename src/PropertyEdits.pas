@@ -28,7 +28,10 @@ type
     opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidSegments,
     opfSolidAzimuth, opfSolidElevation, opfSolidPerspective, opfSolidSize4,
     { Opacities from 0 (transparent) to 1 (opaque). }
-    opfLineOpacity, opfFillOpacity);
+    opfLineOpacity, opfFillOpacity,
+    { Gradient fill: kind, end colour and opacity, angle in degrees. }
+    opfFillGradient, opfGradientColor, opfGradientOpacity,
+    opfGradientAngle);
   TObjectPropertyFields = set of TObjectPropertyField;
   TEditTargetIDs = array of Integer;
 
@@ -64,6 +67,9 @@ type
     SolidAzimuth, SolidElevation: TRealType;
     SolidPerspective: Boolean;
     LineOpacity, FillOpacity: TRealType;
+    FillGradient: TFillGradient;
+    GradientColor: TColor;
+    GradientOpacity, GradientAngle: TRealType;
   end;
 
 { What a 3D size field means for a selected single-body 3D object. }
@@ -467,8 +473,17 @@ begin
   else if ((opfLineOpacity in Patch.Fields) and
     not IsUnitValue(Patch.LineOpacity)) or
     ((opfFillOpacity in Patch.Fields) and
-    not IsUnitValue(Patch.FillOpacity)) then
+    not IsUnitValue(Patch.FillOpacity)) or
+    ((opfGradientOpacity in Patch.Fields) and
+    not IsUnitValue(Patch.GradientOpacity)) then
     ErrorText := 'Opacity must be between 0 and 1'
+  else if (opfFillGradient in Patch.Fields) and
+    ((Ord(Patch.FillGradient) < Ord(Low(TFillGradient))) or
+    (Ord(Patch.FillGradient) > Ord(High(TFillGradient)))) then
+    ErrorText := 'Unknown gradient kind'
+  else if (opfGradientAngle in Patch.Fields) and
+    not IsFiniteValue(Patch.GradientAngle) then
+    ErrorText := 'Gradient angle must be finite'
   else if (opfArrowSizeFactor in Patch.Fields) and
     not IsFiniteNonnegative(Patch.ArrowSizeFactor) then
     ErrorText := 'Arrow size must be a finite nonnegative number'
@@ -606,6 +621,13 @@ begin
   if opfFillColor in Patch.Fields then Prim.FillColor := Patch.FillColor;
   if opfLineOpacity in Patch.Fields then Prim.LineOpacity := Patch.LineOpacity;
   if opfFillOpacity in Patch.Fields then Prim.FillOpacity := Patch.FillOpacity;
+  if opfFillGradient in Patch.Fields then Prim.FillGradient := Patch.FillGradient;
+  if opfGradientColor in Patch.Fields then
+    Prim.GradientColor := Patch.GradientColor;
+  if opfGradientOpacity in Patch.Fields then
+    Prim.GradientOpacity := Patch.GradientOpacity;
+  if opfGradientAngle in Patch.Fields then
+    Prim.GradientAngle := Patch.GradientAngle;
   if opfBeginArrowKind in Patch.Fields then
     Prim.BeginArrowKind := Patch.BeginArrowKind;
   if opfEndArrowKind in Patch.Fields then
@@ -750,6 +772,10 @@ begin
     opfSolidPerspective: Patch.SolidPerspective := Boolean(Value);
     opfLineOpacity: Patch.LineOpacity := TRealType(Value);
     opfFillOpacity: Patch.FillOpacity := TRealType(Value);
+    opfFillGradient: Patch.FillGradient := TFillGradient(Integer(Value));
+    opfGradientColor: Patch.GradientColor := TColor(Integer(Value));
+    opfGradientOpacity: Patch.GradientOpacity := TRealType(Value);
+    opfGradientAngle: Patch.GradientAngle := TRealType(Value);
   end;
   Result := True;
 end;
@@ -877,7 +903,8 @@ begin
     opfRectangleRX, opfRectangleRY: Result := Obj is TRectangle2D;
     opfBitmapLink, opfKeepAspectRatio: Result := Obj is TBitmap2D;
     opfSolidSize1..opfSolidSize4: Result := SolidSupports(Obj, Field);
-    opfLineOpacity, opfFillOpacity:
+    opfLineOpacity, opfFillOpacity, opfFillGradient, opfGradientColor,
+    opfGradientOpacity, opfGradientAngle:
       Result := (Obj is TPrimitive2D) and
         TPrimitive2D(Obj).SupportsOpacity;
   end;
@@ -924,6 +951,10 @@ begin
     opfSolidSize1..opfSolidSize4: Value := ReadSolidValue(Obj, Field);
     opfLineOpacity: Value := Prim.LineOpacity;
     opfFillOpacity: Value := Prim.FillOpacity;
+    opfFillGradient: Value := Ord(Prim.FillGradient);
+    opfGradientColor: Value := Integer(Prim.GradientColor);
+    opfGradientOpacity: Value := Prim.GradientOpacity;
+    opfGradientAngle: Value := Prim.GradientAngle;
   end;
 end;
 
