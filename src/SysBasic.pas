@@ -97,6 +97,9 @@ uses
   Process{$IFDEF MSWINDOWS}, ProcessUnicode{$ENDIF},
 {$ENDIF}
   {$IFDEF WINDOWS}Windows,{$ENDIF} ExtCtrls
+{$IF DEFINED(UNIX) AND NOT DEFINED(DARWIN) AND NOT DEFINED(WASI)}
+  , LCLVersion, UTF8Process
+{$ENDIF}
 {$IFNDEF CPUWASM32}
   , UserStorage
 {$ENDIF}
@@ -692,11 +695,47 @@ begin
     MessageBoxError('External command failed: ' + aCmdLine);
 end;
 
+{$IF DEFINED(FPC) AND DEFINED(UNIX) AND NOT DEFINED(DARWIN) AND NOT DEFINED(WASI)}
+{$IF lcl_fullversion < 4090000}
+{$DEFINE TPX_DIRECT_DESKTOP_OPENER}
+{ Lazarus 4.8 and older quote the path for a shell in Unix OpenDocument, so
+  quote characters reach the opener as part of the file name. Upstream Lazarus
+  commit 1b919ee6b186f48957cf77c69c5cd74d21c188e4 passes the path as one
+  argument; this copy of that launch disappears once the oldest supported
+  Lazarus release contains the commit. }
+function OpenDesktopDocument(const Path: string): Boolean;
+var
+  Opener: string;
+  DocumentProcess: TProcessUTF8;
+begin
+  if not (FileExists(Path) or DirectoryExists(Path)) then Exit(False);
+  Opener := FindFilenameOfCmd('xdg-open');
+  if Opener = '' then Opener := FindFilenameOfCmd('kfmclient');
+  if Opener = '' then Opener := FindFilenameOfCmd('gnome-open');
+  if Opener = '' then Exit(False);
+  DocumentProcess := TProcessUTF8.Create(nil);
+  try
+    DocumentProcess.InheritHandles := False;
+    DocumentProcess.Options := [poWaitOnExit];
+    DocumentProcess.Executable := Opener;
+    DocumentProcess.Parameters.Add(Path);
+    DocumentProcess.Execute;
+    Result := True;
+  finally
+    DocumentProcess.Free;
+  end;
+end;
+{$ENDIF}
+{$ENDIF}
+
 procedure OpenOrExec(const ViewerPath, FileName: string);
 begin
   if ViewerPath = '' then
   begin
-{$IFDEF FPC}
+{$IF DEFINED(TPX_DIRECT_DESKTOP_OPENER)}
+    if not OpenDesktopDocument(FileName) then
+      MessageBoxError('Could not open the default viewer for ' + FileName);
+{$ELSEIF DEFINED(FPC)}
     if not LCLIntf.OpenDocument(FileName) then
       MessageBoxError('Could not open the default viewer for ' + FileName);
 {$ELSE}

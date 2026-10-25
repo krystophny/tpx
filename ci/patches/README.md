@@ -12,11 +12,16 @@ The patch comes from the owning Lazarus repository, commit
 Its SHA-256 is
 `e803579552bf5d22fb3f51782e3a1bad5482c7e17453c936f7053ef54528f452`.
 The owner regression runner checks the received path byte for byte.
-The repair is retained locally and has not yet been merged upstream.
-This versioned bootstrap patch is required until an upstream release contains
-the repair; update the pinned Lazarus revision and remove the patch together
-after the same behavioral test passes without it. Windows uses the original
-upstream implementation because this defect affects Unix only.
+Upstream Lazarus merged the same repair into `main` as commit
+`1b919ee6b186f48957cf77c69c5cd74d21c188e4`, but no release contains it yet.
+Because builds against a distribution Lazarus 4.8 lack the patch, TpX's
+`OpenOrExec` in `src/SysBasic.pas` launches the opener the same way itself on
+Unix other than macOS when `lcl_fullversion` is below 4.9, and uses LCL
+`OpenDocument` otherwise. Keep this bootstrap patch until an upstream release
+contains the repair; then update the pinned Lazarus revision and remove the
+patch and the TpX copy together after the same behavioral test passes without
+them. Windows uses the original upstream implementation because this defect
+affects Unix only.
 
 # Lazarus 4.8 Cocoa text-shortcut repair
 
