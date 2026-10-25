@@ -56,7 +56,14 @@ type
     fFrozenKey: string;
     // Eye distance for perspective, set once per rendering (0 = unknown).
     fEyeDistance: Double;
+    // While inserting, the two points span the box the object is fitted
+    // into; this placement replaces them for projection.
+    fFit: Boolean;
+    fFitOrigin: TPoint2D;
+    fFitScale: Double;
     function GeometryKey: string;
+    procedure BoxPlacement(const A, B: TPoint2D; out Origin: TPoint2D;
+      out Scale: Double);
     function GetBody(I: Integer): TSolidBody;
     function GetBodyCount: Integer;
   protected
@@ -1315,7 +1322,14 @@ begin
     X := X * F;
     Y := Y * F;
   end;
-  GetPlacement(Origin, Scale, Angle);
+  if fFit then
+  begin
+    Origin := fFitOrigin;
+    Scale := fFitScale;
+    Angle := 0;
+  end
+  else
+    GetPlacement(Origin, Scale, Angle);
   Result := Point2D(Origin.X + Scale * (X * Cos(Angle) - Y * Sin(Angle)),
     Origin.Y + Scale * (X * Sin(Angle) + Y * Cos(Angle)));
 end;
@@ -1350,32 +1364,56 @@ begin
   end;
 end;
 
-procedure TSolid3D.FinishFirstDraw;
+procedure TSolid3D.BoxPlacement(const A, B: TPoint2D; out Origin: TPoint2D;
+  out Scale: Double);
 var
-  Lo, Hi, R, U, C: TVec3;
-  A, B: TPoint2D;
-  W, H, MinU, MaxU, MinV, MaxV, S: Double;
-  Corners: array[0..7] of TVec3;
-  I: Integer;
+  Faces: TObjectList;
+  I, J, K: Integer;
+  F: TFace;
+  Lo, Hi: TVec3;
+  MinU, MaxU, MinV, MaxV, W, H: Double;
+  procedure Grow(const P: TVec3);
+  var
+    Q: TPoint2D;
+  begin
+    Q := ProjectScene(P);
+    MinU := Min(MinU, Q.X);
+    MaxU := Max(MaxU, Q.X);
+    MinV := Min(MinV, Q.Y);
+    MaxV := Max(MaxV, Q.Y);
+  end;
 begin
-  inherited FinishFirstDraw;
-  if fPlaced then Exit;
-  // During insertion the two points span the box the object is fitted into.
-  A := Points[0];
-  B := Points[1];
-  SceneBounds(Lo, Hi);
-  ProjectBasis(R, U, C);
-  for I := 0 to 7 do
-    Corners[I] := Vec3(IfThen(I and 1 = 0, Lo.X, Hi.X),
-      IfThen(I and 2 = 0, Lo.Y, Hi.Y), IfThen(I and 4 = 0, Lo.Z, Hi.Z));
+  // Project every vertex with unit placement; the drawn image is the
+  // outline of these points, so its extent is what must fit the box.
   MinU := MaxDouble; MaxU := -MaxDouble;
   MinV := MaxDouble; MaxV := -MaxDouble;
-  for I := 0 to 7 do
-  begin
-    MinU := Min(MinU, VDot(Corners[I], R));
-    MaxU := Max(MaxU, VDot(Corners[I], R));
-    MinV := Min(MinV, VDot(Corners[I], U));
-    MaxV := Max(MaxV, VDot(Corners[I], U));
+  fFit := True;
+  fFitOrigin := Point2D(0, 0);
+  fFitScale := 1;
+  Faces := TObjectList.Create(True);
+  try
+    for I := 0 to BodyCount - 1 do TessellateBody(Bodies[I], Faces);
+    if fPerspective then
+    begin
+      SceneBounds(Lo, Hi);
+      fEyeDistance := 3 * Max(VLen(VSub(Hi, Lo)), 1E-9);
+    end;
+    for I := 0 to Faces.Count - 1 do
+    begin
+      F := TFace(Faces[I]);
+      if F.IsCap then
+      begin
+        for J := 0 to F.Loops.Count - 1 do
+          for K := 0 to High(TCapLoop(F.Loops[J]).P) do
+            Grow(TCapLoop(F.Loops[J]).P[K]);
+      end
+      else
+        for J := 0 to High(F.P) do Grow(F.P[J]);
+    end;
+  finally
+    fEyeDistance := 0;
+    fFit := False;
+    Faces.Free;
   end;
   W := Abs(B.X - A.X);
   H := Abs(B.Y - A.Y);
@@ -1384,11 +1422,28 @@ begin
     W := 30;
     H := 30;
   end;
-  S := Min(IfThen(MaxU > MinU, W / (MaxU - MinU), MaxDouble),
+  Scale := Min(IfThen(MaxU > MinU, W / (MaxU - MinU), MaxDouble),
     IfThen(MaxV > MinV, H / (MaxV - MinV), MaxDouble));
-  if (S <= 0) or (S >= MaxDouble / 2) then S := 20;
-  SetPlacement(Point2D((A.X + B.X) / 2 - S * (MinU + MaxU) / 2,
-    (A.Y + B.Y) / 2 - S * (MinV + MaxV) / 2), S, 0);
+  if (Scale <= 0) or (Scale >= MaxDouble / 2) then
+  begin
+    Scale := 20;
+    MinU := 0; MaxU := 0;
+    MinV := 0; MaxV := 0;
+  end;
+  Origin := Point2D((A.X + B.X) / 2 - Scale * (MinU + MaxU) / 2,
+    (A.Y + B.Y) / 2 - Scale * (MinV + MaxV) / 2);
+end;
+
+procedure TSolid3D.FinishFirstDraw;
+var
+  Origin: TPoint2D;
+  S: Double;
+begin
+  inherited FinishFirstDraw;
+  if fPlaced then Exit;
+  // During insertion the two points span the box the object is fitted into.
+  BoxPlacement(Points[0], Points[1], Origin, S);
+  SetPlacement(Origin, S, 0);
 end;
 
 type
@@ -1417,6 +1472,8 @@ var
   Piece: TPolyLinPiece;
   L: TCapLoop;
   Count: Integer;
+  FitOrigin: TPoint2D;
+  FitScale: Double;
   procedure AddPoly(const Pts: array of TVec3; const Closed: Boolean;
     const Line: TPieceLine; const Fill: TPieceFill; const Hatch: TPieceHatch);
   var
@@ -1513,6 +1570,15 @@ begin
     FreeAndNil(fFrozen);
     FreeAndNil(fFrozenHatch);
   end;
+  // The insertion preview shows the object fitted into the dragged box,
+  // exactly as FinishFirstDraw will place it.
+  if not fPlaced and (BodyCount > 0) and (Points.Count >= 2) then
+  begin
+    BoxPlacement(Points[0], Points[1], FitOrigin, FitScale);
+    fFitOrigin := FitOrigin;
+    fFitScale := FitScale;
+    fFit := True;
+  end;
   Faces := TObjectList.Create(True);
   Order := TObjectList.Create(True);
   try
@@ -1568,6 +1634,7 @@ begin
     end;
   finally
     fEyeDistance := 0;
+    fFit := False;
     Order.Free;
     Faces.Free;
   end;
