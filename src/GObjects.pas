@@ -130,6 +130,13 @@ type
     }
     function CreateVect(const Size: Integer): TEPointsSet2D;
       dynamic;
+    { Draws the fill (with hatching) and/or the stroke of a piece; Opaque
+      leaves out the opacities for paint inside an opacity group. }
+    procedure DeviceDrawPiecePaint(Piece: TPiece;
+      const Transf: TTransf2D; const Dvc: TDevice;
+      const DrawFill, DrawLine, Opaque: Boolean);
+    function DeviceDrawLineGroup(const VT: TTransf2D;
+      const Dvc: TDevice): Boolean;
   public
     Pieces: TArrayOfPiece;
     FirstDrawPoint: Integer;
@@ -1104,14 +1111,41 @@ end;
 procedure TPrimitive2D.DeviceDrawPiece(Piece: TPiece;
   const Transf: TTransf2D; const Dvc: TDevice;
   const ClipRect2D: TRect2D);
+begin
+  DeviceDrawPiecePaint(Piece, Transf, Dvc, True, True, False);
+end;
+
+procedure TPrimitive2D.DeviceDrawPiecePaint(Piece: TPiece;
+  const Transf: TTransf2D; const Dvc: TDevice;
+  const DrawFill, DrawLine, Opaque: Boolean);
 var
   Paint: TPaintStyle;
+  FillColor: TColor;
+  LineStyle: TLineStyle;
+  Hatching: THatching;
 begin
+  if DrawFill then
+  begin
+    FillColor := Piece.GetFillColor(Self);
+    Hatching := Piece.GetHatching(Self);
+  end
+  else
+  begin
+    FillColor := clDefault;
+    Hatching := haNone;
+  end;
+  if DrawLine then LineStyle := Piece.GetLineStyle(Self)
+  else LineStyle := liNone;
+  if not (DrawFill and DrawLine) and (FillColor = clDefault) and
+    (Hatching = haNone) and (LineStyle = liNone) then Exit;
   Paint := DefaultPaintStyle;
   if SupportsOpacity then
   begin
-    Paint.LineOpacity := ClampOpacity(Piece.GetLineOpacity(Self));
-    Paint.FillOpacity := ClampOpacity(Piece.GetFillOpacity(Self));
+    if not Opaque then
+    begin
+      Paint.LineOpacity := ClampOpacity(Piece.GetLineOpacity(Self));
+      Paint.FillOpacity := ClampOpacity(Piece.GetFillOpacity(Self));
+    end;
     Paint.Gradient := Piece.GetFillGradient(Self);
     if Paint.Gradient <> fgNone then
     begin
@@ -1127,13 +1161,77 @@ begin
   Dvc.Paint := Paint;
   try
     Dvc.PieceCh(Piece, Piece.GetLineColor(Self),
-      Piece.GetHatchColor(Self),
-      Piece.GetFillColor(Self), Piece.GetLineStyle(Self),
-      Piece.GetLineWidth(Self), Piece.GetHatching(Self),
-      Transf);
+      Piece.GetHatchColor(Self), FillColor, LineStyle,
+      Piece.GetLineWidth(Self), Hatching, Transf);
   finally
     Dvc.ResetPaint;
   end;
+end;
+
+{ A translucent stroke and the arrowheads drawn on top of it would blend
+  twice where they overlap. Every paint in the line colour that has the
+  line opacity (the strokes, and the arrowhead fills) therefore goes into
+  one opacity group, after the remaining paint such as the object's own
+  fill, which keeps its own compositing. False if the device has no
+  groups or nothing overlaps; the pieces are then drawn one by one. }
+function TPrimitive2D.DeviceDrawLineGroup(const VT: TTransf2D;
+  const Dvc: TDevice): Boolean;
+var
+  I, Grouped: Integer;
+  Alpha, LineWidth: TRealType;
+  InFill, InLine: array of Boolean;
+  Box: TRect2D;
+  Piece: TPiece;
+begin
+  Result := False;
+  Alpha := ClampOpacity(fLineOpacity);
+  if not SupportsOpacity or (Alpha >= 1) or
+    ((fBeginArrowKind = arrNone) and (fEndArrowKind = arrNone)) or
+    (Pieces.Count < 2) or not Dvc.SupportsOpacityGroup then Exit;
+  InFill := nil;
+  InLine := nil;
+  SetLength(InFill, Pieces.Count);
+  SetLength(InLine, Pieces.Count);
+  Grouped := 0;
+  LineWidth := 0;
+  Box := Rect2D(0, 0, 0, 0);
+  for I := 0 to Pieces.Count - 1 do
+  begin
+    Piece := Pieces[I];
+    InFill[I] := False;
+    InLine[I] := False;
+    if Piece = nil then Continue;
+    InFill[I] := (Piece.Fill in [pfiLine, pfiLineAsDefault]) and
+      (Piece.GetFillColor(Self) <> clDefault) and
+      (Piece.GetHatching(Self) = haNone) and
+      (ClampOpacity(Piece.GetFillOpacity(Self)) = Alpha);
+    InLine[I] := (Piece.GetLineStyle(Self) <> liNone) and
+      (ClampOpacity(Piece.GetLineOpacity(Self)) = Alpha);
+    if not (InFill[I] or InLine[I]) then Continue;
+    if Grouped = 0 then
+      Box := TransformBoundingBox2D(Piece.GetBoundingBox, VT)
+    else
+      Box := BoxOutBox2D(Box,
+        TransformBoundingBox2D(Piece.GetBoundingBox, VT));
+    if InLine[I] then
+      LineWidth := Max(LineWidth, Piece.GetLineWidth(Self));
+    Inc(Grouped);
+  end;
+  if Grouped < 2 then Exit;
+  for I := 0 to Pieces.Count - 1 do
+    if Pieces[I] <> nil then
+      DeviceDrawPiecePaint(Pieces[I], VT, Dvc, not InFill[I],
+        not InLine[I], False);
+  Dvc.BeginOpacityGroup(Alpha, Box, LineWidth);
+  try
+    for I := 0 to Pieces.Count - 1 do
+      if InFill[I] or InLine[I] then
+        DeviceDrawPiecePaint(Pieces[I], VT, Dvc, InFill[I], InLine[I],
+          True);
+  finally
+    Dvc.EndOpacityGroup;
+  end;
+  Result := True;
 end;
 
 procedure TPrimitive2D.DeviceDrawPieces(const VT: TTransf2D;
@@ -1141,6 +1239,7 @@ procedure TPrimitive2D.DeviceDrawPieces(const VT: TTransf2D;
 var
   I: Integer;
 begin
+  if DeviceDrawLineGroup(VT, Dvc) then Exit;
   for I := 0 to Pieces.Count - 1 do
     if Pieces[I] <> nil then
       DeviceDrawPiece(Pieces[I], VT, Dvc, ClipRect2D);

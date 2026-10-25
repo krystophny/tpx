@@ -16,6 +16,10 @@ type
     fCurrStrokeOpacity, fCurrFillOpacity: TRealType;
     fCurrLineWidth: TRealType;
     fCurrLineStyle: TLineStyle;
+    { Graphics state before an opacity group, which pgfscope restores. }
+    fGroupColor: TColor;
+    fGroupStrokeOpacity, fGroupFillOpacity, fGroupLineWidth: TRealType;
+    fGroupLineStyle: TLineStyle;
     procedure WriteOpacity(const StrokeOpacity, FillOpacity: TRealType);
     procedure WriteStreamPoint0(const X, Y: TRealType); override;
     function GetColor(Color: TColor): string;
@@ -70,6 +74,10 @@ type
     DvipsFixBB: Boolean;
     FontSizeInTeX: Boolean;
     constructor Create;
+    function SupportsOpacityGroup: Boolean; override;
+    procedure BeginOpacityGroup(const Opacity: TRealType;
+      const Box: TRect2D; const LineWidth: TRealType); override;
+    procedure EndOpacityGroup; override;
     procedure Poly(PP: TPointsSet2D;
       const LineColor, HatchColor, FillColor: TColor;
       const LineStyle: TLineStyle; const LineWidth: TRealType;
@@ -170,6 +178,38 @@ begin
     WriteStream('\pgfsetfillopacity{' + OpacityText(F) + '}');
   fCurrStrokeOpacity := S;
   fCurrFillOpacity := F;
+end;
+
+function T_PGF_Device.SupportsOpacityGroup: Boolean;
+begin
+  Result := True;
+end;
+
+{ The group is painted with the opacity in force around it; pdf resets
+  the opacity inside it, so its paths are opaque. }
+procedure T_PGF_Device.BeginOpacityGroup(const Opacity: TRealType;
+  const Box: TRect2D; const LineWidth: TRealType);
+begin
+  fGroupColor := fCurrColor;
+  fGroupStrokeOpacity := fCurrStrokeOpacity;
+  fGroupFillOpacity := fCurrFillOpacity;
+  fGroupLineWidth := fCurrLineWidth;
+  fGroupLineStyle := fCurrLineStyle;
+  WriteStream('\begin{pgfscope}');
+  WriteOpacity(Opacity, Opacity);
+  WriteLnStream('\begin{pgftransparencygroup}');
+  fCurrStrokeOpacity := 1;
+  fCurrFillOpacity := 1;
+end;
+
+procedure T_PGF_Device.EndOpacityGroup;
+begin
+  WriteLnStream('\end{pgftransparencygroup}\end{pgfscope}');
+  fCurrColor := fGroupColor;
+  fCurrStrokeOpacity := fGroupStrokeOpacity;
+  fCurrFillOpacity := fGroupFillOpacity;
+  fCurrLineWidth := fGroupLineWidth;
+  fCurrLineStyle := fGroupLineStyle;
 end;
 
 procedure T_PGF_Device.WritePathAttr(

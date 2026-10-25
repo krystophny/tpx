@@ -262,3 +262,59 @@ begin
     Frame.Free;
   end;
 end;
+
+{ A translucent stroke and its arrowhead composite once, as one layer, so
+  the head over the stroke has the colour of the stroke alone. }
+procedure TestPaintArrowOpacity;
+var
+  Drawing: TDrawing2D;
+  Mode: TTpXMode;
+  Line: TLine2D;
+  View: TViewport2D;
+  Frame: TBitmap;
+  Stroke, Overlap, Head: TColor;
+begin
+  SetLiveTeXEnabled(False);
+  Mode := MainForm.EventManager.Mode as TTpXMode;
+  Mode.TpX_Manager.DocumentSession.Clear;
+  MainForm.SetBounds(20, 20, 900, 700);
+  MainForm.Show;
+  PumpEvents;
+  Drawing := Mode.Drawing;
+  Drawing.Clear;
+  { The head spans x = 41.6..50 and is 2.1 wide each side at its base;
+    the stroke is 0.6 wide each side. }
+  Line := TLine2D.CreateSpec(-1, Point2D(10, 20), Point2D(50, 20));
+  Line.LineWidth := 4;
+  Line.LineColor := clRed;
+  Line.LineOpacity := 0.5;
+  Line.EndArrowKind := arrH44;
+  Line.ArrowSizeFactor := 3;
+  Drawing.AddObject(-1, Line);
+
+  View := MainForm.LocalView;
+  Frame := TBitmap.Create;
+  try
+    View.ShowGrid := False;
+    View.ShowCrossHair := False;
+    View.VisualRect := Rect2D(0, 0, 60, 40);
+    View.Repaint;
+    PumpEvents;
+    Frame.SetSize(View.ClientWidth, View.ClientHeight);
+    View.RenderToCanvas(Frame.Canvas);
+    Stroke := PaintStylePixel(Frame, View, Point2D(30, 20));
+    Overlap := PaintStylePixel(Frame, View, Point2D(46, 20));
+    Head := PaintStylePixel(Frame, View, Point2D(44, 21.1));
+    CheckPaintChannel(Red(Stroke), 255, 'half red stroke red');
+    CheckPaintChannel(Green(Stroke), 128, 'half red stroke green');
+    CheckPaintChannel(Blue(Stroke), 128, 'half red stroke blue');
+    Check(Overlap = Stroke, Format(
+      'arrowhead over the stroke is %.6x, the stroke alone %.6x',
+      [Overlap, Stroke]));
+    Check(Head = Stroke, Format(
+      'arrowhead beside the stroke is %.6x, the stroke alone %.6x',
+      [Head, Stroke]));
+  finally
+    Frame.Free;
+  end;
+end;

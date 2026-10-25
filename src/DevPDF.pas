@@ -19,6 +19,7 @@ type
     fDrawing2D: TDrawing2D;
     fPDF: TPdfDoc;
     fAlphaSet: Boolean;
+    fGroupOpacity: TRealType;
     FontName: string;
     procedure ResetAlpha;
     procedure WriteAttr(const LineStyle: TLineStyle;
@@ -63,6 +64,10 @@ type
     destructor Destroy; override;
     procedure WriteHeader(ExtRect: TRect2D); override;
     procedure WriteFooter; override;
+    function SupportsOpacityGroup: Boolean; override;
+    procedure BeginOpacityGroup(const Opacity: TRealType;
+      const Box: TRect2D; const LineWidth: TRealType); override;
+    procedure EndOpacityGroup; override;
   end;
 
 implementation
@@ -236,6 +241,23 @@ end;
 procedure TPdfDevice.WriteFooter;
 begin
   fPDF.SaveToStream(fStream);
+end;
+
+function TPdfDevice.SupportsOpacityGroup: Boolean;
+begin
+  Result := True;
+end;
+
+procedure TPdfDevice.BeginOpacityGroup(const Opacity: TRealType;
+  const Box: TRect2D; const LineWidth: TRealType);
+begin
+  fGroupOpacity := ClampOpacity(Opacity);
+  fPDF.Canvas.BeginGroup;
+end;
+
+procedure TPdfDevice.EndOpacityGroup;
+begin
+  fPDF.Canvas.EndGroup(fGroupOpacity);
 end;
 
 procedure TPdfDevice.Poly(PP: TPointsSet2D;

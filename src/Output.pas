@@ -93,6 +93,7 @@ type
     function GetTransform: TTransf2D; virtual;
     procedure WritePiece(Piece: TPiece; Obj: TPrimitive2D);
       override;
+    procedure WritePieces(Obj: TPrimitive2D); override;
 //    procedure WriteLine2D(Obj: TLine2D); override;
     procedure WriteRectangle2D(Obj: TRectangle2D); override;
     procedure WriteEllipse2D(Obj: TEllipse2D); override;
@@ -124,6 +125,9 @@ type
     destructor Destroy; override;
     procedure SetSourceViewport(const PageWidthMM, PageHeightMM,
       ViewBoxLeft, ViewBoxTop, ViewBoxWidth, ViewBoxHeight: TRealType);
+    { Writes only what the editable SVG profile reads back: no group
+      opacity. }
+    procedure UseEditableProfile;
     procedure WriteHeader; override;
   end;
 
@@ -1647,6 +1651,15 @@ begin
     Rect2D(0, 0, 0, 0));
 end;
 
+{ All pieces at once, so a translucent stroke and its arrowheads can
+  share one opacity group. }
+procedure T_Device_Export.WritePieces(Obj: TPrimitive2D);
+begin
+  if Obj.Pieces = nil then Exit;
+  Obj.DeviceDrawPieces(IdentityTransf2D, Self.fDevice,
+    Rect2D(0, 0, 0, 0));
+end;
+
 procedure T_Device_Export.WriteRectangle2D(Obj:
   TRectangle2D);
 begin
@@ -1910,6 +1923,11 @@ begin
   fUseSourceViewport := True;
   fSourceViewBoxY := ViewBoxTop;
   fSourceViewBoxHeight := ViewBoxHeight;
+end;
+
+procedure T_SVG_Export.UseEditableProfile;
+begin
+  (fDevice as TSvgDevice).OpacityGroups := False;
 end;
 
 function T_SVG_Export.GetTransform: TTransf2D;

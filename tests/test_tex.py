@@ -306,6 +306,49 @@ class TeXTests(unittest.TestCase):
         self.assertLess(abs(row[width // 4] - 128), 30, row[width // 4])
         self.assertGreater(row[2], 230, row[2])
 
+    def rgb_row(self, pdf, stem):
+        image = self.root / (stem + ".ppm")
+        self.run_command(["gs", "-q", "-dSAFER", "-dBATCH", "-dNOPAUSE",
+                          "-sDEVICE=ppmraw", "-r300", "-sOutputFile=" + str(image),
+                          pdf])
+        data = image.read_bytes()
+        header = re.sub(rb"#[^\n]*\n", b"", data[:200]).split()
+        width, height = int(header[1]), int(header[2])
+        pixels = data[-width * height * 3:]
+        row = pixels[(height // 2) * width * 3:(height // 2 + 1) * width * 3]
+        return [tuple(row[3 * x:3 * x + 3]) for x in range(width)]
+
+    @unittest.skipUnless(shutil.which("gs"), "Ghostscript is not installed")
+    def test_translucent_arrow_renders_as_one_layer(self):
+        # A half-opaque red stroke with an arrowhead from x = 37.2 mm to its
+        # tip at 40 mm, 0.7 mm wide each side at the base; the stroke is
+        # 0.6 mm wide each side. Where the head covers the stroke, a
+        # composite of one layer keeps the colour of the stroke alone.
+        source = self.root / "arrow.TpX"
+        source.write_text(
+            '%<TpX v="5" PicScale="1" TeXFormat="tikz" PdfTeXFormat="tikz" '
+            'TeXFigure="none" Border="2">\n'
+            '%<line x1="0" y1="5" x2="40" y2="5" lw="4" lc="#FF0000" lo="0.5" '
+            'arr2="h44"/>\n'
+            '%</TpX>\n')
+        self.run_command([BINARY, "-f", source, "-o", "saved.TpX"])
+        (self.root / "arrow.tex").write_text(
+            "\\documentclass{standalone}\\usepackage{tikz}\\begin{document}"
+            "\\input{saved.TpX}\\end{document}\n")
+        self.run_command(["pdflatex", "-halt-on-error", "-interaction=nonstopmode",
+                          "arrow.tex"])
+        self.run_command([BINARY, "-f", source, "-x", "pdf", "-o", "direct"])
+        for pdf in ("arrow.pdf", "direct.pdf"):
+            with self.subTest(pdf=pdf):
+                row = self.rgb_row(pdf, Path(pdf).stem)
+                width = len(row)
+                stroke = row[width // 2]
+                # x = 37.6 mm, 39.6 mm from the left edge of the 44 mm page.
+                overlap = row[round(width * 39.6 / 44)]
+                self.assertEqual(stroke[0], 255, stroke)
+                self.assertLess(abs(stroke[1] - 128), 3, stroke)
+                self.assertEqual(overlap, stroke)
+
     def test_scientific_examples_compile_with_tikz(self):
         examples = Path(__file__).resolve().parents[1] / "examples"
         expected_math = {

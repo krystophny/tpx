@@ -375,6 +375,101 @@ class ExportTests(unittest.TestCase):
         self.assertTrue(pdf.startswith(b"%PDF-1.2"))
         self.assertNotIn(b"ExtGState", pdf)
 
+    def arrow_opacity_drawing(self, tex_format):
+        source = self.root / ("arrow-" + tex_format + ".TpX")
+        source.write_text(
+            '%<TpX v="5" PicScale="1" TeXFormat="{0}" PdfTeXFormat="{0}" '
+            'TeXFigure="none">\n'
+            '%<line x1="0" y1="5" x2="30" y2="5" lw="2" lc="#FF0000" lo="0.5" '
+            'arr2="h44"/>\n'
+            '%</TpX>\n'.format(tex_format))
+        return source
+
+    def test_translucent_arrow_tikz_export_reopens(self):
+        # The opacity group of the export reopens with the paint the paths
+        # had before groups were written, and saves unchanged byte for byte.
+        source = self.root / "arrow-reopen.TpX"
+        source.write_text(
+            '%<TpX v="5" PicScale="1" TeXFormat="tikz" PdfTeXFormat="tikz" '
+            'TeXFigure="none" TeXCenterFigure="0">\n'
+            '%<line x1="0" y1="5" x2="30" y2="5" lw="2" lc="#FF0000" lo="0.5" '
+            'arr2="h44"/>\n'
+            '%</TpX>\n')
+        self.run_tpx("-f", source, "-o", "saved.TpX")
+        exported = "".join(line for line in
+                           (self.root / "saved.TpX").read_text().splitlines(True)
+                           if not line.startswith("%<") and not line.startswith("%  ")
+                           and not line.startswith("%</"))
+        self.assertIn("\\begin{scope}[transparency group, opacity=0.5]", exported)
+        (self.root / "exported.tikz").write_text(exported, newline="")
+        self.run_tpx("-f", "exported.tikz", "-o", "reopened.TpX")
+        reopened = self.read_tpx(self.root / "reopened.TpX")
+        self.assertEqual([(e.tag, e.get("lo"), e.get("fo")) for e in reopened],
+                         [("polyline", "0.5", None), ("polygon", "0.5", "0.5")])
+        self.run_tpx("-f", "exported.tikz", "-o", "resaved.tikz")
+        self.assertEqual((self.root / "resaved.tikz").read_bytes(),
+                         (self.root / "exported.tikz").read_bytes())
+
+    def test_translucent_arrow_exports_one_opacity_group(self):
+        # The stroke and its arrowhead composite once, as one layer, and
+        # the paths inside the group carry no opacity of their own.
+        source = self.arrow_opacity_drawing("tikz")
+        self.run_tpx("-f", source, "-x", "svg", "-o", "drawing")
+        svg = ET.parse(self.root / "drawing.svg").getroot()
+        group = svg.find(SVG + "g")
+        self.assertEqual(group.get("opacity"), "0.5")
+        self.assertEqual([shape.tag for shape in group],
+                         [SVG + "polyline", SVG + "polygon"])
+        for shape in group:
+            self.assertIsNone(shape.get("stroke-opacity"))
+            self.assertIsNone(shape.get("fill-opacity"))
+        # An editable SVG document has no group opacity, so each paint
+        # keeps its own and the document stays editable.
+        self.run_tpx("-f", source, "-o", "document.svg")
+        document = ET.parse(self.root / "document.svg").getroot()
+        self.assertFalse([g for g in document.iter(SVG + "g") if g.get("opacity")])
+        self.assertEqual(document.find(SVG + "polyline").get("stroke-opacity"), "0.5")
+        self.assertEqual(document.find(SVG + "polygon").get("fill-opacity"), "0.5")
+
+        self.run_tpx("-f", source, "-o", "saved.TpX")
+        tikz = (self.root / "saved.TpX").read_text()
+        scope = re.search(r"\\begin\{scope\}\[transparency group, opacity=0\.5\]\n"
+                          r"(.*?)\\end\{scope\}", tikz, re.S)
+        self.assertIsNotNone(scope, tikz)
+        self.assertEqual(scope.group(1).count(r"\path["), 2, scope.group(1))
+        self.assertNotIn("opacity", tikz.replace(scope.group(0), ""))
+        self.assertNotIn("opacity", scope.group(1))
+
+        self.run_tpx("-f", self.arrow_opacity_drawing("pgf"), "-o", "pgf.TpX")
+        pgf = (self.root / "pgf.TpX").read_text()
+        self.assertIn(r"\begin{pgfscope}\pgfsetstrokeopacity{0.5}"
+                      r"\pgfsetfillopacity{0.5}\begin{pgftransparencygroup}", pgf)
+        self.assertIn(r"\end{pgftransparencygroup}\end{pgfscope}", pgf)
+        self.assertEqual(pgf.count("opacity{"), 2, pgf)
+
+        self.run_tpx("-f", self.arrow_opacity_drawing("pstricks"), "-o", "pst.TpX")
+        pst = (self.root / "pst.TpX").read_text()
+        self.assertIn("0.5 .setfillconstantalpha 0.5 .setstrokeconstantalpha", pst)
+        self.assertLess(pst.index(".begintransparencygroup"), pst.index(r"\psline"))
+        self.assertLess(pst.index(r"\pspolygon"), pst.index("{.endtransparencygroup}"))
+        self.assertNotIn("opacity=", pst)
+
+        self.run_tpx("-f", source, "-x", "pdf", "-o", "drawing")
+        pdf = (self.root / "drawing.pdf").read_bytes()
+        self.assertIn(b"/Subtype /Form", pdf)
+        self.assertIn(b"/S /Transparency", pdf)
+        self.assertIn(b"/CA 0.5", pdf)
+        self.assertIn(b"/ca 0.5", pdf)
+        # The page paints the group once, at half alpha.
+        contents = []
+        for data in re.findall(rb">>\r\nstream\r\n(.*?)\nendstream", pdf, re.S):
+            try:
+                contents.append(zlib.decompress(data))
+            except zlib.error:
+                contents.append(data)
+        self.assertTrue(any(re.search(rb"q\n/TpXA500F500 gs\n/TpXG1 Do\nQ", data)
+                            for data in contents), contents)
+
     def test_svg_opacity_import(self):
         source = self.root / "opacity.svg"
         source.write_text(

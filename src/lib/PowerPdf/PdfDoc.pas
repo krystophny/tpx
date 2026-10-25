@@ -375,6 +375,8 @@ type
   TPdfCanvas = class(TObject)
   private
     FContents: TPdfStream;
+    FPageContents: TPdfStream;
+    FGroupCount: Integer;
     FPage: TPdfDictionary;
     FPdfDoc: TPdfDoc;
     FAttr: TPdfCanvasAttribute;
@@ -397,6 +399,11 @@ type
     { Constant stroke and fill alpha through a named ExtGState. }
     procedure SetAlpha(StrokeAlpha, FillAlpha: Single);          {  gs  }
     procedure GRestore;                                          {  Q   }
+    { Transparency group: the paint between BeginGroup and EndGroup goes
+      into a form XObject, which EndGroup paints with Alpha. Groups do
+      not nest, and their paint must not use page resources. }
+    procedure BeginGroup;
+    procedure EndGroup(Alpha: Single);
     procedure Concat(a, b, c, d, e, f: Single);                  {  cm  }
 
     {* General Graphics State *}
@@ -2060,6 +2067,60 @@ begin
   end;
   FPdfDoc.FHeader.FTransparency := True;
   WriteString('/' + Name + ' gs'#10);
+end;
+
+// BeginGroup
+procedure TPdfCanvas.BeginGroup;
+var
+  Form: TPdfXObject;
+  Box: TPdfArray;
+  Group: TPdfDictionary;
+begin
+  if FPageContents <> nil then
+    raise EPdfInvalidOperation.Create('BeginGroup --groups do not nest');
+  Form := TPdfXObject.CreateStream(FPdfDoc.FXref);
+  {$IFNDEF NOZLIB}
+  if FPdfDoc.CompressionMethod = cmFlateDecode then
+    Form.Attributes.PdfArrayByName('Filter').AddItem(
+      TPdfName.CreateName('FlateDecode'));
+  {$ENDIF}
+  Form.Attributes.AddItem('Type', TPdfName.CreateName('XObject'));
+  Form.Attributes.AddItem('Subtype', TPdfName.CreateName('Form'));
+  Box := TPdfArray.CreateArray(FPdfDoc.FXref);
+  Box.AddItem(TPdfNumber.CreateNumber(0));
+  Box.AddItem(TPdfNumber.CreateNumber(0));
+  Box.AddItem(TPdfNumber.CreateNumber(PageWidth));
+  Box.AddItem(TPdfNumber.CreateNumber(PageHeight));
+  Form.Attributes.AddItem('BBox', Box);
+  Group := TPdfDictionary.CreateDictionary(FPdfDoc.FXref);
+  Group.AddItem('S', TPdfName.CreateName('Transparency'));
+  Group.AddItem('I', TPdfBoolean.CreateBoolean(True));
+  Form.Attributes.AddItem('Group', Group);
+  Form.Attributes.AddItem('Resources',
+    TPdfDictionary.CreateDictionary(FPdfDoc.FXref));
+  FPageContents := FContents;
+  FContents := Form;
+end;
+
+// EndGroup
+procedure TPdfCanvas.EndGroup(Alpha: Single);
+var
+  Form: TPdfStream;
+  Name: string;
+begin
+  if FPageContents = nil then
+    raise EPdfInvalidOperation.Create('EndGroup --no group');
+  Form := FContents;
+  FContents := FPageContents;
+  FPageContents := nil;
+  FPdfDoc.FXref.AddObject(Form);
+  Inc(FGroupCount);
+  Name := 'TpXG' + IntToStr(FGroupCount);
+  _Page_GetResources(FPage, 'XObject').AddItem(Name, Form);
+  GSave;
+  SetAlpha(Alpha, Alpha);
+  ExecuteXObject(Name);
+  GRestore;
 end;
 
 // SetRGBFillColor

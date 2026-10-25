@@ -259,6 +259,18 @@ type
     { Whether PieceCh draws the fill and the stroke of a piece as separate
       paths; a device may need that for some paint styles. }
     function NeedsDisjointFill: Boolean; virtual;
+    { Opacity groups: the paint drawn between BeginOpacityGroup and
+      EndOpacityGroup composites as one layer with Opacity, so pieces of
+      one shape that overlap, such as a stroke and its arrowheads, do not
+      blend twice. The caller draws that paint opaque. Box bounds it in
+      the coordinates the device receives, without the stroke width
+      (LineWidth is the widest stroke). Groups do not nest. A device that
+      returns False from SupportsOpacityGroup gets every piece on its own
+      with its own opacity instead. }
+    function SupportsOpacityGroup: Boolean; virtual;
+    procedure BeginOpacityGroup(const Opacity: TRealType;
+      const Box: TRect2D; const LineWidth: TRealType); virtual;
+    procedure EndOpacityGroup; virtual;
   end;
 
   TStreamDevice = class(TDevice)
@@ -428,6 +440,20 @@ end;
 function TDevice.NeedsDisjointFill: Boolean;
 begin
   Result := fDisjointFill;
+end;
+
+function TDevice.SupportsOpacityGroup: Boolean;
+begin
+  Result := False;
+end;
+
+procedure TDevice.BeginOpacityGroup(const Opacity: TRealType;
+  const Box: TRect2D; const LineWidth: TRealType);
+begin
+end;
+
+procedure TDevice.EndOpacityGroup;
+begin
 end;
 
 function TDevice.MultTransf(const Transf: TTransf2D): TTransf2D;

@@ -514,6 +514,19 @@ const
   OutOfRange = '\begin{tikzpicture}' +
     '\path[draw, opacity=1.5] (0,0) -- (1,1);' +
     '\end{tikzpicture}';
+  { A translucent primitive with an arrowhead, as T_TikZ_Device writes it. }
+  Group = '\begin{tikzpicture}' +
+    '\begin{scope}[transparency group, opacity=0.5]' +
+    '\path[draw=red] (0,0) -- (4,0);' +
+    '\path[draw=red, fill=red] (4,0) -- (3,0.5) -- (3,-0.5) -- cycle;' +
+    '\end{scope}' +
+    '\path[draw] (0,1) -- (4,1);' +
+    '\end{tikzpicture}';
+  GroupWithOwnOpacity = '\begin{tikzpicture}' +
+    '\begin{scope}[transparency group, opacity=0.5]' +
+    '\path[draw, draw opacity=0.5] (0,0) -- (4,0);' +
+    '\end{scope}' +
+    '\end{tikzpicture}';
 var
   Syntax: TTikZSyntaxResult;
   Evaluated: TTikZSemanticResult;
@@ -548,6 +561,38 @@ begin
   try
     CheckCore(Evaluated.Outcome = tsoUnsupported,
       'an opacity above 1 must not be clamped silently');
+  finally
+    Evaluated.Free;
+    Syntax.Free;
+  end;
+  Evaluated := ParseAndEvaluate(Group, Syntax);
+  try
+    CheckCore((Evaluated.Outcome = tsoAccepted) and
+      (Evaluated.Scene.ObjectCount = 3),
+      'a transparency group scope with an opacity should import');
+    Obj := Evaluated.Scene.ObjectAt(0);
+    CheckCore((Obj.StrokeOpacity = 0.5) and (Obj.FillOpacity = 1),
+      'an unfilled path in a translucent scope must take it for the stroke');
+    Obj := Evaluated.Scene.ObjectAt(1);
+    CheckCore((Obj.StrokeOpacity = 0.5) and (Obj.FillOpacity = 0.5),
+      'paths in a translucent scope must take the scope opacity');
+    CheckCore(FindDependency(Obj, tdOpacity, Dependency) and
+      (Dependency.DependencySource = tdepUnsupported) and
+      (RawStringOf(Copy(BytesOf(Group), Dependency.ValueSpan.StartByte,
+      Dependency.ValueSpan.EndByte - Dependency.ValueSpan.StartByte)) = '0.5'),
+      'the scope opacity must be bound to the scope option, not editable');
+    Obj := Evaluated.Scene.ObjectAt(2);
+    CheckCore((Obj.StrokeOpacity = 1) and
+      not FindDependency(Obj, tdOpacity, Dependency),
+      'the scope opacity must end with the scope');
+  finally
+    Evaluated.Free;
+    Syntax.Free;
+  end;
+  Evaluated := ParseAndEvaluate(GroupWithOwnOpacity, Syntax);
+  try
+    CheckCore(Evaluated.Outcome = tsoUnsupported,
+      'an opacity inside a translucent scope must not be multiplied silently');
   finally
     Evaluated.Free;
     Syntax.Free;

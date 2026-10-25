@@ -2373,6 +2373,7 @@ begin
     else if ParamStr(1) = 'tikz-style-roundtrip' then TestTikZStyleRoundTrip
     else if ParamStr(1) = 'paint-opacity' then TestPaintOpacity
     else if ParamStr(1) = 'paint-gradient' then TestPaintGradient
+    else if ParamStr(1) = 'paint-arrow-opacity' then TestPaintArrowOpacity
     else if ParamStr(1) = 'bitmap-eps' then TestBitmapEps
     else if ParamStr(1) = 'svg-linked-image-copy' then TestSvgLinkedImageCopy
     else if ParamStr(1) = 'svg-codec' then TestSvgCodec
