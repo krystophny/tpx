@@ -186,6 +186,33 @@ type
       override;
   end;
 
+  { Insert a torus segment like an arc: press at the centre, drag (or click)
+    to the outer rim at the start angle, then click at the end angle. The
+    torus lies in the base plane of the 3D view and follows the pointer;
+    Shift snaps the angles to 15 degrees. }
+  TInsertTorusSegmentMode = class(TInsertSizedGrObjMode)
+  private
+    fStep: Integer;
+    fShown: Boolean;
+    fStart: Double;
+    procedure Rubber(const Show: Boolean);
+    function PointerAngle(const P: TPoint2D; const Shift: TShiftState): Double;
+    procedure Track(const P: TPoint2D; const Shift: TShiftState);
+  public
+    procedure OnPush; override;
+    procedure TorusPointMoved(const P: TPoint2D; const Shift: TShiftState);
+    procedure TorusPointSelected(const P: TPoint2D;
+      const Shift: TShiftState);
+    procedure OnMouseDown(Sender: TObject;
+      Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+      override;
+    procedure OnMouseMove(Sender: TObject;
+      Shift: TShiftState; X, Y: Integer); override;
+    procedure OnMouseUp(Sender: TObject;
+      Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+      override;
+  end;
+
   TFreehandMode = class(TInsertGrObjMode)
   public
     IsPolyline: Boolean;
@@ -356,6 +383,7 @@ var
   InsertSimpleGrObjMode: TInsertSimpleGrObjMode;
   InsertUnsizedGrObjMode: TInsertUnsizedGrObjMode;
   InsertSizedGrObjMode: TInsertSizedGrObjMode;
+  InsertTorusSegmentMode: TInsertTorusSegmentMode;
   FreehandMode: TFreehandMode;
   SelectObjectsInAreaMode: TSelectObjectsInAreaMode;
   ZoomAreaMode: TZoomAreaMode;
@@ -501,6 +529,7 @@ const
   Msg_View3DFront = Msg_View3DTop + 1;
   Msg_View3DSide = Msg_View3DFront + 1;
   Msg_View3DPerspective = Msg_View3DSide + 1;
+  Msg_InsertTorusSegment = Msg_View3DPerspective + 1;
 
 const Drag_Aperture = 4;
   { Pointer travel in pixels before a press becomes a drag. }
@@ -1726,6 +1755,7 @@ begin
       Msg_InsertArc, Msg_InsertSector, Msg_InsertSegment,
       Msg_InsertBitmap, Msg_InsertBox..Msg_InsertTorus:
       IMode := InsertSizedGrObjMode;
+    Msg_InsertTorusSegment: IMode := InsertTorusSegmentMode;
     Msg_InsertPolyline, Msg_InsertPolygon, Msg_InsertCurve,
       Msg_InsertClosedCurve, Msg_InsertBezier,
       Msg_InsertClosedBezier:
@@ -1812,6 +1842,12 @@ begin
           TSolidKind(Ord(skBox) + Msg - Msg_InsertBox));
         NPoints := 2;
       end;
+    Msg_InsertTorusSegment:
+      begin
+        IMode.Obj := TSolid3D.Create(-1);
+        TSolid3D(IMode.Obj).AddBody(skTorus);
+        NPoints := 3;
+      end;
   end;
   if IMode.Obj is TPrimitive2D then
   begin
@@ -1819,7 +1855,7 @@ begin
   end;
   if IMode.Obj is TSolid3D then ApplySolidDefaults(TSolid3D(IMode.Obj));
   if IMode is TInsertSizedGrObjMode then
-    InsertSizedGrObjMode.NPoints := NPoints;
+    TInsertSizedGrObjMode(IMode).NPoints := NPoints;
   IMode.PressedBtn := Sender;
   PushMode(IMode);
 end;
@@ -1921,7 +1957,8 @@ begin
     Msg_SelectedProperties: ChangeSelectedProperties;
     Msg_PictureProperties: PictureProperties;
     Msg_InsertLine..Msg_InsertBitmap: OnInsertGrObj(Msg, Sender);
-    Msg_InsertBox..Msg_InsertTorus: OnInsertGrObj(Msg, Sender);
+    Msg_InsertBox..Msg_InsertTorus, Msg_InsertTorusSegment:
+      OnInsertGrObj(Msg, Sender);
     Msg_Extrude:
       begin
         if not SolidFromSelected(Drawing, skExtrude) then
@@ -2723,6 +2760,130 @@ begin
   end;
 end;
 
+{* --------- TInsertTorusSegmentMode --------- *}
+
+procedure TInsertTorusSegmentMode.OnPush;
+begin
+  inherited OnPush;
+  // The inherited push drew the object once; nothing is placed yet.
+  fShown := True;
+  Rubber(False);
+  fStep := 0;
+end;
+
+procedure TInsertTorusSegmentMode.Rubber(const Show: Boolean);
+begin
+  if (Obj = nil) or (fShown = Show) then Exit;
+  ViewPort.DrawObject2DWithRubber(Obj, IdentityTransf2D);
+  fShown := Show;
+end;
+
+function TInsertTorusSegmentMode.PointerAngle(const P: TPoint2D;
+  const Shift: TShiftState): Double;
+var
+  V: TVec3;
+begin
+  V := TSolid3D(Obj).UnprojectToBase(P);
+  Result := RadToDeg(ArcTan2(V.Y, V.X));
+  if ssShift in Shift then Result := Round(Result / 15) * 15
+  else if UseAngularSnap then Result := Round(Result / 45) * 45;
+end;
+
+procedure TInsertTorusSegmentMode.Track(const P: TPoint2D;
+  const Shift: TShiftState);
+var
+  Solid: TSolid3D;
+  Body: TSolidBody;
+  V: TVec3;
+  R, Sweep: Double;
+begin
+  Solid := TSolid3D(Obj);
+  Body := Solid.Bodies[0];
+  if fStep = 1 then
+  begin
+    // The pointer is on the outer rim at the start angle; the torus shows
+    // whole until the end angle is chosen.
+    Solid.SetPlacement(Solid.Points[0], 1, 0);
+    V := Solid.UnprojectToBase(P);
+    R := Sqrt(Sqr(V.X) + Sqr(V.Y));
+    if R < ViewPort.PixelSize then R := ViewPort.PixelSize;
+    Solid.SetPlacement(Solid.Points[0], R / (Body.Size1 + Body.Size2), 0);
+    fStart := PointerAngle(P, Shift);
+    Body.Size3 := 360;
+    Body.Size4 := fStart;
+  end
+  else
+  begin
+    // Counterclockwise from the start angle, as for arcs.
+    Sweep := PointerAngle(P, Shift) - fStart;
+    Sweep := Sweep - 360 * Floor(Sweep / 360);
+    if Sweep < 1 then Sweep := 360;
+    Body.Size3 := Sweep;
+  end;
+  Solid.UpdateExtension(Solid);
+end;
+
+procedure TInsertTorusSegmentMode.TorusPointMoved(const P: TPoint2D;
+  const Shift: TShiftState);
+begin
+  if (Obj = nil) or (fStep = 0) then Exit;
+  Rubber(False);
+  Track(P, Shift);
+  Rubber(True);
+end;
+
+procedure TInsertTorusSegmentMode.TorusPointSelected(const P: TPoint2D;
+  const Shift: TShiftState);
+begin
+  if Obj = nil then Exit;
+  case fStep of
+    0:
+      begin
+        TSolid3D(Obj).SetPlacement(P, 1, 0);
+        fStep := 1;
+      end;
+    1:
+      begin
+        TorusPointMoved(P, Shift);
+        fStep := 2;
+        TorusPointMoved(P, Shift);
+      end;
+  else
+    TorusPointMoved(P, Shift);
+    Rubber(False);
+    FinishDraw;
+  end;
+end;
+
+procedure TInsertTorusSegmentMode.OnMouseDown(Sender: TObject;
+  Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  if Button <> mbLeft then Exit;
+  TorusPointSelected(ViewPort.GetSnappedPoint(
+    ViewPort.ScreenToViewport(Point2D(X, Y))), Shift);
+  if Obj = nil then BaseMode.OnMouseDown(Sender, Button, Shift, X, Y);
+end;
+
+procedure TInsertTorusSegmentMode.OnMouseMove(Sender: TObject;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  TorusPointMoved(ViewPort.GetSnappedPoint(
+    ViewPort.ScreenToViewport(Point2D(X, Y))), Shift);
+end;
+
+procedure TInsertTorusSegmentMode.OnMouseUp(Sender: TObject;
+  Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  P: TPoint2D;
+begin
+  if (Button <> mbLeft) or (Obj = nil) or (fStep <> 1) then Exit;
+  // Releasing a drag away from the centre fixes the rim; a plain click
+  // waits for a second click, as for arcs.
+  P := ViewPort.GetSnappedPoint(ViewPort.ScreenToViewport(Point2D(X, Y)));
+  if PointDistance2D(P, TSolid3D(Obj).Points[0]) > 3 * ViewPort.PixelSize then
+    TorusPointSelected(P, Shift);
+end;
+
 {* --------- TFreehandMode --------- *}
 
 procedure TFreehandMode.OnPush;
@@ -3255,6 +3416,7 @@ initialization
   InsertSimpleGrObjMode := TInsertSimpleGrObjMode.Create;
   InsertUnsizedGrObjMode := TInsertUnsizedGrObjMode.Create;
   InsertSizedGrObjMode := TInsertSizedGrObjMode.Create;
+  InsertTorusSegmentMode := TInsertTorusSegmentMode.Create;
   FreehandMode := TFreehandMode.Create;
   SelectObjectsInAreaMode := TSelectObjectsInAreaMode.Create;
   ZoomAreaMode := TZoomAreaMode.Create;
@@ -3272,6 +3434,7 @@ finalization
   InsertSimpleGrObjMode.Free;
   InsertUnsizedGrObjMode.Free;
   InsertSizedGrObjMode.Free;
+  InsertTorusSegmentMode.Free;
   FreehandMode.Free;
   SelectObjectsInAreaMode.Free;
   ZoomAreaMode.Create;

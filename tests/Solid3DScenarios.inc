@@ -653,9 +653,10 @@ begin
   MainForm.RefreshInspectorSelection;
   Check(MainForm.Inspector.FieldShown(opfSolidSize1) and
     MainForm.Inspector.FieldShown(opfSolidSize2) and
-    not MainForm.Inspector.FieldShown(opfSolidSize3) and
+    MainForm.Inspector.FieldShown(opfSolidSize3) and
+    MainForm.Inspector.FieldShown(opfSolidSize4) and
     MainForm.Inspector.FieldShown(opfSolidSegments),
-    'Inspector does not show the torus radii and segments');
+    'Inspector does not show the torus radii, angles and segments');
   Check(not MainForm.Inspector.FieldShown(opfBeginArrowKind),
     'Inspector offers arrows for a 3D object');
   Torus.GetPlacement(Origin, Scale, Angle);
@@ -719,4 +720,163 @@ begin
   Drawing.SelectionClear;
   Drawing.DeleteAllObjects;
   WriteLn('PASS solid3d-inspector');
+end;
+
+procedure TestSolid3DTorusSegment;
+const
+  Formats: array[0..2] of string = ('tpx', 'svg', 'tikz');
+  Names: array[0..2] of string = ('segment.TpX', 'segment.svg', 'segment.tikz');
+var
+  Drawing, Reloaded, Scene: TDrawing2D;
+  Mode: TInsertTorusSegmentMode;
+  Probe, Torus: TSolid3D;
+  Body: TSolidBody;
+  Center, Rim, Stop: TPoint2D;
+  Origin: TPoint2D;
+  Scale, Angle: Double;
+  Ctx, Ctx2: TObject;
+  Bytes, Bytes2: RawByteString;
+  ErrorText: string;
+  Edit: TEdit;
+  Wire, I: Integer;
+  function FirstSolid(const D: TDrawing2D): TSolid3D;
+  var
+    Obj: TGraphicObject;
+  begin
+    Result := nil;
+    Obj := D.ObjectList.FirstObj;
+    while (Obj <> nil) and not (Obj is TSolid3D) do Obj := D.ObjectList.NextObj;
+    if Obj <> nil then Result := TSolid3D(Obj);
+  end;
+begin
+  SetLiveTeXEnabled(False);
+  MainForm.Show;
+  MainForm.ShowInspector;
+  Application.ProcessMessages;
+  Drawing := MainForm.TheDrawing;
+  Drawing.DeleteAllObjects;
+  // The tool takes the arc's three points: centre, outer rim at the start
+  // angle and end angle, through the handlers the mouse calls.
+  MainForm.EventManager.SendMessage(Msg_InsertTorusSegment, nil);
+  Check(MainForm.EventManager.Mode is TInsertTorusSegmentMode,
+    'Insert torus segment did not start its insertion mode');
+  Mode := TInsertTorusSegmentMode(MainForm.EventManager.Mode);
+  Center := Point2D(100, 100);
+  Mode.TorusPointSelected(Center, []);
+  Probe := Mode.Obj as TSolid3D;
+  // Points of the base plane z = 0 as the default camera shows them.
+  Rim := Probe.ProjectScene(Vec3(40 * Cos(DegToRad(30)), 40 * Sin(DegToRad(30)), 0));
+  Stop := Probe.ProjectScene(Vec3(25 * Cos(DegToRad(283)),
+    25 * Sin(DegToRad(283)), 0));
+  Mode.TorusPointMoved(Point2D(130, 90), []);
+  // Points are single precision; Shift snaps the start to exactly 30.
+  Mode.TorusPointSelected(Rim, [ssShift]);
+  Body := Probe.Bodies[0];
+  Probe.GetPlacement(Origin, Scale, Angle);
+  Check((Abs((Body.Size1 + Body.Size2) * Scale - 40) < 1E-3) and
+    (Body.Size4 = 30) and (Body.Size3 = 360),
+    Format('the rim point did not set the outer radius and start angle ' +
+    '(outer %g, start %g, angle %g)', [(Body.Size1 + Body.Size2) * Scale,
+    Body.Size4, Body.Size3]));
+  Mode.TorusPointMoved(Stop, []);
+  Check(Abs(Body.Size3 - 253) < 1E-3, Format(
+    'moving to the end angle did not sweep counterclockwise (%g)', [Body.Size3]));
+  // Shift snaps the end angle to 15 degrees: 283 becomes 285.
+  Mode.TorusPointSelected(Stop, [ssShift]);
+  Check(Solid3DCount(Drawing) = 1, 'the torus segment was not added');
+  Torus := FirstSolid(Drawing);
+  Check(Drawing.SelectedObjects.Count = 1, 'the new torus segment is not selected');
+  Body := Torus.Bodies[0];
+  Check(Body.IsTorusSegment and (Abs(Body.Size3 - 255) < 1E-6) and
+    (Abs(Body.Size4 - 30) < 1E-6), Format(
+    'the torus segment angles are wrong (angle %g, start %g)', [Body.Size3, Body.Size4]));
+  Torus.GetPlacement(Origin, Scale, Angle);
+  Check((Abs(Origin.X - 100) < 1E-9) and (Abs(Origin.Y - 100) < 1E-9),
+    'the torus segment is not centred on the first point');
+  // Without hidden-face removal every face is one piece: 26 of the 36
+  // segments times 16 rings, plus the two end caps.
+  Torus.Hidden := shWire;
+  Torus.UpdateExtension(Torus);
+  Wire := Torus.Pieces.Count;
+  Torus.Hidden := shRemoved;
+  Torus.UpdateExtension(Torus);
+  Check(Wire = 26 * 16 + 2, Format('the torus segment has %d faces, not %d',
+    [Wire, 26 * 16 + 2]));
+  // Inspector: angles in degrees, undoable.
+  Drawing.SelectionClear;
+  Drawing.SelectionAdd(Torus);
+  MainForm.RefreshInspectorSelection;
+  Check(MainForm.Inspector.FieldShown(opfSolidSize3) and
+    MainForm.Inspector.FieldShown(opfSolidSize4),
+    'Inspector does not show the torus angles');
+  Check((MainForm.Inspector.EditorFor(opfSolidSize3) as TEdit).Text = '255',
+    'Inspector does not show the swept angle in degrees');
+  MainForm.Inspector.FocusField(opfSolidSize4);
+  Edit := MainForm.Inspector.EditorFor(opfSolidSize4) as TEdit;
+  Edit.Text := '45';
+  Check(MainForm.Inspector.PrepareForSelectionChange(ErrorText),
+    'Inspector start angle edit failed: ' + ErrorText);
+  Torus := FirstSolid(Drawing);
+  Check(Abs(Torus.Bodies[0].Size4 - 45) < 1E-6,
+    'Inspector did not set the start angle');
+  Drawing.History.Undo;
+  Torus := FirstSolid(Drawing);
+  Check(Abs(Torus.Bodies[0].Size4 - 30) < 1E-6, 'Undo did not restore the start angle');
+  Drawing.History.Redo;
+  Torus := FirstSolid(Drawing);
+  Check(Abs(Torus.Bodies[0].Size4 - 45) < 1E-6, 'Redo did not reapply the start angle');
+  // TpX, SVG and TikZ keep the angles; the saved TpX names them.
+  Bytes := SerializeDocumentToBytes('tpx', Drawing, 'segment.TpX');
+  Check((Pos('angle="255"', string(Bytes)) > 0) and (Pos('start="45"', string(Bytes)) > 0),
+    'the saved torus segment does not carry angle and start');
+  Scene := Solid3DLoad('tpx', 'segment.TpX', Bytes, Ctx);
+  try
+    for I := 0 to High(Formats) do
+    begin
+      Bytes := SerializeDocumentToBytes(Formats[I], Scene, TDocumentPath(Names[I]));
+      Reloaded := Solid3DLoad(Formats[I], Names[I], Bytes, Ctx2);
+      try
+        CheckSameSolids(Scene, Reloaded, 'torus segment ' + Formats[I], I = 1);
+        Body := FirstSolid(Reloaded).Bodies[0];
+        Check((Abs(Body.Size3 - 255) < 1E-9) and (Abs(Body.Size4 - 45) < 1E-9),
+          'torus segment angles changed in ' + Formats[I]);
+        Bytes2 := SerializeDocumentToBytes(Formats[I], Reloaded,
+          TDocumentPath(Names[I]), Ctx2);
+        Check(Bytes2 = Bytes, 'torus segment ' + Formats[I] +
+          ' save -> open -> save is not byte-stable');
+      finally
+        Reloaded.Free;
+        Ctx2.Free;
+      end;
+    end;
+  finally
+    Scene.Free;
+    Ctx.Free;
+  end;
+  // Group with a full torus, view change and ungroup keep the segment.
+  MainForm.EventManager.SendMessage(Msg_InsertTorus, nil);
+  TInsertSizedGrObjMode(MainForm.EventManager.Mode).PointSelected(Point2D(160, 100));
+  TInsertSizedGrObjMode(MainForm.EventManager.Mode).PointSelected(Point2D(200, 130));
+  // A full torus is written exactly as before.
+  Bytes := SerializeDocumentToBytes('tpx', Drawing, 'two.TpX');
+  Check(Pos('<body kind="torus" r1="0.6" r2="0.25" segments="36" rings="16"/>',
+    string(Bytes)) > 0, 'a full torus is no longer written as before');
+  Drawing.SelectAll;
+  MainForm.EventManager.SendMessage(Msg_Group, nil);
+  Torus := FirstSolid(Drawing);
+  Check((Drawing.ObjectsCount = 1) and (Torus.BodyCount = 2) and
+    Torus.Bodies[0].IsTorusSegment and not Torus.Bodies[1].IsTorusSegment,
+    'Group did not join the torus segment and the torus');
+  Drawing.SelectAll;
+  MainForm.EventManager.SendMessage(Msg_View3DTop, nil);
+  Check(FirstSolid(Drawing).Pieces.Count > 0, 'the grouped segment renders nothing from the top');
+  Drawing.SelectAll;
+  MainForm.EventManager.SendMessage(Msg_Ungroup, nil);
+  Check(Solid3DCount(Drawing) = 2, 'Ungroup did not split the torus scene');
+  Torus := FirstSolid(Drawing);
+  Check(Torus.Bodies[0].IsTorusSegment and
+    (Abs(Torus.Bodies[0].Size3 - 255) < 1E-9), 'Ungroup lost the torus angles');
+  Drawing.SelectionClear;
+  Drawing.DeleteAllObjects;
+  WriteLn('PASS solid3d-torus-segment');
 end;

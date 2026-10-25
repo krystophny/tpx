@@ -27,9 +27,10 @@ type
   public
     Kind: TSolidKind;
     // box: width, depth, height; cylinder and cone: radius, height;
-    // sphere: radius; torus: major and minor radius;
+    // sphere: radius; torus: major and minor radius, then the swept angle
+    // and start angle in degrees (360 and 0 for a full torus);
     // extrude: depth; revolve: angle and start angle in degrees.
-    Size1, Size2, Size3: Double;
+    Size1, Size2, Size3, Size4: Double;
     SegU, SegV: Integer;
     M: TMat34;
     // Closed 2D shapes in model units (x along X or R, y along Z).
@@ -38,8 +39,10 @@ type
     destructor Destroy; override;
     procedure Assign(Source: TSolidBody);
     procedure SaveToStream(const Stream: TStream);
-    procedure LoadFromStream(const Stream: TStream);
+    procedure LoadFromStream(const Stream: TStream; const Version: Byte);
     function IsIdentity: Boolean;
+    // A torus that covers only part of the revolution.
+    function IsTorusSegment: Boolean;
   end;
 
   TSolid3D = class(TPrimitive2D)
@@ -96,6 +99,8 @@ type
     function ProjectScene(const P: TVec3): TPoint2D;
     // Model-space vector that projects to the 2D drawing offset D.
     function UnprojectOffset(const D: TPoint2D): TVec3;
+    // The point of the scene plane z = 0 that a parallel view shows at P.
+    function UnprojectToBase(const P: TPoint2D): TVec3;
     procedure SceneBounds(out Lo, Hi: TVec3);
     property Bodies[I: Integer]: TSolidBody read GetBody;
     property BodyCount: Integer read GetBodyCount;
@@ -542,7 +547,7 @@ begin
     skCone:
       begin Size1 := 0.5; Size2 := 1; Size3 := 0; SegU := 24; SegV := 1; end;
     skTorus:
-      begin Size1 := 0.6; Size2 := 0.25; Size3 := 0; SegU := 36; SegV := 16; end;
+      begin Size1 := 0.6; Size2 := 0.25; Size3 := 360; SegU := 36; SegV := 16; end;
     skExtrude:
       begin Size1 := 10; Size2 := 0; Size3 := 0; SegU := 1; SegV := 1; end;
     skRevolve:
@@ -565,6 +570,7 @@ begin
   Size1 := Source.Size1;
   Size2 := Source.Size2;
   Size3 := Source.Size3;
+  Size4 := Source.Size4;
   SegU := Source.SegU;
   SegV := Source.SegV;
   M := Source.M;
@@ -594,6 +600,11 @@ begin
     end;
 end;
 
+function TSolidBody.IsTorusSegment: Boolean;
+begin
+  Result := (Kind = skTorus) and (Size3 < 360 - 1E-9);
+end;
+
 procedure TSolidBody.SaveToStream(const Stream: TStream);
 var
   B: Byte;
@@ -606,6 +617,7 @@ begin
   Stream.Write(Size1, SizeOf(Size1));
   Stream.Write(Size2, SizeOf(Size2));
   Stream.Write(Size3, SizeOf(Size3));
+  Stream.Write(Size4, SizeOf(Size4));
   Stream.Write(SegU, SizeOf(SegU));
   Stream.Write(SegV, SizeOf(SegV));
   Stream.Write(M, SizeOf(M));
@@ -621,7 +633,8 @@ begin
   end;
 end;
 
-procedure TSolidBody.LoadFromStream(const Stream: TStream);
+procedure TSolidBody.LoadFromStream(const Stream: TStream;
+  const Version: Byte);
 var
   B: Byte;
   N, I: Longint;
@@ -634,6 +647,13 @@ begin
   Stream.ReadBuffer(Size1, SizeOf(Size1));
   Stream.ReadBuffer(Size2, SizeOf(Size2));
   Stream.ReadBuffer(Size3, SizeOf(Size3));
+  if Version >= 3 then Stream.ReadBuffer(Size4, SizeOf(Size4))
+  else
+  begin
+    // Before version 3 every torus was a full one with an unused Size3.
+    Size4 := 0;
+    if Kind = skTorus then Size3 := 360;
+  end;
   Stream.ReadBuffer(SegU, SizeOf(SegU));
   Stream.ReadBuffer(SegV, SizeOf(SegV));
   Stream.ReadBuffer(M, SizeOf(M));
@@ -831,6 +851,11 @@ begin
         Angle := Body.Size1;
         Start := Body.Size2;
       end
+      else if Body.Kind = skTorus then
+      begin
+        Angle := Body.Size3;
+        Start := Body.Size4;
+      end
       else
       begin
         Angle := 360;
@@ -978,7 +1003,7 @@ begin
 end;
 
 const
-  SolidStreamVersion: Byte = 2;
+  SolidStreamVersion: Byte = 3;
 
 // Point sets as count + points; used for the frozen rendering.
 procedure WritePointSet(const Stream: TStream; const PP: TPointsSet2D);
@@ -1070,7 +1095,7 @@ begin
   begin
     Body := TSolidBody.Create(skBox);
     try
-      Body.LoadFromStream(Stream);
+      Body.LoadFromStream(Stream, Version);
     except
       Body.Free;
       raise;
@@ -1345,6 +1370,17 @@ begin
   X := (D.X * Cos(Angle) + D.Y * Sin(Angle)) / Scale;
   Y := (-D.X * Sin(Angle) + D.Y * Cos(Angle)) / Scale;
   Result := VAdd(VScale(R, X), VScale(U, Y));
+end;
+
+function TSolid3D.UnprojectToBase(const P: TPoint2D): TVec3;
+var
+  R, U, C: TVec3;
+begin
+  Result := UnprojectOffset(Point2D(P.X - Points[0].X, P.Y - Points[0].Y));
+  ProjectBasis(R, U, C);
+  // Slide along the line of sight onto z = 0; seen edge-on, keep the offset.
+  if Abs(C.Z) > 1E-3 then
+    Result := VSub(Result, VScale(C, Result.Z / C.Z));
 end;
 
 procedure TSolid3D.SetView(const Azimuth, Elevation: Double);

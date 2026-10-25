@@ -23,9 +23,10 @@ type
     opfSymbolDiameter, opfSymbolRotation, opfRectangleRX,
     opfRectangleRY, opfBitmapLink, opfKeepAspectRatio,
     { 3D objects: sizes in drawing mm or degrees by body kind, then the
-      segment count and the camera. }
+      segment count and the camera. The fourth size comes last so that the
+      ordinals of older recovery records stay valid. }
     opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidSegments,
-    opfSolidAzimuth, opfSolidElevation, opfSolidPerspective);
+    opfSolidAzimuth, opfSolidElevation, opfSolidPerspective, opfSolidSize4);
   TObjectPropertyFields = set of TObjectPropertyField;
   TEditTargetIDs = array of Integer;
 
@@ -56,7 +57,7 @@ type
     RectangleRY: TRealType;
     BitmapLink: TEditUtf8Text;
     KeepAspectRatio: Boolean;
-    SolidSize1, SolidSize2, SolidSize3: TRealType;
+    SolidSize1, SolidSize2, SolidSize3, SolidSize4: TRealType;
     SolidSegments: Integer;
     SolidAzimuth, SolidElevation: TRealType;
     SolidPerspective: Boolean;
@@ -105,7 +106,8 @@ end;
 
 function SolidSizeIsAngle(Body: TSolidBody; Field: TObjectPropertyField): Boolean;
 begin
-  Result := (Body.Kind = skRevolve) and (Field in [opfSolidSize1, opfSolidSize2]);
+  Result := ((Body.Kind = skRevolve) and (Field in [opfSolidSize1, opfSolidSize2]))
+    or ((Body.Kind = skTorus) and (Field in [opfSolidSize3, opfSolidSize4]));
 end;
 
 function SolidSupports(Obj: TObject2D; Field: TObjectPropertyField): Boolean;
@@ -121,7 +123,8 @@ begin
     opfSolidSize1: Result := True;
     opfSolidSize2: Result := Body.Kind in [skBox, skCylinder, skCone, skTorus,
       skRevolve];
-    opfSolidSize3: Result := Body.Kind = skBox;
+    opfSolidSize3: Result := Body.Kind in [skBox, skTorus];
+    opfSolidSize4: Result := Body.Kind = skTorus;
     opfSolidSegments: Result := not (Body.Kind in [skBox, skExtrude]);
   end;
 end;
@@ -140,17 +143,20 @@ begin
         skBox: Caption := 'Width (mm)';
         skTorus: Caption := 'Radius R (mm)';
         skExtrude: Caption := 'Depth (mm)';
-        skRevolve: Caption := 'Angle (�)';
+        skRevolve: Caption := 'Angle (째)';
       else Caption := 'Radius (mm)';
       end;
     opfSolidSize2:
       case Body.Kind of
         skBox: Caption := 'Depth (mm)';
         skTorus: Caption := 'Tube radius r (mm)';
-        skRevolve: Caption := 'Start angle (�)';
+        skRevolve: Caption := 'Start angle (째)';
       else Caption := 'Height (mm)';
       end;
-    opfSolidSize3: Caption := 'Height (mm)';
+    opfSolidSize3:
+      if Body.Kind = skTorus then Caption := 'Angle (째)'
+      else Caption := 'Height (mm)';
+    opfSolidSize4: Caption := 'Start angle (째)';
     opfSolidSegments: Caption := 'Segments';
   end;
 end;
@@ -174,6 +180,7 @@ begin
   case Field of
     opfSolidSize1: S := Body.Size1;
     opfSolidSize2: S := Body.Size2;
+    opfSolidSize4: S := Body.Size4;
   else S := Body.Size3;
   end;
   if not SolidSizeIsAngle(Body, Field) then S := S * SolidScale(Obj);
@@ -199,6 +206,10 @@ begin
       Body.Size2 := Model(opfSolidSize2, Patch.SolidSize2);
     if opfSolidSize3 in Patch.Fields then
       Body.Size3 := Model(opfSolidSize3, Patch.SolidSize3);
+    // A torus sweeps at most one full turn.
+    if Body.Kind = skTorus then Body.Size3 := Min(Body.Size3, 360);
+    if opfSolidSize4 in Patch.Fields then
+      Body.Size4 := Model(opfSolidSize4, Patch.SolidSize4);
     if opfSolidSegments in Patch.Fields then Body.SegU := Patch.SolidSegments;
   end;
   if opfSolidAzimuth in Patch.Fields then
@@ -485,7 +496,9 @@ begin
     not IsFinitePositive(Patch.SolidSize1)) or
     ((opfSolidSize3 in Patch.Fields) and not IsFinitePositive(Patch.SolidSize3)) then
     ErrorText := '3D sizes must be finite positive numbers'
-  else if (opfSolidSize2 in Patch.Fields) and not IsFiniteValue(Patch.SolidSize2) then
+  else if ((opfSolidSize2 in Patch.Fields) and
+    not IsFiniteValue(Patch.SolidSize2)) or
+    ((opfSolidSize4 in Patch.Fields) and not IsFiniteValue(Patch.SolidSize4)) then
     ErrorText := '3D size must be finite'
   else if (opfSolidSegments in Patch.Fields) and
     ((Patch.SolidSegments < 3) or (Patch.SolidSegments > 720)) then
@@ -715,6 +728,7 @@ begin
     opfSolidSize1: Patch.SolidSize1 := TRealType(Value);
     opfSolidSize2: Patch.SolidSize2 := TRealType(Value);
     opfSolidSize3: Patch.SolidSize3 := TRealType(Value);
+    opfSolidSize4: Patch.SolidSize4 := TRealType(Value);
     opfSolidSegments: Patch.SolidSegments := Integer(Value);
     opfSolidAzimuth: Patch.SolidAzimuth := TRealType(Value);
     opfSolidElevation: Patch.SolidElevation := TRealType(Value);
@@ -845,7 +859,7 @@ begin
       Result := Obj is TSymbol2D;
     opfRectangleRX, opfRectangleRY: Result := Obj is TRectangle2D;
     opfBitmapLink, opfKeepAspectRatio: Result := Obj is TBitmap2D;
-    opfSolidSize1..opfSolidPerspective: Result := SolidSupports(Obj, Field);
+    opfSolidSize1..opfSolidSize4: Result := SolidSupports(Obj, Field);
   end;
 end;
 
@@ -887,7 +901,7 @@ begin
       if (Obj as TBitmap2D).BitmapEntry = nil then Value := ''
       else Value := (Obj as TBitmap2D).BitmapEntry.ImageLink;
     opfKeepAspectRatio: Value := (Obj as TBitmap2D).KeepAspectRatio;
-    opfSolidSize1..opfSolidPerspective: Value := ReadSolidValue(Obj, Field);
+    opfSolidSize1..opfSolidSize4: Value := ReadSolidValue(Obj, Field);
   end;
 end;
 

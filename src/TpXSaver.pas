@@ -616,6 +616,11 @@ begin
         begin
           fXML.AddAttribute('r1', FD(Body.Size1));
           fXML.AddAttribute('r2', FD(Body.Size2));
+          // A full torus keeps the attributes it always had.
+          if Body.IsTorusSegment then
+            fXML.AddAttribute('angle', FD(Body.Size3));
+          if Body.Size4 <> 0 then
+            fXML.AddAttribute('start', FD(Body.Size4));
         end;
       skExtrude: fXML.AddAttribute('depth', FD(Body.Size1));
       skRevolve:

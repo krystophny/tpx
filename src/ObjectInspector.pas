@@ -174,11 +174,11 @@ uses
 const
   { Object-specific properties come first; the style properties that the
     toolbars above the canvas also edit stay behind "More". }
-  PrimaryFields: array[0..14] of TObjectPropertyField = (opfText,
+  PrimaryFields: array[0..15] of TObjectPropertyField = (opfText,
     opfTeXText, opfTextHeight, opfTextRotation, opfSymbolKind,
     opfSymbolDiameter, opfSymbolRotation, opfRectangleRX, opfRectangleRY,
     opfBitmapLink, opfKeepAspectRatio, opfSolidSize1, opfSolidSize2,
-    opfSolidSize3, opfSolidSegments);
+    opfSolidSize3, opfSolidSize4, opfSolidSegments);
   MoreFields: array[0..16] of TObjectPropertyField = (opfLineStyle,
     opfLineColor, opfLineWidth, opfBeginArrowKind, opfEndArrowKind,
     opfArrowSizeFactor, opfHatching, opfHatchColor, opfFillColor,
@@ -248,6 +248,7 @@ begin
     opfSolidSize1: Result := 'SolidSize1';
     opfSolidSize2: Result := 'SolidSize2';
     opfSolidSize3: Result := 'SolidSize3';
+    opfSolidSize4: Result := 'SolidSize4';
     opfSolidSegments: Result := 'SolidSegments';
     opfSolidAzimuth: Result := 'Azimuth';
     opfSolidElevation: Result := 'Elevation';
@@ -403,6 +404,7 @@ begin
   AddField(opfSolidSize1, 'Size 1', False, False, False);
   AddField(opfSolidSize2, 'Size 2', False, False, False);
   AddField(opfSolidSize3, 'Size 3', False, False, False);
+  AddField(opfSolidSize4, 'Size 4', False, False, False);
   AddField(opfSolidSegments, 'Segments', False, False, False);
 
   FCoordinateButton := TButton.Create(Self);
@@ -869,8 +871,8 @@ begin
   Result := Field in [opfLineWidth, opfArrowSizeFactor, opfTextHeight,
     opfTextRotation, opfStarSizeFactor, opfSymbolDiameter,
     opfSymbolRotation, opfRectangleRX, opfRectangleRY, opfSolidSize1,
-    opfSolidSize2, opfSolidSize3, opfSolidSegments, opfSolidAzimuth,
-    opfSolidElevation];
+    opfSolidSize2, opfSolidSize3, opfSolidSize4, opfSolidSegments,
+    opfSolidAzimuth, opfSolidElevation];
 end;
 
 function TObjectInspector.NumericRange(
@@ -878,8 +880,8 @@ function TObjectInspector.NumericRange(
 begin
   case Field of
     opfTextHeight: Result := nerPositive;
-    opfTextRotation, opfSymbolRotation, opfSolidSize2, opfSolidAzimuth,
-    opfSolidElevation: Result := nerFinite;
+    opfTextRotation, opfSymbolRotation, opfSolidSize2, opfSolidSize4,
+    opfSolidAzimuth, opfSolidElevation: Result := nerFinite;
     opfSolidSize1, opfSolidSize3, opfSolidSegments: Result := nerPositive;
   else
     Result := nerNonnegative;
@@ -911,8 +913,8 @@ begin
     opfStarSizeFactor, opfSymbolDiameter, opfRectangleRX,
     opfRectangleRY:
       Result := InspectorNumberText(TRealType(Value));
-    opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidAzimuth,
-    opfSolidElevation:
+    opfSolidSize1, opfSolidSize2, opfSolidSize3, opfSolidSize4,
+    opfSolidAzimuth, opfSolidElevation:
       Result := InspectorNumberText(Double(Value));
   else
     Result := VarToStr(Value);
@@ -971,8 +973,9 @@ var
   Obj: TGraphicObject;
 begin
   FSolidAmbiguous := [];
-  for Field := opfSolidSize1 to opfSolidSegments do
+  for Field := opfSolidSize1 to opfSolidSize4 do
   begin
+    if Field in [opfSolidAzimuth..opfSolidPerspective] then Continue;
     { The kind's own word when every selected body agrees. }
     Caption := '';
     for I := 0 to High(FTargetIDs) do
@@ -1231,6 +1234,7 @@ begin
       opfSolidSize1: Patch.SolidSize1 := Number;
       opfSolidSize2: Patch.SolidSize2 := Number;
       opfSolidSize3: Patch.SolidSize3 := Number;
+      opfSolidSize4: Patch.SolidSize4 := Number;
       opfSolidSegments: Patch.SolidSegments := Round(Number);
       opfSolidAzimuth: Patch.SolidAzimuth := Number;
       opfSolidElevation: Patch.SolidElevation := Number;

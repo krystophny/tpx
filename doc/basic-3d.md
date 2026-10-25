@@ -5,6 +5,12 @@ edges and hidden faces removed. A 3D object is one drawing object.
 
 - **Insert → Box, Cylinder, Sphere, Cone, Torus** (also on the tool palette):
   drag a box; the object is fitted into it.
+- **Insert → Torus segment** works like Insert → Arc: press at the centre,
+  drag (or click) to the outer rim at the start angle, then move round
+  counterclockwise and click at the end angle. The torus lies in the base
+  plane of the 3D view and follows the pointer; Shift snaps both angles to
+  15°. The open ends are flat circular caps. The Inspector edits the angle
+  and start angle of any torus (360° is a full torus).
 - **Modify → Extrude / Revolve** turn the selected closed shapes into one 3D
   object. For Revolve, a selected straight line is the axis (otherwise the
   left edge of the shapes). Revolve leaves a 90° cut-away toward the viewer;
@@ -36,7 +42,8 @@ the polygons; current TpX reads the solid and ignores them.
     <body kind="box" w=".." d=".." h=".."/>
     <body kind="cylinder|cone" r=".." h=".." segments=".."/>
     <body kind="sphere" r=".." segments=".." rings=".."/>
-    <body kind="torus" r1=".." r2=".." segments=".." rings=".."/>
+    <body kind="torus" r1=".." r2=".." [angle=".."] [start=".."]
+          segments=".." rings=".."/>
     <body kind="extrude" depth="..">  2D profile elements  </body>
     <body kind="revolve" angle=".." start=".." segments="..">  profiles  </body>
   </solid>
@@ -46,8 +53,11 @@ the polygons; current TpX reads the solid and ignores them.
 
 `x1,y1`–`x2,y2` is the placement: origin, scale (length) and in-plane angle
 of the projected model. `az`/`el` are the camera azimuth and elevation in
-degrees. A body may carry `m="12 numbers"`, its row-major 3×4 placement in the
-scene. The TeX part of the file contains plain TikZ/PGF paths.
+degrees. A torus segment has `angle` (swept degrees, below 360) and `start`
+(degrees from the body's x axis); `angle` is left out for a full torus and
+`start` when it is 0, so existing files are written unchanged. A body may
+carry `m="12 numbers"`, its row-major 3×4 placement in the scene. The TeX part
+of the file contains plain TikZ/PGF paths.
 
 **SVG.** The faces are a plain `<g>` of polygons (hatching as lines), led by an
 invisible two-point polyline carrying the placement and followed by

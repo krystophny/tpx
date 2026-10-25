@@ -438,6 +438,9 @@ type
     InsertTorus: TAction;
     InsertTorusBtn: TToolButton;
     InsertTorus1: TMenuItem;
+    InsertTorusSegment: TAction;
+    InsertTorusSegmentBtn: TToolButton;
+    InsertTorusSegment1: TMenuItem;
     N3D: TMenuItem;
     Extrude: TAction;
     Revolve: TAction;
@@ -5320,7 +5323,9 @@ begin
   else if Sender = InsertCone then
     SendToolMessage(Msg_InsertCone, InsertConeBtn)
   else if Sender = InsertTorus then
-    SendToolMessage(Msg_InsertTorus, InsertTorusBtn);
+    SendToolMessage(Msg_InsertTorus, InsertTorusBtn)
+  else if Sender = InsertTorusSegment then
+    SendToolMessage(Msg_InsertTorusSegment, InsertTorusSegmentBtn);
 end;
 
 procedure TMainForm.PressModeButton(
