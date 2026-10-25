@@ -221,14 +221,18 @@ end;
 
 procedure T_TpX_Loader.ReadArrows(XMLNode: TXMLDElement;
   Primitive2D: TPrimitive2D);
+  { Unknown or out-of-range codes load as arrNone, so that the saver
+    never indexes ArrowsIDs with an undefined kind. }
   function GetArr(const ID: string): TArrowKind;
   var
     I, J: Integer;
   begin
+    Result := arrNone;
     Val(ID, I, J);
     if J = 0 then
     begin
-      Result := TArrowKind(I + 1);
+      if (I >= 0) and (I < High(ArrowsIDs)) then
+        Result := TArrowKind(I + 1);
       Exit;
     end;
     for I := 1 to High(ArrowsIDs) do

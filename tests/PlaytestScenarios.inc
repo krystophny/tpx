@@ -1826,3 +1826,57 @@ begin
         end;
   finally Log.Free end;
 end;
+
+procedure TestUnknownArrowCodes;
+const
+  Header = '%<TpX v="5" TeXFormat="tikz" PdfTeXFormat="tikz" ArrowsSize="0.7" ' +
+    'StarsSize="1" DefaultFontHeight="5" DefaultSymbolSize="30" ' +
+    'ApproximationPrecision="0.01" PicScale="1" Border="2" BitmapRes="20000" ' +
+    'HatchingStep="2" DottedSize="0.5" DashSize="1" LineWidth="0.3" ' +
+    'TeXCenterFigure="1" TeXFigure="none">' + LineEnding;
+var
+  Drawing: TDrawing2D;
+  Loader: T_TpX_Loader;
+  Source: TStringList;
+  FileName, Saved: string;
+  Line: TLine2D;
+  Stream: TFileStream;
+  I: Integer;
+begin
+  Drawing := TDrawing2D.Create(nil);
+  FileName := GetTempFileName(SysUtils.GetTempDir(False), 'tpx-arrow-codes-');
+  Source := TStringList.Create;
+  try
+    Source.Text := Header +
+      '%  <line x1="0" y1="0" x2="10" y2="0" arr1="999" arr2="h30" arrs="1" lw="1.00"/>' + LineEnding +
+      '%  <line x1="0" y1="5" x2="10" y2="5" arr1="-3" arr2="h44" arrs="1" lw="1.00"/>' + LineEnding +
+      '%</TpX>' + LineEnding;
+    Source.SaveToFile(FileName);
+    Loader := T_TpX_Loader.Create(Drawing);
+    try Loader.LoadFromFile(FileName); finally Loader.Free end;
+    Line := Drawing.ObjectList.FirstObj as TLine2D;
+    Check((Line.BeginArrowKind = arrNone) and (Line.EndArrowKind = arrNone),
+      'Unknown arrow codes did not load as no arrow');
+    Line := Drawing.ObjectList.NextObj as TLine2D;
+    Check((Line.BeginArrowKind = arrNone) and (Line.EndArrowKind = arrH44),
+      'Valid arrow beside an out-of-range code was not preserved');
+    Check(StoreToFile_TpX(Drawing, FileName, False),
+      'Could not save the drawing with unknown arrow codes');
+    Stream := TFileStream.Create(FileName, fmOpenRead);
+    try
+      SetLength(Saved, Stream.Size);
+      Stream.ReadBuffer(Saved[1], Stream.Size);
+    finally
+      Stream.Free;
+    end;
+    for I := 1 to Length(Saved) do
+      Check((Saved[I] >= #32) or (Saved[I] in [#9, #10, #13]),
+        'Saved file contains a control byte');
+    Check(Pos('arr2="h44"', Saved) > 0, 'Saved file lost the valid arrow');
+    Check(Pos('h30', Saved) = 0, 'Saved file kept the unknown arrow code');
+  finally
+    Source.Free;
+    Drawing.Free;
+    DeleteFile(FileName);
+  end;
+end;
