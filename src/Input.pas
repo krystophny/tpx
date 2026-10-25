@@ -146,8 +146,8 @@ type
     procedure Scale_LineWidth(const Scale: TRealType);
   end;
 
-procedure FillPoints(Primitive: TPrimitive2D;
-  const Text: string; Pnts: TPointsSet2D);
+{ Reads an "x,y x,y ..." point list into Pnts; False when it has none. }
+function FillPoints(const Text: string; Pnts: TPointsSet2D): Boolean;
 procedure Import_Metafile(const Drawing: TDrawing2D;
   const MF_FileName: string;
   Lines: TStrings);
@@ -539,8 +539,7 @@ begin
   ReadPrimitiveAttr(Result, XMLNode);
 end;
 
-procedure FillPoints(Primitive: TPrimitive2D;
-  const Text: string; Pnts: TPointsSet2D);
+function FillPoints(const Text: string; Pnts: TPointsSet2D): Boolean;
 var
   Pos, LenText, Len: Integer;
   X, Y: TRealType;
@@ -581,11 +580,23 @@ begin
       GetSpace;
       PP.Add(Point2D(X, Y));
     end;
-    if PP.Count = 0 then FreeAndNil(Primitive)
-    else Pnts.Copy(PP, 0, PP.Count - 1);
+    Result := PP.Count > 0;
+    if Result then Pnts.Copy(PP, 0, PP.Count - 1);
   finally
     PP.Free;
   end;
+end;
+
+{ The point list of a path element is its text. An element without one
+  (for example with x1/y1 attributes or point children) cannot be read. }
+procedure ReadPointList(XMLNode: TXMLDElement; Primitive: TPrimitive2D;
+  Pnts: TPointsSet2D);
+begin
+  if FillPoints(XMLNode.Text, Pnts) then Exit;
+  Primitive.Free;
+  raise EReadError.CreateFmt(
+    'TpX <%s> element has no point list (expected "x,y x,y ..." as its text)',
+    [XMLNode.NodeName]);
 end;
 
 function T_TpX_Loader.ReadSmooth(XMLNode: TXMLDElement):
@@ -600,8 +611,7 @@ begin
     Result := TClosedSmoothPath2D.CreateSpec(-1, [Point2D(0, 0)])
   else Result := TSmoothPath2D.CreateSpec(-1, [Point2D(0, 0)]);
   ReadArrows(XMLNode, Result);
-  FillPoints(Result, XMLNode.Text, (Result as
-    TSmoothPath2D0).Points);
+  ReadPointList(XMLNode, Result, (Result as TSmoothPath2D0).Points);
   ReadPrimitiveAttr(Result, XMLNode);
 end;
 
@@ -617,8 +627,7 @@ begin
     Result := TClosedBezierPath2D.CreateSpec(-1, [Point2D(0, 0)])
   else Result := TBezierPath2D.CreateSpec(-1, [Point2D(0, 0)]);
   ReadArrows(XMLNode, Result);
-  FillPoints(Result, XMLNode.Text, (Result as
-    TBezierPath2D0).Points);
+  ReadPointList(XMLNode, Result, (Result as TBezierPath2D0).Points);
   ReadPrimitiveAttr(Result, XMLNode);
 end;
 
@@ -626,7 +635,7 @@ function T_TpX_Loader.ReadPolygon(XMLNode: TXMLDElement):
   TPrimitive2D;
 begin
   Result := TPolygon2D.CreateSpec(-1, [Point2D(0, 0)]);
-  FillPoints(Result, XMLNode.Text, (Result as TPolygon2D).Points);
+  ReadPointList(XMLNode, Result, (Result as TPolygon2D).Points);
   ReadPrimitiveAttr(Result, XMLNode);
 end;
 
@@ -635,7 +644,7 @@ function T_TpX_Loader.ReadPolyline(XMLNode: TXMLDElement):
 begin
   Result := TPolyline2D.CreateSpec(-1, [Point2D(0, 0)]);
   ReadArrows(XMLNode, Result);
-  FillPoints(Result, XMLNode.Text, (Result as TPolyline2D).Points);
+  ReadPointList(XMLNode, Result, (Result as TPolyline2D).Points);
   ReadPrimitiveAttr(Result, XMLNode);
 end;
 
@@ -728,7 +737,7 @@ function T_TpX_Loader.ReadCompound(XMLNode: TXMLDElement):
 begin
   Result := TCompound2D.Create(-1);
   ReadPrimitiveAttr(Result, XMLNode);
-  FillPoints(Result, XMLNode.Text, Result.Points);
+  ReadPointList(XMLNode, Result, Result.Points);
   ReadPrimitiveAttr(Result, XMLNode);
 end;
 
