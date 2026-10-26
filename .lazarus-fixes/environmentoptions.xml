@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <EnvironmentOptions>
+    <LazarusDirectory Value="/Users/ert/code/lazarus/"/>
+    <CompilerFilename Value="/Users/ert/.local/tpx-fpc/bin/fpc"/>
+  </EnvironmentOptions>
+</CONFIG>

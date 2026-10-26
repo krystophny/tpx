@@ -1,0 +1,26 @@
+%<TpX v="5" TeXFormat="tikz" PdfTeXFormat="tikz" ArrowsSize="0.7" StarsSize="1" DefaultFontHeight="5" DefaultSymbolSize="30" ApproximationPrecision="0.01" PicScale="1" Border="2" BitmapRes="20000" HatchingStep="2" DottedSize="0.5" DashSize="1" LineWidth="0.3" TeXFigure="none">
+%  <line x1="0" y1="0" x2="10" y2="10"/>
+%  <line x1="0" y1="1" x2="10.5" y2="10"/>
+%  <group>
+%    <line x1="30" y1="30" x2="32" y2="30"/>
+%  </group>
+%  <rect x="50" y="50" w="20" h="10"/>
+%  <line x1="90" y1="90" x2="95" y2="95"/>
+%  <line x1="30" y1="30" x2="70" y2="50"/>
+%</TpX>
+\begingroup%
+\providecommand{\tpxLineWidth}{0.3mm}%
+\providecommand{\tpxTextSize}{14.2264pt}%
+\providecommand{\tpxDashSize}{1mm}%
+\providecommand{\tpxDotSize}{0.5mm}%
+\begin{tikzpicture}[x=1.00mm, y=1.00mm, inner xsep=0pt, inner ysep=0pt, outer xsep=0pt, outer ysep=0pt]
+\path[line width=0mm] (-2.00,-2.00) rectangle +(74.00,64.00);
+\definecolor{L}{rgb}{0,0,0}
+\path[line width=1*\tpxLineWidth, draw=L] (0.00,0.00) -- (10.00,10.00);
+\path[line width=1*\tpxLineWidth, draw=L] (0.00,1.00) -- (10.50,10.00);
+\path[line width=1*\tpxLineWidth, draw=L] (30.00,30.00) -- (32.00,30.00);
+\path[line width=1*\tpxLineWidth, draw=L] (50.00,50.00) rectangle +(20.00,10.00);
+\path[line width=1*\tpxLineWidth, draw=L] (90.00,90.00) -- (95.00,95.00);
+\path[line width=1*\tpxLineWidth, draw=L] (30.00,30.00) -- (70.00,50.00);
+\end{tikzpicture}%
+\endgroup%

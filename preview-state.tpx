@@ -1,0 +1,21 @@
+%<TpX v="5" TeXFormat="tikz" PdfTeXFormat="tikz" ArrowsSize="0.7" StarsSize="1" DefaultFontHeight="5" DefaultSymbolSize="30" ApproximationPrecision="0.01" PicScale="1" Border="2" BitmapRes="20000" HatchingStep="2" DottedSize="0.5" DashSize="1" LineWidth="0.3" TeXCenterFigure="1" IncludePath="include path">
+%  <caption label="fig:test">
+%Caption  </caption>
+%  <line x1="0" y1="0" x2="20" y2="10"/>
+%</TpX>
+\begin{figure}
+\centering
+\begingroup%
+\providecommand{\tpxLineWidth}{0.3mm}%
+\providecommand{\tpxTextSize}{14.2264pt}%
+\providecommand{\tpxDashSize}{1mm}%
+\providecommand{\tpxDotSize}{0.5mm}%
+\begin{tikzpicture}[x=1.00mm, y=1.00mm, inner xsep=0pt, inner ysep=0pt, outer xsep=0pt, outer ysep=0pt]
+\path[line width=0mm] (-2.00,-2.00) rectangle +(24.00,14.00);
+\definecolor{L}{rgb}{0,0,0}
+\path[line width=1*\tpxLineWidth, draw=L] (0.00,0.00) -- (20.00,10.00);
+\end{tikzpicture}%
+\endgroup%
+\caption{\label{fig:test}%
+ Caption}
+\end{figure}
